@@ -46,6 +46,22 @@ Integration tests should live in tests/integration and end in `.test.ts`. Non-te
 #### E2E Tests
 E2E tests should live in tests/e2e and end in `test.ts`. Non-test helper code can live alongside the integration tests, but omit the suffix.
 
+### Rust
+
+#### Unit Tests
+Unit tests should be colocated with Rust src code and appended with `_test.rs`. E.g.:
+
+```
+- foo.rs
+- foo_test.rs
+```
+
+#### Integration Tests
+Integration tests should live in tests/integration and end in `_test.rs`. Non-test helper code can live alongside the integration tests, but omit the suffix.
+
+#### E2E Tests
+E2E tests should live in tests/e2e and end in `_test.rs`. Non-test helper code can live alongside the integration tests, but omit the suffix.
+
 
 ## How tests are written
 

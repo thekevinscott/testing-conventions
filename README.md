@@ -3,14 +3,32 @@
 **Enforce testing conventions in libraries (Python, Typescript, and Rust)**
 
 `testing-conventions` is an opinionated, config-driven standard that enforces
-how tests are expected to function in a library. It promotes the following:
+how tests are expected to function in a library.
 
-- Where tests live
-- How tests are written
-- The line between unit and integration tests
-- Coverage floors
+1. What tests are (e.g., The line between unit and integration tests)
+2. Where tests live
+3. How tests are written
+4. Coverage floors
 
-## Where Tests Live
+## 1. What Tests Are
+Tests exist to assert the behavior of code. They're there to provide confidence that the code does what it's supposed to do.
+
+This library supports 4 kinds of tests:
+
+1. Unit tests
+2. Integration tests
+3. E2E tests
+4. Doc tests
+
+Unit tests are cheap and plentiful but provide limited confidence. They're helpful in an agentic world though, particularly around refactoring.
+
+Integration tests treat the system as a black box, with the caveat that expensive third party dependencies (databases, LLMs, system operations) are mocked.
+
+E2E are identical to integration _without_ mocks. They're not meant to be run in CI, but they _are_ meant to be executable by LLMs to assert that the third party contracts are being honored.
+
+Doc tests are for inline documentation.
+
+## 2. Where Tests Live
 
 ### Python
 
@@ -114,9 +132,53 @@ pub fn add(a: i32, b: i32) -> i32 {
 ````
 
 
-## How tests are written
+## 3. How tests are written
 
 ### Python
+
+In Python, use `pytest`.
+
+#### Unit Tests
+In unit tests, _everything_ except for the function under test should be mocked. Use `pytest
+
+#### Integration Tests
+In integration tests, third party dependencies should be mocked.
+
+If the library exports a Python SDK, then mocking should be easy. If the library exposes a CLI, generally good practice is to primarily support a Python SDK that the CLI wraps; and for integration tests to _exclusively_ test the SDK.
+
+### Typescript
+
+In Typescript, use `vitest`.
+
+#### Unit Tests
+In unit tests, _everything_ except for the function under test should be mocked.
+
+Mocks should be typed like so:
+
+```typescript
+vi.mock('rimraf', async () => {
+  const actual = await vi.importActual("rimraf") as typeof rimraf;
+  return {
+    ...actual,
+    rimraf: vi.fn(),
+  };
+});
+```
+
+#### Integration Tests
+In integration tests, third party dependencies should be mocked.
+
+If the library exports a Typescript SDK, then mocking should be easy. If the library exposes a CLI, generally good practice is to primarily support a Typescript SDK that the CLI wraps; and for integration tests to _exclusively_ test the SDK.
+
+### Rust
+
+In Rust, use `cargo test`.
+
+#### 4. Coverage Floors
+
+Aim for 100% branch coverage wherever possible.
+
+--- Old LLM generated under this line ---
 
 ## What it enforces
 

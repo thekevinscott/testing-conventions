@@ -47,18 +47,30 @@ E2E tests should live in tests/e2e and end in `test.ts`. Non-test helper code ca
 ### Rust
 
 #### Unit Tests
-Unit tests should be colocated with Rust src code and appended with `_test.rs`. E.g.:
+Unit tests are colocated with the code they test, in an inline `#[cfg(test)]` module in the same `.rs` file. This is the idiomatic Rust pattern, and it lets unit tests reach private items. E.g.:
 
-```
-- foo.rs
-- foo_test.rs
+```rust
+// foo.rs
+pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn adds() {
+        assert_eq!(add(2, 2), 4);
+    }
+}
 ```
 
 #### Integration Tests
-Integration tests should live in tests/integration and end in `_test.rs`. Non-test helper code can live alongside the integration tests, but omit the suffix.
+Integration tests live in the top-level `tests/` directory (a sibling of `src/`). Cargo compiles each file there as its own crate, so they exercise only the crate's public API — no suffix needed, the location is the signal. Shared helper code goes in `tests/common/mod.rs`, which Cargo treats as a module rather than a test crate.
 
 #### E2E Tests
-E2E tests should live in tests/e2e and end in `_test.rs`. Non-test helper code can live alongside the integration tests, but omit the suffix.
+E2E tests also live under `tests/`, driving the built binary (e.g. via `CARGO_BIN_EXE_<name>` or `assert_cmd`). Keep them in their own file(s), such as `tests/e2e.rs`, to separate them from the API-level integration suite.
 
 
 ## How tests are written

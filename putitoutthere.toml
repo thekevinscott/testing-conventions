@@ -57,3 +57,11 @@ targets = [
   "aarch64-apple-darwin",
   "x86_64-pc-windows-msvc",
 ]
+
+# putitoutthere@v0's write-launcher generates the npm bundled-cli launcher and
+# reads bundle_cli.bin; without this table the npm build dies with
+# "Cannot read properties of undefined (reading 'bin')". bin = the crate's
+# [[bin]] name; crate_path is relative to the repo root.
+[package.bundle_cli]
+bin = "testing-conventions"
+crate_path = "packages/rust"

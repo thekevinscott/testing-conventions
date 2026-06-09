@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Dual-mode build:
 //   TARGET unset / "main" / "noarch" -> tsc (the publishable JS shim).
 //   TARGET = <rust-triple>           -> cargo cross-compile + stage at
@@ -10,8 +9,10 @@
 // GHA is retiring the windows-latest -> windows-2022 alias on 2026-06-15)
 // per the engine's defaultRunsOn, so cross-linker setup is not required —
 // `rustup target add` is enough to make the triple known to cargo.
+//
+// Run via tsx (see the `build` script in package.json).
 
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
 import { chmodSync, copyFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,7 +48,7 @@ copyFileSync(src, dst);
 chmodSync(dst, 0o755);
 console.log(`staged: ${src} -> ${dst}`);
 
-function run(cmd, args, opts) {
+function run(cmd: string, args: string[], opts: SpawnSyncOptions = {}): void {
   // shell: true so Windows resolves `.cmd` shims (npx.cmd, rustup.exe, etc.)
   // without each call hard-coding extensions. Args are static — no injection.
   const res = spawnSync(cmd, args, { stdio: 'inherit', shell: true, ...opts });

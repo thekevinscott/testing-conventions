@@ -12,7 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "Kevin Scott", email = "me@thekevinscott.com" }]
 
 [project.urls]
-Repository = "https://github.com/thekevinbot/testing-conventions"
+Repository = "https://github.com/thekevinscott/testing-conventions"
 
 [tool.maturin]
 manifest-path = "../rust/Cargo.toml"

@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "description": "Enforce testing conventions in libraries (Python, TypeScript, and Rust).",
   "license": "MIT",
-  "repository": "https://github.com/thekevinbot/testing-conventions",
+  "repository": "https://github.com/thekevinscott/testing-conventions",
   "type": "module",
   "bin": {
     "testing-conventions": "dist/bin.js"

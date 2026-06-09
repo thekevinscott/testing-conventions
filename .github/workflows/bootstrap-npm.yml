@@ -62,7 +62,7 @@ jobs:
             "license": "MIT",
             "repository": {
               "type": "git",
-              "url": "git+https://github.com/thekevinbot/testing-conventions.git"
+              "url": "git+https://github.com/thekevinscott/testing-conventions.git"
             }
           }
           EOF

@@ -58,14 +58,35 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v8
+      # bin/abi3 maturin wheels are Python-version-independent (py3-none),
+      # but the build matrix fans across every Python version, so each
+      # platform emits N byte-equivalent wheels across N artifacts. Pulling
+      # them with `merge-multiple: true` points the identical filenames at
+      # one path and the parallel extraction races -> torn write -> twine
+      # `BadZipFile: Bad magic number`. Stage each artifact in its own dir,
+      # then copy a single copy of each distribution into dist/ (first-wins;
+      # the duplicates are the same wheel). Root cause is upstream: piot
+      # should not fan a version-independent wheel across Python versions.
+      - name: Download sdist + wheel artifacts (no merge)
+        uses: actions/download-artifact@v8
         with:
           pattern: '*-sdist'
-          path: dist/
-          merge-multiple: true
+          path: staging/
       - uses: actions/download-artifact@v8
         with:
           pattern: '*-wheel-*'
-          path: dist/
-          merge-multiple: true
+          path: staging/
+      - name: Collect one copy of each distribution into dist/
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find staging -type f \( -name '*.whl' -o -name '*.tar.gz' \) | while read -r f; do
+            dest="dist/$(basename "$f")"
+            if [ -e "$dest" ]; then
+              echo "skip duplicate: $f"
+            else
+              cp "$f" "$dest"
+            fi
+          done
+          echo "dist/ contents:"; ls -l dist/
       - uses: pypa/gh-action-pypi-publish@release/v1

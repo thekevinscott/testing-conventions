@@ -1,0 +1,30 @@
+name: Check
+
+# Static release-config gate. Runs `putitoutthere check` on every PR so
+# release misconfigurations are caught here instead of 10-20 minutes into a
+# real release run. Covers (among others): manifest repository-URL vs
+# GITHUB_REPOSITORY mismatch, package name/shape, bundle_cli wiring, crates
+# metadata, pypi version source, and tag-template collisions.
+#
+# This is the gate we were missing: every release failure so far
+# (repository-URL mismatch, the npm bundled-cli launcher, ...) was a config
+# problem only surfaced mid-release. As putitoutthere grows new `check`
+# lints, this gate inherits them automatically via the pinned @v0 ref.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: putitoutthere check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: thekevinscott/putitoutthere@v0
+        with:
+          command: check
+          # fail_on_error defaults to true: any finding fails the gate.

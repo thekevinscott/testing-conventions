@@ -147,26 +147,13 @@ supported):
 
 ```toml
 [python]
-unit.glob = "src/**/*_test.py"
-integration.dir = "tests/integration"
-e2e.dir = "tests/e2e"
 coverage = { branch = true, fail_under = 100 }
 
 [typescript]
-unit.glob = "src/**/*.test.ts"
-integration.dir = "tests/integration"
-e2e.dir = "tests/e2e"
 coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
 
 [rust]
-# units are inline #[cfg(test)]; integration & e2e live under tests/
 coverage = { regions = 100, lines = 100 }
-
-[rules]
-unit.isolation = "error"
-integration.external = "all"
-integration.whitelist = ["lodash", "chrono"]
-coverage.floor = "no-regress"
 ```
 
 ## License

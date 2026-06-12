@@ -4,8 +4,8 @@
 //! a Python source file `foo.py` is unit-tested by a colocated `foo_test.py`.
 //! [`missing_unit_tests`] walks a directory tree and returns every source file
 //! that has no such sibling — an "orphan". Files that are themselves tests
-//! (`*_test.py`) are what the check looks *for*, never subjects, and package
-//! plumbing (`__init__.py`, `conftest.py`) is exempt.
+//! (`*_test.py`) are what the check looks *for*, never subjects, and the
+//! package marker (`__init__.py`) is exempt.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -16,8 +16,8 @@ use anyhow::{Context, Result};
 const PY_EXTENSION: &str = "py";
 /// The stem suffix that marks a file as a unit test: `foo` → `foo_test`.
 const TEST_STEM_SUFFIX: &str = "_test";
-/// Files that are never unit-test subjects: the package marker and pytest config.
-const EXEMPT_FILENAMES: [&str; 2] = ["__init__.py", "conftest.py"];
+/// The package marker, which is never a unit-test subject.
+const PACKAGE_MARKER: &str = "__init__.py";
 
 /// Walk `root` recursively and return every Python source file that has no
 /// colocated `<stem>_test.py`, sorted for deterministic output.
@@ -73,11 +73,9 @@ fn is_test_file(path: &Path) -> bool {
     stem_of(path).ends_with(TEST_STEM_SUFFIX)
 }
 
-/// `true` for package/pytest plumbing that never needs a colocated test.
+/// `true` for the package marker (`__init__.py`), which never needs a test.
 fn is_exempt(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| EXEMPT_FILENAMES.contains(&name))
+    path.file_name().and_then(|name| name.to_str()) == Some(PACKAGE_MARKER)
 }
 
 /// The colocated test a source is expected to have: `foo.py` → `foo_test.py`.

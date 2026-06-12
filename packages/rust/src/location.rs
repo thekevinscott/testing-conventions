@@ -119,11 +119,11 @@ mod tests {
     }
 
     #[test]
-    fn exempts_package_and_pytest_plumbing() {
+    fn exempts_the_package_marker() {
         assert!(is_exempt(Path::new("__init__.py")));
-        assert!(is_exempt(Path::new("pkg/conftest.py")));
+        assert!(is_exempt(Path::new("pkg/__init__.py")));
+        assert!(!is_exempt(Path::new("conftest.py")));
         assert!(!is_exempt(Path::new("widget.py")));
-        assert!(!is_exempt(Path::new("pkg/helper.py")));
     }
 
     #[test]

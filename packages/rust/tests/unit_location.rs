@@ -63,10 +63,10 @@ fn red_tree_reports_every_missing_twin() {
 }
 
 #[test]
-fn exempts_init_and_conftest() {
+fn package_markers_are_not_orphans() {
     assert!(
         relative_orphans(&fixture("exempt")).is_empty(),
-        "__init__.py and conftest.py are package/pytest plumbing, never subjects"
+        "__init__.py is a package marker, never a unit-test subject"
     );
 }
 

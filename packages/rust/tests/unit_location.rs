@@ -63,6 +63,14 @@ fn red_tree_reports_every_missing_twin() {
 }
 
 #[test]
+fn exempts_init_and_conftest() {
+    assert!(
+        relative_orphans(&fixture("exempt")).is_empty(),
+        "__init__.py and conftest.py are package/pytest plumbing, never subjects"
+    );
+}
+
+#[test]
 fn a_missing_root_is_an_error() {
     let result = missing_unit_tests(fixture("does_not_exist"));
     assert!(

@@ -20,6 +20,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `unit-location [--lang python|typescript] <PATH>` CLI subcommand — runs the check
   over a directory and exits non-zero, printing each source file missing its
   colocated test. `--lang` defaults to `python`. (#15, #18)
+- `coverage` module — `evaluate(report, thresholds)` checks a parsed coverage.py
+  report against a `[python].coverage` floor (`fail_under`, with `branch`
+  required), and `parse_report` reads `coverage json` output. The deterministic
+  core of the Python coverage rule; the `unit coverage` CLI and the run-coverage
+  subprocess are not wired yet. (#26)
 
 ### Changed
 

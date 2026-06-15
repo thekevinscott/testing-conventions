@@ -181,10 +181,14 @@ mod tests {
     }
 
     #[test]
-    fn typescript_tracks_ts_and_tsx_but_not_declarations() {
+    fn typescript_tracks_ts_tsx_mts_cts_but_not_declarations() {
         assert!(Language::TypeScript.tracks(Path::new("widget.ts")));
         assert!(Language::TypeScript.tracks(Path::new("pkg/button.tsx")));
+        assert!(Language::TypeScript.tracks(Path::new("service.mts")));
+        assert!(Language::TypeScript.tracks(Path::new("legacy.cts")));
         assert!(!Language::TypeScript.tracks(Path::new("types.d.ts")));
+        assert!(!Language::TypeScript.tracks(Path::new("ambient.d.mts")));
+        assert!(!Language::TypeScript.tracks(Path::new("globals.d.cts")));
         assert!(!Language::TypeScript.tracks(Path::new("widget.py")));
         assert!(!Language::TypeScript.tracks(Path::new("README")));
     }
@@ -193,8 +197,11 @@ mod tests {
     fn typescript_recognizes_test_files_by_suffix() {
         assert!(Language::TypeScript.is_test(Path::new("widget.test.ts")));
         assert!(Language::TypeScript.is_test(Path::new("pkg/button.test.tsx")));
+        assert!(Language::TypeScript.is_test(Path::new("service.test.mts")));
+        assert!(Language::TypeScript.is_test(Path::new("legacy.test.cts")));
         assert!(!Language::TypeScript.is_test(Path::new("widget.ts")));
         assert!(!Language::TypeScript.is_test(Path::new("button.tsx")));
+        assert!(!Language::TypeScript.is_test(Path::new("service.mts")));
     }
 
     #[test]
@@ -214,6 +221,14 @@ mod tests {
         assert_eq!(
             Language::TypeScript.expected_test_path(Path::new("button.tsx")),
             PathBuf::from("button.test.tsx")
+        );
+        assert_eq!(
+            Language::TypeScript.expected_test_path(Path::new("service.mts")),
+            PathBuf::from("service.test.mts")
+        );
+        assert_eq!(
+            Language::TypeScript.expected_test_path(Path::new("legacy.cts")),
+            PathBuf::from("legacy.test.cts")
         );
     }
 }

@@ -95,10 +95,11 @@ fn python_subcommand_exits_nonzero_on_a_red_tree() {
 
 #[test]
 fn typescript_clean_tree_reports_no_orphans() {
-    // The clean tree also holds a `*.d.ts` with no twin; it must be ignored.
+    // The clean tree pairs .ts/.tsx/.mts/.cts sources and holds `*.d.ts` /
+    // `*.d.mts` declarations with no twin; declarations must be ignored.
     assert!(
         relative_orphans(&fixture("typescript/clean"), Language::TypeScript).is_empty(),
-        "every .ts/.tsx source is paired; declaration files are ignored"
+        "every .ts/.tsx/.mts/.cts source is paired; declaration files are ignored"
     );
 }
 
@@ -106,7 +107,7 @@ fn typescript_clean_tree_reports_no_orphans() {
 fn typescript_red_tree_reports_every_missing_twin() {
     assert_eq!(
         relative_orphans(&fixture("typescript/red"), Language::TypeScript),
-        vec!["lonely.ts", "pkg/orphan.ts"],
+        vec!["bridge.cts", "lonely.ts", "pkg/orphan.ts", "solo.mts"],
     );
 }
 

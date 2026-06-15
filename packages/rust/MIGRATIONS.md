@@ -23,17 +23,20 @@ Purely additive; nothing consumes the parsed config yet.
 
 Also adds the first structural rule — unit-test location/naming — for two
 languages. `missing_unit_tests(root, language)` walks a directory and returns
-every source file with no colocated test, and `unit-location [--lang …] <PATH>`
-runs that check and exits non-zero on any orphan. Python (#15): `foo.py` →
-`foo_test.py`, `__init__.py` exempt. TypeScript (#18): `foo-bar.ts` →
-`foo-bar.test.ts` (`.ts`/`.tsx`/`.mts`/`.cts`), `*.d.ts`/`*.d.mts`/`*.d.cts`
-ignored. Purely additive.
+every source file with no colocated test, and `unit location --language
+<python|typescript> <PATH>` runs that check and exits non-zero on any orphan.
+Rules nest under their test kind (`unit` is a command group, `location` its
+first rule, #22) and `--language` is required — there is no default, so the
+scanned language is always explicit. Python (#15): `foo.py` → `foo_test.py`,
+`__init__.py` exempt. TypeScript (#18): `foo-bar.ts` → `foo-bar.test.ts`
+(`.ts`/`.tsx`/`.mts`/`.cts`), `*.d.ts`/`*.d.mts`/`*.d.cts` ignored. Purely
+additive.
 
 ### Required changes
 
 None. New, additive API: `testing_conventions::config::{Config, load_config}`,
 `testing_conventions::location::{missing_unit_tests, Language}`, and the
-`unit-location [--lang python|typescript] <PATH>` CLI subcommand.
+`unit location --language <python|typescript> <PATH>` CLI command.
 
 ### Deprecations removed
 
@@ -58,4 +61,4 @@ cd packages/rust && cargo test --test unit_location
 
 Expected: the location check's integration tests pass for both languages — each
 clean fixture reports no orphans, each red fixture reports its missing twins, and
-`unit-location` exits non-zero on the red fixtures.
+`unit location` exits non-zero on the red fixtures.

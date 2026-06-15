@@ -35,10 +35,12 @@ command group, `location` its first rule) and `--language` is required (the
 earlier; the library API (`missing_unit_tests`, `Language`, `Config`,
 `load_config`) is unchanged.
 
-Also lands the deterministic core of the Python coverage rule (#26): the new
-`testing_conventions::coverage` module (`evaluate`, `parse_report`, and the
-`Thresholds` / `CoverageReport` / `Outcome` types). Purely additive — the CLI and
-the run-coverage subprocess aren't wired yet, so there's nothing to migrate.
+Also adds the Python coverage rule (#26): `unit coverage --language python
+--config <CONFIG> <PATH>` runs the unit suite under `coverage.py` (branch on,
+`*_test.py` omitted) and enforces the config's `[python].coverage` floor, with the
+supporting `testing_conventions::coverage` module (`measure`, `evaluate`,
+`parse_report`, and the `Thresholds` / `CoverageReport` / `Outcome` types). Purely
+additive — a new subcommand and module; nothing existing changes.
 
 ### Required changes
 

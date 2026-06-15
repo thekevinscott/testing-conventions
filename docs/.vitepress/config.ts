@@ -23,6 +23,7 @@ export default defineConfig({
           text: 'How-to Guides',
           items: [
             { text: 'Overview', link: '/guide/' },
+            { text: 'Enforce conventions in CI', link: '/guide/ci' },
           ],
         },
         {

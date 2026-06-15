@@ -1,0 +1,83 @@
+name: Testing Conventions
+
+# Reusable workflow: enforce a library's testing conventions in CI.
+#
+# Call it from a consumer repo, pinned to a tag:
+#
+#   jobs:
+#     conventions:
+#       uses: thekevinscott/testing-conventions/.github/workflows/conventions.yml@v0
+#       with:
+#         languages: python,typescript
+#         path: src
+#
+# It installs the published `testing-conventions` binary (one Rust core, from
+# crates.io) and runs each rule for every requested language, failing the job on
+# any violation. Today that is the unit-test location/naming check; as more rules
+# land they run here too.
+#
+# "Every configured language" is explicit via `languages` for now; once the
+# config-driven `check` umbrella is wired this will read the config file itself.
+
+on:
+  workflow_call:
+    inputs:
+      languages:
+        description: 'Comma-separated languages to check (python, typescript).'
+        type: string
+        default: 'python,typescript'
+      path:
+        description: 'Directory scanned recursively for sources.'
+        type: string
+        default: 'src'
+      version:
+        description: 'testing-conventions version to install (default: latest from crates.io).'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  unit-location:
+    name: Unit-test location
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install testing-conventions
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -uo pipefail
+          if [ -n "$VERSION" ]; then
+            cargo install testing-conventions --locked --version "$VERSION"
+          else
+            cargo install testing-conventions --locked
+          fi
+
+      # NOTE: the command surface tracks issue #22 (unit-location -> `unit location`,
+      # --lang -> a required --language); update the invocation below when it lands.
+      - name: Check unit-test location
+        env:
+          LANGUAGES: ${{ inputs.languages }}
+          SCAN_PATH: ${{ inputs.path }}
+        run: |
+          set -uo pipefail
+          IFS=',' read -ra langs <<< "$LANGUAGES" || true
+          status=0
+          for lang in "${langs[@]}"; do
+            lang="$(echo "$lang" | tr -d '[:space:]')"
+            [ -z "$lang" ] && continue
+            echo "::group::unit-location ($lang) $SCAN_PATH"
+            if ! testing-conventions unit-location --lang "$lang" "$SCAN_PATH"; then
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          if [ "$status" -ne 0 ]; then
+            echo "::error::testing-conventions: unit-test location violations found"
+          fi
+          exit "$status"

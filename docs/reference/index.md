@@ -41,6 +41,25 @@ testing-conventions unit location --language <LANG> <PATH>
 | `0`  | Every source file has its colocated unit test. Nothing is printed.                              |
 | `1`  | One or more orphans. Each prints to stderr as `missing colocated unit test: <path>`, then a count. |
 
+### `unit coverage`
+
+Run the unit suite under coverage and fail if it's below the configured floor.
+
+```
+testing-conventions unit coverage --language <LANG> --config <CONFIG> <PATH>
+```
+
+| Argument / flag     | Description                                                                |
+| ------------------- | -------------------------------------------------------------------------- |
+| `<PATH>`            | Directory whose unit suite is run and measured.                            |
+| `--language <LANG>` | **Required.** `python` only for now (TypeScript / Rust coverage are separate items). |
+| `--config <CONFIG>` | Config file providing the thresholds (default `testing-conventions.toml`). |
+
+For **`python`**, runs `coverage.py` with branch coverage on — measuring the sources under
+`<PATH>` with `*_test.py` excluded from the denominator — and compares the total against
+`[python].coverage` (`fail_under`, `branch`). Exits `0` when the floor is met, `1` (with the
+actual vs. required percent on stderr) when it isn't. `coverage` and `pytest` must be installed.
+
 ### `check`
 
 Reserved for the config-driven umbrella that runs every configured rule. **Not wired yet** —
@@ -49,11 +68,10 @@ it currently exits `0`. Rules ship under their test-kind group (like `unit locat
 
 ## Configuration
 
-The standard is config-driven: one TOML file is intended as the single source of truth for
-every rule's thresholds. The schema is validated by the loader (unknown keys and malformed
-TOML are rejected), but **no rule consumes it from the CLI yet** — the rule that ships today
-(`unit location`) is deliberately not configurable, and the coverage thresholds below are
-accepted by the schema ahead of the coverage engine that will enforce them.
+The standard is config-driven: one TOML file is the single source of truth for every rule's
+thresholds. The schema is validated by the loader (unknown keys and malformed TOML are
+rejected). The `[python].coverage` thresholds are consumed by `unit coverage` today; the
+other tables are accepted but not yet enforced (their rules are forthcoming).
 
 ```toml
 [python]

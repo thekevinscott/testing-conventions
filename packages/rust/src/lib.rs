@@ -21,10 +21,13 @@ pub struct Cli {
 enum Command {
     /// Check the repository against its testing-conventions config.
     Check,
-    /// Check that every Python source file has a colocated `_test.py` unit test.
+    /// Check that every source file has a colocated unit test.
     UnitLocation {
-        /// Directory to scan recursively for `*.py` sources.
+        /// Directory to scan recursively.
         path: PathBuf,
+        /// Language convention to enforce.
+        #[arg(long, value_enum, default_value = "python")]
+        lang: location::Language,
     },
 }
 
@@ -38,16 +41,16 @@ where
         // The config-driven `check` umbrella isn't wired yet; the scaffold
         // proves the wiring while individual rules land as their own subcommand.
         Some(Command::Check) | None => Ok(0),
-        Some(Command::UnitLocation { path }) => run_unit_location(&path),
+        Some(Command::UnitLocation { path, lang }) => run_unit_location(&path, lang),
     }
 }
 
-/// Run the Python unit-test location check over `root`, reporting orphans.
+/// Run the unit-test location check over `root` for `language`, reporting orphans.
 ///
-/// Returns `0` when every source file has its colocated `_test.py`; otherwise
+/// Returns `0` when every source file has its colocated unit test; otherwise
 /// prints each orphan to stderr and returns `1`.
-fn run_unit_location(root: &Path) -> anyhow::Result<i32> {
-    let orphans = location::missing_unit_tests(root)?;
+fn run_unit_location(root: &Path, language: location::Language) -> anyhow::Result<i32> {
+    let orphans = location::missing_unit_tests(root, language)?;
     if orphans.is_empty() {
         return Ok(0);
     }
@@ -55,7 +58,7 @@ fn run_unit_location(root: &Path) -> anyhow::Result<i32> {
         eprintln!("missing colocated unit test: {}", orphan.display());
     }
     eprintln!(
-        "error: {} source file(s) missing a colocated `_test.py`",
+        "error: {} source file(s) missing a colocated unit test",
         orphans.len()
     );
     Ok(1)

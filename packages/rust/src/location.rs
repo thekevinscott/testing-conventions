@@ -18,7 +18,8 @@ pub enum Language {
     /// `foo.py` → colocated `foo_test.py`; `__init__.py` is exempt.
     #[value(name = "python")]
     Python,
-    /// `foo-bar.ts` → colocated `foo-bar.test.ts`; `*.d.ts` is ignored.
+    /// `foo-bar.ts` → colocated `foo-bar.test.ts`, across `.ts`/`.tsx`/`.mts`/`.cts`;
+    /// declaration files (`.d.ts`/`.d.mts`/`.d.cts`) are ignored.
     #[value(name = "typescript")]
     TypeScript,
 }
@@ -28,7 +29,9 @@ impl Language {
     fn tracks(self, path: &Path) -> bool {
         match self {
             Language::Python => has_extension(path, &["py"]),
-            Language::TypeScript => has_extension(path, &["ts", "tsx"]) && !is_declaration(path),
+            Language::TypeScript => {
+                has_extension(path, &["ts", "tsx", "mts", "cts"]) && !is_declaration(path)
+            }
         }
     }
 
@@ -38,7 +41,10 @@ impl Language {
             Language::Python => stem_of(path).ends_with("_test"),
             Language::TypeScript => {
                 let name = file_name_of(path);
-                name.ends_with(".test.ts") || name.ends_with(".test.tsx")
+                name.ends_with(".test.ts")
+                    || name.ends_with(".test.tsx")
+                    || name.ends_with(".test.mts")
+                    || name.ends_with(".test.cts")
             }
         }
     }
@@ -113,10 +119,11 @@ fn has_extension(path: &Path, extensions: &[&str]) -> bool {
         .is_some_and(|ext| extensions.contains(&ext))
 }
 
-/// `true` for a TypeScript declaration file (`*.d.ts`) — no runtime code, so
-/// never a unit-test subject.
+/// `true` for a TypeScript declaration file (`*.d.ts` / `*.d.mts` / `*.d.cts`) —
+/// no runtime code, so never a unit-test subject.
 fn is_declaration(path: &Path) -> bool {
-    file_name_of(path).ends_with(".d.ts")
+    let name = file_name_of(path);
+    name.ends_with(".d.ts") || name.ends_with(".d.mts") || name.ends_with(".d.cts")
 }
 
 /// The file extension, lossily decoded (empty if there is none).

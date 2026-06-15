@@ -26,7 +26,8 @@ languages. `missing_unit_tests(root, language)` walks a directory and returns
 every source file with no colocated test, and `unit-location [--lang …] <PATH>`
 runs that check and exits non-zero on any orphan. Python (#15): `foo.py` →
 `foo_test.py`, `__init__.py` exempt. TypeScript (#18): `foo-bar.ts` →
-`foo-bar.test.ts` (and `.tsx`), `*.d.ts` ignored. Purely additive.
+`foo-bar.test.ts` (`.ts`/`.tsx`/`.mts`/`.cts`), `*.d.ts`/`*.d.mts`/`*.d.cts`
+ignored. Purely additive.
 
 ### Required changes
 

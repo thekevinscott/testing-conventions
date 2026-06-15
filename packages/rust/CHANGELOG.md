@@ -16,7 +16,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and returns every source file with no colocated unit test (sorted), enforcing
   the README's "Location & Naming" rule per `Language`:
   - **Python** (#15) — `foo.py` → `foo_test.py`; `*_test.py` and `__init__.py` are exempt.
-  - **TypeScript** (#18) — `foo-bar.ts` → `foo-bar.test.ts` (and `.tsx`); `*.test.ts`/`*.test.tsx` are tests, `*.d.ts` is ignored, nothing is exempt.
+  - **TypeScript** (#18) — `foo-bar.ts` → `foo-bar.test.ts` across `.ts`/`.tsx`/`.mts`/`.cts`; `*.test.{ts,tsx,mts,cts}` are tests, `*.d.ts`/`*.d.mts`/`*.d.cts` are ignored, nothing is exempt.
 - `unit-location [--lang python|typescript] <PATH>` CLI subcommand — runs the check
   over a directory and exits non-zero, printing each source file missing its
   colocated test. `--lang` defaults to `python`. (#15, #18)

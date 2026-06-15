@@ -28,7 +28,7 @@ impl Language {
     fn tracks(self, path: &Path) -> bool {
         match self {
             Language::Python => has_extension(path, &["py"]),
-            Language::TypeScript => todo!("#18: track *.ts / *.tsx, ignore *.d.ts"),
+            Language::TypeScript => has_extension(path, &["ts", "tsx"]) && !is_declaration(path),
         }
     }
 
@@ -36,7 +36,10 @@ impl Language {
     fn is_test(self, path: &Path) -> bool {
         match self {
             Language::Python => stem_of(path).ends_with("_test"),
-            Language::TypeScript => todo!("#18: *.test.ts / *.test.tsx are tests"),
+            Language::TypeScript => {
+                let name = file_name_of(path);
+                name.ends_with(".test.ts") || name.ends_with(".test.tsx")
+            }
         }
     }
 
@@ -44,7 +47,7 @@ impl Language {
     fn is_exempt(self, path: &Path) -> bool {
         match self {
             Language::Python => file_name_of(path) == "__init__.py",
-            Language::TypeScript => todo!("#18: TypeScript has no exemptions"),
+            Language::TypeScript => false,
         }
     }
 
@@ -52,7 +55,9 @@ impl Language {
     fn expected_test_path(self, source: &Path) -> PathBuf {
         match self {
             Language::Python => source.with_file_name(format!("{}_test.py", stem_of(source))),
-            Language::TypeScript => todo!("#18: foo-bar.ts -> foo-bar.test.ts"),
+            Language::TypeScript => {
+                source.with_file_name(format!("{}.test.{}", stem_of(source), extension_of(source)))
+            }
         }
     }
 }
@@ -108,6 +113,19 @@ fn has_extension(path: &Path, extensions: &[&str]) -> bool {
         .is_some_and(|ext| extensions.contains(&ext))
 }
 
+/// `true` for a TypeScript declaration file (`*.d.ts`) — no runtime code, so
+/// never a unit-test subject.
+fn is_declaration(path: &Path) -> bool {
+    file_name_of(path).ends_with(".d.ts")
+}
+
+/// The file extension, lossily decoded (empty if there is none).
+fn extension_of(path: &Path) -> String {
+    path.extension()
+        .map(|ext| ext.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
 /// The file name, lossily decoded.
 fn file_name_of(path: &Path) -> String {
     path.file_name()
@@ -159,6 +177,43 @@ mod tests {
         assert_eq!(
             Language::Python.expected_test_path(Path::new("widget.py")),
             PathBuf::from("widget_test.py")
+        );
+    }
+
+    #[test]
+    fn typescript_tracks_ts_and_tsx_but_not_declarations() {
+        assert!(Language::TypeScript.tracks(Path::new("widget.ts")));
+        assert!(Language::TypeScript.tracks(Path::new("pkg/button.tsx")));
+        assert!(!Language::TypeScript.tracks(Path::new("types.d.ts")));
+        assert!(!Language::TypeScript.tracks(Path::new("widget.py")));
+        assert!(!Language::TypeScript.tracks(Path::new("README")));
+    }
+
+    #[test]
+    fn typescript_recognizes_test_files_by_suffix() {
+        assert!(Language::TypeScript.is_test(Path::new("widget.test.ts")));
+        assert!(Language::TypeScript.is_test(Path::new("pkg/button.test.tsx")));
+        assert!(!Language::TypeScript.is_test(Path::new("widget.ts")));
+        assert!(!Language::TypeScript.is_test(Path::new("button.tsx")));
+    }
+
+    #[test]
+    fn typescript_has_no_exemptions() {
+        // Unlike Python's `__init__.py`, nothing in TS is language-mandated;
+        // `index.ts` is a deliberate file and therefore a subject.
+        assert!(!Language::TypeScript.is_exempt(Path::new("index.ts")));
+        assert!(!Language::TypeScript.is_exempt(Path::new("pkg/index.ts")));
+    }
+
+    #[test]
+    fn typescript_expected_test_path_keeps_the_extension() {
+        assert_eq!(
+            Language::TypeScript.expected_test_path(Path::new("pkg/widget.ts")),
+            PathBuf::from("pkg/widget.test.ts")
+        );
+        assert_eq!(
+            Language::TypeScript.expected_test_path(Path::new("button.tsx")),
+            PathBuf::from("button.test.tsx")
         );
     }
 }

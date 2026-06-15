@@ -23,6 +23,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **BREAKING** — the unit-test location check moved from the flat `unit-location`
+  subcommand to `unit location`: rules now nest under their test kind (`unit` is a
+  command group, `location` its first rule). The `--lang` flag is renamed to
+  `--language` and is now **required** — the `python` default is gone, so omitting
+  the language is a usage error instead of a silently-empty `python` scan. Migrate
+  `unit-location --lang typescript src/` → `unit location --language typescript src/`;
+  see [MIGRATIONS](./MIGRATIONS.md#unreleased). (#22)
+
 ### Deprecated
 
 ### Removed

@@ -12,9 +12,9 @@ name: Testing Conventions
 #         path: src
 #
 # It installs the published `testing-conventions` binary (one Rust core, from
-# crates.io) and runs each rule for every requested language, failing the job on
-# any violation. Today that is the unit-test location/naming check; as more rules
-# land they run here too.
+# crates.io) and runs each rule for every requested language as its own matrix
+# job, failing the build on any violation. Today that is the unit-test
+# location/naming check; as more rules land they run here too.
 #
 # "Every configured language" is explicit via `languages` for now; once the
 # config-driven `check` umbrella is wired this will read the config file itself.
@@ -39,45 +39,46 @@ permissions:
   contents: read
 
 jobs:
-  unit-location:
-    name: Unit-test location
+  # Turn the comma-separated `languages` input into a JSON array the matrix below
+  # fans out over (trims whitespace, drops empties, errors if nothing is left).
+  setup:
+    name: Resolve languages
     runs-on: ubuntu-latest
+    outputs:
+      languages: ${{ steps.parse.outputs.languages }}
+    steps:
+      - id: parse
+        env:
+          LANGUAGES: ${{ inputs.languages }}
+        run: |
+          langs="$(jq -Rc 'split(",") | map(gsub("^ +| +$";"")) | map(select(length > 0))' <<< "$LANGUAGES")"
+          [ "$(jq length <<< "$langs")" -gt 0 ] || { echo "::error::no languages to check"; exit 1; }
+          echo "languages=$langs" >> "$GITHUB_OUTPUT"
+
+  unit-location:
+    name: Unit-test location (${{ matrix.language }})
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.setup.outputs.languages) }}
     steps:
       - uses: actions/checkout@v6
-
       - uses: dtolnay/rust-toolchain@stable
-
       - name: Install testing-conventions
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          set -uo pipefail
           if [ -n "$VERSION" ]; then
             cargo install testing-conventions --locked --version "$VERSION"
           else
             cargo install testing-conventions --locked
           fi
-
       # NOTE: the command surface tracks issue #22 (unit-location -> `unit location`,
       # --lang -> a required --language); update the invocation below when it lands.
       - name: Check unit-test location
         env:
-          LANGUAGES: ${{ inputs.languages }}
+          LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
-        run: |
-          set -uo pipefail
-          IFS=',' read -ra langs <<< "$LANGUAGES" || true
-          status=0
-          for lang in "${langs[@]}"; do
-            lang="$(echo "$lang" | tr -d '[:space:]')"
-            [ -z "$lang" ] && continue
-            echo "::group::unit-location ($lang) $SCAN_PATH"
-            if ! testing-conventions unit-location --lang "$lang" "$SCAN_PATH"; then
-              status=1
-            fi
-            echo "::endgroup::"
-          done
-          if [ "$status" -ne 0 ]; then
-            echo "::error::testing-conventions: unit-test location violations found"
-          fi
-          exit "$status"
+        run: testing-conventions unit-location --lang "$LANGUAGE" "$SCAN_PATH"

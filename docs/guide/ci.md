@@ -15,7 +15,7 @@ on: [pull_request]
 
 jobs:
   conventions:
-    uses: thekevinscott/testing-conventions/.github/workflows/conventions.yml@v0
+    uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
     with:
       languages: python,typescript
       path: src

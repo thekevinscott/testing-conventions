@@ -56,7 +56,23 @@ pub fn parse_report(json: &str) -> Result<CoverageReport> {
 /// Fails when total coverage is below `fail_under`, or when branch coverage was
 /// required but the report measured no branches (a misconfigured run).
 pub fn evaluate(report: &CoverageReport, thresholds: Thresholds) -> Outcome {
-    todo!("#26: enforce the coverage floor")
+    if thresholds.branch && report.totals.num_branches == 0 {
+        return Outcome::Fail(
+            "branch coverage is required but the report measured no branches".to_string(),
+        );
+    }
+    let actual = report.totals.percent_covered;
+    let required = f64::from(thresholds.fail_under);
+    // A hair of tolerance so a report that rounds to the floor (e.g. 99.999…%
+    // for a 100% target) isn't failed by float noise.
+    if actual + 1e-9 >= required {
+        Outcome::Pass
+    } else {
+        Outcome::Fail(format!(
+            "coverage {actual:.2}% is below the required {}%",
+            thresholds.fail_under
+        ))
+    }
 }
 
 #[cfg(test)]

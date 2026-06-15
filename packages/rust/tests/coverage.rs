@@ -10,12 +10,13 @@ use std::path::PathBuf;
 
 use testing_conventions::coverage::{evaluate, parse_report, Outcome, Thresholds};
 
-/// Read a coverage report fixture under `tests/fixtures/coverage/python/`.
+/// Read a coverage report fixture under `tests/fixtures/unit_coverage/python/`.
 fn fixture(name: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/unit_coverage/python")
         .join(name);
-    std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("fixture `{}` must exist", path.display()))
+    std::fs::read_to_string(&path)
+        .unwrap_or_else(|_| panic!("fixture `{}` must exist", path.display()))
 }
 
 const FLOOR: Thresholds = Thresholds {

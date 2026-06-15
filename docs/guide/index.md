@@ -25,6 +25,25 @@ Every source file without its colocated test is printed to stderr and the comman
 non-zero. (Rust needs no separate check here: inline `#[cfg(test)]` modules make colocation
 and 1:1 naming automatic.)
 
+## Check unit-test coverage
+
+Coverage floors are enforced on the **unit suite only**, with branch coverage on and test
+files excluded from the denominator. Put the floor in your config and run `unit coverage`:
+
+```toml
+# testing-conventions.toml
+[python]
+coverage = { branch = true, fail_under = 90 }
+```
+
+```sh
+testing-conventions unit coverage --language python --config testing-conventions.toml src/
+```
+
+It runs the suite under `coverage.py`, compares the total to `fail_under`, and exits non-zero
+on a shortfall — so CI fails on a coverage regression. (`python`, `coverage`, and `pytest`
+must be installed; Python is the only language wired today.)
+
 ## Wire it into CI
 
 `unit location`'s non-zero exit is all a CI step needs — a failing check fails the job,

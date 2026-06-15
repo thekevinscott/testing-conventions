@@ -1,8 +1,10 @@
 pub mod config;
+pub mod coverage;
 pub mod location;
 
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
@@ -39,6 +41,17 @@ enum UnitRule {
         #[arg(long, value_enum)]
         language: location::Language,
     },
+    /// Check that the unit suite meets the configured coverage floor.
+    Coverage {
+        /// Directory whose unit suite is run and measured.
+        path: PathBuf,
+        /// Language convention to enforce (required).
+        #[arg(long, value_enum)]
+        language: location::Language,
+        /// testing-conventions config file providing the coverage thresholds.
+        #[arg(long, default_value = "testing-conventions.toml")]
+        config: PathBuf,
+    },
 }
 
 pub fn run<I, T>(args: I) -> anyhow::Result<i32>
@@ -52,9 +65,14 @@ where
         // proves the wiring while individual rules land under their test-kind
         // group (e.g. `unit location`).
         Some(Command::Check) | None => Ok(0),
-        Some(Command::Unit {
-            rule: UnitRule::Location { path, language },
-        }) => run_unit_location(&path, language),
+        Some(Command::Unit { rule }) => match rule {
+            UnitRule::Location { path, language } => run_unit_location(&path, language),
+            UnitRule::Coverage {
+                path,
+                language,
+                config,
+            } => run_unit_coverage(&path, language, &config),
+        },
     }
 }
 
@@ -75,6 +93,39 @@ fn run_unit_location(root: &Path, language: location::Language) -> anyhow::Resul
         orphans.len()
     );
     Ok(1)
+}
+
+/// Run the unit-test coverage check over `root` for `language`, enforcing the
+/// floor from the config at `config_path`. Returns `0` when the floor is met,
+/// `1` otherwise.
+fn run_unit_coverage(
+    root: &Path,
+    language: location::Language,
+    config_path: &Path,
+) -> anyhow::Result<i32> {
+    let config = config::load_config(config_path)?;
+    let thresholds = match language {
+        location::Language::Python => {
+            let python = config
+                .python
+                .context("config has no [python] table to read coverage thresholds from")?;
+            coverage::Thresholds {
+                fail_under: python.coverage.fail_under,
+                branch: python.coverage.branch,
+            }
+        }
+        location::Language::TypeScript => anyhow::bail!(
+            "`unit coverage` supports `--language python` only for now; \
+             TypeScript coverage is a separate item"
+        ),
+    };
+    match coverage::measure(root, thresholds)? {
+        coverage::Outcome::Pass => Ok(0),
+        coverage::Outcome::Fail(reason) => {
+            eprintln!("error: coverage check failed — {reason}");
+            Ok(1)
+        }
+    }
 }
 
 #[cfg(test)]

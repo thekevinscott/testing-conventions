@@ -41,6 +41,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/rust
+      # The coverage rule's integration/e2e tests (#26) shell out to coverage.py.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet coverage pytest
       - uses: taiki-e/install-action@cargo-llvm-cov
       - run: cargo llvm-cov --ignore-filename-regex 'main\.rs' --fail-under-lines 95
 

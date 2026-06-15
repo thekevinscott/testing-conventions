@@ -35,3 +35,10 @@ fn above_85_exits_nonzero_against_a_100_floor() {
 fn full_exits_zero_against_a_100_floor() {
     assert_eq!(unit_coverage_exit("full", "floor100.toml"), 0);
 }
+
+#[test]
+fn waived_exits_zero_against_a_100_floor() {
+    // A `coverage` waiver omits the shim from the denominator, so the built
+    // binary clears the 100 floor end-to-end (#32).
+    assert_eq!(unit_coverage_exit("waived", "floor100.toml"), 0);
+}

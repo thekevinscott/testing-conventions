@@ -16,6 +16,15 @@ previously released as `unit-location [--lang …]` (v0.0.3 / v0.0.4), is now
 (`unit` is a command group, `location` its first rule) and `--language` is required. Breaking
 for anyone on v0.0.4 or earlier; the library API is unchanged.
 
+Also adds **exemptions & waivers** (#32), so the checker can be an honest blocking gate.
+Pure re-export **barrels** (a TypeScript file that only does `export … from`) are exempt from
+`unit location`, matched by shape not name. And an in-file marker
+`testing-conventions:waiver(<scope>): <reason>` (scope `location`, `coverage`, or `all`)
+exempts the file it lives in — keeping it off the orphan list and/or out of the coverage
+denominator. The reason is required; a malformed marker is a hard error, never a silent pass.
+See the [reference](/reference/#exemptions-waivers) and the
+[waivers guide](/guide/waivers). Purely additive.
+
 ### Required changes
 
 The unit-location CLI was renamed and its language flag made required:
@@ -37,6 +46,12 @@ deprecation cycle.
 
 Omitting the language is now a usage error (exit `2`) instead of defaulting to `python` — so a
 flag-less run on a TypeScript project no longer scans for `*.py`, finds none, and exits `0`.
+
+Exemptions & waivers (#32) change runtime behavior without a code change: `unit location` no
+longer flags re-export barrels or `location`-waived files, `unit coverage` omits
+`coverage`-waived files from the denominator, and a malformed waiver (the reserved
+`testing-conventions:waiver` token without a valid `(scope): reason`) now makes the check
+**error** rather than pass.
 
 ### Verification
 

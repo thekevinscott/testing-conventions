@@ -124,6 +124,33 @@ fn typescript_subcommand_exits_nonzero_on_a_red_tree() {
     assert_eq!(unit_location_exit("typescript/red", "typescript"), 1);
 }
 
+// ---- Exemptions & waivers (#32) ------------------------------------------
+
+#[test]
+fn typescript_barrels_and_waived_files_are_not_orphans() {
+    // The `waivers` tree pairs its ordinary sources and otherwise holds only
+    // exempt files: `index.ts` / `public-api.ts` are pure re-export barrels
+    // (exempt by shape, not name), and `cli.ts` carries a `location` waiver.
+    assert!(
+        relative_orphans(&fixture("typescript/waivers"), Language::TypeScript).is_empty(),
+        "re-export barrels and the reason-waived shim are not orphans"
+    );
+}
+
+#[test]
+fn typescript_waivers_subcommand_exits_zero() {
+    assert_eq!(unit_location_exit("typescript/waivers", "typescript"), 0);
+}
+
+#[test]
+fn typescript_a_waiver_without_a_reason_is_an_error() {
+    // A reason-less waiver must fail loudly — never silently exempt the file.
+    assert!(
+        missing_unit_tests(fixture("typescript/malformed_waiver"), Language::TypeScript).is_err(),
+        "a waiver with no reason is malformed and must error, not pass"
+    );
+}
+
 // ---- CLI surface (#22) ---------------------------------------------------
 
 /// Raw result of invoking the CLI with `args` after the program name, so a

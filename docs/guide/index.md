@@ -23,7 +23,8 @@ testing-conventions unit location --language typescript src/   # TypeScript
 
 Every source file without its colocated test is printed to stderr and the command exits
 non-zero. (Rust needs no separate check here: inline `#[cfg(test)]` modules make colocation
-and 1:1 naming automatic.)
+and 1:1 naming automatic.) Files that genuinely shouldn't be tested — re-export barrels, a
+launcher shim — have an escape hatch; see [Exempt a file](./waivers).
 
 ## Check unit-test coverage
 

@@ -50,6 +50,23 @@ fn full_passes_a_100_floor() {
 }
 
 #[test]
+fn a_coverage_waiver_omits_the_file_and_lets_the_floor_pass() {
+    // `waived` sits at ~58% only because of shim.py; its `coverage` waiver omits
+    // it from the denominator, leaving core.py (fully covered) to clear 100. The
+    // waiver is doing real work — without it this codebase fails the floor (#32).
+    assert_eq!(
+        measure(&codebase("waived"), FLOOR_100).unwrap(),
+        Outcome::Pass
+    );
+}
+
+#[test]
+fn a_coverage_waiver_without_a_reason_is_an_error() {
+    // The omit scan rejects a reason-less waiver before coverage even runs.
+    assert!(measure(&codebase("waiver_missing_reason"), FLOOR_100).is_err());
+}
+
+#[test]
 fn a_suite_that_cannot_run_is_an_error_not_a_silent_pass() {
     // An empty directory collects no tests; measuring it must error rather than
     // report a vacuous pass.

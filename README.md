@@ -140,6 +140,19 @@ shipping test code bloats the artifact and leaks fixtures.
 
 **Checked** — deterministic (inspect the built artifact for test files).
 
+## Exemptions & waivers
+
+A blocking gate needs an honest escape hatch for files that genuinely shouldn't be tested —
+otherwise it forces pointless tests or gets disabled. Two layers, neither a silent ignore:
+
+- **Structural exemptions** (automatic, by shape) — `__init__.py` (Python), declaration files
+  `*.d.ts` (TypeScript), and pure re-export **barrels**: a TS file whose only statements are
+  `export … from "…"`, matched by shape not name (the analog of `__init__.py`).
+- **Waivers** (explicit, reason-required) — an in-file marker
+  `testing-conventions:waiver(<scope>): <reason>`, with `<scope>` one of `location`,
+  `coverage`, or `all`. The reason is required, and a malformed marker is an error — so a
+  waiver is auditable in the diff and can never silently disable a check.
+
 ## Configuration
 
 One file drives every rule (TOML shown; native-language config files are also

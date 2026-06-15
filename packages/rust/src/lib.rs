@@ -1,6 +1,7 @@
 pub mod config;
 pub mod coverage;
 pub mod location;
+pub mod waiver;
 
 use std::path::{Path, PathBuf};
 

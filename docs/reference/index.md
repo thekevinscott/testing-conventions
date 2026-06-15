@@ -10,18 +10,20 @@ testing-conventions <COMMAND>
 
 Global flags: `--help`, `--version`.
 
-### `unit-location`
+### `unit location`
 
-Check that every source file under a directory has a colocated unit test.
+Check that every source file under a directory has a colocated unit test. `location` is the
+first rule under the `unit` command group; future rules (e.g. `unit isolation`) and other
+test kinds (`integration`, `e2e`) nest the same way.
 
 ```
-testing-conventions unit-location [--lang <LANG>] <PATH>
+testing-conventions unit location --language <LANG> <PATH>
 ```
 
-| Argument / flag | Description                                                        |
-| --------------- | ------------------------------------------------------------------ |
-| `<PATH>`        | Directory to scan recursively.                                     |
-| `--lang <LANG>` | Convention to enforce: `python` (default) or `typescript`.         |
+| Argument / flag     | Description                                                       |
+| ------------------- | ----------------------------------------------------------------- |
+| `<PATH>`            | Directory to scan recursively.                                    |
+| `--language <LANG>` | **Required.** Convention to enforce: `python` or `typescript`. No default — omitting it is a usage error, never a silent `python` run. |
 
 **What counts, by language:**
 
@@ -42,7 +44,7 @@ testing-conventions unit-location [--lang <LANG>] <PATH>
 ### `check`
 
 Reserved for the config-driven umbrella that runs every configured rule. **Not wired yet** —
-it currently exits `0`. Rules ship as their own subcommand (like `unit-location`) until
+it currently exits `0`. Rules ship under their test-kind group (like `unit location`) until
 `check` orchestrates them from the config.
 
 ## Configuration
@@ -50,7 +52,7 @@ it currently exits `0`. Rules ship as their own subcommand (like `unit-location`
 The standard is config-driven: one TOML file is intended as the single source of truth for
 every rule's thresholds. The schema is validated by the loader (unknown keys and malformed
 TOML are rejected), but **no rule consumes it from the CLI yet** — the rule that ships today
-(`unit-location`) is deliberately not configurable, and the coverage thresholds below are
+(`unit location`) is deliberately not configurable, and the coverage thresholds below are
 accepted by the schema ahead of the coverage engine that will enforce them.
 
 ```toml

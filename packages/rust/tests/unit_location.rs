@@ -3,8 +3,9 @@
 //!
 //! A source file must have a *colocated* test named after it: `foo.py` →
 //! `foo_test.py`, `foo-bar.ts` → `foo-bar.test.ts`. `missing_unit_tests`
-//! returns the source files missing their twin; the `unit-location`
-//! subcommand turns a non-empty result into a non-zero exit.
+//! returns the source files missing their twin; the `unit location`
+//! subcommand (a `location` rule nested under the `unit` kind, #22) turns a
+//! non-empty result into a non-zero exit.
 //!
 //! Per the #3 guardrail, each language ships a clean fixture (every source
 //! paired — must pass) and a red fixture (orphans present — must fail).
@@ -36,14 +37,16 @@ fn relative_orphans(root: &Path, language: Language) -> Vec<String> {
         .collect()
 }
 
-/// Exit code of `unit-location [--lang <lang>] <fixture>`.
-fn unit_location_exit(fixture_name: &str, lang: Option<&str>) -> i32 {
-    let mut argv: Vec<OsString> = vec!["testing-conventions".into(), "unit-location".into()];
-    if let Some(lang) = lang {
-        argv.push("--lang".into());
-        argv.push(lang.into());
-    }
-    argv.push(fixture(fixture_name).into_os_string());
+/// Exit code of `unit location --language <language> <fixture>`.
+fn unit_location_exit(fixture_name: &str, language: &str) -> i32 {
+    let argv: Vec<OsString> = vec![
+        "testing-conventions".into(),
+        "unit".into(),
+        "location".into(),
+        "--language".into(),
+        language.into(),
+        fixture(fixture_name).into_os_string(),
+    ];
     run(argv).expect("a readable tree should not error")
 }
 
@@ -83,12 +86,12 @@ fn python_missing_root_is_an_error() {
 
 #[test]
 fn python_subcommand_exits_zero_on_a_clean_tree() {
-    assert_eq!(unit_location_exit("clean", None), 0);
+    assert_eq!(unit_location_exit("clean", "python"), 0);
 }
 
 #[test]
 fn python_subcommand_exits_nonzero_on_a_red_tree() {
-    assert_eq!(unit_location_exit("red", None), 1);
+    assert_eq!(unit_location_exit("red", "python"), 1);
 }
 
 // ---- TypeScript (#18) ----------------------------------------------------
@@ -113,13 +116,45 @@ fn typescript_red_tree_reports_every_missing_twin() {
 
 #[test]
 fn typescript_subcommand_exits_zero_on_a_clean_tree() {
-    assert_eq!(
-        unit_location_exit("typescript/clean", Some("typescript")),
-        0
-    );
+    assert_eq!(unit_location_exit("typescript/clean", "typescript"), 0);
 }
 
 #[test]
 fn typescript_subcommand_exits_nonzero_on_a_red_tree() {
-    assert_eq!(unit_location_exit("typescript/red", Some("typescript")), 1);
+    assert_eq!(unit_location_exit("typescript/red", "typescript"), 1);
+}
+
+// ---- CLI surface (#22) ---------------------------------------------------
+
+/// Raw result of invoking the CLI with `args` after the program name, so a
+/// usage error (clap) can be asserted rather than unwrapped away.
+fn run_cli(args: &[&str]) -> anyhow::Result<i32> {
+    let argv: Vec<OsString> = std::iter::once(OsString::from("testing-conventions"))
+        .chain(args.iter().copied().map(OsString::from))
+        .collect();
+    run(argv)
+}
+
+#[test]
+fn unit_location_requires_language() {
+    // Omitting `--language` is a usage error — never a silent `python` run.
+    let err = run_cli(&["unit", "location", "src"]).expect_err("--language is required");
+    let clap_err = err
+        .downcast_ref::<clap::Error>()
+        .expect("a missing required flag should surface as a clap::Error");
+    assert_eq!(
+        clap_err.kind(),
+        clap::error::ErrorKind::MissingRequiredArgument
+    );
+}
+
+#[test]
+fn the_flat_unit_location_subcommand_is_gone() {
+    // The pre-#22 flat form (`unit-location …`) no longer parses; the rule now
+    // lives at `unit location`.
+    let err = run_cli(&["unit-location", "src"]).expect_err("the flat subcommand was removed");
+    let clap_err = err
+        .downcast_ref::<clap::Error>()
+        .expect("an unknown subcommand should surface as a clap::Error");
+    assert_eq!(clap_err.kind(), clap::error::ErrorKind::InvalidSubcommand);
 }

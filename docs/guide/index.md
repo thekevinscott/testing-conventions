@@ -17,8 +17,8 @@ test can't hide. The expected twin varies by language:
 Run it over your source directory:
 
 ```sh
-testing-conventions unit-location src/                     # Python (default)
-testing-conventions unit-location --lang typescript src/   # TypeScript
+testing-conventions unit location --language python src/       # Python
+testing-conventions unit location --language typescript src/   # TypeScript
 ```
 
 Every source file without its colocated test is printed to stderr and the command exits
@@ -27,7 +27,7 @@ and 1:1 naming automatic.)
 
 ## Wire it into CI
 
-`unit-location`'s non-zero exit is all a CI step needs — a failing check fails the job,
+`unit location`'s non-zero exit is all a CI step needs — a failing check fails the job,
 with the offending files named in the log:
 
 ```yaml
@@ -35,9 +35,9 @@ with the offending files named in the log:
 steps:
   - uses: actions/checkout@v4
   - name: Unit-test location (Python)
-    run: testing-conventions unit-location src/
+    run: testing-conventions unit location --language python src/
   - name: Unit-test location (TypeScript)
-    run: testing-conventions unit-location --lang typescript src/
+    run: testing-conventions unit location --language typescript src/
 ```
 
 ## See also

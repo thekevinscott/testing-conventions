@@ -21,13 +21,23 @@ pub struct Cli {
 enum Command {
     /// Check the repository against its testing-conventions config.
     Check,
+    /// Unit-test conventions.
+    Unit {
+        #[command(subcommand)]
+        rule: UnitRule,
+    },
+}
+
+/// Rules enforced on the unit-test suite (the README's "Unit" taxonomy).
+#[derive(Subcommand, Debug)]
+enum UnitRule {
     /// Check that every source file has a colocated unit test.
-    UnitLocation {
+    Location {
         /// Directory to scan recursively.
         path: PathBuf,
-        /// Language convention to enforce.
-        #[arg(long, value_enum, default_value = "python")]
-        lang: location::Language,
+        /// Language convention to enforce (required).
+        #[arg(long, value_enum)]
+        language: location::Language,
     },
 }
 
@@ -39,9 +49,12 @@ where
     let cli = Cli::try_parse_from(args)?;
     match cli.command {
         // The config-driven `check` umbrella isn't wired yet; the scaffold
-        // proves the wiring while individual rules land as their own subcommand.
+        // proves the wiring while individual rules land under their test-kind
+        // group (e.g. `unit location`).
         Some(Command::Check) | None => Ok(0),
-        Some(Command::UnitLocation { path, lang }) => run_unit_location(&path, lang),
+        Some(Command::Unit {
+            rule: UnitRule::Location { path, language },
+        }) => run_unit_location(&path, language),
     }
 }
 

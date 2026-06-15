@@ -30,15 +30,15 @@ testing-conventions --version
 ## Your first check: unit-test location
 
 The rule shipping today is **unit-test location & naming**: every source file must have a
-colocated unit test named after it. Point the `unit-location` subcommand at the directory
-you want to scan:
+colocated unit test named after it. Point the `unit location` command at the directory you
+want to scan, naming the language with the required `--language` flag:
 
 ```sh
-# Python is the default: foo.py must have a sibling foo_test.py
-testing-conventions unit-location src/
+# Python: foo.py must have a sibling foo_test.py
+testing-conventions unit location --language python src/
 
 # TypeScript: foo-bar.ts must have a sibling foo-bar.test.ts
-testing-conventions unit-location --lang typescript src/
+testing-conventions unit location --language typescript src/
 ```
 
 When every source file is paired, the command prints nothing and exits `0`. When a file is

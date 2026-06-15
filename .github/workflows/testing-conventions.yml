@@ -1,0 +1,66 @@
+name: Testing Conventions
+
+# Reusable workflow: enforce a library's testing conventions in CI.
+#
+# Call it from a consumer repo, pinned to a tag:
+#
+#   jobs:
+#     conventions:
+#       uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
+#       with:
+#         languages: '["python", "typescript"]'
+#         path: src
+#
+# It installs the published `testing-conventions` binary (one Rust core, from
+# crates.io) and runs each rule for every requested language as its own matrix
+# job, failing the build on any violation. Today that is the unit-test
+# location/naming check; as more rules land they run here too.
+#
+# `languages` is a JSON array so the matrix can fan out over it directly
+# (reusable-workflow inputs can't be native lists). Once the config-driven
+# `check` umbrella is wired this will read the config file itself.
+
+on:
+  workflow_call:
+    inputs:
+      languages:
+        description: 'JSON array of languages to check, e.g. ["python", "typescript"].'
+        type: string
+        default: '["python", "typescript"]'
+      path:
+        description: 'Directory scanned recursively for sources.'
+        type: string
+        default: 'src'
+      version:
+        description: 'testing-conventions version to install (default: latest from crates.io).'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  unit-location:
+    name: Unit-test location (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(inputs.languages) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install testing-conventions
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$VERSION" ]; then
+            cargo install testing-conventions --locked --version "$VERSION"
+          else
+            cargo install testing-conventions --locked
+          fi
+      - name: Check unit-test location
+        env:
+          LANGUAGE: ${{ matrix.language }}
+          SCAN_PATH: ${{ inputs.path }}
+        run: testing-conventions unit location --language "$LANGUAGE" "$SCAN_PATH"

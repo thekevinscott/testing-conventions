@@ -17,29 +17,31 @@ jobs:
   conventions:
     uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
     with:
-      languages: python,typescript
+      languages: '["python", "typescript"]'
       path: src
 ```
 
 It installs the published `testing-conventions` binary and runs every requested rule for each
-language, failing the job — with the offending files in the log — on any violation.
+language as its own matrix job, failing the build — with the offending files in the log — on
+any violation.
 
 ### Inputs
 
-| Input       | Default             | Description                                                  |
-| ----------- | ------------------- | ------------------------------------------------------------ |
-| `languages` | `python,typescript` | Comma-separated languages to check (`python`, `typescript`). |
-| `path`      | `src`               | Directory scanned recursively for sources.                   |
-| `version`   | latest              | `testing-conventions` version to install (e.g. `0.1.0`).     |
+| Input       | Default                     | Description                                                |
+| ----------- | --------------------------- | ---------------------------------------------------------- |
+| `languages` | `["python", "typescript"]`  | JSON array of languages to check (`python`, `typescript`). |
+| `path`      | `src`                       | Directory scanned recursively for sources.                 |
+| `version`   | latest                      | `testing-conventions` version to install (e.g. `0.1.0`).   |
 
 ## Roll your own
 
 Prefer to wire it up by hand? The CLI is a single binary — install it (see
-[Getting Started](../getting-started)) and call each rule as its own step:
+[Getting Started](../getting-started)) and call each rule as its own step, naming the language
+with the required `--language` flag:
 
 ```yaml
-- run: testing-conventions unit-location src/
-- run: testing-conventions unit-location --lang typescript src/
+- run: testing-conventions unit location --language python src/
+- run: testing-conventions unit location --language typescript src/
 ```
 
 Either way, the non-zero exit on a violation is what fails the build.

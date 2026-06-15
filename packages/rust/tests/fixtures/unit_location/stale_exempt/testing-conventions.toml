@@ -1,0 +1,4 @@
+[[python.exempt]]
+path = "ghost.py"
+rules = ["location"]
+reason = "deliberately points nowhere, to exercise stale-entry detection"

@@ -1,1 +1,2 @@
-// unit_location typescript red fixture: source colocated with widget.test.ts (OK)
+// red fixture source, paired with widget.test.ts
+export const widget = () => "widget";

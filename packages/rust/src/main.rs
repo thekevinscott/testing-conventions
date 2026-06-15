@@ -8,8 +8,8 @@ fn main() -> ExitCode {
                 clap_err.exit();
             }
             // `{err:#}` prints the whole anyhow chain on one line ("context:
-            // cause"), so a wrapped failure (e.g. a malformed waiver, with the
-            // offending file as context) shows both the where and the why.
+            // cause"), so a wrapped failure (e.g. a stale exempt entry, with the
+            // offending config as context) shows both the where and the why.
             eprintln!("error: {err:#}");
             ExitCode::from(1)
         }

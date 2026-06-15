@@ -1,1 +1,3 @@
-# unit_location clean fixture: nested source colocated with helper_test.py
+# clean fixture nested source, paired with helper_test.py
+def helper():
+    return "help"

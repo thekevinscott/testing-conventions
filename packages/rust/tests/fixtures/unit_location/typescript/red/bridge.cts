@@ -1,1 +1,2 @@
-// unit_location typescript red fixture: CJS (.cts) source with no colocated bridge.test.cts
+// red fixture ORPHAN — no colocated bridge.test.cts
+export const bridge = () => 1;

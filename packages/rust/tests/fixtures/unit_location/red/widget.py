@@ -1,1 +1,3 @@
-# unit_location red fixture: source colocated with widget_test.py (paired, OK)
+# red fixture source, paired with widget_test.py
+def widget():
+    return "widget"

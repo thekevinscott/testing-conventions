@@ -16,14 +16,13 @@ previously released as `unit-location [--lang …]` (v0.0.3 / v0.0.4), is now
 (`unit` is a command group, `location` its first rule) and `--language` is required. Breaking
 for anyone on v0.0.4 or earlier; the library API is unchanged.
 
-Also adds **exemptions & waivers** (#32), so the checker can be an honest blocking gate.
-Pure re-export **barrels** (a TypeScript file that only does `export … from`) are exempt from
-`unit location`, matched by shape not name. And an in-file marker
-`testing-conventions:waiver(<scope>): <reason>` (scope `location`, `coverage`, or `all`)
-exempts the file it lives in — keeping it off the orphan list and/or out of the coverage
-denominator. The reason is required; a malformed marker is a hard error, never a silent pass.
-See the [reference](/reference/#exemptions-waivers) and the
-[waivers guide](/guide/waivers). Purely additive.
+Also adds **exemptions** (#32), so the checker can be an honest blocking gate. Exemptions are
+config-driven and explicit — there's no automatic name- or shape-based exemption, so
+`__init__.py`, re-export barrels, and launcher shims are all subjects now. Only empty/comment-
+only files (no logic) are skipped automatically. For a deliberate omission, list the file in a
+`[[<language>.exempt]]` config entry with the `rules` it lifts (`location` / `coverage`) and a
+required `reason`; a stale entry (missing path) is a hard error. See the
+[reference](/reference/#exemptions) and the [exemptions guide](/guide/exemptions).
 
 ### Required changes
 
@@ -37,6 +36,11 @@ The unit-location CLI was renamed and its language flag made required:
 `unit-location` → `unit location`; `--lang` → `--language`; `--language` is required (no
 `python` default).
 
+Exemptions (#32) also change the library API: `location::missing_unit_tests` gains an `exempt`
+argument and `coverage::measure` gains an `omit` argument (build both with
+`config::resolve_exempt`); `[<language>].coverage` becomes optional. Anyone relying on
+`__init__.py` being exempt must add a non-empty one to the config — empty ones need nothing.
+
 ### Deprecations removed
 
 The `--lang` flag and its implicit `python` default are gone — a clean pre-1.0 break, not a
@@ -47,11 +51,10 @@ deprecation cycle.
 Omitting the language is now a usage error (exit `2`) instead of defaulting to `python` — so a
 flag-less run on a TypeScript project no longer scans for `*.py`, finds none, and exits `0`.
 
-Exemptions & waivers (#32) change runtime behavior without a code change: `unit location` no
-longer flags re-export barrels or `location`-waived files, `unit coverage` omits
-`coverage`-waived files from the denominator, and a malformed waiver (the reserved
-`testing-conventions:waiver` token without a valid `(scope): reason`) now makes the check
-**error** rather than pass.
+Exemptions (#32) change runtime behavior: `__init__.py` is no longer auto-exempt (a non-empty
+one without a test is now an orphan), `unit location` / `unit coverage` honor the config
+`exempt` list, and a reason-less or stale exempt entry makes the run **error** rather than
+pass. Empty/comment-only files of any language are non-subjects and never reported.
 
 ### Verification
 

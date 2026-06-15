@@ -1,15 +1,16 @@
 //! Integration tests for the unit-test location/naming check
-//! (Python — issue #15; TypeScript — issue #18).
+//! (Python — issue #15; TypeScript — issue #18; exemptions — issue #32).
 //!
 //! A source file must have a *colocated* test named after it: `foo.py` →
 //! `foo_test.py`, `foo-bar.ts` → `foo-bar.test.ts`. `missing_unit_tests`
 //! returns the source files missing their twin; the `unit location`
-//! subcommand (a `location` rule nested under the `unit` kind, #22) turns a
-//! non-empty result into a non-zero exit.
+//! subcommand turns a non-empty result into a non-zero exit.
 //!
-//! Per the #3 guardrail, each language ships a clean fixture (every source
-//! paired — must pass) and a red fixture (orphans present — must fail).
+//! Empty/comment-only files are never subjects (no logic to test), and a file
+//! listed in the config `exempt` table is a deliberate, reason-required
+//! omission. A stale exempt entry (path that no longer exists) is an error.
 
+use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
@@ -23,9 +24,15 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Orphans reported under `root` for `language`, as `/`-joined relative paths.
+/// Orphans reported under `root` for `language` (no exemptions), as `/`-joined
+/// relative paths.
 fn relative_orphans(root: &Path, language: Language) -> Vec<String> {
-    missing_unit_tests(root, language)
+    orphans_with(root, language, &BTreeSet::new())
+}
+
+/// Orphans reported under `root` for `language` with `exempt` paths lifted.
+fn orphans_with(root: &Path, language: Language, exempt: &BTreeSet<String>) -> Vec<String> {
+    missing_unit_tests(root, language, exempt)
         .expect("walking a readable tree should succeed")
         .iter()
         .map(|path| {
@@ -37,17 +44,33 @@ fn relative_orphans(root: &Path, language: Language) -> Vec<String> {
         .collect()
 }
 
-/// Exit code of `unit location --language <language> <fixture>`.
-fn unit_location_exit(fixture_name: &str, language: &str) -> i32 {
+/// A `BTreeSet` of exempt relative paths.
+fn exempt(paths: &[&str]) -> BTreeSet<String> {
+    paths.iter().map(|p| p.to_string()).collect()
+}
+
+/// Result of `unit location --language <lang> --config <fixture>/testing-conventions.toml
+/// <fixture>`. The config is co-located with each fixture; for trees without one
+/// (clean/red), the absent file simply means "no exemptions".
+fn unit_location_run(fixture_name: &str, language: &str) -> anyhow::Result<i32> {
+    let dir = fixture(fixture_name);
+    let config = dir.join("testing-conventions.toml");
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),
         "unit".into(),
         "location".into(),
         "--language".into(),
         language.into(),
-        fixture(fixture_name).into_os_string(),
+        "--config".into(),
+        config.into_os_string(),
+        dir.into_os_string(),
     ];
-    run(argv).expect("a readable tree should not error")
+    run(argv)
+}
+
+/// Exit code of `unit location` over `fixture_name`.
+fn unit_location_exit(fixture_name: &str, language: &str) -> i32 {
+    unit_location_run(fixture_name, language).expect("a readable tree should not error")
 }
 
 // ---- Python (#15) --------------------------------------------------------
@@ -69,17 +92,14 @@ fn python_red_tree_reports_every_missing_twin() {
 }
 
 #[test]
-fn python_package_markers_are_not_orphans() {
-    assert!(
-        relative_orphans(&fixture("exempt"), Language::Python).is_empty(),
-        "__init__.py is a package marker, never a unit-test subject"
-    );
-}
-
-#[test]
 fn python_missing_root_is_an_error() {
     assert!(
-        missing_unit_tests(fixture("does_not_exist"), Language::Python).is_err(),
+        missing_unit_tests(
+            fixture("does_not_exist"),
+            Language::Python,
+            &BTreeSet::new()
+        )
+        .is_err(),
         "an unreadable root must be an error"
     );
 }
@@ -124,30 +144,53 @@ fn typescript_subcommand_exits_nonzero_on_a_red_tree() {
     assert_eq!(unit_location_exit("typescript/red", "typescript"), 1);
 }
 
-// ---- Exemptions & waivers (#32) ------------------------------------------
+// ---- Exemptions (#32) ----------------------------------------------------
 
 #[test]
-fn typescript_barrels_and_waived_files_are_not_orphans() {
-    // The `waivers` tree pairs its ordinary sources and otherwise holds only
-    // exempt files: `index.ts` / `public-api.ts` are pure re-export barrels
-    // (exempt by shape, not name), and `cli.ts` carries a `location` waiver.
-    assert!(
-        relative_orphans(&fixture("typescript/waivers"), Language::TypeScript).is_empty(),
-        "re-export barrels and the reason-waived shim are not orphans"
+fn empty_init_is_a_non_subject_but_content_and_shims_are_orphans() {
+    // In `python_exempt`: the empty top-level __init__.py is a non-subject (no
+    // code), core.py is paired, and pkg/__init__.py (has code) + cli.py are
+    // orphans absent any exemption — __init__.py is no longer auto-exempt.
+    assert_eq!(
+        relative_orphans(&fixture("python_exempt"), Language::Python),
+        vec!["cli.py", "pkg/__init__.py"],
     );
 }
 
 #[test]
-fn typescript_waivers_subcommand_exits_zero() {
-    assert_eq!(unit_location_exit("typescript/waivers", "typescript"), 0);
+fn config_exemptions_lift_listed_files() {
+    // Lifting exactly the two orphans (at the library level) clears the tree.
+    assert!(orphans_with(
+        &fixture("python_exempt"),
+        Language::Python,
+        &exempt(&["cli.py", "pkg/__init__.py"]),
+    )
+    .is_empty());
 }
 
 #[test]
-fn typescript_a_waiver_without_a_reason_is_an_error() {
-    // A reason-less waiver must fail loudly — never silently exempt the file.
+fn python_subcommand_exits_zero_with_config_exemptions() {
+    // The fixture's testing-conventions.toml exempts cli.py + pkg/__init__.py.
+    assert_eq!(unit_location_exit("python_exempt", "python"), 0);
+}
+
+#[test]
+fn a_typescript_barrel_is_an_orphan_until_explicitly_exempted() {
+    // No automatic shape exemption: a re-export barrel is an orphan…
+    assert_eq!(
+        relative_orphans(&fixture("typescript/exempt"), Language::TypeScript),
+        vec!["index.ts"],
+    );
+    // …until the config exempts it, with a reason.
+    assert_eq!(unit_location_exit("typescript/exempt", "typescript"), 0);
+}
+
+#[test]
+fn a_stale_exempt_entry_is_an_error() {
+    // The fixture exempts `ghost.py`, which doesn't exist — config can't rot.
     assert!(
-        missing_unit_tests(fixture("typescript/malformed_waiver"), Language::TypeScript).is_err(),
-        "a waiver with no reason is malformed and must error, not pass"
+        unit_location_run("stale_exempt", "python").is_err(),
+        "an exempt entry pointing at a missing file must error"
     );
 }
 

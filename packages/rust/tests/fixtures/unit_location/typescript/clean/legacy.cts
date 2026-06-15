@@ -1,1 +1,2 @@
-// unit_location typescript clean fixture: CJS (.cts) source colocated with legacy.test.cts
+// clean fixture source, paired with legacy.test.cts
+export const legacy = () => "legacy";

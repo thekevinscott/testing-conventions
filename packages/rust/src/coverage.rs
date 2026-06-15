@@ -1,4 +1,4 @@
-//! Coverage rule (Python — issue #26).
+//! Coverage rule (Python — issue #26; exemptions — issue #32).
 //!
 //! Enforces the README's Coverage rule: a library's unit suite must meet the
 //! configured floor, measured with branch coverage, with test files excluded
@@ -7,6 +7,10 @@
 //! config, [`evaluate`] decides pass/fail. Producing the report (shelling out
 //! to `coverage`) is a thin layer on top, kept separate so the guarantee is
 //! testable without a Python toolchain.
+//!
+//! Files exempted from coverage in config (issue #32) are omitted from the
+//! denominator alongside the test files; the caller resolves them
+//! ([`crate::config::resolve_exempt`]) and passes their paths to [`measure`].
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -14,8 +18,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
-
-use crate::waiver::{self, Scope};
 
 /// Always omitted from the coverage denominator: colocated unit tests are the
 /// suite, never a subject of it.
@@ -88,11 +90,13 @@ pub fn evaluate(report: &CoverageReport, thresholds: Thresholds) -> Outcome {
 /// Run the unit suite under coverage.py in `root` and check it against
 /// `thresholds`.
 ///
-/// Shells out to `coverage run --branch` (omitting `*_test.py` from the
-/// denominator) then `coverage json`, and evaluates the report. The `coverage`
-/// CLI — with `pytest` importable — must be on `PATH`.
-pub fn measure(root: &Path, thresholds: Thresholds) -> Result<Outcome> {
-    let report = run_coverage(root)?;
+/// Shells out to `coverage run --branch` (omitting `*_test.py` and every path in
+/// `omit` from the denominator) then `coverage json`, and evaluates the report.
+/// `omit` holds the `coverage`-rule exemptions resolved from config, as
+/// `root`-relative paths. The `coverage` CLI — with `pytest` importable — must be
+/// on `PATH`.
+pub fn measure(root: &Path, thresholds: Thresholds, omit: &[String]) -> Result<Outcome> {
+    let report = run_coverage(root, omit)?;
     Ok(evaluate(&report, thresholds))
 }
 
@@ -120,9 +124,9 @@ impl Drop for DataFile {
 }
 
 /// Run coverage.py over the unit suite in `root` and return the parsed report.
-fn run_coverage(root: &Path) -> Result<CoverageReport> {
+fn run_coverage(root: &Path, omit: &[String]) -> Result<CoverageReport> {
     let data = DataFile::new();
-    let omit = build_omit(root)?;
+    let omit = build_omit(omit);
 
     // Branch coverage on; measure the sources in `root` with the test files —
     // and any `coverage`-waived files — omitted from the denominator. Byte-code
@@ -163,51 +167,15 @@ fn run_coverage(root: &Path) -> Result<CoverageReport> {
 }
 
 /// The single comma-joined `--omit` value for the coverage run: always
-/// `*_test.py`, plus every Python source under `root` carrying a `coverage`
-/// waiver. (coverage.py takes one `--omit` — repeated flags don't accumulate, so
-/// the patterns must be joined.) A waived file leaves the denominator with its
-/// reason recorded in the file itself — an auditable omission, not a silent
-/// ignore-glob. A malformed waiver is an error.
-fn build_omit(root: &Path) -> Result<String> {
-    let mut waived = waived_coverage_files(root)?;
-    waived.sort();
-    Ok(std::iter::once(TEST_OMIT.to_string())
-        .chain(waived)
+/// `*_test.py`, plus every `coverage`-exempt path from config. (coverage.py
+/// takes one `--omit` — repeated flags don't accumulate, so the patterns must be
+/// joined.) An exempt file leaves the denominator with its reason recorded in
+/// config — an auditable omission, not a silent ignore-glob.
+fn build_omit(omit: &[String]) -> String {
+    std::iter::once(TEST_OMIT.to_string())
+        .chain(omit.iter().cloned())
         .collect::<Vec<_>>()
-        .join(","))
-}
-
-/// Python source files under `root` carrying a `coverage` (or `all`) waiver, as
-/// `root`-relative, `/`-separated paths (the form coverage.py records them in).
-/// Malformed waivers are errors.
-fn waived_coverage_files(root: &Path) -> Result<Vec<String>> {
-    let mut out = Vec::new();
-    collect_waived(root, root, &mut out)?;
-    Ok(out)
-}
-
-/// Recursively gather `coverage`-waived `*.py` files under `dir` into `out`.
-fn collect_waived(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<()> {
-    let entries =
-        std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
-    for entry in entries {
-        let path = entry
-            .with_context(|| format!("reading an entry under `{}`", dir.display()))?
-            .path();
-        if path.is_dir() {
-            collect_waived(root, &path, out)?;
-        } else if path.extension().and_then(|ext| ext.to_str()) == Some("py") {
-            let contents = std::fs::read_to_string(&path)
-                .with_context(|| format!("reading `{}`", path.display()))?;
-            let waived = waiver::waived_reason(&contents, Scope::Coverage)
-                .with_context(|| format!("checking waivers in `{}`", path.display()))?;
-            if waived.is_some() {
-                let relative = path.strip_prefix(root).unwrap_or(&path);
-                out.push(relative.to_string_lossy().replace('\\', "/"));
-            }
-        }
-    }
-    Ok(())
+        .join(",")
 }
 
 #[cfg(test)]
@@ -274,67 +242,15 @@ mod tests {
         assert_eq!(report.totals.num_branches, 8);
     }
 
-    /// A throwaway directory tree, removed on drop, for the omit-scan tests.
-    struct TempTree(PathBuf);
-
-    impl TempTree {
-        fn new(files: &[(&str, &str)]) -> Self {
-            static COUNTER: AtomicU64 = AtomicU64::new(0);
-            let root = std::env::temp_dir().join(format!(
-                "tc-omit-{}-{}",
-                std::process::id(),
-                COUNTER.fetch_add(1, Ordering::Relaxed),
-            ));
-            for (rel, contents) in files {
-                let path = root.join(rel);
-                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-                std::fs::write(path, contents).unwrap();
-            }
-            TempTree(root)
-        }
-    }
-
-    impl Drop for TempTree {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
+    #[test]
+    fn omit_is_just_the_test_glob_when_nothing_is_exempt() {
+        assert_eq!(build_omit(&[]), "*_test.py");
     }
 
     #[test]
-    fn omit_is_just_the_test_glob_when_nothing_is_waived() {
-        let tree = TempTree::new(&[("widget.py", "x = 1\n"), ("widget_test.py", "")]);
-        assert_eq!(build_omit(&tree.0).unwrap(), "*_test.py");
-    }
-
-    #[test]
-    fn omit_folds_in_coverage_waived_files_sorted_and_relative() {
-        let tree = TempTree::new(&[
-            ("core.py", "x = 1\n"),
-            (
-                "shim.py",
-                "# testing-conventions:waiver(coverage): launcher shim\n",
-            ),
-            (
-                "pkg/gen.py",
-                "# testing-conventions:waiver(all): generated code\n",
-            ),
-        ]);
-        // *_test.py first, then waived files sorted; nested path is `/`-joined.
-        assert_eq!(build_omit(&tree.0).unwrap(), "*_test.py,pkg/gen.py,shim.py");
-    }
-
-    #[test]
-    fn a_location_only_waiver_does_not_omit_from_coverage() {
-        let tree = TempTree::new(&[(
-            "shim.py",
-            "# testing-conventions:waiver(location): no colocated test\n",
-        )]);
-        assert_eq!(build_omit(&tree.0).unwrap(), "*_test.py");
-    }
-
-    #[test]
-    fn a_malformed_waiver_makes_the_omit_scan_error() {
-        let tree = TempTree::new(&[("shim.py", "# testing-conventions:waiver(coverage):\n")]);
-        assert!(build_omit(&tree.0).is_err());
+    fn omit_folds_in_the_exempt_paths_after_the_test_glob() {
+        // The caller passes already-resolved, sorted, `root`-relative paths.
+        let exempt = vec!["pkg/gen.py".to_string(), "shim.py".to_string()];
+        assert_eq!(build_omit(&exempt), "*_test.py,pkg/gen.py,shim.py");
     }
 }

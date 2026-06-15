@@ -37,8 +37,11 @@ fn full_exits_zero_against_a_100_floor() {
 }
 
 #[test]
-fn waived_exits_zero_against_a_100_floor() {
-    // A `coverage` waiver omits the shim from the denominator, so the built
-    // binary clears the 100 floor end-to-end (#32).
-    assert_eq!(unit_coverage_exit("waived", "floor100.toml"), 0);
+fn exempt_cov_exits_zero_against_a_100_floor() {
+    // The config exempts shim.py from coverage, so the built binary omits it
+    // from the denominator and clears the 100 floor end-to-end (#32).
+    assert_eq!(
+        unit_coverage_exit("exempt_cov", "floor100_exempt_shim.toml"),
+        0
+    );
 }

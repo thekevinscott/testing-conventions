@@ -1,1 +1,2 @@
-// unit_location typescript clean fixture: source colocated with widget.test.ts
+// clean fixture source, paired with widget.test.ts
+export const widget = () => "widget";

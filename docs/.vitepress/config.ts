@@ -27,7 +27,7 @@ export default defineConfig({
           text: 'How-to Guides',
           items: [
             { text: 'Overview', link: '/guide/' },
-            { text: 'Exempt a file (barrels & waivers)', link: '/guide/waivers' },
+            { text: 'Exempt a file', link: '/guide/exemptions' },
             { text: 'Enforce conventions in CI', link: '/guide/ci' },
           ],
         },

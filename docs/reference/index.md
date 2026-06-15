@@ -17,25 +17,27 @@ first rule under the `unit` command group; future rules (e.g. `unit isolation`) 
 test kinds (`integration`, `e2e`) nest the same way.
 
 ```
-testing-conventions unit location --language <LANG> <PATH>
+testing-conventions unit location --language <LANG> [--config <CONFIG>] <PATH>
 ```
 
 | Argument / flag     | Description                                                       |
 | ------------------- | ----------------------------------------------------------------- |
 | `<PATH>`            | Directory to scan recursively.                                    |
 | `--language <LANG>` | **Required.** Convention to enforce: `python` or `typescript`. No default — omitting it is a usage error, never a silent `python` run. |
+| `--config <CONFIG>` | Config file supplying the `exempt` list (default `testing-conventions.toml`). Optional — if the file is absent, nothing is exempt. |
 
 **What counts, by language:**
 
-- **`python`** — a source `*.py` needs a colocated `*_test.py`. `*_test.py` files (the tests
-  themselves) and `__init__.py` (a language-mandated package marker) are not subjects.
+- **`python`** — a source `*.py` needs a colocated `*_test.py`. `*_test.py` files are the tests
+  themselves. Note `__init__.py` is **not** auto-exempt: an empty one is skipped (see below),
+  but a non-empty one needs a test or an [exemption](#exemptions).
 - **`typescript`** — a source `*.ts` / `*.tsx` / `*.mts` / `*.cts` needs a colocated
   `*.test.*` of the matching extension (`foo.mts` → `foo.test.mts`). `*.test.*` files are the
   tests; declaration files (`*.d.ts` / `*.d.mts` / `*.d.cts`) carry no runtime code and are
-  ignored, as are pure re-export **barrels** (see [Exemptions & waivers](#exemptions-waivers)).
+  ignored.
 
-Beyond the per-language rules, a file can be exempted by a structural **barrel** match or an
-explicit **waiver** — see [Exemptions & waivers](#exemptions-waivers).
+Two things are not subjects regardless of language: **empty or comment-only files** (no logic
+to test) and any file listed in the config [`exempt`](#exemptions) table.
 
 **Exit codes:**
 
@@ -62,58 +64,44 @@ For **`python`**, runs `coverage.py` with branch coverage on — measuring the s
 `<PATH>` with `*_test.py` excluded from the denominator — and compares the total against
 `[python].coverage` (`fail_under`, `branch`). Exits `0` when the floor is met, `1` (with the
 actual vs. required percent on stderr) when it isn't. `coverage` and `pytest` must be installed.
-Files carrying a `coverage` [waiver](#exemptions-waivers) are also excluded from the
-denominator.
+Files with a `coverage` [exemption](#exemptions) are also excluded from the denominator.
 
-## Exemptions & waivers
+## Exemptions
 
 Not every source file should need a colocated test or full coverage — a launcher shim, a pure
 re-export barrel, generated code. So the checker can be a *blocking* gate without forcing
-pointless tests, two escape hatches exist. Neither is a silent blanket ignore: structural
-exemptions are deterministic, and waivers are reason-required and visible in the file's own
-diff.
+pointless tests, files are exempted **explicitly, in the config**. There is no automatic name-
+or shape-based exemption — the only files skipped automatically are those with no logic at all.
 
-### Structural exemptions (automatic)
+### Empty files (automatic)
 
-Matched by shape, no configuration. A file that matches is never an orphan:
+A file with no code — empty, or only whitespace and comments — has nothing to test and is never
+a subject. This is the only automatic exclusion, and it's why a bare `__init__.py` needs no
+configuration. (A declaration file `*.d.ts` is likewise never tracked: it carries no runtime
+code.) The moment a file gains a statement — a re-export, a constant, a function — it becomes a
+subject and needs a colocated test or an entry below.
 
-| Exemption | Language | Why |
-| --------- | -------- | --- |
-| `__init__.py` | Python | Language-mandated package marker; no runtime logic. |
-| `*.d.ts` / `*.d.mts` / `*.d.cts` | TypeScript | Declaration files carry no runtime code. |
-| Pure re-export **barrel** | TypeScript | A file whose only statements are `export … from "…"` (e.g. `index.ts`, `public-api.ts`). Wires modules together but holds no logic of its own — the TypeScript analog of `__init__.py`. Matched by **shape, not name**. |
+### The `exempt` list (explicit, reason-required)
 
-A barrel is recognized when *every* statement is a re-export — `export * from`,
-`export * as ns from`, `export { … } from`, with an optional `type` modifier. A single local
-declaration (`export const`, `export function`, an `import`) makes the file a subject again.
+For a deliberate omission, add a `[[<language>.exempt]]` entry to the config:
 
-### Waivers (explicit, reason-required)
-
-For deliberate omissions the tool can't infer, add an in-file marker — a comment, anywhere in
-the file:
-
-```
-testing-conventions:waiver(<scope>): <reason>
+```toml
+[[python.exempt]]
+path = "mypkg/cli.py"          # relative to the scanned <PATH>
+rules = ["location", "coverage"]  # which checks this lifts
+reason = "thin launcher; logic in run(), tested in run_test.py"  # required
 ```
 
-| Field | Values |
-| ----- | ------ |
-| `<scope>` | `location` (skip the colocated-test requirement), `coverage` (omit from the coverage denominator), or `all` (both). |
-| `<reason>` | Free text to the end of the line. **Required** — a marker with an empty reason is an error. |
+| Field | Meaning |
+| ----- | ------- |
+| `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists — a stale entry is a hard error, so the list can't silently rot. |
+| `rules` | Which checks the exemption lifts: `location` (skip the colocated-test requirement) and/or `coverage` (omit from the coverage denominator). |
+| `reason` | Why the omission is deliberate. **Required** — an empty reason is rejected on load. |
 
-```ts
-// testing-conventions:waiver(location): thin CLI launcher; logic lives in run(), tested in run.test.ts
-export const main = () => process.exit(cli(process.argv));
-```
-
-```python
-# testing-conventions:waiver(coverage): generated protobuf stubs, not hand-authored
-```
-
-The marker token `testing-conventions:waiver` is **reserved**: an occurrence that isn't a
-valid `(scope): reason` makes the check **error**, so a typo can't quietly disable it. Because
-the waiver lives at the omission and carries a reason, it shows up in code review and the
-file's diff — auditable by construction, the opposite of a prose omit-list.
+Because every exemption lives in the one config file, names its rules, and carries a reason,
+the project's entire exemption surface is auditable in a single diff — the opposite of a prose
+omit-list or a scattered set of ignore comments. A re-export barrel (`index.ts`), a launcher
+shim, or a non-empty `__init__.py` is exempted this way, not automatically.
 
 ### `check`
 
@@ -124,13 +112,20 @@ it currently exits `0`. Rules ship under their test-kind group (like `unit locat
 ## Configuration
 
 The standard is config-driven: one TOML file is the single source of truth for every rule's
-thresholds. The schema is validated by the loader (unknown keys and malformed TOML are
-rejected). The `[python].coverage` thresholds are consumed by `unit coverage` today; the
-other tables are accepted but not yet enforced (their rules are forthcoming).
+thresholds and exemptions. The schema is validated by the loader (unknown keys, malformed TOML,
+and reason-less `exempt` entries are rejected). Each `[python]` / `[typescript]` / `[rust]`
+table is optional, and within it both `coverage` and `exempt` are optional — a repo can
+configure just coverage, just exemptions, or both.
 
 ```toml
 [python]
 coverage = { branch = true, fail_under = 100 }
+
+# A deliberate, reason-required omission (see Exemptions above):
+[[python.exempt]]
+path = "mypkg/cli.py"
+rules = ["location", "coverage"]
+reason = "thin launcher; logic in run(), tested in run_test.py"
 
 [typescript]
 coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
@@ -139,5 +134,6 @@ coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
 coverage = { regions = 100, lines = 100 }
 ```
 
-Each top-level table (`[python]`, `[typescript]`, `[rust]`) is optional. See
+`[python].coverage` is consumed by `unit coverage` and the `exempt` lists by both rules; the
+other coverage tables are accepted but not yet enforced (their rules are forthcoming). See
 [Migrations](../migrations) for the public-API history.

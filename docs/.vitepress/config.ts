@@ -1,6 +1,10 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
+  // Deployed to GitHub Pages at https://thekevinscott.github.io/testing-conventions/,
+  // so assets must be served from the repo subpath, not the domain root. Without this,
+  // every CSS/JS/font URL resolves to /assets/... (404) and the site renders unstyled.
+  base: '/testing-conventions/',
   title: 'testing-conventions',
   description: 'One config-driven, deterministic standard for how tests are structured, isolated, and measured — across Python, TypeScript, and Rust.',
   cleanUrls: true,

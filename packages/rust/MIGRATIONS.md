@@ -21,9 +21,16 @@ reads one TOML file into it and validates the config itself (the self-guard) —
 unknown keys and malformed TOML are rejected rather than silently accepted.
 Purely additive; nothing consumes the parsed config yet.
 
+Also adds the first structural rule. The `location` module's
+`missing_unit_tests()` walks a directory and returns every Python source file
+with no colocated `*_test.py`, and the new `unit-location <PATH>` subcommand
+runs that check and exits non-zero on any orphan. Purely additive.
+
 ### Required changes
 
-None. New, additive API: `testing_conventions::config::{Config, load_config}`.
+None. New, additive API: `testing_conventions::config::{Config, load_config}`,
+`testing_conventions::location::missing_unit_tests`, and the
+`unit-location <PATH>` CLI subcommand.
 
 ### Deprecations removed
 
@@ -41,3 +48,11 @@ cd packages/rust && cargo test --test config_loader
 
 Expected: the loader's integration tests pass — the canonical config loads into
 memory, and unknown-key, malformed, and missing-file configs are rejected.
+
+```
+cd packages/rust && cargo test --test unit_location
+```
+
+Expected: the location check's integration tests pass — the clean fixture
+reports no orphans, the red fixture reports both missing twins, and the
+`unit-location` subcommand exits non-zero on the red fixture.

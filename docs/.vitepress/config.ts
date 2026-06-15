@@ -1,8 +1,8 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: '',
-  description: '',
+  title: 'testing-conventions',
+  description: 'One config-driven, deterministic standard for how tests are structured, isolated, and measured — across Python, TypeScript, and Rust.',
   cleanUrls: true,
   themeConfig: {
     nav: [

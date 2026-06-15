@@ -1,27 +1,59 @@
 # Getting Started
 
-<!-- One-paragraph orientation: what this is, what the reader will accomplish. -->
+`testing-conventions` is a single CLI that enforces a library's testing standards as
+deterministic, bright-line checks — the kind an agent (or a hurried human) can't quietly
+cross while keeping CI green. One config file is meant to drive every rule, and each rule
+is verified the same way in CI. This page takes you from install to a first check.
 
 ## Install
 
-<!-- Install commands per language. -->
+The tool is one Rust binary, published to three registries under the same name. Install it
+whichever way matches your project's toolchain:
 
 ```sh
-# rust
-cargo add <crate>
+# Rust (crates.io)
+cargo install testing-conventions
 
-# python
-pip install <package>
+# Python (PyPI) — the wheel bundles the binary
+pipx install testing-conventions      # or: uv tool install testing-conventions
 
-# node
-npm install <package>
+# Node (npm)
+npm install -g testing-conventions    # or run ad-hoc with: npx testing-conventions
 ```
 
-## Your first call
+Confirm it's on your `PATH`:
 
-<!-- Smallest end-to-end example that runs successfully. -->
+```sh
+testing-conventions --version
+```
+
+## Your first check
+
+The rule shipping today is **unit-test location & naming**: every source file must have a
+colocated unit test named after it. Point the `unit-location` subcommand at the directory
+you want to scan:
+
+```sh
+# Python is the default: foo.py must have a sibling foo_test.py
+testing-conventions unit-location src/
+
+# TypeScript: foo-bar.ts must have a sibling foo-bar.test.ts
+testing-conventions unit-location --lang typescript src/
+```
+
+When every source file is paired, the command prints nothing and exits `0`. When a file is
+missing its twin, each orphan is listed on stderr and the command exits `1`:
+
+```
+missing colocated unit test: src/widget.ts
+missing colocated unit test: src/pkg/orphan.ts
+error: 2 source file(s) missing a colocated unit test
+```
+
+That non-zero exit is the whole point: drop the same command into CI and an orphaned (or
+missing) test can't slip through green.
 
 ## Next steps
 
-- [Guides](./guide/) — task-oriented recipes.
-- [Reference](./reference/) — the full API surface.
+- [Guides](./guide/) — task-oriented recipes (enforce a rule, wire it into CI).
+- [Reference](./reference/) — every subcommand, flag, exit code, and config key.

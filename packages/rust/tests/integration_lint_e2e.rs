@@ -1,9 +1,6 @@
 //! E2E tests for the Python integration-test lints (#19): drive the built CLI
 //! binary end-to-end (no mocks) against the fixture codebases and assert the
 //! exit code.
-//!
-//! **Starts RED** — the skeleton (#48) exits `0` everywhere, so the red-fixture
-//! assertion fails until R1 (#49) detection lands.
 
 use std::path::PathBuf;
 use std::process::Command;

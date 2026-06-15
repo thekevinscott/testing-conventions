@@ -1,9 +1,6 @@
 //! Integration tests for the Python integration-test lints
 //! (#19; rules #48–#52). Per the #3 guardrail, each lint ships a red fixture
 //! (a violation — must be reported) and a clean fixture (must pass).
-//!
-//! These **start RED**: the skeleton (#48) wires `integration lint` but no
-//! detection, so the red-fixture assertions below fail until R1 (#49) lands.
 
 use std::ffi::OsString;
 use std::path::PathBuf;

@@ -151,11 +151,9 @@ fn run_unit_coverage(
     }
 }
 
-/// Run the integration-test lints over `root` for `language`.
-///
-/// Skeleton (#48): the lint set is empty, so this reports nothing and returns
-/// `0`. The lints (#49–#52) turn real violations into a non-zero exit, printing
-/// each to stderr as `path:line: rule — message`.
+/// Run the integration-test lints over `root` for `language`, printing each
+/// violation to stderr as `path:line: rule — message` and returning `1` when any
+/// are found, `0` otherwise.
 fn run_integration_lint(root: &Path, language: location::Language) -> anyhow::Result<i32> {
     match language {
         location::Language::Python => {}

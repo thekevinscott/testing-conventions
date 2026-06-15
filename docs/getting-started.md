@@ -15,19 +15,19 @@ whichever way matches your project's toolchain:
 cargo install testing-conventions
 
 # Python (PyPI) — the wheel bundles the binary
-pipx install testing-conventions      # or: uv tool install testing-conventions
+pip install testing-conventions
 
-# Node (npm)
-npm install -g testing-conventions    # or run ad-hoc with: npx testing-conventions
+# Node (npm) — as a dev dependency, run via npx
+npm install --save-dev testing-conventions
 ```
 
-Confirm it's on your `PATH`:
+Confirm it's available (prefix `npx` if you installed it as an npm dev dependency):
 
 ```sh
 testing-conventions --version
 ```
 
-## Your first check
+## Your first check: unit-test location
 
 The rule shipping today is **unit-test location & naming**: every source file must have a
 colocated unit test named after it. Point the `unit-location` subcommand at the directory

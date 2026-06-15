@@ -1,44 +1,93 @@
-//! Unit-test location/naming check for Python sources (issue #15).
+//! Unit-test location/naming check (Python — issue #15; TypeScript — issue #18).
 //!
-//! The convention (README "Location & Naming"; `internals/python/testing.md`):
-//! a Python source file `foo.py` is unit-tested by a colocated `foo_test.py`.
-//! [`missing_unit_tests`] walks a directory tree and returns every source file
-//! that has no such sibling — an "orphan". Files that are themselves tests
-//! (`*_test.py`) are what the check looks *for*, never subjects, and the
-//! package marker (`__init__.py`) is exempt.
+//! Convention (README "Location & Naming"; `internals/*/testing.md`): a source
+//! file is unit-tested by a *colocated* test named after it — `foo.py` →
+//! `foo_test.py` (Python), `foo-bar.ts` → `foo-bar.test.ts` (TypeScript).
+//! [`missing_unit_tests`] walks a tree for a [`Language`] and returns every
+//! source file with no such sibling — an "orphan". Test files are what the
+//! check looks *for*, never subjects.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-/// The extension that marks a Python file.
-const PY_EXTENSION: &str = "py";
-/// The stem suffix that marks a file as a unit test: `foo` → `foo_test`.
-const TEST_STEM_SUFFIX: &str = "_test";
-/// The package marker, which is never a unit-test subject.
-const PACKAGE_MARKER: &str = "__init__.py";
+/// A language whose unit-test location/naming convention can be checked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Language {
+    /// `foo.py` → colocated `foo_test.py`; `__init__.py` is exempt.
+    #[value(name = "python")]
+    Python,
+    /// `foo-bar.ts` → colocated `foo-bar.test.ts`, across `.ts`/`.tsx`/`.mts`/`.cts`;
+    /// declaration files (`.d.ts`/`.d.mts`/`.d.cts`) are ignored.
+    #[value(name = "typescript")]
+    TypeScript,
+}
 
-/// Walk `root` recursively and return every Python source file that has no
-/// colocated `<stem>_test.py`, sorted for deterministic output.
+impl Language {
+    /// `true` for a file this language's check tracks (source *or* test).
+    fn tracks(self, path: &Path) -> bool {
+        match self {
+            Language::Python => has_extension(path, &["py"]),
+            Language::TypeScript => {
+                has_extension(path, &["ts", "tsx", "mts", "cts"]) && !is_declaration(path)
+            }
+        }
+    }
+
+    /// `true` when `path` is itself a unit test, never a subject.
+    fn is_test(self, path: &Path) -> bool {
+        match self {
+            Language::Python => stem_of(path).ends_with("_test"),
+            Language::TypeScript => {
+                let name = file_name_of(path);
+                name.ends_with(".test.ts")
+                    || name.ends_with(".test.tsx")
+                    || name.ends_with(".test.mts")
+                    || name.ends_with(".test.cts")
+            }
+        }
+    }
+
+    /// `true` for a file exempt from needing a colocated test.
+    fn is_exempt(self, path: &Path) -> bool {
+        match self {
+            Language::Python => file_name_of(path) == "__init__.py",
+            Language::TypeScript => false,
+        }
+    }
+
+    /// The colocated test `source` is expected to have.
+    fn expected_test_path(self, source: &Path) -> PathBuf {
+        match self {
+            Language::Python => source.with_file_name(format!("{}_test.py", stem_of(source))),
+            Language::TypeScript => {
+                source.with_file_name(format!("{}.test.{}", stem_of(source), extension_of(source)))
+            }
+        }
+    }
+}
+
+/// Walk `root` recursively and return every source file (for `language`) that
+/// has no colocated unit test, sorted for deterministic output.
 ///
-/// A file whose stem ends in `_test` is itself a test and is never treated as a
-/// subject; every other `*.py` file is a subject and must have its colocated
-/// test sibling. Returns an error if the tree under `root` cannot be read.
-pub fn missing_unit_tests(root: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
-    let mut python_files = Vec::new();
-    collect_python_files(root.as_ref(), &mut python_files)?;
+/// A file that is itself a test is never treated as a subject; every other
+/// source file must have its colocated test sibling. Returns an error if the
+/// tree under `root` cannot be read.
+pub fn missing_unit_tests(root: impl AsRef<Path>, language: Language) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    collect_files(root.as_ref(), language, &mut files)?;
 
-    // Every `*.py` path we found, so a subject's expected twin is a lookup
+    // Every tracked path we found, so a subject's expected twin is a lookup
     // rather than a second pass over the filesystem.
-    let present: HashSet<&Path> = python_files.iter().map(PathBuf::as_path).collect();
+    let present: HashSet<&Path> = files.iter().map(PathBuf::as_path).collect();
 
     let mut orphans: Vec<PathBuf> = Vec::new();
-    for source in &python_files {
-        if is_test_file(source) || is_exempt(source) {
+    for source in &files {
+        if language.is_test(source) || language.is_exempt(source) {
             continue;
         }
-        if !present.contains(expected_test_path(source).as_path()) {
+        if !present.contains(language.expected_test_path(source).as_path()) {
             orphans.push(source.clone());
         }
     }
@@ -46,8 +95,8 @@ pub fn missing_unit_tests(root: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
     Ok(orphans)
 }
 
-/// Recursively collect every `*.py` file under `dir` into `out`.
-fn collect_python_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+/// Recursively collect every file `language` tracks under `dir` into `out`.
+fn collect_files(dir: &Path, language: Language, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
     for entry in entries {
@@ -55,37 +104,40 @@ fn collect_python_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
             .with_context(|| format!("reading an entry under `{}`", dir.display()))?
             .path();
         if path.is_dir() {
-            collect_python_files(&path, out)?;
-        } else if is_python_source(&path) {
+            collect_files(&path, language, out)?;
+        } else if language.tracks(&path) {
             out.push(path);
         }
     }
     Ok(())
 }
 
-/// `true` for a file with a `.py` extension.
-fn is_python_source(path: &Path) -> bool {
-    path.extension().and_then(|ext| ext.to_str()) == Some(PY_EXTENSION)
+/// `true` when the file's extension is one of `extensions`.
+fn has_extension(path: &Path, extensions: &[&str]) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| extensions.contains(&ext))
 }
 
-/// `true` when `path` is itself a unit test (`*_test.py`), never a subject.
-fn is_test_file(path: &Path) -> bool {
-    stem_of(path).ends_with(TEST_STEM_SUFFIX)
+/// `true` for a TypeScript declaration file (`*.d.ts` / `*.d.mts` / `*.d.cts`) —
+/// no runtime code, so never a unit-test subject.
+fn is_declaration(path: &Path) -> bool {
+    let name = file_name_of(path);
+    name.ends_with(".d.ts") || name.ends_with(".d.mts") || name.ends_with(".d.cts")
 }
 
-/// `true` for the package marker (`__init__.py`), which never needs a test.
-fn is_exempt(path: &Path) -> bool {
-    path.file_name().and_then(|name| name.to_str()) == Some(PACKAGE_MARKER)
+/// The file extension, lossily decoded (empty if there is none).
+fn extension_of(path: &Path) -> String {
+    path.extension()
+        .map(|ext| ext.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
-/// The colocated test a source is expected to have: `foo.py` → `foo_test.py`.
-fn expected_test_path(source: &Path) -> PathBuf {
-    source.with_file_name(format!(
-        "{}{}.{}",
-        stem_of(source),
-        TEST_STEM_SUFFIX,
-        PY_EXTENSION
-    ))
+/// The file name, lossily decoded.
+fn file_name_of(path: &Path) -> String {
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 /// The file stem (the name without its extension), lossily decoded.
@@ -100,39 +152,90 @@ mod tests {
     use super::*;
 
     #[test]
-    fn recognizes_python_sources_by_extension() {
-        assert!(is_python_source(Path::new("a.py")));
-        assert!(is_python_source(Path::new("pkg/widget.py")));
-        assert!(!is_python_source(Path::new("a.pyi")));
-        assert!(!is_python_source(Path::new("a.txt")));
-        assert!(!is_python_source(Path::new("README")));
+    fn python_tracks_py_files() {
+        assert!(Language::Python.tracks(Path::new("a.py")));
+        assert!(Language::Python.tracks(Path::new("pkg/widget.py")));
+        assert!(!Language::Python.tracks(Path::new("a.pyi")));
+        assert!(!Language::Python.tracks(Path::new("a.txt")));
+        assert!(!Language::Python.tracks(Path::new("README")));
     }
 
     #[test]
-    fn recognizes_test_files_by_stem_suffix() {
-        assert!(is_test_file(Path::new("widget_test.py")));
-        assert!(is_test_file(Path::new("pkg/helper_test.py")));
-        assert!(!is_test_file(Path::new("widget.py")));
-        assert!(!is_test_file(Path::new("pkg/helper.py")));
+    fn python_recognizes_test_files_by_stem_suffix() {
+        assert!(Language::Python.is_test(Path::new("widget_test.py")));
+        assert!(Language::Python.is_test(Path::new("pkg/helper_test.py")));
+        assert!(!Language::Python.is_test(Path::new("widget.py")));
     }
 
     #[test]
-    fn exempts_the_package_marker() {
-        assert!(is_exempt(Path::new("__init__.py")));
-        assert!(is_exempt(Path::new("pkg/__init__.py")));
-        assert!(!is_exempt(Path::new("conftest.py")));
-        assert!(!is_exempt(Path::new("widget.py")));
+    fn python_exempts_the_package_marker() {
+        assert!(Language::Python.is_exempt(Path::new("__init__.py")));
+        assert!(Language::Python.is_exempt(Path::new("pkg/__init__.py")));
+        assert!(!Language::Python.is_exempt(Path::new("conftest.py")));
+        assert!(!Language::Python.is_exempt(Path::new("widget.py")));
     }
 
     #[test]
-    fn expected_test_path_is_the_colocated_twin() {
+    fn python_expected_test_path_is_the_colocated_twin() {
         assert_eq!(
-            expected_test_path(Path::new("pkg/widget.py")),
+            Language::Python.expected_test_path(Path::new("pkg/widget.py")),
             PathBuf::from("pkg/widget_test.py")
         );
         assert_eq!(
-            expected_test_path(Path::new("widget.py")),
+            Language::Python.expected_test_path(Path::new("widget.py")),
             PathBuf::from("widget_test.py")
+        );
+    }
+
+    #[test]
+    fn typescript_tracks_ts_tsx_mts_cts_but_not_declarations() {
+        assert!(Language::TypeScript.tracks(Path::new("widget.ts")));
+        assert!(Language::TypeScript.tracks(Path::new("pkg/button.tsx")));
+        assert!(Language::TypeScript.tracks(Path::new("service.mts")));
+        assert!(Language::TypeScript.tracks(Path::new("legacy.cts")));
+        assert!(!Language::TypeScript.tracks(Path::new("types.d.ts")));
+        assert!(!Language::TypeScript.tracks(Path::new("ambient.d.mts")));
+        assert!(!Language::TypeScript.tracks(Path::new("globals.d.cts")));
+        assert!(!Language::TypeScript.tracks(Path::new("widget.py")));
+        assert!(!Language::TypeScript.tracks(Path::new("README")));
+    }
+
+    #[test]
+    fn typescript_recognizes_test_files_by_suffix() {
+        assert!(Language::TypeScript.is_test(Path::new("widget.test.ts")));
+        assert!(Language::TypeScript.is_test(Path::new("pkg/button.test.tsx")));
+        assert!(Language::TypeScript.is_test(Path::new("service.test.mts")));
+        assert!(Language::TypeScript.is_test(Path::new("legacy.test.cts")));
+        assert!(!Language::TypeScript.is_test(Path::new("widget.ts")));
+        assert!(!Language::TypeScript.is_test(Path::new("button.tsx")));
+        assert!(!Language::TypeScript.is_test(Path::new("service.mts")));
+    }
+
+    #[test]
+    fn typescript_has_no_exemptions() {
+        // Unlike Python's `__init__.py`, nothing in TS is language-mandated;
+        // `index.ts` is a deliberate file and therefore a subject.
+        assert!(!Language::TypeScript.is_exempt(Path::new("index.ts")));
+        assert!(!Language::TypeScript.is_exempt(Path::new("pkg/index.ts")));
+    }
+
+    #[test]
+    fn typescript_expected_test_path_keeps_the_extension() {
+        assert_eq!(
+            Language::TypeScript.expected_test_path(Path::new("pkg/widget.ts")),
+            PathBuf::from("pkg/widget.test.ts")
+        );
+        assert_eq!(
+            Language::TypeScript.expected_test_path(Path::new("button.tsx")),
+            PathBuf::from("button.test.tsx")
+        );
+        assert_eq!(
+            Language::TypeScript.expected_test_path(Path::new("service.mts")),
+            PathBuf::from("service.test.mts")
+        );
+        assert_eq!(
+            Language::TypeScript.expected_test_path(Path::new("legacy.cts")),
+            PathBuf::from("legacy.test.cts")
         );
     }
 }

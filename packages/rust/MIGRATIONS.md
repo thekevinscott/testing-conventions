@@ -21,16 +21,19 @@ reads one TOML file into it and validates the config itself (the self-guard) —
 unknown keys and malformed TOML are rejected rather than silently accepted.
 Purely additive; nothing consumes the parsed config yet.
 
-Also adds the first structural rule. The `location` module's
-`missing_unit_tests()` walks a directory and returns every Python source file
-with no colocated `*_test.py`, and the new `unit-location <PATH>` subcommand
-runs that check and exits non-zero on any orphan. Purely additive.
+Also adds the first structural rule — unit-test location/naming — for two
+languages. `missing_unit_tests(root, language)` walks a directory and returns
+every source file with no colocated test, and `unit-location [--lang …] <PATH>`
+runs that check and exits non-zero on any orphan. Python (#15): `foo.py` →
+`foo_test.py`, `__init__.py` exempt. TypeScript (#18): `foo-bar.ts` →
+`foo-bar.test.ts` (`.ts`/`.tsx`/`.mts`/`.cts`), `*.d.ts`/`*.d.mts`/`*.d.cts`
+ignored. Purely additive.
 
 ### Required changes
 
 None. New, additive API: `testing_conventions::config::{Config, load_config}`,
-`testing_conventions::location::missing_unit_tests`, and the
-`unit-location <PATH>` CLI subcommand.
+`testing_conventions::location::{missing_unit_tests, Language}`, and the
+`unit-location [--lang python|typescript] <PATH>` CLI subcommand.
 
 ### Deprecations removed
 
@@ -53,6 +56,6 @@ memory, and unknown-key, malformed, and missing-file configs are rejected.
 cd packages/rust && cargo test --test unit_location
 ```
 
-Expected: the location check's integration tests pass — the clean fixture
-reports no orphans, the red fixture reports both missing twins, and the
-`unit-location` subcommand exits non-zero on the red fixture.
+Expected: the location check's integration tests pass for both languages — each
+clean fixture reports no orphans, each red fixture reports its missing twins, and
+`unit-location` exits non-zero on the red fixtures.

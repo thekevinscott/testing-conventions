@@ -7,6 +7,7 @@ uv-managed venv, `hatchling` (or `maturin`) build backend, native 3.12+ syntax, 
 - [setup.md](setup.md) — toolchain, common libraries, watch mode, project shape, `pyproject.toml`, configuration, ecosystem cheat sheet
 - [style.md](style.md) — type hints, async / sync discipline, what good Python code looks like
 - [testing.md](testing.md) — pytest, pytest-describe, fixtures, coverage
+- [isolation.md](isolation.md) — **design.** The isolation & external-deps rule (#42) made deterministic for Python: first-party via `pyproject.toml`, the `no-first-party-patch` integration lint, and the deferred unit direction.
 - [shipping.md](shipping.md) — Github, public API design, CLI, lint + format, repo orchestration, CI/CD, release flow, PyO3 bindings
 - [review.md](review.md) — pre-review tooling pass, reading-a-PR checklist, common type errors
 

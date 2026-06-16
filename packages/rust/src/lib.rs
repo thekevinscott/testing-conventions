@@ -75,6 +75,10 @@ enum IntegrationRule {
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
         language: colocated_test::Language,
+        /// testing-conventions config file providing the `exempt` list (waivers).
+        /// Optional: if the file is absent, nothing is waived.
+        #[arg(long, default_value = "testing-conventions.toml")]
+        config: PathBuf,
     },
 }
 
@@ -102,7 +106,11 @@ where
             } => run_unit_coverage(&path, language, &config),
         },
         Some(Command::Integration { rule }) => match rule {
-            IntegrationRule::Lint { path, language } => run_integration_lint(&path, language),
+            IntegrationRule::Lint {
+                path,
+                language,
+                config,
+            } => run_integration_lint(&path, language, &config),
         },
     }
 }
@@ -196,14 +204,22 @@ fn run_unit_coverage(
 /// Run the integration-test lints over `root` for `language`, printing each
 /// violation to stderr as `path:line: rule — message` and returning `1` when any
 /// are found, `0` otherwise.
-fn run_integration_lint(root: &Path, language: colocated_test::Language) -> anyhow::Result<i32> {
+fn run_integration_lint(
+    root: &Path,
+    language: colocated_test::Language,
+    config_path: &Path,
+) -> anyhow::Result<i32> {
     match language {
         colocated_test::Language::Python => {}
         colocated_test::Language::TypeScript => {
             anyhow::bail!("`integration lint` supports `--language python` only for now")
         }
     }
-    let violations = lint::find_violations(root)?;
+    let waived = lint_waivers(root, language, config_path)?;
+    let violations: Vec<lint::Violation> = lint::find_violations(root)?
+        .into_iter()
+        .filter(|v| !is_waived(v, root, &waived))
+        .collect();
     if violations.is_empty() {
         return Ok(0);
     }
@@ -218,6 +234,40 @@ fn run_integration_lint(root: &Path, language: colocated_test::Language) -> anyh
     }
     eprintln!("error: {} lint violation(s)", violations.len());
     Ok(1)
+}
+
+/// The `no-constant-patch` waivers (root-relative paths) from the config at
+/// `config_path` — the only waivable lint (#52). A missing config file means
+/// nothing is waived.
+fn lint_waivers(
+    root: &Path,
+    language: colocated_test::Language,
+    config_path: &Path,
+) -> anyhow::Result<std::collections::BTreeSet<String>> {
+    if !config_path.exists() {
+        return Ok(std::collections::BTreeSet::new());
+    }
+    let config = config::load_config(config_path)?;
+    config::resolve_exempt(
+        root,
+        config.exemptions(language),
+        config::Rule::NoConstantPatch,
+    )
+}
+
+/// `true` when `violation` is a `no-constant-patch` finding in a waived file.
+fn is_waived(
+    violation: &lint::Violation,
+    root: &Path,
+    waived: &std::collections::BTreeSet<String>,
+) -> bool {
+    violation.rule == "no-constant-patch"
+        && violation
+            .file
+            .strip_prefix(root)
+            .ok()
+            .map(|rel| rel.to_string_lossy().replace('\\', "/"))
+            .is_some_and(|rel| waived.contains(&rel))
 }
 
 #[cfg(test)]

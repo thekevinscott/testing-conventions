@@ -1,0 +1,5 @@
+# Waiver for R4 (#52): exempt the file from `no-constant-patch`, with a reason.
+[[python.exempt]]
+path = "patch_config_constant_test.py"
+rules = ["no-constant-patch"]
+reason = "legacy test; config-injection refactor tracked separately"

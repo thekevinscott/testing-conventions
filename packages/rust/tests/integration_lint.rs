@@ -36,6 +36,21 @@ fn lint_exit(fixture_name: &str) -> i32 {
     run(argv).expect("a readable tree should not error")
 }
 
+/// Exit code of `integration lint --language python --config <config> <fixture>`.
+fn lint_exit_with_config(fixture_name: &str, config_name: &str) -> i32 {
+    let argv: Vec<OsString> = vec![
+        "testing-conventions".into(),
+        "integration".into(),
+        "lint".into(),
+        "--language".into(),
+        "python".into(),
+        "--config".into(),
+        fixture(config_name).into_os_string(),
+        fixture(fixture_name).into_os_string(),
+    ];
+    run(argv).expect("a readable tree should not error")
+}
+
 // ---- R1: forbid `monkeypatch` (#49) --------------------------------------
 
 #[test]
@@ -172,6 +187,45 @@ fn environ_red_exits_nonzero() {
 #[test]
 fn environ_clean_exits_zero() {
     assert_eq!(lint_exit("environ/clean"), 0);
+}
+
+// ---- R4: don't patch module-global config constants (#52, waivable) -------
+
+#[test]
+fn constant_patch_red_reports_a_violation() {
+    let violations = find_violations(fixture("constant_patch/red"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.iter().any(|v| v.rule == "no-constant-patch"),
+        "patching a module-global UPPER_CASE constant must be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn constant_patch_clean_reports_no_violations() {
+    let violations = find_violations(fixture("constant_patch/clean"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "the clean fixture injects config explicitly; got {violations:?}"
+    );
+}
+
+#[test]
+fn constant_patch_red_exits_nonzero() {
+    assert_eq!(lint_exit("constant_patch/red"), 1);
+}
+
+#[test]
+fn constant_patch_waived_exits_zero() {
+    // Same patch as the red fixture, but the file is waived in the config.
+    assert_eq!(
+        lint_exit_with_config(
+            "constant_patch/waived",
+            "constant_patch/waived/testing-conventions.toml"
+        ),
+        0
+    );
 }
 
 // ---- CLI surface ---------------------------------------------------------

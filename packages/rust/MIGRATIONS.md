@@ -117,6 +117,16 @@ shared `Violation` type moves to a new `violation` module and is re-exported fro
 `lint`, so `testing_conventions::lint::Violation` still resolves with **no code
 change required**.
 
+Also adds the Rust **integration** isolation lint (#44): `integration lint
+--language rust <PATH>` flags `no-first-party-double` — a `#[double]`
+(mockall_double) import of a first-party item (the crate under test or a `path`
+dep) in a `tests/` integration crate, which must run first-party code for real;
+doubling an external crate is fine. To add Rust without touching the file-pairing
+`colocated_test::Language`, `integration lint`'s `--language` is now its own
+`IntegrationLintLanguage` (python/typescript/rust). Purely additive — `--language
+rust` is new, the python/typescript surface is unchanged, and the library gains
+`testing_conventions::isolation::find_integration_violations`.
+
 Also adds the first TypeScript lint (#43, #75): `integration lint --language
 typescript <PATH>` extends the (previously Python-only) `integration lint` command
 to TypeScript, parsing each `*.test.{ts,tsx,mts,cts}` file with `oxc` and flagging
@@ -339,3 +349,10 @@ Expected: the workflow guard's integration + e2e suites pass — the clean fixtu
 live subcommands, version pins, a `\`-continuation, and a comment that must not be read as
 a call) reports nothing and exits `0`, while the red fixture (`unit location` and the flat
 `unit-location`) flags both and the built binary exits `1`.
+cd packages/rust && cargo test --test rust_integration_lint --test rust_integration_lint_e2e
+```
+
+Expected: the Rust integration tests pass — the red fixture's `#[double] use
+widget::Renderer` (doubling the crate under test) is flagged and exits `1`, while
+the clean fixture (runs `gadget::compute` for real, doubles only `rand`) reports
+nothing and exits `0`.

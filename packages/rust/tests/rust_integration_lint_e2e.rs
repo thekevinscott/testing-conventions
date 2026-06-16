@@ -1,0 +1,33 @@
+//! E2E tests for the Rust `integration lint` rule (#44): drive the built CLI
+//! binary against the fixture crates and assert the exit code.
+
+use std::path::PathBuf;
+use std::process::Command;
+
+/// Absolute path to a fixture crate under `tests/fixtures/isolation/integration/`.
+fn fixture(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/isolation/integration")
+        .join(name)
+}
+
+/// Exit code of `testing-conventions integration lint --language rust <codebase>`.
+fn lint_exit(codebase: &str) -> i32 {
+    Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["integration", "lint", "--language", "rust"])
+        .arg(fixture(codebase))
+        .status()
+        .expect("the built binary should run")
+        .code()
+        .expect("the process should exit with a code")
+}
+
+#[test]
+fn red_exits_nonzero() {
+    assert_eq!(lint_exit("red"), 1);
+}
+
+#[test]
+fn clean_exits_zero() {
+    assert_eq!(lint_exit("clean"), 0);
+}

@@ -1,0 +1,15 @@
+# Red fixture: a library `widget` whose integration test doubles the crate under
+# test. Parsed by `syn`, never compiled — `[workspace]` isolates it from cargo.
+[package]
+name = "widget"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8"
+
+[dev-dependencies]
+mockall = "0.13"
+mockall_double = "0.3"
+
+[workspace]

@@ -100,6 +100,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   unqualified call, and pure `std` (including `std::io::Cursor` and the I/O traits)
   stay in-module. Library API:
   `testing_conventions::isolation::{find_violations, Violation, Language}`. (#44)
+- `integration lint --language rust <PATH>` — the Rust arm of `integration lint`,
+  enforcing the README "External Dependencies" rule on `tests/` integration crates.
+  Detector **`no-first-party-double`** (#44): a `#[double]` (mockall_double) import
+  of a first-party item — the crate under test (its `Cargo.toml` `[package].name`)
+  or a `path` dependency — which an integration test must run for real. Doubling an
+  external crate / `std` is fine, and `crate::` (the test crate itself, not the
+  library under test) is not flagged. `integration lint` gains its own
+  `IntegrationLintLanguage` (python/typescript/rust), distinct from the file-pairing
+  `colocated_test::Language`. Library API:
+  `testing_conventions::isolation::find_integration_violations`. (#44)
 - `unit isolation --language typescript <PATH>` — the TypeScript arm of `unit
   isolation` (#43, #76), the unit-direction counterpart to slice #75's
   `no-first-party-mock`. A unit test must isolate the unit under test, so every

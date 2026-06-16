@@ -1010,10 +1010,12 @@ dependencies = [
  "anyhow",
  "clap",
  "oxc",
+ "proc-macro2",
  "rustpython-ast",
  "rustpython-parser",
  "serde",
  "serde_json",
+ "syn",
  "toml",
 ]
 

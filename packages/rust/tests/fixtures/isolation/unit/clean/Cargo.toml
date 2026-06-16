@@ -1,0 +1,15 @@
+# Clean fixture crate for the Rust unit-isolation rule (#44). `rand` is declared
+# as a dependency but never called from a test — its presence alone is fine; only a
+# direct call out of the module is a violation. `[workspace]` isolates it from cargo.
+[package]
+name = "iso_unit_clean"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8"
+
+[dev-dependencies]
+mockall = "0.13"
+
+[workspace]

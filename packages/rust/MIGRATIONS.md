@@ -103,6 +103,16 @@ must not ship. `packaging::scan(root, globs)` is the deterministic core; the
 per-language *build* step that produces the artifact lands in #72 / #73 / #74
 (the last also adding `--language rust`). Purely additive — a new command and
 module; no existing signature or behavior changes.
+Most recently, adds the Rust `unit isolation` rule (#44) and its `isolation`
+module: a deterministic, `syn`-based lint on Rust test code. `unit isolation
+--language rust <PATH>` parses each `*.rs` file under the crate root and flags a
+call out of an inline `#[cfg(test)]` module's own module — `no-out-of-module-call`
+(`crate::…`, `super::super::…`, an external crate from `Cargo.toml`, or effectful
+`std`). Purely additive: a new `unit` subcommand and module
+(`testing_conventions::isolation::{find_violations, Violation, Language}`). The
+shared `Violation` type moves to a new `violation` module and is re-exported from
+`lint`, so `testing_conventions::lint::Violation` still resolves with **no code
+change required**.
 
 Also adds the first TypeScript lint (#43, #75): `integration lint --language
 typescript <PATH>` extends the (previously Python-only) `integration lint` command
@@ -257,3 +267,10 @@ artifact containing a test file (`python_red`'s `widget_test.py`,
 `typescript_red`'s `button.test.ts`) is flagged and the built binary exits `1`,
 while a clean artifact exits `0`. No toolchain required (the scanner reads the
 tree directly).
+cd packages/rust && cargo test --test isolation --test isolation_e2e
+```
+
+Expected: the isolation tests pass — the red fixture's four out-of-module forms
+(first-party cross-module, effectful `std`, external crate, ancestor reach) are
+each flagged and the crate exits `1`, while the clean fixture (`super::` + an
+injected trait double + `Cursor`) reports nothing and exits `0`.

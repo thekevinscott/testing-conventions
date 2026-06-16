@@ -7,6 +7,7 @@
 - [setup.md](setup.md) — toolchain, commands, watch mode, project shape, `Cargo.toml`, ecosystem cheat sheet
 - [style.md](style.md) — reading vocabulary, foundational concepts, idiomatic patterns, memory model
 - [testing.md](testing.md) — inline `#[cfg(test)]` tests, doc tests, integration tests
+- [isolation.md](isolation.md) — **design.** The isolation & external-deps rule (#44) made deterministic for Rust: the `syn` heuristic vs `dylint`, effectful-`std` policy, and red→green slices.
 - [shipping.md](shipping.md) — Github, public API design, CLI architecture, CI/CD, release, docs
 - [review.md](review.md) — pre-review tooling pass, reading-a-PR checklist, compiler error vocabulary
 - [code-smells.md](code-smells.md) — **review-only.** The full smell catalog. Load it when reviewing agent output, not when generating code — naming bad patterns in a generation context primes them.

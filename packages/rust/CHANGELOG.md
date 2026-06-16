@@ -85,6 +85,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Origin::{FirstParty, Builtin, ThirdParty}`) is the foundation the unit-isolation
   slices (#76, #77) build on. Library API:
   `testing_conventions::ts::{find_integration_violations, classify, Origin}`. (#43, #75)
+- `isolation` module + `unit isolation` CLI — the first deterministic lint on
+  *Rust* test code. `unit isolation --language rust <PATH>` parses each `*.rs`
+  file under the crate root with `syn` and walks its inline `#[cfg(test)]` modules,
+  exiting non-zero on any violation. Detector **`no-out-of-module-call`** (#44): a
+  call out of a unit test's own module — `crate::…` (another first-party module),
+  `super::super::…` (an ancestor), an external crate (named in `Cargo.toml`, with
+  `[dev-dependencies]` test tooling excluded), or effectful `std`
+  (`fs`/`net`/`process`/`env`/`thread`/`os`, the clock, or real-handle I/O). A
+  single `super::`, `self`/`Self`, a bare unqualified call, and pure `std`
+  (including `std::io::Cursor` and the I/O traits) stay in-module. Library API:
+  `testing_conventions::isolation::{find_violations, Violation, Language}`. (#44)
+- `violation` module — the `Violation` type is hoisted here and shared by the
+  Python `lint` and Rust `isolation` detectors so the CLI prints every rule the
+  same way. `testing_conventions::lint::Violation` remains as a re-export, so the
+  prior path still resolves (no break). (#44)
 
 ### Changed
 

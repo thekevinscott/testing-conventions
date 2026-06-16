@@ -95,6 +95,24 @@ pub fn check_typescript(root: &Path, base: &str, exclude: &[String]) -> Result<V
     Ok(uncovered_changed_lines_ts(&changed, &uncovered))
 }
 
+/// Every line added or modified in `root`'s `<base>...HEAD` diff that the Rust
+/// unit suite (`cargo llvm-cov`) doesn't cover, sorted for deterministic output.
+/// `exclude` is the `coverage`-rule exemptions (as in
+/// [`crate::coverage::measure_rust`]) — an excluded file is dropped from the run,
+/// so its changed lines are lifted.
+///
+/// The Rust twin of [`check`] (#136), built on the Rust coverage rule (#37):
+/// reuses the same `<base>...HEAD` diff machinery ([`changed_lines`]), scoped to
+/// `.rs` sources, and maps the changed lines against `cargo llvm-cov`'s per-line
+/// coverage.
+pub fn check_rust(_root: &Path, _base: &str, _exclude: &[String]) -> Result<Vec<Uncovered>> {
+    // Stub (#136): the `unit patch-coverage --language rust` command surface and
+    // the `coverage`-exemption plumbing are wired; the diff + `cargo llvm-cov`
+    // detection lands once the red integration tests are witnessed failing on CI
+    // (and the e2e tests fail locally).
+    Ok(Vec::new())
+}
+
 /// The new-side lines each file gained in `repo`'s `<base>...HEAD` diff, keyed by
 /// `repo`-relative path. The diff machinery shared by the TS / Rust twins.
 ///

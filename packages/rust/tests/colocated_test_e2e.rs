@@ -38,3 +38,11 @@ fn a_blank_reason_exemption_makes_the_binary_error() {
     // omission. (#32 — "every exemption must say why".)
     assert_eq!(unit_colocated_test_exit("bad_exempt", "python"), 1);
 }
+
+#[test]
+fn conftest_is_not_an_orphan() {
+    // python_conftest holds a conftest.py (pytest fixtures) beside a paired
+    // source/test. conftest.py is support, never a subject, so the binary reports
+    // no orphans and exits zero. (#112)
+    assert_eq!(unit_colocated_test_exit("python_conftest", "python"), 0);
+}

@@ -37,6 +37,13 @@ fn full_exits_zero_against_a_100_floor() {
 }
 
 #[test]
+fn conftest_omitted_exits_zero_against_a_100_floor() {
+    // conftest_omit's conftest.py has an uncovered fixture body; the binary clears
+    // the 100 floor only by omitting conftest.py from the denominator (#112).
+    assert_eq!(unit_coverage_exit("conftest_omit", "floor100.toml"), 0);
+}
+
+#[test]
 fn exempt_cov_exits_zero_against_a_100_floor() {
     // The config exempts shim.py from coverage, so the built binary omits it
     // from the denominator and clears the 100 floor end-to-end (#32).

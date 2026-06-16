@@ -31,6 +31,11 @@ use serde::Deserialize;
 /// suite, never a subject of it.
 const TEST_OMIT: &str = "*_test.py";
 
+/// Also always omitted: `conftest.py` holds pytest fixtures (test support), never
+/// a coverage subject. `*conftest.py` matches it at any depth, mirroring the
+/// `*_test.py` glob. (#112)
+const SUPPORT_OMIT: &str = "*conftest.py";
+
 /// The coverage floor to enforce, from a `[<language>].coverage` table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Thresholds {
@@ -174,13 +179,15 @@ fn run_coverage(root: &Path, omit: &[String]) -> Result<CoverageReport> {
     parse_report(&String::from_utf8_lossy(&json.stdout))
 }
 
-/// The single comma-joined `--omit` value for the coverage run: always
-/// `*_test.py`, plus every `coverage`-exempt path from config. (coverage.py
-/// takes one `--omit` — repeated flags don't accumulate, so the patterns must be
-/// joined.) An exempt file leaves the denominator with its reason recorded in
-/// config — an auditable omission, not a silent ignore-glob.
+/// The single comma-joined `--omit` value for the coverage run: always the test
+/// glob `*_test.py` and the support glob `*conftest.py`, plus every
+/// `coverage`-exempt path from config. (coverage.py takes one `--omit` — repeated
+/// flags don't accumulate, so the patterns must be joined.) An exempt file leaves
+/// the denominator with its reason recorded in config — an auditable omission, not
+/// a silent ignore-glob.
 fn build_omit(omit: &[String]) -> String {
-    std::iter::once(TEST_OMIT.to_string())
+    [TEST_OMIT.to_string(), SUPPORT_OMIT.to_string()]
+        .into_iter()
         .chain(omit.iter().cloned())
         .collect::<Vec<_>>()
         .join(",")
@@ -493,15 +500,18 @@ mod tests {
     }
 
     #[test]
-    fn omit_is_just_the_test_glob_when_nothing_is_exempt() {
-        assert_eq!(build_omit(&[]), "*_test.py");
+    fn omit_is_the_test_and_support_globs_when_nothing_is_exempt() {
+        assert_eq!(build_omit(&[]), "*_test.py,*conftest.py");
     }
 
     #[test]
     fn omit_folds_in_the_exempt_paths_after_the_test_glob() {
         // The caller passes already-resolved, sorted, `root`-relative paths.
         let exempt = vec!["pkg/gen.py".to_string(), "shim.py".to_string()];
-        assert_eq!(build_omit(&exempt), "*_test.py,pkg/gen.py,shim.py");
+        assert_eq!(
+            build_omit(&exempt),
+            "*_test.py,*conftest.py,pkg/gen.py,shim.py"
+        );
     }
 
     // --- TypeScript (vitest) — issue #31 ---

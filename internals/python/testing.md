@@ -26,7 +26,7 @@ def describe_process():
         assert process(items) == expected
 ```
 
-Naming convention: **`foo.py` ↔ `foo_test.py` colocated**. The legacy `test_foo.py` prefix also works (pytest discovers both with `python_files = ["*_test.py", "test_*.py"]`).
+Naming convention: **`foo.py` ↔ `foo_test.py` colocated** — the only form the colocated-test rule recognizes (no legacy `test_foo.py`). `conftest.py` (pytest fixtures) is test *support*: never a subject, and omitted from the coverage denominator.
 
 **Why colocated**: the test file sits next to its subject. Move the source file, the test moves with it. The directory hierarchy is the source hierarchy.
 

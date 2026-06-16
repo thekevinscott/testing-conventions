@@ -68,6 +68,17 @@ impl Language {
         }
     }
 
+    /// `true` when `path` is test *support* — not a unit under test, but not a
+    /// subject either. Python's `conftest.py` (pytest fixtures) is the only such
+    /// file: there is no `conftest_test.py`, and it is never a coverage subject.
+    /// (#112)
+    fn is_support(self, path: &Path) -> bool {
+        match self {
+            Language::Python => file_name_of(path) == "conftest.py",
+            Language::TypeScript | Language::Rust => false,
+        }
+    }
+
     /// `true` when `source` (the file's contents) holds at least one line of
     /// code — anything beyond blank lines and comments. An empty or comment-only
     /// file (e.g. a bare `__init__.py`) carries no logic, so it is never a
@@ -118,7 +129,8 @@ pub fn missing_unit_tests(
 
     let mut orphans: Vec<PathBuf> = Vec::new();
     for source in &files {
-        if language.is_test(source) {
+        // A test file and a support file (Python `conftest.py`) are never subjects.
+        if language.is_test(source) || language.is_support(source) {
             continue;
         }
         if present.contains(language.expected_test_path(source).as_path()) {
@@ -253,6 +265,17 @@ mod tests {
         assert!(Language::Python.is_test(Path::new("widget_test.py")));
         assert!(Language::Python.is_test(Path::new("pkg/helper_test.py")));
         assert!(!Language::Python.is_test(Path::new("widget.py")));
+    }
+
+    #[test]
+    fn python_conftest_is_support_not_a_subject() {
+        // conftest.py holds pytest fixtures — support, never a subject (#112).
+        assert!(Language::Python.is_support(Path::new("conftest.py")));
+        assert!(Language::Python.is_support(Path::new("pkg/conftest.py")));
+        assert!(!Language::Python.is_support(Path::new("widget.py")));
+        assert!(!Language::Python.is_support(Path::new("widget_test.py")));
+        // Support is Python-only; TypeScript/Rust have no conftest concept.
+        assert!(!Language::TypeScript.is_support(Path::new("conftest.ts")));
     }
 
     #[test]

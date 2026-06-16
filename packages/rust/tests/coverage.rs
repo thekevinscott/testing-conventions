@@ -50,6 +50,18 @@ fn full_passes_a_100_floor() {
 }
 
 #[test]
+fn conftest_is_omitted_from_the_denominator() {
+    // conftest.py is pytest support, never a coverage subject. `conftest_omit`'s
+    // widget.py is fully covered, but its conftest.py has an unused fixture body
+    // (uncovered) — so the 100 floor passes only because conftest.py is omitted
+    // from the denominator alongside the test files. (#112)
+    assert_eq!(
+        measure(&codebase("conftest_omit"), FLOOR_100, &[]).unwrap(),
+        Outcome::Pass
+    );
+}
+
+#[test]
 fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
     // `exempt_cov` sits at ~58% only because of shim.py; omitting it (the
     // `coverage`-rule exemption the CLI resolves from config) leaves core.py,

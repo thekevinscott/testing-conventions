@@ -50,23 +50,6 @@ reason = "pure re-export barrel; no logic of its own"
 `unit location` reads the list via `--config` (default `testing-conventions.toml`); `unit
 coverage` already takes `--config` for its thresholds.
 
-## Why config, not in-file comments
-
-Keeping exemptions in the one config file means the project's **entire** exemption surface is
-visible in a single file — and in a single diff when it changes. A reviewer sees every
-deliberate omission at once, instead of hunting for ignore-comments scattered across the
-source.
-
-It's enforced, too: every `path` must point to a file that exists. A stale entry — left behind
-when a file moves or is deleted — is a **hard error**, not a silently-ignored line:
-
-```sh
-$ testing-conventions unit location --language python src/
-error: exempt entry `mypkg/cli.py` matches no file under `src` — remove the stale entry or fix the path
-```
-
-That's the difference between an auditable exemption and an ignore-glob that quietly rots.
-
 ## See also
 
 - [Reference — Exemptions](../reference/#exemptions) — the exact schema and the empty-file rule.

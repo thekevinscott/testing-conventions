@@ -1,0 +1,4 @@
+[[python.exempt]]
+path = "src/cli.py"
+rules = ["location"]
+reason = ""

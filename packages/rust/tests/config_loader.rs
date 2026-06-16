@@ -108,3 +108,13 @@ fn rejects_an_exemption_without_a_reason_self_guard() {
         "an exemption missing its reason must be rejected (self-guard)"
     );
 }
+
+#[test]
+fn rejects_an_exemption_with_a_blank_reason_self_guard() {
+    // Distinct from a *missing* reason: the `reason` key is present but blank.
+    // The loader's validation step must still reject it on load.
+    assert!(
+        load_config(fixture("exempt_empty_reason.toml")).is_err(),
+        "an exemption with a blank reason must be rejected (self-guard)"
+    );
+}

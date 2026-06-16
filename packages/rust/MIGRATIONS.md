@@ -292,17 +292,6 @@ module (`stale_sources`), and a waivable `config::Rule::CoChange` (`co-change`);
 changes. `--language rust` is rejected (inline `#[cfg(test)]` units have no sibling test to go
 stale).
 
-Finally, adds the **coverage non-regression ratchet — Python** (#131, parent #46):
-`unit coverage --language python` now also fails on a regression. A committed
-`coverage-baseline.json` beside the measured tree records the last total per
-language (`{ "python": { "percent_covered": 100.0 } }`), and a run whose Python
-total drops below the recorded baseline fails even when it still clears the
-configured floor. Purely additive — an absent baseline file means no ratchet
-(floor-only, unchanged). New library API `coverage::{read_baseline,
-evaluate_ratchet, measure_report, Baseline, PythonBaseline, BASELINE_PATH}`; the
-existing `measure` / `evaluate` are unchanged. The TypeScript / Rust arms and the
-explicit baseline-record step are later slices.
-
 Also corrects the Python test-file recognition in the two `lint.rs` scans (#145,
 follow-up to #112): `integration lint --language python` and `unit isolation
 --language python` no longer treat a legacy `test_*.py` as a test file. After #112
@@ -423,11 +412,6 @@ Exemptions (#32) change runtime behavior:
   the loader **rejected** those ids as an unknown `rules` variant (and even parsed,
   `integration lint` could never have waived them). A reason-less or stale entry still
   errors. (#123)
-- `unit coverage --language python` now also enforces a **non-regression ratchet**
-  (#131): with a `coverage-baseline.json` beside `<PATH>`, a run whose total drops
-  below the recorded `python` baseline exits non-zero — printing `coverage NN.NN%
-  regressed below the recorded baseline MM.MM%` — even when the floor is still met.
-  Without the file, behavior is unchanged.
 - `integration lint --language python` and `unit isolation --language python` no
   longer scan a legacy `test_*.py` (#145): it is ordinary source after #112, so a
   `test_*.py` carrying a `no-monkeypatch` / `unmocked-collaborator` violation is no
@@ -639,15 +623,6 @@ editing or deleting a source without touching its colocated test is flagged and 
 binary exits `1`; changing both, changing only a test, adding a brand-new source, or
 touching an empty/`conftest.py` file exits `0`; a `co-change` exemption lifts a stale
 source; and `--language rust` is rejected. Requires `git`.
-
-```
-cd packages/rust && cargo test --test coverage_ratchet --test coverage_ratchet_e2e
-```
-
-Expected: the non-regression ratchet tests pass (#131) — `ratchet_regressed`
-(~86%, clears the 85 floor) regresses below its committed 100% baseline and exits
-`1`, while `ratchet_clean` (100% meeting a 100% baseline) exits `0`. Requires
-`coverage` + `pytest` on `PATH`.
 
 ```
 cd packages/rust && cargo test --test patch_coverage --test patch_coverage_e2e

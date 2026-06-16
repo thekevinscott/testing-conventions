@@ -2,9 +2,9 @@
 //!
 //! Enforces the README Coverage rule's changed-line guarantee: every line a diff
 //! touches must be covered by the unit suite. Where [`crate::coverage`] measures
-//! the *whole* suite against a floor (#26) and the #131 ratchet against a
-//! baseline, this measures only the lines `<base>...HEAD` added or modified —
-//! failing when any changed, executable line is left uncovered.
+//! the *whole* suite against a floor (#26), this measures only the lines
+//! `<base>...HEAD` added or modified — failing when any changed, executable line
+//! is left uncovered.
 //!
 //! Two inputs are combined:
 //!   - the **diff** — [`changed_lines`] runs `git diff --unified=0 <base>...HEAD`

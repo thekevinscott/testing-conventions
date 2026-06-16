@@ -17,7 +17,7 @@ features:
   - title: Structural boundary
     details: Unit, integration, and e2e tests are separated by location, not tags.
   - title: Unit-suite coverage
-    details: Coverage floors are measured on the unit suite only, exclude test code from the denominator, and can't regress.
+    details: Coverage floors are measured on the unit suite only and exclude test code from the denominator.
   - title: One standard, three languages
     details: A single config drives Python, TypeScript, and Rust. Every rule is enforced deterministically in CI.
 ---

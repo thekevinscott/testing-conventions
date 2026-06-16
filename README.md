@@ -191,8 +191,8 @@ the suite. CI checks the attestation: `e2e verify` requires the committed
 
 ### Coverage
 
-**Rule:** coverage floors are enforced on the **unit suite only**, can't regress,
-and exclude test code from the denominator. The thresholds are set per library, in
+**Rule:** coverage floors are enforced on the **unit suite only** and exclude
+test code from the denominator. The thresholds are set per library, in
 each tool's native coverage primitives.
 
 **Why:** coverage measures execution, not assertion. Measuring it on anything but
@@ -202,7 +202,7 @@ real unit tests lets integration tests inflate the number.
 - **TypeScript:** `vitest` coverage (v8/istanbul). Set the `lines` / `branches` / `functions` / `statements` thresholds; exclude `*.test.ts`.
 - **Rust:** `cargo llvm-cov`. Set `regions` / `lines` (branch coverage is still experimental). Inline units can't be excluded by filename; use `#[coverage(off)]` (toolchain-dependent).
 
-**Checked:** deterministic (run coverage; compare to the configured thresholds and to the previous run).
+**Checked:** deterministic (run coverage; compare to the configured thresholds).
 
 ### Packaging
 

@@ -11,11 +11,12 @@
 //! Node-builtin / third-party) is the shared foundation the unit-direction
 //! slices (#76, #77) build on.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use oxc::allocator::Allocator;
-use oxc::ast::ast::{Argument, CallExpression, Expression};
+use oxc::ast::ast::{Argument, CallExpression, Expression, ImportDeclaration, ImportOrExportKind};
 use oxc::ast_visit::{walk, Visit};
 use oxc::parser::Parser;
 use oxc::span::{SourceType, Span};
@@ -130,14 +131,138 @@ pub fn find_integration_violations(root: impl AsRef<Path>) -> Result<Vec<Violati
 }
 
 /// Scan the unit test files under `root` and return every isolation violation —
-/// a runtime import that isn't `vi.mock()`-ed (#76). The TypeScript arm of
-/// `unit isolation` ([`crate::isolation::Language::TypeScript`]).
+/// a runtime import that isn't `vi.mock()`-ed (#76) — sorted by `(file, line)`.
+/// The TypeScript arm of `unit isolation`
+/// ([`crate::isolation::Language::TypeScript`]).
 ///
-/// Skeleton: reports nothing yet. The `unmocked-collaborator` detection (walk
-/// each `*.test.{ts,tsx,mts,cts}` for runtime imports that aren't the
-/// unit-under-test, the test runner, or `vi.mock()`-ed) lands next (#76).
-pub fn find_unit_violations(_root: impl AsRef<Path>) -> Result<Vec<Violation>> {
-    Ok(Vec::new())
+/// A *TypeScript unit test* is `*.test.{ts,tsx,mts,cts}`. Each is parsed and
+/// walked; a file that cannot be read or parsed is an error.
+pub fn find_unit_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
+    let root = root.as_ref();
+    let mut files = Vec::new();
+    collect_ts_test_files(root, &mut files)?;
+    files.sort();
+
+    let mut violations = Vec::new();
+    for file in &files {
+        let source = std::fs::read_to_string(file)
+            .with_context(|| format!("reading test file `{}`", file.display()))?;
+        violations.extend(unit_violations_in(file, &source)?);
+    }
+
+    violations.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
+    Ok(violations)
+}
+
+/// Parse one unit test file and collect its `unmocked-collaborator` violations:
+/// every runtime import that isn't the unit under test, the test runner, or
+/// `vi.mock()`-ed.
+fn unit_violations_in(file: &Path, source: &str) -> Result<Vec<Violation>> {
+    let allocator = Allocator::default();
+    let source_type = SourceType::from_path(file).map_err(|err| {
+        anyhow!(
+            "unsupported TypeScript extension `{}`: {err}",
+            file.display()
+        )
+    })?;
+    let ret = Parser::new(&allocator, source, source_type).parse();
+    if ret.panicked || !ret.diagnostics.is_empty() {
+        let detail = ret
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        bail!("parsing `{}` failed: {detail}", file.display());
+    }
+
+    let mut collector = UnitCollector {
+        source,
+        imports: Vec::new(),
+        mocked: BTreeSet::new(),
+    };
+    collector.visit_program(&ret.program);
+
+    let unit = unit_under_test_specifier(file);
+    let mut violations = Vec::new();
+    for (spec, line) in &collector.imports {
+        if is_unit_under_test(spec, &unit)
+            || is_test_runner(spec)
+            || collector.mocked.contains(spec)
+        {
+            continue;
+        }
+        violations.push(Violation {
+            file: file.to_path_buf(),
+            line: *line,
+            rule: "unmocked-collaborator",
+            message: format!(
+                "unit test imports `{spec}` without mocking it — a unit test isolates the \
+                 unit under test, so every collaborator must be `vi.mock()`-ed"
+            ),
+        });
+    }
+    Ok(violations)
+}
+
+/// Collects a unit test's runtime imports (specifier + line) and its `vi.mock()`
+/// targets in one AST pass.
+struct UnitCollector<'s> {
+    source: &'s str,
+    imports: Vec<(String, usize)>,
+    mocked: BTreeSet<String>,
+}
+
+impl<'a> Visit<'a> for UnitCollector<'_> {
+    fn visit_import_declaration(&mut self, decl: &ImportDeclaration<'a>) {
+        // `import type …` is erased at compile time — not a runtime dependency.
+        if matches!(decl.import_kind, ImportOrExportKind::Type) {
+            return;
+        }
+        self.imports.push((
+            decl.source.value.to_string(),
+            line_of(self.source, decl.span.start),
+        ));
+    }
+
+    fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
+        if let Some(spec) = vi_mock_target(call) {
+            self.mocked.insert(spec);
+        }
+        walk::walk_call_expression(self, call);
+    }
+}
+
+/// The unit-under-test specifier for a test file: `pkg/widget.test.ts` → `./widget`.
+fn unit_under_test_specifier(file: &Path) -> String {
+    let name = file
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    let stem = name.split(".test.").next().unwrap_or(name);
+    format!("./{stem}")
+}
+
+/// `true` when `spec` resolves to the unit under test, ignoring an explicit
+/// module extension (`./widget` and `./widget.js` both match `./widget`).
+fn is_unit_under_test(spec: &str, unit: &str) -> bool {
+    strip_module_ext(spec) == unit
+}
+
+/// `spec` without a trailing JS/TS module extension.
+fn strip_module_ext(spec: &str) -> &str {
+    for ext in [".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"] {
+        if let Some(base) = spec.strip_suffix(ext) {
+            return base;
+        }
+    }
+    spec
+}
+
+/// `true` for the Vitest test runner itself (`vitest`, `vitest/*`, `@vitest/*`) —
+/// the harness, never a collaborator to mock.
+fn is_test_runner(spec: &str) -> bool {
+    spec == "vitest" || spec.starts_with("vitest/") || spec.starts_with("@vitest/")
 }
 
 /// Parse one TypeScript test file and collect its `no-first-party-mock`
@@ -274,6 +399,85 @@ mod tests {
     /// Parse `source` as `name` and return its integration violations.
     fn violations(name: &str, source: &str) -> Vec<Violation> {
         integration_violations_in(Path::new(name), source).expect("source should parse")
+    }
+
+    /// Parse `source` as `name` and return its unit-isolation violations.
+    fn unit_violations(name: &str, source: &str) -> Vec<Violation> {
+        unit_violations_in(Path::new(name), source).expect("source should parse")
+    }
+
+    #[test]
+    fn unit_flags_unmocked_first_party_and_external() {
+        let found = unit_violations(
+            "widget.test.ts",
+            "import { makeWidget } from './widget';\n\
+             import { format } from './formatter';\n\
+             import { chunk } from 'lodash';\n",
+        );
+        // The unit under test (`./widget`) is not a collaborator; the other two are
+        // imported but not mocked.
+        assert_eq!(found.len(), 2, "got: {found:?}");
+        assert!(found.iter().all(|v| v.rule == "unmocked-collaborator"));
+        assert!(found.iter().any(|v| v.message.contains("./formatter")));
+        assert!(found.iter().any(|v| v.message.contains("lodash")));
+    }
+
+    #[test]
+    fn unit_mocked_collaborator_is_clean() {
+        let found = unit_violations(
+            "widget.test.ts",
+            "import { format } from './formatter';\nvi.mock('./formatter');\n",
+        );
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    #[test]
+    fn unit_under_test_and_runner_are_not_flagged() {
+        let found = unit_violations(
+            "widget.test.ts",
+            "import { vi } from 'vitest';\n\
+             import { makeWidget } from './widget.js';\n",
+        );
+        // `vitest` is the runner; `./widget.js` is the unit under test (extension ignored).
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    #[test]
+    fn unit_type_only_import_is_not_flagged() {
+        let found = unit_violations(
+            "widget.test.ts",
+            "import type { Opts } from './opts';\nimport { x } from './x';\nvi.mock('./x');\n",
+        );
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    #[test]
+    fn unit_under_test_specifier_strips_test_suffix() {
+        assert_eq!(
+            unit_under_test_specifier(Path::new("pkg/widget.test.ts")),
+            "./widget"
+        );
+        assert_eq!(
+            unit_under_test_specifier(Path::new("button.test.tsx")),
+            "./button"
+        );
+    }
+
+    #[test]
+    fn strip_module_ext_drops_known_extensions_only() {
+        assert_eq!(strip_module_ext("./widget.js"), "./widget");
+        assert_eq!(strip_module_ext("./widget.mts"), "./widget");
+        assert_eq!(strip_module_ext("./widget"), "./widget");
+        assert_eq!(strip_module_ext("lodash"), "lodash");
+    }
+
+    #[test]
+    fn recognizes_the_test_runner() {
+        assert!(is_test_runner("vitest"));
+        assert!(is_test_runner("vitest/config"));
+        assert!(is_test_runner("@vitest/spy"));
+        assert!(!is_test_runner("./vitest-helpers"));
+        assert!(!is_test_runner("lodash"));
     }
 
     #[test]

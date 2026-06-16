@@ -96,6 +96,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   single `super::`, `self`/`Self`, a bare unqualified call, and pure `std`
   (including `std::io::Cursor` and the I/O traits) stay in-module. Library API:
   `testing_conventions::isolation::{find_violations, Violation, Language}`. (#44)
+- `unit isolation --language typescript <PATH>` — the TypeScript arm of `unit
+  isolation` (#43, #76), the unit-direction counterpart to slice #75's
+  `no-first-party-mock`. A unit test must isolate the unit under test, so every
+  runtime import that isn't `vi.mock()` / `vi.doMock()`-ed is flagged
+  (**`unmocked-collaborator`**), except three: the **unit under test**
+  (`widget.test.ts` → `./widget`), **type-only** imports (`import type …`), and the
+  **test runner** (`vitest` / `@vitest/*`). Adds `TypeScript` to `isolation::Language`
+  and reuses slice #75's `oxc` parser. Library API:
+  `testing_conventions::ts::find_unit_violations`. (#43, #76)
 - `violation` module — the `Violation` type is hoisted here and shared by the
   Python `lint` and Rust `isolation` detectors so the CLI prints every rule the
   same way. `testing_conventions::lint::Violation` remains as a re-export, so the

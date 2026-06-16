@@ -129,6 +129,17 @@ pub fn find_integration_violations(root: impl AsRef<Path>) -> Result<Vec<Violati
     Ok(violations)
 }
 
+/// Scan the unit test files under `root` and return every isolation violation —
+/// a runtime import that isn't `vi.mock()`-ed (#76). The TypeScript arm of
+/// `unit isolation` ([`crate::isolation::Language::TypeScript`]).
+///
+/// Skeleton: reports nothing yet. The `unmocked-collaborator` detection (walk
+/// each `*.test.{ts,tsx,mts,cts}` for runtime imports that aren't the
+/// unit-under-test, the test runner, or `vi.mock()`-ed) lands next (#76).
+pub fn find_unit_violations(_root: impl AsRef<Path>) -> Result<Vec<Violation>> {
+    Ok(Vec::new())
+}
+
 /// Parse one TypeScript test file and collect its `no-first-party-mock`
 /// violations. A parse failure is an error — a malformed test file is never a
 /// silent pass.

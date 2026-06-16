@@ -124,6 +124,14 @@ new `testing_conventions::ts` module (`find_integration_violations`, plus the sh
 specifier classifier `classify` → `Origin`) and a new `--language typescript` arm on
 `integration lint`; nothing existing changes.
 
+Also extends `unit isolation` to TypeScript (#43, #76), the unit-direction
+counterpart: `unit isolation --language typescript <PATH>` walks each
+`*.test.{ts,tsx,mts,cts}` unit test and flags any runtime import that isn't
+`vi.mock()`-ed (`unmocked-collaborator`), except the unit under test, type-only
+imports, and the test runner (`vitest`). Additive — adds a `TypeScript` variant to
+`isolation::Language` and the `testing_conventions::ts::find_unit_violations`
+function; the Rust `unit isolation` behavior from #44 is unchanged.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -247,6 +255,15 @@ Expected: the TypeScript lint's integration + e2e tests pass — the clean fixtu
 (mocks only third-party packages and Node built-ins) reports no violations and exits
 `0`, and the red fixture (a first-party `vi.mock` / `vi.doMock`) is flagged and exits
 `1`.
+
+```
+cd packages/rust && cargo test --test unit_isolation --test unit_isolation_e2e
+```
+
+Expected: the TypeScript unit-isolation tests pass — the clean fixture (every
+collaborator `vi.mock()`-ed) reports no violations and exits `0`, and the red fixture
+(an un-mocked first-party `./formatter` and external `lodash`, with the unit under
+test and a mocked collaborator left alone) is flagged and exits `1`.
 
 ```
 cd packages/rust && cargo test --test coverage_e2e --test coverage_ts_e2e

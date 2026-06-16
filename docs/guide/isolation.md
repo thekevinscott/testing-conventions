@@ -45,8 +45,16 @@ target (`vi.mock(name)`) can't be classified deterministically and is left alone
 
 ## Mock every collaborator in a unit test
 
-The mirror-image rule for the **unit** suite: mock each first-party collaborator and external
-import, typed so the double can't drift from the real module.
+The mirror-image rule for the **unit** suite — enforced by `unit isolation`:
+
+```sh
+testing-conventions unit isolation --language typescript src/
+```
+
+It flags any runtime import a unit test doesn't `vi.mock()` (`unmocked-collaborator`), leaving
+only three alone: the unit under test (`widget.test.ts` → `./widget`), type-only imports, and
+the test runner (`vitest`). Mock each collaborator — typed, so the double can't drift from the
+real module:
 
 ```ts
 vi.mock('./service', async () => {
@@ -55,9 +63,9 @@ vi.mock('./service', async () => {
 });
 ```
 
-See the [README](https://github.com/thekevinscott/testing-conventions#isolation) for the full
-rule across Python, TypeScript, and Rust. (Deterministic enforcement of the unit direction is
-rolling out alongside `no-first-party-mock`.)
+(Rust enforces the same intent structurally with `unit isolation --language rust` —
+`no-out-of-module-call`.) See the
+[README](https://github.com/thekevinscott/testing-conventions#isolation) for the full rule.
 
 ## See also
 

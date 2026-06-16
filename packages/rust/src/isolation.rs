@@ -30,13 +30,18 @@ pub use crate::violation::Violation;
 /// Rule id reported for an out-of-module call.
 const RULE: &str = "no-out-of-module-call";
 
-/// A language whose unit-isolation convention can be checked. Rust only for now
-/// (Python #42 / TypeScript #43 are separate detectors).
+/// A language whose unit-isolation convention can be checked (Python #42 is a
+/// separate detector). Each detector lives in its own module; this enum is the
+/// shared `unit isolation` language selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Language {
-    /// Inline `#[cfg(test)]` modules in `*.rs` files.
+    /// Inline `#[cfg(test)]` modules in `*.rs` files (`no-out-of-module-call`).
     #[value(name = "rust")]
     Rust,
+    /// `*.test.{ts,tsx,mts,cts}` unit tests (`unmocked-collaborator`, #43 / #76);
+    /// the detector lives in [`crate::ts`].
+    #[value(name = "typescript")]
+    TypeScript,
 }
 
 /// Scan the Rust source files under `root` and return every isolation violation,

@@ -26,6 +26,10 @@ impl TempRepo {
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
+        // Throwaway repos never sign — keep the suite hermetic regardless of the
+        // machine's global `commit.gpgsign`, now that `attest` inherits it instead
+        // of forcing it off.
+        git(&root, &["config", "commit.gpgsign", "false"]);
         std::fs::write(root.join("README.md"), "seed\n").unwrap();
         git(&root, &["add", "."]);
         git(

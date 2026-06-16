@@ -74,17 +74,10 @@ pub fn attest(repo: &Path, command: &str) -> Result<Attestation> {
     git_run(repo, &["add", ATTESTATION_PATH])?;
     let short = &commit[..commit.len().min(7)];
     let message = format!("e2e attestation for {short}");
-    git_run(
-        repo,
-        &[
-            "-c",
-            "commit.gpgsign=false",
-            "commit",
-            "-q",
-            "-m",
-            message.as_str(),
-        ],
-    )?;
+    // A plain commit that inherits the repo's signing policy: a repo requiring
+    // verified signatures gets a signed (mergeable) attestation, instead of the
+    // unsigned commit a forced `commit.gpgsign=false` would leave behind (#128).
+    git_run(repo, &["commit", "-q", "-m", message.as_str()])?;
 
     Ok(attestation)
 }

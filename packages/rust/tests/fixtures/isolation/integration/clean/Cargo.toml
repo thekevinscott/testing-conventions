@@ -1,0 +1,15 @@
+# Clean fixture: a library `gadget` whose integration test runs first-party code
+# for real and doubles only an external crate. `[workspace]` isolates it from cargo.
+[package]
+name = "gadget"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8"
+
+[dev-dependencies]
+mockall = "0.13"
+mockall_double = "0.3"
+
+[workspace]

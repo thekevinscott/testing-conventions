@@ -86,6 +86,43 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     Ok(violations)
 }
 
+/// Scan the Rust integration crates under `root` (the `*.rs` files in a `tests/`
+/// directory) and return every `no-first-party-double` violation — a `#[double]`
+/// import of a first-party item. An integration test runs first-party code for
+/// real, so doubling it is the error; doubling an external crate is fine. `root`
+/// is the crate root; its `Cargo.toml` names the first-party crates.
+///
+/// Skeleton: this commit wires the `tests/` walk + parse and reports nothing; the
+/// detector lands in the green step.
+pub fn find_integration_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
+    let root = root.as_ref();
+    let mut files = Vec::new();
+    collect_rust_files(root, &mut files)?;
+    files.retain(|file| is_integration_test(root, file));
+    files.sort();
+
+    let mut violations: Vec<Violation> = Vec::new();
+    for file in &files {
+        let source = std::fs::read_to_string(file)
+            .with_context(|| format!("reading source file `{}`", file.display()))?;
+        syn::parse_file(&source).map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
+    }
+
+    violations.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
+    Ok(violations)
+}
+
+/// `true` when `file` (under `root`) is a Rust integration test — a `*.rs` file
+/// with a `tests` directory in its `root`-relative path. Unit tests are inline
+/// `#[cfg(test)]` in `src/`, where doubling a collaborator is correct isolation;
+/// only `tests/` crates run first-party for real and so are integration subjects.
+fn is_integration_test(root: &Path, file: &Path) -> bool {
+    file.strip_prefix(root)
+        .unwrap_or(file)
+        .components()
+        .any(|component| component.as_os_str() == "tests")
+}
+
 /// Walks one parsed file, flagging out-of-module calls inside `#[cfg(test)]`
 /// modules. `test_depth` counts how deep we are inside such modules, so a call in
 /// non-test code is ignored.

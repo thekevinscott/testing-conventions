@@ -93,17 +93,33 @@ enum UnitRule {
     },
 }
 
+/// Languages the integration-test lints support — its own set (Python,
+/// TypeScript, Rust), distinct from the file-pairing `colocated_test::Language`,
+/// so adding Rust here doesn't touch the colocated-test/coverage rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum IntegrationLintLanguage {
+    /// Python test files (`*_test.py`, `test_*.py`, `conftest.py`).
+    #[value(name = "python")]
+    Python,
+    /// TypeScript test files (`*.test.{ts,tsx,mts,cts}`).
+    #[value(name = "typescript")]
+    TypeScript,
+    /// Rust integration crates under `tests/`.
+    #[value(name = "rust")]
+    Rust,
+}
+
 /// Lints enforced on integration tests (mocking mechanism & style, and more to
 /// come). The README's "Integration" taxonomy.
 #[derive(Subcommand, Debug)]
 enum IntegrationRule {
-    /// Lint integration test files for mocking mechanism & style (Python, TypeScript).
+    /// Lint integration test files for mocking mechanism & style (Python, TypeScript, Rust).
     Lint {
         /// Directory to scan recursively for test files.
         path: PathBuf,
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
-        language: colocated_test::Language,
+        language: IntegrationLintLanguage,
         /// testing-conventions config file providing the `exempt` list (waivers).
         /// Optional: if the file is absent, nothing is waived.
         #[arg(long, default_value = "testing-conventions.toml")]
@@ -287,13 +303,24 @@ fn run_unit_isolation(root: &Path, language: isolation::Language) -> anyhow::Res
 /// are found, `0` otherwise.
 fn run_integration_lint(
     root: &Path,
-    language: colocated_test::Language,
+    language: IntegrationLintLanguage,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
-    let waived = lint_waivers(root, language, config_path)?;
-    let raw = match language {
-        colocated_test::Language::Python => lint::find_violations(root)?,
-        colocated_test::Language::TypeScript => ts::find_integration_violations(root)?,
+    let (raw, waived) = match language {
+        IntegrationLintLanguage::Python => (
+            lint::find_violations(root)?,
+            lint_waivers(root, colocated_test::Language::Python, config_path)?,
+        ),
+        IntegrationLintLanguage::TypeScript => (
+            ts::find_integration_violations(root)?,
+            lint_waivers(root, colocated_test::Language::TypeScript, config_path)?,
+        ),
+        // The Rust `no-first-party-double` lint is bright-line; the inline
+        // `waiver:` hatch is a separate slice, so nothing is waived here yet.
+        IntegrationLintLanguage::Rust => (
+            isolation::find_integration_violations(root)?,
+            std::collections::BTreeSet::new(),
+        ),
     };
     let violations: Vec<lint::Violation> = raw
         .into_iter()

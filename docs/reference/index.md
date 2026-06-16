@@ -194,6 +194,29 @@ walks the AST:
   (`node:fs`, `child_process`) may be mocked. A non-literal target (`vi.mock(name)`) can't be
   classified deterministically and is left alone. See the [Isolation guide](../guide/isolation).
 
+### `e2e attest`
+
+Run the e2e suite locally and record that it ran against the current commit — the *write* half
+of the e2e attestation nudge. The first command under the `e2e` group; the CI-side `e2e verify`
+gate follows.
+
+```
+testing-conventions e2e attest '<command>'
+```
+
+| Argument | Description |
+| -------- | ----------- |
+| `<command>` | The e2e command to run (e.g. `pnpm run e2e`), executed via the shell with its output streamed through. |
+
+Run from the repository root. `attest` resolves the current commit (`HEAD`), runs `<command>`
+capturing its exit code, writes `e2e-attestation.json` recording the command, a timestamp, the
+exit code, and the commit SHA it was run against, and commits that file on top — the attestation
+names the code commit beneath it, since a commit can't name its own SHA.
+
+It writes **regardless of the command's exit code** — the point is to force a *run*, not a
+*pass* — and exits `0` once the attestation is recorded and committed. The companion `e2e verify`
+(a CI gate confirming the latest code commit is attested) is not shipped yet.
+
 ### `check`
 
 Reserved for the config-driven umbrella that runs every configured rule. **Not wired yet** —

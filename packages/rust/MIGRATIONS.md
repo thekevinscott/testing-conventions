@@ -124,6 +124,14 @@ new `testing_conventions::ts` module (`find_integration_violations`, plus the sh
 specifier classifier `classify` → `Origin`) and a new `--language typescript` arm on
 `integration lint`; nothing existing changes.
 
+Also adds the e2e attestation nudge's first command (#17, #67): `e2e attest
+'<command>'` runs the e2e suite, writes a committed `e2e-attestation.json` naming
+the current commit (the command, a timestamp, the exit code, and the attested
+SHA), and commits it on top — regardless of the command's outcome (force a run,
+not a pass). Purely additive: a new `e2e` command group and the
+`testing_conventions::e2e` module (`attest`, `Attestation`, `ATTESTATION_PATH`);
+nothing existing changes. The CI-side `e2e verify` follows in #68.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -230,6 +238,14 @@ four metrics, `above` fails 100 but clears the mid floor, `below` (100% lines bu
 its shim is omitted by a `coverage` exemption. Requires Node with `vitest` +
 `@vitest/coverage-v8` installed (run `npm ci` in
 `tests/fixtures/unit_coverage/typescript`).
+
+```
+cd packages/rust && cargo test --test e2e_attest --test e2e_attest_e2e
+```
+
+Expected: the `e2e attest` tests pass — in a throwaway git repo, `attest` names
+HEAD, writes `e2e-attestation.json`, and commits it on top, exiting `0` even when
+the wrapped command fails (force a run, not a pass). Requires `git`.
 
 ```
 cd packages/rust && cargo test --test integration_lint --test integration_lint_e2e

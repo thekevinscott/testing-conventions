@@ -60,6 +60,30 @@ For **`python`**, runs `coverage.py` with branch coverage on — measuring the s
 `[python].coverage` (`fail_under`, `branch`). Exits `0` when the floor is met, `1` (with the
 actual vs. required percent on stderr) when it isn't. `coverage` and `pytest` must be installed.
 
+### `integration lint`
+
+Lint Python test files for mocking mechanism & style. The first rule under the `integration`
+command group; future lints join it under the same command.
+
+```
+testing-conventions integration lint --language <LANG> <PATH>
+```
+
+| Argument / flag     | Description                                                        |
+| ------------------- | ----------------------------------------------------------------- |
+| `<PATH>`            | Directory to scan recursively for Python test files.              |
+| `--language <LANG>` | **Required.** `python` only for now. Omitting it is a usage error. |
+
+Parses each Python test file (`*_test.py`, `test_*.py`, `conftest.py`) with a Rust Python
+parser and walks the AST. Reports each violation to stderr as `path:line: <lint> — <message>`
+and exits `1` if any are found, `0` otherwise.
+
+**Lints:**
+
+- **`no-monkeypatch`** — a test or fixture function that declares the `monkeypatch` parameter.
+  pytest's `monkeypatch` is banned; patch with `unittest.mock` (`patch` / `patch.object` /
+  `patch.dict`) wrapped in a `pytest.fixture` instead.
+
 ### `check`
 
 Reserved for the config-driven umbrella that runs every configured rule. **Not wired yet** —

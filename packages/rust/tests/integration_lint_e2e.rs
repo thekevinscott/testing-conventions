@@ -95,3 +95,14 @@ fn first_party_patch_red_exits_nonzero() {
 fn first_party_patch_clean_exits_zero() {
     assert_eq!(lint_exit("no_first_party_patch/clean"), 0);
 }
+
+#[test]
+fn first_party_patch_waived_exits_zero() {
+    assert_eq!(
+        lint_exit_with_config(
+            "no_first_party_patch/waived",
+            "no_first_party_patch/waived/testing-conventions.toml"
+        ),
+        0
+    );
+}

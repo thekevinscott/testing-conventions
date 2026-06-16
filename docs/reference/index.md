@@ -83,6 +83,9 @@ and exits `1` if any are found, `0` otherwise.
 - **`no-monkeypatch`** — a test or fixture function that declares the `monkeypatch` parameter.
   pytest's `monkeypatch` is banned; patch with `unittest.mock` (`patch` / `patch.object` /
   `patch.dict`) wrapped in a `pytest.fixture` instead.
+- **`no-inline-patch`** — a `patch(...)` / `patch.object(...)` / `patch.dict(...)` call in a
+  test body, whether the `with patch(...)` form or a bare call. Move the patch into a
+  `pytest.fixture`; a patch inside a fixture is allowed.
 
 ### `check`
 

@@ -30,10 +30,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `lint` module + `integration lint` CLI — the first deterministic *lint* on test
   code. `integration lint --language python <PATH>` parses each Python test file
   (`*_test.py`, `test_*.py`, `conftest.py`) with `rustpython_parser` and walks the
-  AST, exiting non-zero on any violation. First lint:
+  AST, exiting non-zero on any violation. Lints:
   **`no-monkeypatch`** (#49) — a test/fixture that declares the `monkeypatch`
-  parameter (patch with `unittest.mock` wrapped in a `pytest.fixture` instead).
-  Library API: `testing_conventions::lint::{find_violations, Violation}`. (#48, #49)
+  parameter; and **`no-inline-patch`** (#50) — a `patch(...)` / `patch.object(...)`
+  / `patch.dict(...)` call in a test body (`with patch(...)` or a bare call), which
+  belongs in a `pytest.fixture`. Library API:
+  `testing_conventions::lint::{find_violations, Violation}`. (#48, #49, #50)
 
 ### Changed
 

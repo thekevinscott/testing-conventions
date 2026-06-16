@@ -39,9 +39,9 @@ fn lint_exit(fixture_name: &str) -> i32 {
 // ---- R1: forbid `monkeypatch` (#49) --------------------------------------
 
 #[test]
-fn red_fixture_reports_a_monkeypatch_violation() {
-    let violations =
-        find_violations(fixture("red")).expect("walking a readable tree should succeed");
+fn monkeypatch_red_reports_a_violation() {
+    let violations = find_violations(fixture("monkeypatch/red"))
+        .expect("walking a readable tree should succeed");
     assert!(
         violations.iter().any(|v| v.rule == "no-monkeypatch"),
         "the red fixture uses pytest's `monkeypatch` and must be flagged; got {violations:?}"
@@ -49,9 +49,9 @@ fn red_fixture_reports_a_monkeypatch_violation() {
 }
 
 #[test]
-fn clean_fixture_reports_no_violations() {
-    let violations =
-        find_violations(fixture("clean")).expect("walking a readable tree should succeed");
+fn monkeypatch_clean_reports_no_violations() {
+    let violations = find_violations(fixture("monkeypatch/clean"))
+        .expect("walking a readable tree should succeed");
     assert!(
         violations.is_empty(),
         "the clean fixture patches via a fixture (no monkeypatch); got {violations:?}"
@@ -59,13 +59,59 @@ fn clean_fixture_reports_no_violations() {
 }
 
 #[test]
-fn red_fixture_exits_nonzero() {
-    assert_eq!(lint_exit("red"), 1);
+fn monkeypatch_red_exits_nonzero() {
+    assert_eq!(lint_exit("monkeypatch/red"), 1);
 }
 
 #[test]
-fn clean_fixture_exits_zero() {
-    assert_eq!(lint_exit("clean"), 0);
+fn monkeypatch_clean_exits_zero() {
+    assert_eq!(lint_exit("monkeypatch/clean"), 0);
+}
+
+// ---- R2: patches must live in fixtures, not inline (#50) -----------------
+
+#[test]
+fn inline_patch_red_flags_the_with_form() {
+    let violations = find_violations(fixture("inline_patch/red"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "no-inline-patch" && v.file.ends_with("inline_with_patch_test.py")),
+        "an inline `with patch(...)` in a test body must be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn inline_patch_red_flags_the_bare_call() {
+    let violations = find_violations(fixture("inline_patch/red"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "no-inline-patch" && v.file.ends_with("bare_patch_call_test.py")),
+        "a bare `patch(...)` call in a test body must be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn inline_patch_clean_reports_no_violations() {
+    let violations = find_violations(fixture("inline_patch/clean"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "the clean fixture wraps the patch in a fixture; got {violations:?}"
+    );
+}
+
+#[test]
+fn inline_patch_red_exits_nonzero() {
+    assert_eq!(lint_exit("inline_patch/red"), 1);
+}
+
+#[test]
+fn inline_patch_clean_exits_zero() {
+    assert_eq!(lint_exit("inline_patch/clean"), 0);
 }
 
 // ---- CLI surface ---------------------------------------------------------

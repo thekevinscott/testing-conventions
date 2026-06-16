@@ -626,6 +626,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
+ "rustpython-ast",
  "rustpython-parser",
  "serde",
  "serde_json",

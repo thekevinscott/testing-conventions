@@ -136,19 +136,24 @@ deterministic bright-line.
 **Python** — parses each colocated unit test (`*_test.py` / `test_*.py`, not `conftest.py`) with
 the Rust Python parser:
 
-- **`unmocked-collaborator`** — an imported **first-party** collaborator that the test doesn't
-  mock. First-party is the dist's own package (read from the nearest `pyproject.toml`
-  `[project].name`, as in [`integration lint`](#integration-lint)'s `no-first-party-patch`), or a
-  relative import. Three things are never collaborators: the **unit under test** (the import whose
-  module's last segment matches the test's base name — `widget_test.py` ↔ `myproject.widget`), the
-  **test framework** (`pytest` / `unittest` / `unittest.mock`), and **pure stdlib** / `__future__` /
-  `TYPE_CHECKING`-guarded (type-only) imports. An import counts as **mocked** when a `patch("…")` in
-  the file targets a matching last segment — `patch("myproject.widget.record")` mocks an imported
-  `record` (the convention patches the name in the consuming module). The canonical unit test
-  imports only the unit under test and patches collaborators by string, so it has no collaborator
-  imports to flag. Un-mocked third-party / effectful-stdlib imports are a separate slice; a
-  first-party *value/type* import used to build test data is a documented non-goal (waive it). See
-  the [Isolation guide](../guide/isolation).
+- **`unmocked-collaborator`** — an imported collaborator that the test doesn't mock. Two kinds are
+  checked: **first-party** (the dist's own package, read from the nearest `pyproject.toml`
+  `[project].name`, as in [`integration lint`](#integration-lint)'s `no-first-party-patch`, or a
+  relative import) and **external** — a **third-party** package (any bare import that's neither
+  first-party nor stdlib) or an **effectful-stdlib** module (a conservative network / subprocess /
+  process / randomness / database / low-level-OS set: `socket`, `subprocess`, `ssl`, `random`,
+  `sqlite3`, …). Never collaborators: the **unit under test** (the import whose module's last segment
+  matches the test's base name — `widget_test.py` ↔ `myproject.widget`), the **test framework**
+  (`pytest` / `_pytest` / `mock`; `unittest` / `unittest.mock` are stdlib), **pure stdlib**
+  (`json`, `dataclasses`, …), `__future__`, and `TYPE_CHECKING`-guarded (type-only) imports. An
+  import counts as **mocked** when a `patch("…")` in the file targets a matching last segment —
+  `patch("myproject.widget.record")` mocks an imported `record` (the convention patches the name in
+  the consuming module). The canonical unit test imports only the unit under test and patches
+  collaborators by string, so it has no collaborator imports to flag. Documented non-goals (waive
+  them): dual-nature stdlib heads used purely (`os`, `pathlib`, `datetime`, `time`, `io` — the clock
+  / filesystem are caught by the patch convention, not at import), a *value/type* import used to
+  build test data, and pure test-helper packages beyond the framework allowlist. See the
+  [Isolation guide](../guide/isolation).
 
 ## Exemptions
 

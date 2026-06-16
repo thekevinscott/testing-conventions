@@ -86,22 +86,27 @@ Python works the same way, against the colocated `*_test.py` suite:
 testing-conventions unit isolation --language python src/
 ```
 
-It flags an imported **first-party** collaborator (the dist's own package, per `pyproject.toml`)
-that the unit test doesn't mock (`unmocked-collaborator`). The unit under test, `pytest` /
-`unittest`, pure stdlib, and type-only imports are never collaborators. The idiom is to *not*
-import the collaborator at all — patch it by string in a fixture, so the unit uses the double
-internally:
+It flags an imported collaborator the unit test doesn't mock (`unmocked-collaborator`) — both
+**first-party** (the dist's own package, per `pyproject.toml`) and **external**: a third-party
+package or an effectful-stdlib module (`socket`, `subprocess`, `random`, …). The unit under test,
+`pytest` / `unittest`, **pure** stdlib (`json`, `dataclasses`, …), and type-only imports are never
+collaborators. The idiom is to *not* import the collaborator at all — patch it by string in a
+fixture, so the unit uses the double internally:
 
 ```python
-# ❌ flagged — `record` is a first-party collaborator imported and used for real
+# ❌ flagged — a first-party collaborator and an external dep, imported and used for real
 from myproject.ledger import record
+import requests
 
-# ✅ fine — patch the name as the unit under test looks it up; don't import it
+# ✅ fine — patch the names as the unit under test looks them up; don't import them
 @pytest.fixture(autouse=True)
 def mock_record():
     with patch("myproject.widget.record") as mock:
         yield mock
 ```
+
+(Dual-nature stdlib like `os` / `pathlib` / `datetime` isn't flagged at the import — the clock and
+filesystem are caught by patching, not by the import check.)
 
 (Rust enforces the same intent structurally with `unit isolation --language rust` —
 `no-out-of-module-call`.) See the

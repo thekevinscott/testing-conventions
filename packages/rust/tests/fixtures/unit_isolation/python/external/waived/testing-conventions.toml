@@ -1,0 +1,5 @@
+# Waiver for slice 3: exempt the file from `unmocked-collaborator`, with a reason.
+[[python.exempt]]
+path = "widget_test.py"
+rules = ["unmocked-collaborator"]
+reason = "legacy unit test hitting the real network/subprocess; isolation refactor tracked separately"

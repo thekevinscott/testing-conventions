@@ -92,3 +92,59 @@ fn waived_exits_zero() {
         0
     );
 }
+
+// ---- external & effectful-stdlib deps (#121, slice 3) --------------------
+
+#[test]
+fn external_red_flags_unmocked_external_deps() {
+    let violations = find_unit_isolation_violations(fixture("external/red"))
+        .expect("walking a readable tree should succeed");
+    // A third-party package and an effectful-stdlib module, both imported un-mocked.
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "unmocked-collaborator" && v.message.contains("requests")),
+        "an imported, un-mocked third-party package must be flagged; got {violations:?}"
+    );
+    assert!(
+        violations.iter().any(|v| v.message.contains("subprocess")),
+        "an imported, un-mocked effectful-stdlib module must be flagged; got {violations:?}"
+    );
+    // Pure stdlib (`json`) is never a collaborator.
+    assert!(
+        !violations.iter().any(|v| v.message.contains("json")),
+        "pure stdlib must not be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn external_clean_reports_no_violations() {
+    let violations = find_unit_isolation_violations(fixture("external/clean"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "the clean fixture mocks the external collaborators by string and uses only pure \
+         stdlib; got {violations:?}"
+    );
+}
+
+#[test]
+fn external_red_exits_nonzero() {
+    assert_eq!(isolation_exit("external/red"), 1);
+}
+
+#[test]
+fn external_clean_exits_zero() {
+    assert_eq!(isolation_exit("external/clean"), 0);
+}
+
+#[test]
+fn external_waived_exits_zero() {
+    assert_eq!(
+        isolation_exit_with_config(
+            "external/waived",
+            "external/waived/testing-conventions.toml"
+        ),
+        0
+    );
+}

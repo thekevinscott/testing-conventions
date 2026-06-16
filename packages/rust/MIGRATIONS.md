@@ -248,6 +248,17 @@ never a subject, and omitted from the denominator alongside the test files. No A
 change; the legacy `test_*.py` prefix stays unsupported (the colocated rule
 requires `foo_test.py`).
 
+Then extends Python `unit isolation` to **external** collaborators (#121, slice 3):
+the same `unmocked-collaborator` rule now also flags an imported, un-mocked
+third-party package or effectful-stdlib module (network / subprocess / process /
+randomness / database / low-level OS), classifying import heads against an embedded
+`sys.stdlib_module_names` set and a conservative effectful subset. Pure stdlib, the
+`pytest` / `_pytest` / `mock` framework allowlist, and dual-nature heads (`os`,
+`pathlib`, `datetime`, `time`, `io`) are not flagged. Behavior-only —
+`find_unit_isolation_violations` reports the extra findings; no signature or rule-id
+change, so the #102 waiver still applies.
+>>>>>>> db034a8 (test(rust): red — Python unit isolation external deps (#121))
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -501,3 +512,12 @@ Expected: the Python unit-isolation tests pass (#42, slice 2) — the red fixtur
 exits `1`, the clean fixture (imports only the unit under test, patches the
 collaborator by string) reports nothing and exits `0`, and the `waived` fixture's
 `[[python.exempt]] rules = ["unmocked-collaborator"]` lifts it back to `0`.
+
+```
+cd packages/rust && cargo test --test py_unit_isolation --test py_unit_isolation_e2e external
+```
+
+Expected: the external-deps tests pass (#121, slice 3) — the `external/red` fixture
+(imports un-mocked `requests` + `subprocess`) is flagged and exits `1`, the
+`external/clean` fixture (mocks them by string, uses only pure `json`) reports
+nothing and exits `0`, and `external/waived` lifts both back to `0`.

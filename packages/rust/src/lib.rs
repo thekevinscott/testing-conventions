@@ -98,8 +98,8 @@ enum UnitRule {
     PatchCoverage {
         /// Directory whose unit suite is run and measured; also where git runs.
         path: PathBuf,
-        /// Language convention to enforce (required). Python only for now — the
-        /// TypeScript and Rust twins are separate items.
+        /// Language convention to enforce (required). Python and TypeScript — the
+        /// Rust twin (`cargo llvm-cov`) is a separate item.
         #[arg(long, value_enum)]
         language: colocated_test::Language,
         /// Base ref to diff against: the check compares `<base>...HEAD`, the
@@ -462,32 +462,32 @@ fn run_unit_coverage(
 
 /// Run the patch (changed-line) coverage check over `root` for `language`,
 /// diffing `<base>...HEAD` and requiring every changed line to be covered by the
-/// unit suite (#132). Returns `0` when every changed line is covered; otherwise
-/// prints each uncovered line to stderr and returns `1`.
+/// unit suite (Python #132, TypeScript #135). Returns `0` when every changed line
+/// is covered; otherwise prints each uncovered line to stderr and returns `1`.
 ///
-/// Python only this slice — the TypeScript and Rust twins are later items under
-/// #46 (mirroring how `unit coverage` is staged). The `coverage`-rule exemptions
-/// from the config at `config_path` lift a file's changed lines (a missing config
-/// file → nothing exempt), reusing the floor's exemption surface (#32).
+/// Python runs coverage.py and TypeScript runs vitest; both reuse the same
+/// `<base>...HEAD` diff machinery. The Rust twin (`cargo llvm-cov`) is a later
+/// item under #46 (mirroring how `unit coverage` is staged). The `coverage`-rule
+/// exemptions from the config at `config_path` lift a file's changed lines (a
+/// missing config file → nothing exempt), reusing the floor's exemption surface
+/// (#32).
 fn run_unit_patch_coverage(
     root: &Path,
     base: &str,
     language: colocated_test::Language,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
-    match language {
-        colocated_test::Language::Python => {}
-        colocated_test::Language::TypeScript => anyhow::bail!(
-            "`unit patch-coverage` supports `--language python`; \
-             the TypeScript twin is a separate item"
-        ),
+    let exempt = patch_coverage_exemptions(root, config_path, language)?;
+    let uncovered = match language {
+        colocated_test::Language::Python => patch_coverage::check(root, base, &exempt)?,
+        colocated_test::Language::TypeScript => {
+            patch_coverage::check_typescript(root, base, &exempt)?
+        }
         colocated_test::Language::Rust => anyhow::bail!(
-            "`unit patch-coverage` supports `--language python`; \
+            "`unit patch-coverage` supports `--language python` / `typescript`; \
              the Rust twin (`cargo llvm-cov`) is a separate item"
         ),
-    }
-    let omit = patch_coverage_exemptions(root, config_path)?;
-    let uncovered = patch_coverage::check(root, base, &omit)?;
+    };
     if uncovered.is_empty() {
         return Ok(0);
     }
@@ -505,18 +505,21 @@ fn run_unit_patch_coverage(
     Ok(1)
 }
 
-/// The `coverage`-rule exempt paths resolved from the config at `config_path`
-/// (Python `[python].exempt`), as `root`-relative `--omit` patterns. A missing
-/// config file means nothing is exempt. Mirrors `run_unit_coverage`'s Python arm,
-/// so a file waived from the floor is waived from patch coverage too.
-fn patch_coverage_exemptions(root: &Path, config_path: &Path) -> anyhow::Result<Vec<String>> {
+/// The `coverage`-rule exempt paths for `language` resolved from the config at
+/// `config_path` (the `[<language>].exempt` table), as `root`-relative patterns. A
+/// missing config file means nothing is exempt. Mirrors `run_unit_coverage`, so a
+/// file waived from the floor is waived from patch coverage too.
+fn patch_coverage_exemptions(
+    root: &Path,
+    config_path: &Path,
+    language: colocated_test::Language,
+) -> anyhow::Result<Vec<String>> {
     if !config_path.exists() {
         return Ok(Vec::new());
     }
     let config = config::load_config(config_path)?;
-    let python = config.python.unwrap_or_default();
     Ok(
-        config::resolve_exempt(root, &python.exempt, config::Rule::Coverage)?
+        config::resolve_exempt(root, config.exemptions(language), config::Rule::Coverage)?
             .into_iter()
             .collect(),
     )

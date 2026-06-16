@@ -329,6 +329,20 @@ via coverage.py `--source`). Purely additive: a new `unit` subcommand and the
 `#[serde(default)]` field — `measure` / `evaluate` and the floor are unchanged).
 `--language typescript` / `rust` are rejected as separate items.
 
+Also adds **patch (changed-line) coverage — TypeScript** (#135, parent #46): `unit
+patch-coverage --language typescript [--base <REF>] [--config <CONFIG>] <PATH>`,
+the TypeScript twin of #132 built on the TypeScript coverage rule (#31). It reuses
+the same `<base>...HEAD` diff machinery — scoped to `.ts` / `.tsx` / `.mts` /
+`.cts` sources — and maps the changed lines against vitest's per-file v8 coverage,
+flagging a changed line that carries a statement the suite never ran or the source
+of a branch never taken (line + branch). It runs `npx vitest` with the `json`
+reporter and `--coverage.all` (so an untested changed file is wholly uncovered) and
+honors the floor's `[typescript].coverage` exemption (#32) — an excluded file's
+changed lines are lifted. Purely additive: `patch_coverage` gains `check_typescript`
+and `uncovered_changed_lines_ts`, and `coverage` gains `measure_patch_typescript`;
+the Python arm and the existing API are unchanged. `--language rust` is still
+rejected as a separate item.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -643,5 +657,18 @@ Expected: the patch-coverage tests pass (#132) — in a throwaway git repo, a ch
 that adds an uncovered line or branch (or a brand-new untested file) is flagged and
 the binary exits `1`, while rewording a covered line, or touching only a comment,
 exits `0`; a `coverage` exemption lifts an uncovered file; an unresolvable `--base`
-errors; and `--language typescript` / `rust` are rejected. Requires `coverage` +
-`pytest` + `git` on `PATH`.
+errors; and `--language rust` is rejected. Requires `coverage` + `pytest` + `git`
+on `PATH`.
+
+```
+cd packages/rust && cargo test --test patch_coverage_ts --test patch_coverage_ts_e2e
+```
+
+Expected: the TypeScript patch-coverage tests pass (#135) — in a throwaway git repo
+(with the fixtures' `node_modules` symlinked so `npx vitest` resolves), a change
+that adds an uncovered statement or branch (or a brand-new untested file) is flagged
+and the binary exits `1`, while rewording a covered line, or touching only a
+comment, exits `0`; a `[typescript].coverage` exemption lifts an uncovered file; and
+an unresolvable `--base` errors. Requires `git` + a Node toolchain with `vitest` and
+`@vitest/coverage-v8` installed (`npm ci` under
+`packages/rust/tests/fixtures/unit_coverage/typescript`).

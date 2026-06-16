@@ -1,4 +1,4 @@
-//! Patch (changed-line) coverage (Python — #132, parent #46).
+//! Patch (changed-line) coverage (Python — #132; TypeScript — #135; parent #46).
 //!
 //! Enforces the README Coverage rule's changed-line guarantee: every line a diff
 //! touches must be covered by the unit suite. Where [`crate::coverage`] measures
@@ -8,15 +8,18 @@
 //!
 //! Two inputs are combined:
 //!   - the **diff** — [`changed_lines`] runs `git diff --unified=0 <base>...HEAD`
-//!     and returns the new-side line numbers each file gained. This is the diff
-//!     machinery established here, shared by the forthcoming TypeScript / Rust
-//!     twins.
-//!   - the **coverage** — coverage.py's per-file `missing_lines` /
-//!     `missing_branches` ([`crate::coverage::measure_patch_report`]). A changed
-//!     line is uncovered when it is a missing line, or the source of a branch the
-//!     suite never took ([`uncovered_changed_lines`]). Non-executable changed
-//!     lines (comments, blanks) and `coverage`-exempt files have nothing to cover
-//!     and are skipped.
+//!     and returns the new-side line numbers each file gained. This diff machinery
+//!     is language-agnostic, shared by both arms (and the forthcoming Rust twin).
+//!   - the **coverage** — per the language. Python ([`check`]) reads coverage.py's
+//!     per-file `missing_lines` / `missing_branches`
+//!     ([`crate::coverage::measure_patch_report`]); a changed line is uncovered
+//!     when it is a missing line or the source of a branch the suite never took
+//!     ([`uncovered_changed_lines`]). TypeScript ([`check_typescript`]) reads
+//!     vitest's per-file v8 coverage reduced to one uncovered-line set per file
+//!     ([`crate::coverage::measure_patch_typescript`]) and intersects it directly
+//!     ([`uncovered_changed_lines_ts`]). Either way, non-executable changed lines
+//!     (comments, blanks) and `coverage`-exempt files have nothing to cover and
+//!     are skipped.
 //!
 //! Relationship to the commit-scoped co-change rule ([`crate::co_change`], #33):
 //! co-change enforces that a changed source and its colocated *test* move
@@ -61,6 +64,35 @@ pub fn check(root: &Path, base: &str, omit: &[String]) -> Result<Vec<Uncovered>>
     let report = coverage::measure_patch_report(root, omit)?;
     let files = relative_keys(report.files, root);
     Ok(uncovered_changed_lines(&changed, &files))
+}
+
+/// TypeScript source extensions patch coverage scopes to — the set
+/// `coverage`'s `TS_INCLUDE` measures. A `.d.ts` declaration ends in `.ts` but
+/// carries no runtime code; vitest excludes it from the report, so its changed
+/// lines find nothing to cover and are skipped without a special case here.
+const TS_EXTENSIONS: [&str; 4] = [".ts", ".tsx", ".mts", ".cts"];
+
+/// Every line added or modified in `root`'s `<base>...HEAD` diff that the
+/// TypeScript unit suite (vitest) doesn't cover, sorted for deterministic output.
+/// `exclude` is the `coverage`-rule exemptions (as in
+/// [`crate::coverage::measure_typescript`]) — an excluded file is left out of the
+/// run, so its changed lines are lifted.
+///
+/// The TypeScript twin of [`check`] (#135): reuses the same `<base>...HEAD` diff
+/// machinery ([`changed_lines`]), scoped to `.ts` / `.tsx` / `.mts` / `.cts`
+/// sources, and maps the changed lines against vitest's per-file v8 coverage
+/// ([`crate::coverage::measure_patch_typescript`]). Returns early — with no
+/// coverage run — when the diff touches no TypeScript source, so a PR that changes
+/// only docs or other languages doesn't pay for a measurement. Requires vitest +
+/// git; an unresolvable `base` surfaces as an error rather than a silent pass.
+pub fn check_typescript(root: &Path, base: &str, exclude: &[String]) -> Result<Vec<Uncovered>> {
+    let mut changed = changed_lines(root, base)?;
+    changed.retain(|path, _| TS_EXTENSIONS.iter().any(|ext| path.ends_with(ext)));
+    if changed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let uncovered = relative_keys(coverage::measure_patch_typescript(root, exclude)?, root);
+    Ok(uncovered_changed_lines_ts(&changed, &uncovered))
 }
 
 /// The new-side lines each file gained in `repo`'s `<base>...HEAD` diff, keyed by
@@ -185,13 +217,45 @@ pub fn uncovered_changed_lines(
     uncovered
 }
 
-/// Re-key a report's `files` to `root`-relative `/`-joined paths so they match the
-/// diff's paths. coverage.py reports paths relative to where it ran (here `root`),
-/// but an absolute path is stripped to `root` defensively.
-fn relative_keys(
-    files: BTreeMap<String, FileCoverage>,
-    root: &Path,
-) -> BTreeMap<String, FileCoverage> {
+/// Pure: every changed line a TypeScript coverage report marks uncovered.
+/// `uncovered` is the per-file set of uncovered lines
+/// ([`crate::coverage::measure_patch_typescript`]) — statements the suite never
+/// ran and the source lines of branches a path of which it never took — keyed by
+/// `root`-relative path, as `changed` is. A changed file absent from `uncovered`
+/// was not measured (a test file, a declaration file, or a `coverage`-exempt file
+/// excluded from the run) and contributes nothing; a changed line not in its set
+/// (a comment or blank) has nothing to cover.
+///
+/// The TypeScript counterpart to [`uncovered_changed_lines`]: where coverage.py
+/// splits missing lines from missing branches, vitest's report is reduced to one
+/// uncovered-line set per file upstream, so this is the plain intersection.
+pub fn uncovered_changed_lines_ts(
+    changed: &BTreeMap<String, BTreeSet<u64>>,
+    uncovered: &BTreeMap<String, BTreeSet<u64>>,
+) -> Vec<Uncovered> {
+    let mut out = Vec::new();
+    for (file, lines) in changed {
+        let Some(uncovered_lines) = uncovered.get(file) else {
+            continue;
+        };
+        for &line in lines {
+            if uncovered_lines.contains(&line) {
+                out.push(Uncovered {
+                    file: file.clone(),
+                    line,
+                });
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Re-key a report's per-file map to `root`-relative `/`-joined paths so they match
+/// the diff's paths. coverage.py reports paths relative to where it ran (here
+/// `root`) and vitest reports absolute paths; an absolute path is stripped to
+/// `root`, a relative one left as-is.
+fn relative_keys<V>(files: BTreeMap<String, V>, root: &Path) -> BTreeMap<String, V> {
     files
         .into_iter()
         .map(|(key, value)| {
@@ -394,6 +458,70 @@ mod tests {
                 },
                 Uncovered {
                     file: "z.py".to_string(),
+                    line: 2
+                },
+            ]
+        );
+    }
+
+    // ---- uncovered_changed_lines_ts (TypeScript, #135) -----------------------
+
+    #[test]
+    fn ts_a_changed_uncovered_line_is_reported() {
+        // Line 4 changed and the vitest report marks it uncovered → reported.
+        let out = uncovered_changed_lines_ts(
+            &changed(&[("widget.ts", &[4])]),
+            &changed(&[("widget.ts", &[3, 4, 5])]),
+        );
+        assert_eq!(
+            out,
+            vec![Uncovered {
+                file: "widget.ts".to_string(),
+                line: 4
+            }]
+        );
+    }
+
+    #[test]
+    fn ts_a_covered_changed_line_is_not_reported() {
+        // Line 2 changed but it isn't in the uncovered set → covered, not reported.
+        let out = uncovered_changed_lines_ts(
+            &changed(&[("widget.ts", &[2])]),
+            &changed(&[("widget.ts", &[3, 4, 5])]),
+        );
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn ts_a_changed_file_absent_from_coverage_is_skipped() {
+        // A test file never appears in the report (it's excluded from the run), so
+        // its changed lines contribute nothing rather than panicking on a lookup.
+        let out = uncovered_changed_lines_ts(
+            &changed(&[("widget.test.ts", &[1, 2])]),
+            &changed(&[("widget.ts", &[5])]),
+        );
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn ts_reports_are_sorted_across_files_and_lines() {
+        let out = uncovered_changed_lines_ts(
+            &changed(&[("z.ts", &[2, 1]), ("a.ts", &[9])]),
+            &changed(&[("z.ts", &[1, 2]), ("a.ts", &[9])]),
+        );
+        assert_eq!(
+            out,
+            vec![
+                Uncovered {
+                    file: "a.ts".to_string(),
+                    line: 9
+                },
+                Uncovered {
+                    file: "z.ts".to_string(),
+                    line: 1
+                },
+                Uncovered {
+                    file: "z.ts".to_string(),
                     line: 2
                 },
             ]

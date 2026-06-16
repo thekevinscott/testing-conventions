@@ -17,8 +17,23 @@ end to end.
   zero-config default `["python", "typescript"]`, the workflow must skip every
   language's jobs and still pass (#94) — the dogfooding case of our own
   `packages/python`, which ships a wheel but carries no `.py`.
+- `integration-waiver/` — a clean Python suite whose one integration test trips
+  `no-constant-patch`, lifted by a `[[python.exempt]]` entry (#102) in a
+  *non-default* config path. Run through the reusable workflow, the call passes only
+  because the integration-lint job forwards `--config` (#126); the colocated-test and
+  coverage jobs pass alongside it.
+- `integration-rust/` — `clean/` and `red/` Rust crates for the rust integration-lint
+  arm (#126). `clean/` doubles only an external crate (passes); `red/` doubles the
+  crate under test with `#[double]` (`no-first-party-double`, fails). The `clean/`
+  crate is driven through the reusable workflow to prove the rust arm runs and that
+  rust stays out of the coverage matrix; `red/` is driven directly for the fail path.
+- `integration-typescript/` — `clean/` and `red/` TypeScript integration suites for
+  the typescript arm (#126). `clean/` mocks only third-party / Node built-ins
+  (passes); `red/` mocks a first-party module (`no-first-party-mock`, fails). Both
+  are driven directly (a TypeScript `uses:` call would also pull in the vitest
+  coverage job).
 
-`clean/` and `below-floor/` each carry their own `testing-conventions.toml` with
-the `[python].coverage` floor for that run. The self-test drives the *published*
-`testing-conventions` binary (what consumers get via `npx`), so these fixtures
-track the released surface rather than this branch's source.
+`clean/`, `below-floor/`, and `integration-waiver/` each carry their own
+`testing-conventions.toml` with the `[python].coverage` floor for that run. The
+self-test drives the *published* `testing-conventions` binary (what consumers get via
+`npx`), so these fixtures track the released surface rather than this branch's source.

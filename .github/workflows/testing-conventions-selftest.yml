@@ -29,6 +29,18 @@ name: Testing Conventions (self-test)
 #                    job downloads and inspects it; the whole call must pass.
 #   packaging-red    drives the published `packaging` command on a committed wheel
 #                    that ships a `*_test.py` and asserts a non-zero exit.
+#
+# integration lint — the TypeScript + Rust arms and the config waiver (#126):
+#   integration-lint-config-waiver   a #102 waiver in a *non-default* config path
+#                                    lifts a Python integration violation; the
+#                                    `uses:` call passes only because the job now
+#                                    forwards `--config`.
+#   integration-lint-rust            a clean Rust crate passes the reusable workflow
+#                                    — the rust arm runs and rust stays out of the
+#                                    coverage matrix it doesn't support.
+#   integration-lint-new-arms-trip   drives the published command for the rust and
+#                                    typescript arms and asserts the non-zero exit on
+#                                    a violation (a `uses:` call can't assert a fail).
 
 on:
   pull_request:
@@ -75,6 +87,61 @@ jobs:
     with:
       languages: '["python", "typescript"]'
       path: .github/selftest/no-sources
+
+  integration-lint-config-waiver:
+    name: Integration lint forwards the consumer's --config (#102 waiver honored)
+    # The integration-lint job must pass the caller's `config` through to
+    # `integration lint`, so a #102 waiver lifts the violation it names. This fixture
+    # is a clean Python suite (its colocated-test and coverage jobs pass) whose one
+    # integration test trips `no-constant-patch`, lifted by a `[[python.exempt]]`
+    # entry in a *non-default* config path. The whole `uses:` call passes only when
+    # the job forwards `--config` (#126): before it did, the job dropped the flag, so
+    # the waiver was ignored, the violation was reported, and the call failed.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["python"]'
+      path: .github/selftest/integration-waiver
+      config: .github/selftest/integration-waiver/testing-conventions.toml
+
+  integration-lint-rust:
+    name: A clean Rust library passes the reusable workflow (rust arm runs)
+    # The integration-lint matrix now fans out over rust too (#126). A clean Rust
+    # crate must pass the reusable workflow: the rust arm runs `integration lint`,
+    # and the rust sources must *not* enter the coverage/colocated matrix — `unit
+    # coverage` has no rust arm and would error. Only the integration-lint rust job
+    # runs here; the source-matrix jobs skip.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["rust"]'
+      path: .github/selftest/integration-rust/clean
+
+  integration-lint-new-arms-trip:
+    name: The TypeScript and Rust integration-lint arms fail on a violation
+    # The fail path for the new arms (#126): a `uses:` call that fails would fail the
+    # whole run, so drive the published command directly — the exact invocation the
+    # workflow's rust/typescript arms run — and assert the non-zero exit that fails a
+    # consumer's build, with a clean pass alongside each.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Rust — a first-party `#[double]` must fail integration lint
+        run: |
+          if npx -y testing-conventions integration lint --language rust \
+            .github/selftest/integration-rust/red; then
+            echo "::error::expected the red Rust crate to fail integration lint, but it passed"
+            exit 1
+          fi
+          echo "red Rust crate correctly tripped integration lint"
+      - name: TypeScript — a first-party `vi.mock` must fail integration lint
+        run: |
+          if npx -y testing-conventions integration lint --language typescript \
+            .github/selftest/integration-typescript/red; then
+            echo "::error::expected the red TypeScript suite to fail integration lint, but it passed"
+            exit 1
+          fi
+          echo "red TypeScript suite correctly tripped integration lint"
+      - name: TypeScript — a clean integration suite passes
+        run: npx -y testing-conventions integration lint --language typescript .github/selftest/integration-typescript/clean
 
   below-floor:
     name: Below-floor suite trips the coverage gate

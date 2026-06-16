@@ -108,6 +108,11 @@ found, `0` otherwise.
   `super::` (the unit under test), `self` / `Self`, a bare unqualified call, and pure `std` —
   including `std::io::Cursor` and the I/O traits — stay in-module. Inject a trait double
   (hand-rolled or `mockall`) for a collaborator instead.
+- **`no-out-of-module-import`** — a `use` inside a test module that brings in a foreign surface:
+  a glob of anything but `super::*`, or a named import rooted at `crate::`, an external crate, or
+  effectful `std`. `use super::*` / `use super::Thing` (the unit under test), `self`, and pure
+  `std` (`std::collections::HashMap`, `std::io::Cursor`, …) are in-module. This catches a
+  collaborator that's imported and then called unqualified, which the call check can't see.
 
 Full name-resolution precision — a collaborator reached through an unqualified call, a
 `use … as …` rename, or a macro — is a future `dylint` pass; the `syn` heuristic is the

@@ -103,12 +103,15 @@ must not ship. `packaging::scan(root, globs)` is the deterministic core; the
 per-language *build* step that produces the artifact lands in #72 / #73 / #74
 (the last also adding `--language rust`). Purely additive — a new command and
 module; no existing signature or behavior changes.
-Most recently, adds the Rust `unit isolation` rule (#44) and its `isolation`
+
+Also adds the Rust `unit isolation` rule (#44) and its `isolation`
 module: a deterministic, `syn`-based lint on Rust test code. `unit isolation
 --language rust <PATH>` parses each `*.rs` file under the crate root and flags a
 call out of an inline `#[cfg(test)]` module's own module — `no-out-of-module-call`
 (`crate::…`, `super::super::…`, an external crate from `Cargo.toml`, or effectful
-`std`). Purely additive: a new `unit` subcommand and module
+`std`) — and a foreign `use` import — `no-out-of-module-import` (a glob of anything
+but `super::*`, or a named import rooted at `crate::`, an external crate, or
+effectful `std`). Purely additive: a new `unit` subcommand and module
 (`testing_conventions::isolation::{find_violations, Violation, Language}`). The
 shared `Violation` type moves to a new `violation` module and is re-exported from
 `lint`, so `testing_conventions::lint::Violation` still resolves with **no code

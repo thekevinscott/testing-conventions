@@ -1,7 +1,8 @@
-//! Integration tests for the Rust `unit isolation` rule (#44) — the D1 detector: a
-//! call out of an inline `#[cfg(test)]` module's own module. Per the #3 guardrail,
-//! the rule ships a red fixture (each out-of-module form, must be flagged) and a
-//! clean fixture (well-isolated, must pass).
+//! Integration tests for the Rust `unit isolation` rule (#44). Two detectors: D1
+//! flags a call out of an inline `#[cfg(test)]` module's own module
+//! (`no-out-of-module-call`); D2 flags a foreign `use` import
+//! (`no-out-of-module-import`). Per the #3 guardrail, each ships a red fixture
+//! (every out-of-module form, must be flagged) and a clean fixture (must pass).
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -88,6 +89,69 @@ fn red_exits_nonzero() {
 #[test]
 fn clean_exits_zero() {
     assert_eq!(iso_exit("unit/clean"), 0);
+}
+
+// ---- D2: foreign imports (#44) -------------------------------------------
+
+/// `true` when scanning `fixture_name` yields a `no-out-of-module-import`
+/// violation in the file ending `file_suffix`.
+fn import_flagged(fixture_name: &str, file_suffix: &str) -> bool {
+    find_violations(fixture(fixture_name))
+        .expect("walking a readable tree should succeed")
+        .iter()
+        .any(|v| v.rule == "no-out-of-module-import" && v.file.ends_with(file_suffix))
+}
+
+#[test]
+fn imports_red_flags_first_party_glob() {
+    assert!(
+        import_flagged("imports/red", "first_party_glob.rs"),
+        "`use crate::other::*` in a unit test must be flagged"
+    );
+}
+
+#[test]
+fn imports_red_flags_first_party_named() {
+    assert!(
+        import_flagged("imports/red", "first_party_named.rs"),
+        "`use crate::other::Thing` in a unit test must be flagged"
+    );
+}
+
+#[test]
+fn imports_red_flags_external_crate() {
+    assert!(
+        import_flagged("imports/red", "external_named.rs"),
+        "`use rand::Rng` in a unit test must be flagged"
+    );
+}
+
+#[test]
+fn imports_red_flags_effectful_std() {
+    assert!(
+        import_flagged("imports/red", "effectful_std.rs"),
+        "`use std::fs` in a unit test must be flagged"
+    );
+}
+
+#[test]
+fn imports_clean_reports_no_violations() {
+    let violations =
+        find_violations(fixture("imports/clean")).expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "the clean fixture imports only super:: and pure std; got {violations:?}"
+    );
+}
+
+#[test]
+fn imports_red_exits_nonzero() {
+    assert_eq!(iso_exit("imports/red"), 1);
+}
+
+#[test]
+fn imports_clean_exits_zero() {
+    assert_eq!(iso_exit("imports/clean"), 0);
 }
 
 #[test]

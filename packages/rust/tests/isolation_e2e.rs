@@ -31,3 +31,14 @@ fn red_exits_nonzero() {
 fn clean_exits_zero() {
     assert_eq!(iso_exit("unit/clean"), 0);
 }
+
+// D2: foreign imports (#44)
+#[test]
+fn imports_red_exits_nonzero() {
+    assert_eq!(iso_exit("imports/red"), 1);
+}
+
+#[test]
+fn imports_clean_exits_zero() {
+    assert_eq!(iso_exit("imports/clean"), 0);
+}

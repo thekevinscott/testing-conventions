@@ -23,12 +23,24 @@ fn lint_exit(codebase: &str) -> i32 {
         .expect("the process should exit with a code")
 }
 
+// R1: forbid `monkeypatch` (#49)
 #[test]
-fn red_fixture_exits_nonzero() {
-    assert_eq!(lint_exit("red"), 1);
+fn monkeypatch_red_exits_nonzero() {
+    assert_eq!(lint_exit("monkeypatch/red"), 1);
 }
 
 #[test]
-fn clean_fixture_exits_zero() {
-    assert_eq!(lint_exit("clean"), 0);
+fn monkeypatch_clean_exits_zero() {
+    assert_eq!(lint_exit("monkeypatch/clean"), 0);
+}
+
+// R2: patches must live in fixtures, not inline (#50)
+#[test]
+fn inline_patch_red_exits_nonzero() {
+    assert_eq!(lint_exit("inline_patch/red"), 1);
+}
+
+#[test]
+fn inline_patch_clean_exits_zero() {
+    assert_eq!(lint_exit("inline_patch/clean"), 0);
 }

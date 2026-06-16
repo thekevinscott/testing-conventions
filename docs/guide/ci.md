@@ -58,6 +58,7 @@ with the required `--language` flag:
 - run: testing-conventions unit colocated-test --language typescript src/
 - run: testing-conventions unit coverage --language python --config testing-conventions.toml src/
 - run: testing-conventions unit coverage --language typescript --config testing-conventions.toml src/
+- run: testing-conventions integration lint --language python src/   # python only for now
 ```
 
 Either way, the non-zero exit on a violation is what fails the build.

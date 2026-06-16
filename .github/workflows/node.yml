@@ -45,6 +45,23 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm run typecheck
 
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/node
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm test
+
   build:
     name: Build + smoke
     runs-on: ubuntu-latest

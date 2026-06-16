@@ -372,12 +372,14 @@ fn co_change_exemptions(
 /// floor from the config at `config_path`. Returns `0` when the floor is met,
 /// `1` otherwise.
 ///
-/// Coverage is zero-config by default (#80): a missing config file — or a config
-/// with no `[<language>].coverage` table — falls back to the language's sane
-/// default floor ([`config::PythonCoverage::default`] /
-/// [`config::TypeScriptCoverage::default`]), the same way `unit colocated-test`
-/// and `integration lint` treat an absent config as "nothing exempt". A present
+/// Coverage is zero-config by default for Python and TypeScript (#80): a missing
+/// config file — or a config with no `[<language>].coverage` table — falls back to
+/// the language's sane default floor ([`config::PythonCoverage::default`] /
+/// [`config::TypeScriptCoverage::default`]), the same way `unit colocated-test` and
+/// `integration lint` treat an absent config as "nothing exempt". A present
 /// `coverage` table overrides the default; `coverage`-rule exemptions still apply.
+/// Rust (#37) is the exception — it has no default floor yet, so a missing
+/// `[rust].coverage` table is an error rather than a guessed floor.
 fn run_unit_coverage(
     root: &Path,
     language: colocated_test::Language,
@@ -417,10 +419,28 @@ fn run_unit_coverage(
                     .collect();
             coverage::measure_typescript(root, thresholds, &exclude)?
         }
-        colocated_test::Language::Rust => anyhow::bail!(
-            "`unit coverage` supports `--language python` / `typescript`; \
-             Rust coverage (`cargo llvm-cov`) is a separate item"
-        ),
+        colocated_test::Language::Rust => {
+            let rust = config.rust.unwrap_or_default();
+            // Rust has no zero-config default floor yet (unlike Python/TypeScript,
+            // #80): a missing `[rust].coverage` table is an error, not a guessed
+            // floor — so a crate opts into a specific floor deliberately.
+            let coverage = rust.coverage.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Rust coverage needs a `[rust].coverage` table (regions / lines) in `{}` — \
+                     there is no zero-config default floor for Rust yet",
+                    config_path.display()
+                )
+            })?;
+            let thresholds = coverage::RustThresholds {
+                regions: coverage.regions,
+                lines: coverage.lines,
+            };
+            let ignore: Vec<String> =
+                config::resolve_exempt(root, &rust.exempt, config::Rule::Coverage)?
+                    .into_iter()
+                    .collect();
+            coverage::measure_rust(root, thresholds, &ignore)?
+        }
     };
     match outcome {
         coverage::Outcome::Pass => Ok(0),
@@ -750,9 +770,11 @@ mod tests {
     }
 
     #[test]
-    fn unit_coverage_rejects_rust() {
-        // Zero-config: with no config file the default config is used, so this
-        // reaches the language arm (which bails for Rust) without any fixture.
+    fn unit_coverage_rust_requires_a_coverage_table() {
+        // Zero-config: with no config file the default config carries no
+        // `[rust].coverage` table, so the Rust arm errors asking for one (Rust has
+        // no default floor yet, #37) instead of running `cargo llvm-cov`. The error
+        // is raised before any measurement, so no fixture or toolchain is needed.
         let err = run([
             "testing-conventions",
             "unit",
@@ -762,6 +784,6 @@ mod tests {
             "rust",
         ])
         .unwrap_err();
-        assert!(err.to_string().contains("separate item"), "got: {err}");
+        assert!(err.to_string().contains("[rust].coverage"), "got: {err}");
     }
 }

@@ -1,4 +1,4 @@
-//! Coverage rule (Python — issue #26; TypeScript — issue #31; exemptions — issue #32).
+//! Coverage rule (Python — issue #26; TypeScript — issue #31; Rust — issue #37; exemptions — issue #32).
 //!
 //! Enforces the README's Coverage rule: a library's unit suite must meet the
 //! configured floor, with test files excluded from the denominator. This module
@@ -13,12 +13,16 @@
 //! reports four independent metrics (lines / branches / functions / statements),
 //! so it carries its own [`TypeScriptThresholds`], [`VitestReport`], and
 //! [`evaluate_typescript`] / [`measure_typescript`] pair — sharing only the
-//! [`Outcome`] type. Its subprocess layer shells out to `vitest`.
+//! [`Outcome`] type. Its subprocess layer shells out to `vitest`. Rust (#37) is
+//! the third twin: `cargo llvm-cov` reports regions/lines (branch coverage is
+//! experimental), so it carries [`RustThresholds`], [`LlvmCovReport`], and
+//! [`evaluate_rust`] / [`measure_rust`]; its subprocess layer shells out to
+//! `cargo llvm-cov`.
 //!
 //! Files exempted from coverage in config (issue #32) are omitted from the
 //! denominator alongside the test files; the caller resolves them
 //! ([`crate::config::resolve_exempt`]) and passes their paths to [`measure`] /
-//! [`measure_typescript`].
+//! [`measure_typescript`] / [`measure_rust`].
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -610,12 +614,196 @@ pub struct RustThresholds {
     pub lines: u8,
 }
 
+/// A `cargo llvm-cov --json` export (LLVM's `llvm.coverage.json.export`), pared to
+/// the totals the check needs. A single run produces one `data` entry; unmodeled
+/// fields (per-file/per-function detail, `type`, `version`) are ignored.
+#[derive(Debug, Clone, Deserialize)]
+pub struct LlvmCovReport {
+    pub data: Vec<LlvmCovData>,
+}
+
+/// One export entry — only its `totals` are needed (`--summary-only` omits the
+/// per-file and per-function detail).
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct LlvmCovData {
+    pub totals: LlvmCovTotals,
+}
+
+/// The `totals` block of an llvm-cov export — the two metrics this rule enforces.
+/// llvm-cov also reports `functions`, `instantiations`, and (experimental)
+/// `branches`, which the check ignores.
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct LlvmCovTotals {
+    pub regions: LlvmCovMetric,
+    pub lines: LlvmCovMetric,
+}
+
+/// One metric's totals from an llvm-cov export, pared to what the check needs: the
+/// denominator size and the covered percent.
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct LlvmCovMetric {
+    /// Size of the denominator (regions or lines counted).
+    pub count: u64,
+    /// How many were covered.
+    pub covered: u64,
+    /// Covered percent — llvm-cov computes `100 * covered / count`.
+    pub percent: f64,
+}
+
+/// Parse a `cargo llvm-cov --json` export.
+pub fn parse_llvm_cov_report(json: &str) -> Result<LlvmCovReport> {
+    serde_json::from_str(json).context("parsing cargo llvm-cov JSON report")
+}
+
+/// Decide whether `report` meets both thresholds.
+///
+/// Fails when the run measured no regions at all (an empty denominator — a wrong
+/// path, or a crate that compiled nothing — is never a silent pass), otherwise
+/// checks regions and lines and fails listing each below its floor.
+pub fn evaluate_rust(report: &LlvmCovReport, thresholds: RustThresholds) -> Outcome {
+    let Some(totals) = report.data.first().map(|entry| &entry.totals) else {
+        return Outcome::Fail("the cargo llvm-cov report contained no data".to_string());
+    };
+    // Vacuous-run guard: every compiled crate has regions, so a zero region
+    // denominator means nothing was measured — failed rather than passed on an
+    // empty measurement (mirrors the TypeScript path).
+    if totals.regions.count == 0 {
+        return Outcome::Fail(
+            "the unit suite measured no code — check the path and that the suite runs".to_string(),
+        );
+    }
+    let checks = [
+        ("regions", totals.regions.percent, thresholds.regions),
+        ("lines", totals.lines.percent, thresholds.lines),
+    ];
+    let mut shortfalls = Vec::new();
+    for (name, actual, required) in checks {
+        // A hair of tolerance so a percent that rounds to the floor isn't failed by
+        // float noise (matches the Python / TypeScript paths).
+        if actual + 1e-9 < f64::from(required) {
+            shortfalls.push(format!("{name} {actual:.2}% < {required}%"));
+        }
+    }
+    if shortfalls.is_empty() {
+        Outcome::Pass
+    } else {
+        Outcome::Fail(format!(
+            "coverage below thresholds: {}",
+            shortfalls.join(", ")
+        ))
+    }
+}
+
 /// Run the unit suite under `cargo llvm-cov` in `root` and check it against
-/// `thresholds`, omitting every `coverage`-exempt path in `ignore` from the
-/// denominator. (#37)
+/// `thresholds`.
+///
+/// Shells out to `cargo llvm-cov --json --summary-only`, omitting every path in
+/// `ignore` from the denominator (a single `--ignore-filename-regex`), then
+/// evaluates the export. `ignore` holds the `coverage`-rule exemptions resolved
+/// from config, as `root`-relative paths. `cargo-llvm-cov` must be installed.
 pub fn measure_rust(root: &Path, thresholds: RustThresholds, ignore: &[String]) -> Result<Outcome> {
-    let _ = (root, thresholds, ignore);
-    todo!("#37: run cargo llvm-cov --json and enforce the regions/lines floor")
+    let report = run_llvm_cov(root, ignore)?;
+    Ok(evaluate_rust(&report, thresholds))
+}
+
+/// A `cargo llvm-cov` target directory under the temp dir — unique per call (so
+/// checks running in parallel don't collide) and removed on drop (so the build
+/// never leaks into the scanned tree). Passed to the run as `CARGO_TARGET_DIR`.
+struct TargetDir(PathBuf);
+
+impl TargetDir {
+    fn new() -> Self {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let name = format!(
+            "testing-conventions-llvm-cov-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed),
+        );
+        TargetDir(std::env::temp_dir().join(name))
+    }
+}
+
+impl Drop for TargetDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// Run cargo llvm-cov over the unit suite in `root` and return the parsed export.
+fn run_llvm_cov(root: &Path, ignore: &[String]) -> Result<LlvmCovReport> {
+    let target = TargetDir::new();
+
+    // `--summary-only` keeps the export to the `totals` block; the build goes to an
+    // out-of-tree target dir (via `CARGO_TARGET_DIR`) so the scanned crate stays
+    // pristine. The `coverage`-rule exemptions become one `--ignore-filename-regex`.
+    let mut command = Command::new("cargo");
+    command
+        .current_dir(root)
+        .args(["llvm-cov", "--json", "--summary-only"])
+        .env("CARGO_TARGET_DIR", &target.0);
+    if let Some(regex) = ignore_filename_regex(ignore) {
+        command.arg("--ignore-filename-regex").arg(regex);
+    }
+    // Nested-run hygiene: when this check itself runs under `cargo llvm-cov` (the
+    // package's own coverage job), the outer run exports its coverage flags and
+    // profile path into our environment. Strip them so the inner run instruments
+    // the scanned crate cleanly instead of inheriting the outer run's state.
+    for var in [
+        "RUSTFLAGS",
+        "CARGO_ENCODED_RUSTFLAGS",
+        "RUSTDOCFLAGS",
+        "CARGO_ENCODED_RUSTDOCFLAGS",
+        "LLVM_PROFILE_FILE",
+        "CARGO_LLVM_COV",
+        "CARGO_LLVM_COV_SHOW_ENV",
+        "CARGO_LLVM_COV_TARGET_DIR",
+    ] {
+        command.env_remove(var);
+    }
+    let output = command
+        .output()
+        .context("running `cargo llvm-cov --json` (is cargo-llvm-cov installed?)")?;
+    if !output.status.success() {
+        bail!(
+            "the unit suite did not run cleanly under cargo llvm-cov in `{}`:\n{}{}",
+            root.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+    parse_llvm_cov_report(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// The single `--ignore-filename-regex` value for the run, or `None` when nothing
+/// is exempt. `cargo llvm-cov` takes one regex, so the `coverage`-exempt paths are
+/// each regex-escaped (matched literally, not as a pattern) and joined with `|`. An
+/// exempt file leaves the denominator with its reason recorded in config — an
+/// auditable omission, not a silent ignore-glob.
+fn ignore_filename_regex(ignore: &[String]) -> Option<String> {
+    if ignore.is_empty() {
+        return None;
+    }
+    Some(
+        ignore
+            .iter()
+            .map(|path| regex_escape(path))
+            .collect::<Vec<_>>()
+            .join("|"),
+    )
+}
+
+/// Escape the regex metacharacters in `s` so it matches literally — an exempt path
+/// carries `.` (and may carry other metacharacters) that must not read as regex.
+fn regex_escape(s: &str) -> String {
+    const META: &str = r"\.+*?()|[]{}^$";
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if META.contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -989,5 +1177,140 @@ mod tests {
     #[test]
     fn istanbul_malformed_json_is_an_error() {
         assert!(uncovered_istanbul_lines("{ not json").is_err());
+    }
+
+    // --- Rust (cargo llvm-cov) — issue #37 ---
+
+    fn rust_metric(percent: f64) -> LlvmCovMetric {
+        LlvmCovMetric {
+            count: 10,
+            covered: 10,
+            percent,
+        }
+    }
+
+    fn rust_report(regions: f64, lines: f64) -> LlvmCovReport {
+        LlvmCovReport {
+            data: vec![LlvmCovData {
+                totals: LlvmCovTotals {
+                    regions: rust_metric(regions),
+                    lines: rust_metric(lines),
+                },
+            }],
+        }
+    }
+
+    const RUST_FULL: RustThresholds = RustThresholds {
+        regions: 100,
+        lines: 100,
+    };
+    const RUST_MID: RustThresholds = RustThresholds {
+        regions: 80,
+        lines: 85,
+    };
+
+    #[test]
+    fn rust_passes_when_both_metrics_meet_their_floor() {
+        assert_eq!(
+            evaluate_rust(&rust_report(100.0, 100.0), RUST_FULL),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn rust_fails_on_the_one_metric_below_its_floor() {
+        // 100% lines but only 70% regions: the regions floor catches what line
+        // coverage misses — and only `regions` is named, not the metric that met
+        // its floor.
+        let outcome = evaluate_rust(&rust_report(70.0, 100.0), RUST_MID);
+        assert!(
+            matches!(&outcome, Outcome::Fail(message) if message.contains("regions") && !message.contains("lines")),
+            "got: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn rust_fail_message_names_every_metric_below() {
+        let outcome = evaluate_rust(&rust_report(50.0, 50.0), RUST_MID);
+        assert!(
+            matches!(&outcome, Outcome::Fail(message)
+                if message.contains("regions") && message.contains("lines")),
+            "got: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn rust_tolerates_float_noise_at_the_floor() {
+        // A percent a hair under the floor from rounding still passes.
+        assert_eq!(
+            evaluate_rust(&rust_report(99.999_999_999, 100.0), RUST_FULL),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn rust_fails_a_vacuous_run_that_measured_no_code() {
+        // No regions in the denominator (a wrong path, or a crate that compiled
+        // nothing): a vacuous run is a failure, never a silent pass.
+        let nothing = LlvmCovMetric {
+            count: 0,
+            covered: 0,
+            percent: 0.0,
+        };
+        let report = LlvmCovReport {
+            data: vec![LlvmCovData {
+                totals: LlvmCovTotals {
+                    regions: nothing,
+                    lines: nothing,
+                },
+            }],
+        };
+        let outcome = evaluate_rust(&report, RUST_MID);
+        assert!(
+            matches!(&outcome, Outcome::Fail(message) if message.contains("measured no code")),
+            "got: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn rust_fails_an_export_with_no_data() {
+        // `cargo llvm-cov` always emits one `data` entry; an empty array is a
+        // malformed run, failed rather than treated as a pass.
+        let report = LlvmCovReport { data: vec![] };
+        assert!(matches!(evaluate_rust(&report, RUST_MID), Outcome::Fail(_)));
+    }
+
+    #[test]
+    fn parses_a_cargo_llvm_cov_report() {
+        // A realistic `--json --summary-only` export: regions/lines (enforced) plus
+        // the functions block and the `type`/`version` the check ignores.
+        let json = r#"{
+            "data": [{"totals": {
+                "regions": {"count": 12, "covered": 9, "notcovered": 3, "percent": 75.0},
+                "lines": {"count": 20, "covered": 18, "percent": 90.0},
+                "functions": {"count": 3, "covered": 3, "percent": 100.0}
+            }}],
+            "type": "llvm.coverage.json.export",
+            "version": "2.0.1"
+        }"#;
+        let report = parse_llvm_cov_report(json).expect("valid llvm-cov json");
+        assert_eq!(report.data[0].totals.regions.percent, 75.0);
+        assert_eq!(report.data[0].totals.lines.count, 20);
+    }
+
+    #[test]
+    fn rust_ignore_regex_is_none_when_nothing_is_exempt() {
+        assert_eq!(ignore_filename_regex(&[]), None);
+    }
+
+    #[test]
+    fn rust_ignore_regex_escapes_and_joins_exempt_paths() {
+        // The caller passes already-resolved, `root`-relative paths; each is
+        // regex-escaped (the `.` becomes `\.`) and joined into one alternation.
+        let exempt = vec!["src/shim.rs".to_string(), "src/gen.rs".to_string()];
+        assert_eq!(
+            ignore_filename_regex(&exempt).as_deref(),
+            Some(r"src/shim\.rs|src/gen\.rs")
+        );
     }
 }

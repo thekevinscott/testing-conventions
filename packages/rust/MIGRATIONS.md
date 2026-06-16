@@ -217,6 +217,13 @@ reports the extra rule (no signature change), plus a new waivable `config::Rule`
 variant `no-first-party-patch`; the python/typescript/rust surface is otherwise
 unchanged.
 
+Then adds that CI side (#17, #68): `e2e verify` reads the committed
+`e2e-attestation.json` and passes iff its recorded SHA equals the latest code
+commit — the newest commit touching any path other than the attestation file —
+else exits non-zero with a run-`attest` hint. It never runs e2e and never judges
+the recorded exit code/output. Purely additive: a new `e2e verify` subcommand and
+`testing_conventions::e2e::{verify, Verification}`; nothing existing changes.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made

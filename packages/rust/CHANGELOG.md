@@ -196,6 +196,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   code (force a run, not a pass) and exits `0` once recorded. Library API:
   `testing_conventions::e2e::{attest, Attestation, ATTESTATION_PATH}`. The CI-side
   `e2e verify` gate is a later slice (#68). (#17, #67)
+- `e2e verify` CLI (#17, #68) — the CI side of the nudge. Reads the committed
+  `e2e-attestation.json` and passes iff its recorded SHA equals the latest *code*
+  commit (the newest commit touching any path other than the attestation file);
+  otherwise exits non-zero with a run-`attest` hint. Never runs e2e and never
+  judges the recorded exit code or output. Library API:
+  `testing_conventions::e2e::{verify, Verification}`. (#17, #68)
 
 ### Changed
 

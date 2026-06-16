@@ -5,7 +5,7 @@
 //! code commit is attested. The point is to *nudge* agents to run e2e locally —
 //! CI never runs e2e, it only checks the committed attestation.
 //!
-//! This slice (#67) implements `attest`; `verify` is a later slice (#68).
+//! This module implements both `attest` (#67) and `verify` (#68).
 
 use std::path::Path;
 use std::process::Command;
@@ -87,6 +87,35 @@ pub fn attest(repo: &Path, command: &str) -> Result<Attestation> {
     )?;
 
     Ok(attestation)
+}
+
+/// The outcome of [`verify`] — whether the committed attestation names the latest
+/// code commit, and if not, why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Verification {
+    /// The attestation names the latest code commit — the gate passes.
+    Fresh,
+    /// No attestation file is present — the gate fails.
+    Missing,
+    /// An attestation is present but names an older commit than the latest code
+    /// commit (code changed since it was attested) — the gate fails.
+    Stale {
+        /// The commit the attestation names.
+        attested: String,
+        /// The latest code commit (newest one touching a non-attestation path).
+        latest: String,
+    },
+}
+
+/// Verify that the committed attestation names the latest code commit (#68) — the
+/// CI side of the nudge. Reads only the committed attestation: never runs e2e,
+/// never inspects the recorded exit code or output.
+///
+/// Stub: the real check lands in the implementation commit; this compiles so the
+/// red integration + e2e tests run against it.
+pub fn verify(repo: &Path) -> Result<Verification> {
+    let _ = repo;
+    bail!("e2e verify is not implemented yet (#68)")
 }
 
 /// Run `git` with `args` in `repo`, returning trimmed stdout; errors if git fails.

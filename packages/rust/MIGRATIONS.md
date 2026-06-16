@@ -240,6 +240,14 @@ Additive: a new `Python` variant on `isolation::Language` (so `unit isolation
 it emits the existing `unmocked-collaborator` rule, so the #102 waiver applies with
 no new `config::Rule`. Nothing existing changes.
 
+Also fixes the Python `conftest.py` handling (#112): `unit colocated-test` and
+`unit coverage` treated `conftest.py` (pytest fixtures) as a unit-test subject —
+flagging it as a missing-test orphan and counting it in the coverage denominator —
+because only `*_test.py` was recognized as a non-subject. It is now test support:
+never a subject, and omitted from the denominator alongside the test files. No API
+change; the legacy `test_*.py` prefix stays unsupported (the colocated rule
+requires `foo_test.py`).
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -311,6 +319,10 @@ Exemptions (#32) change runtime behavior:
   options-object mock `vi.mock(spec, { spy: true })` (Vitest ≥2). The spy form
   wraps the real module and can't drift, like a bare auto-mock; only a factory
   *function* without a `vi.importActual<…>` anchor is flagged. (#111)
+- `unit colocated-test --language python` no longer reports `conftest.py` as a
+  missing-test orphan, and `unit coverage --language python` omits `conftest.py`
+  from the denominator (alongside `*_test.py`). conftest.py is pytest support,
+  never a subject. (#112)
 
 ### Verification
 

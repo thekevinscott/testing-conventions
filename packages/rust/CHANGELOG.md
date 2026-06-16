@@ -260,3 +260,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   factory — it spies on the real module, so the double can't drift, exactly like a
   bare `vi.mock(spec)` auto-mock; only a factory *function* missing a
   `vi.importActual<…>` anchor is flagged. (#111)
+- `unit colocated-test` and `unit coverage` (`--language python`) no longer treat
+  `conftest.py` as a unit-test subject: it holds pytest fixtures (test support), so
+  it is never reported as a missing-test orphan, and it is omitted from the
+  coverage denominator alongside `*_test.py`. (#112)

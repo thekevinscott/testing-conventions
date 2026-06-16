@@ -1,0 +1,2 @@
+# A valid config that names no language table, so `check` has nothing to run.
+# That is a misconfiguration the umbrella reports as an error, never a silent pass.

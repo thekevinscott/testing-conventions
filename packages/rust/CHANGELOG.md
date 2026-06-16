@@ -43,6 +43,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `del`, or `update`/`pop`/`setdefault`/`clear`/`popitem`), which belongs in
   `patch.dict(os.environ, …)`. Library API:
   `testing_conventions::lint::{find_violations, Violation}`. (#48, #49, #50, #51)
+- `check` command — the config-driven umbrella, now wired (it was a reserved
+  no-op that exited `0`). `check [--config <CONFIG>] <PATH>` reads the config and
+  runs every rule its present language tables enable — `unit colocated-test`
+  (Python, TypeScript), `integration lint` (Python), and `unit coverage` (Python,
+  when `[python].coverage` is set) — over `<PATH>` in one pass, exiting non-zero
+  if any rule reports a violation or fails to run, `0` only when they all pass. A
+  configured threshold no rule covers yet (e.g. `[typescript].coverage`) is
+  surfaced as a `note:` and skipped, never silently dropped; a config that enables
+  no checks is an error. New rules tie into CI by joining the umbrella here, so the
+  reusable workflow runs `check` with no per-rule edit (subsumes #57 / #58). (#56)
 
 ### Changed
 

@@ -8,30 +8,25 @@ name: Testing Conventions
 #     conventions:
 #       uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
 #       with:
-#         languages: '["python", "typescript"]'
 #         path: src
 #
 # It runs the published `testing-conventions` binary via `npx` (a prebuilt,
-# per-platform npm package — no Rust toolchain, no compile from source), once
-# per rule and requested language as its own matrix job, failing the build on
-# any violation. Today that is the unit-test colocated-test check (every
-# language), the unit-test coverage floor (Python only), and the
-# integration-test lint (mocking mechanism & style, Python only); as more rules
-# land they run here too.
+# per-platform npm package — no Rust toolchain, no compile from source) as a
+# single `check` job. `check` reads the config file and runs every rule its
+# present `[python]` / `[typescript]` / `[rust]` tables enable — unit
+# colocated-test, the Python unit-coverage floor, integration lint, and whatever
+# lands next — failing the build on any violation.
 #
-# `languages` is a JSON array so the matrix can fan out over it directly
-# (reusable-workflow inputs can't be native lists). Once the config-driven
-# `check` umbrella is wired this will read the config file itself.
+# Which rules run is config-driven, so a newly-shipped rule enforces here
+# automatically: there is no per-rule job to add. This single `check` job
+# subsumed the old per-rule matrix (the separate colocated-test / unit-coverage /
+# integration-lint jobs, #57 / #58 — see #56).
 
 on:
   workflow_call:
     inputs:
-      languages:
-        description: 'JSON array of languages to check, e.g. ["python", "typescript"].'
-        type: string
-        default: '["python", "typescript"]'
       path:
-        description: 'Directory scanned recursively for sources.'
+        description: 'Directory scanned recursively for sources and tests.'
         type: string
         default: 'src'
       version:
@@ -39,7 +34,7 @@ on:
         type: string
         default: ''
       config:
-        description: 'Config file with the coverage thresholds (the `[python].coverage` table).'
+        description: 'Config file whose [python]/[typescript]/[rust] tables decide which rules run.'
         type: string
         default: 'testing-conventions.toml'
 
@@ -47,72 +42,27 @@ permissions:
   contents: read
 
 jobs:
-  colocated-test:
-    name: Colocated test (${{ matrix.language }})
+  check:
+    name: Testing conventions
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        language: ${{ fromJSON(inputs.languages) }}
     steps:
       - uses: actions/checkout@v6
-      - name: Check colocated test
-        # node/npx ship on ubuntu-latest; `-y` skips the install prompt and
-        # `${VERSION:+@...}` pins the version only when one was requested.
-        env:
-          LANGUAGE: ${{ matrix.language }}
-          SCAN_PATH: ${{ inputs.path }}
-          VERSION: ${{ inputs.version }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" "$SCAN_PATH"
-
-  unit-coverage:
-    name: Unit-test coverage (${{ matrix.language }})
-    # `unit coverage` enforces the Python floor only today (#26) — it exits
-    # non-zero for any other language — so, like `integration-lint` below, the
-    # matrix lists just `python` and the job is skipped (not failed) for callers
-    # that didn't request python. Add languages here as the rule gains them; #56
-    # (config-driven `check`) will eventually drive this from the config file.
-    if: contains(fromJSON(inputs.languages), 'python')
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [python]
-    steps:
-      - uses: actions/checkout@v6
-      # Unlike location/lint, `unit coverage` shells out to coverage.py driving
-      # pytest, so both must be on PATH alongside the npx-run binary.
+      # The Python unit-coverage rule shells out to coverage.py driving pytest, so
+      # the toolchain is set up here. It's the only rule needing it today (coverage
+      # is Python-only, #26) and sits unused when no `[python].coverage` floor is
+      # configured — `check` derives what to run from the config, so the workflow
+      # provisions for the heaviest rule unconditionally rather than parsing it.
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install coverage toolchain
         run: python -m pip install --quiet coverage pytest
-      - name: Check unit-test coverage
+      - name: Run testing-conventions check
+        # node/npx ship on ubuntu-latest; `-y` skips the install prompt and
+        # `${VERSION:+@...}` pins the version only when one was requested. Inputs
+        # go through env (not interpolated into the shell) to avoid injection.
         env:
-          LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ inputs.config }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit coverage --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
-
-  integration-lint:
-    name: Integration lint (${{ matrix.language }})
-    # `integration lint` (mocking mechanism & style) is Python-only today, so the
-    # matrix lists just `python`; the job is skipped — not failed — for callers
-    # that didn't request python. When the lint gains more languages, add them to
-    # the matrix below. #56 (config-driven `check`) will eventually drive which
-    # rules/languages run here without a workflow edit.
-    if: contains(fromJSON(inputs.languages), 'python')
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [python]
-    steps:
-      - uses: actions/checkout@v6
-      - name: Lint integration tests
-        env:
-          LANGUAGE: ${{ matrix.language }}
-          SCAN_PATH: ${{ inputs.path }}
-          VERSION: ${{ inputs.version }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" integration lint --language "$LANGUAGE" "$SCAN_PATH"
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" check --config "$CONFIG" "$SCAN_PATH"

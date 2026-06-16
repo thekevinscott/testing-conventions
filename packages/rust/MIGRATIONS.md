@@ -69,6 +69,15 @@ silently rot. New config types `Rule` and `Exemption` plus `resolve_exempt()`;
 and `missing_unit_tests` / `coverage::measure` take the resolved exemptions
 (signatures below).
 
+Finally, wires the config-driven `check` umbrella (#56). `check` was a reserved
+no-op that exited `0`; it now takes a `<PATH>` (and optional `--config`), reads
+the config, and runs every rule its present `[python]` / `[typescript]` /
+`[rust]` tables enable — `unit colocated-test`, `integration lint`, and the
+Python `unit coverage` floor — in one pass, exiting non-zero on any violation.
+The mapping of which rules apply to which language lives in `check`, so a new
+rule enforces in CI by joining the umbrella, with no workflow edit; the reusable
+workflow now runs `check` instead of a per-rule job matrix.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -129,6 +138,13 @@ Exemptions (#32) change runtime behavior:
 - CLI error output now prints the full cause chain (e.g. `error: exempt entry
   \`ghost.py\` matches no file under \`…\`: …`) instead of only the outermost
   context. Exit codes are unchanged.
+- `check` is no longer a no-op (#56). It previously ignored its input and exited
+  `0`; it now requires a `<PATH>`, reads the config, and runs every configured
+  rule, exiting `1` on any violation. Invoking `check` with no path is now a usage
+  error (exit `2`). Consumers of the reusable CI workflow: the `languages` input is
+  gone — `check` derives the languages to check from the config's `[python]` /
+  `[typescript]` / `[rust]` tables, so remove `languages:` from the `with:` block
+  (`path` / `version` / `config` are unchanged).
 
 ### Verification
 
@@ -165,3 +181,15 @@ cd packages/rust && cargo test --test integration_lint --test integration_lint_e
 Expected: the lint's integration + e2e tests pass — the clean fixture reports no
 violations and exits `0`, and the red fixture (a test taking `monkeypatch`) is
 flagged and exits `1`.
+
+```
+cd packages/rust && cargo test --lib && cargo test --test check_e2e
+```
+
+Expected: the `check` plan unit tests pass (a `[python]` table plans
+colocated-test + lint, a `[python].coverage` floor adds coverage, `[typescript]`
+plans colocated-test only, and a `[rust]` / unsupported-coverage table is noted
+not run), and the umbrella e2e tests pass — a clean Python + TypeScript tree exits
+`0`, a tree with a missing colocated test exits `1`, and a config that enables no
+checks errors. (The `check_e2e` fixtures set no coverage floor, so they need no
+Python toolchain.)

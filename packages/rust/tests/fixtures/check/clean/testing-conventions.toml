@@ -1,0 +1,6 @@
+# A Python + TypeScript project. Both tables are present (so `check` runs the
+# colocated-test rule for each, plus integration lint for Python); no coverage
+# floor is set, so the toolchain-free rules are all that run.
+[python]
+
+[typescript]

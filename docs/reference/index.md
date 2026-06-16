@@ -135,9 +135,31 @@ and exits `1` if any are found, `0` otherwise.
 
 ### `check`
 
-Reserved for the config-driven umbrella that runs every configured rule. **Not wired yet** —
-it currently exits `0`. Rules ship under their test-kind group (like `unit colocated-test`)
-until `check` orchestrates them from the config.
+The config-driven umbrella: run every rule the config enables, in one command.
+
+```
+testing-conventions check [--config <CONFIG>] <PATH>
+```
+
+| Argument / flag     | Description                                                                      |
+| ------------------- | -------------------------------------------------------------------------------- |
+| `<PATH>`            | Directory scanned recursively (sources + tests); passed to each rule.            |
+| `--config <CONFIG>` | Config file (default `testing-conventions.toml`). Its present `[python]` / `[typescript]` / `[rust]` tables decide which rules run. |
+
+`check` reads the config and runs every rule its present language tables enable:
+
+- `[python]` → `unit colocated-test`, `integration lint`, and `unit coverage` (when
+  `[python].coverage` is set; needs `coverage` + `pytest` on `PATH`).
+- `[typescript]` → `unit colocated-test`.
+- `[rust]` → nothing yet (the colocated-test rule is file-based and doesn't cover inline
+  `#[cfg(test)]`, and Rust coverage isn't implemented).
+
+It runs the whole set in one pass — so every problem surfaces at once — and exits `1` if any
+rule reports a violation or fails to run, `0` only when they all pass. A configured threshold
+no rule covers yet (e.g. `[typescript].coverage`) is surfaced as a `note:` and skipped, never
+silently dropped; a config that enables no checks at all is an error. Because the rule set
+lives here, a new rule enforces in CI the moment it joins the umbrella — the [reusable
+workflow](../guide/ci) runs `check`, so no per-rule workflow edit is needed.
 
 ## Configuration
 

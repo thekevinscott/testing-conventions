@@ -17,34 +17,55 @@ jobs:
   conventions:
     uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
     with:
-      languages: '["python", "typescript"]'
       path: src
 ```
 
-It installs the published `testing-conventions` binary and runs every requested rule for each
-language as its own matrix job, failing the build — with the offending files in the log — on
-any violation.
+It installs the published `testing-conventions` binary and runs `testing-conventions check`:
+the **config-driven umbrella**. `check` reads your config file and runs every rule its present
+`[python]` / `[typescript]` / `[rust]` tables enable, failing the build — with the offending
+files in the log — on any violation.
+
+Because the rule set is driven by your config, not the workflow, a newly-shipped rule starts
+enforcing as soon as you adopt a version that has it: there is no per-rule job to add.
 
 ### Inputs
 
-| Input       | Default                     | Description                                                |
-| ----------- | --------------------------- | ---------------------------------------------------------- |
-| `languages` | `["python", "typescript"]`  | JSON array of languages to check (`python`, `typescript`). |
-| `path`      | `src`                       | Directory scanned recursively for sources.                 |
-| `version`   | latest                      | `testing-conventions` version to install (e.g. `0.1.0`).   |
-| `config`    | `testing-conventions.toml`  | Config file with the coverage thresholds (`[python].coverage`). |
+| Input     | Default                    | Description                                                          |
+| --------- | -------------------------- | -------------------------------------------------------------------- |
+| `path`    | `src`                      | Directory scanned recursively for sources and tests.                 |
+| `version` | latest                     | `testing-conventions` version to install (e.g. `0.1.0`).             |
+| `config`  | `testing-conventions.toml` | Config file whose language tables decide which rules run.            |
 
-The Python **coverage** job runs when `python` is among `languages`: it runs your unit suite
-under `coverage.py` (branch on, `*_test.py` excluded) and fails if the total is below the
-`[python].coverage` floor in your `config`. It installs `coverage` + `pytest`, so it fits
-suites with no third-party runtime imports; a project that needs its own dependencies should
-drive the CLI directly (below) until #56 makes this config-driven.
+### What runs, from your config
+
+| Config table             | Rules `check` runs                                                            |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| `[python]`               | `unit colocated-test`, `integration lint`, and — if `[python].coverage` is set — `unit coverage`. |
+| `[typescript]`           | `unit colocated-test`.                                                         |
+| `[rust]`                 | Nothing yet (Rust rules are still in progress).                               |
+
+A configured threshold no rule covers yet (e.g. `[typescript].coverage`) is surfaced as a
+`note:` in the log and skipped — never silently dropped — and a config that enables no checks
+at all fails as a misconfiguration. The workflow sets up `coverage` + `pytest` for the Python
+coverage rule, so it fits suites with no third-party runtime imports; a project that needs its
+own dependencies should drive the CLI directly (below) until config-driven setup lands.
+
+::: tip Migrating from the per-language form
+Earlier versions took a `languages` input and ran each rule as its own matrix job. That input
+is gone: drop it and let the config's `[python]` / `[typescript]` / `[rust]` tables decide what
+runs. (`path`, `version`, and `config` are unchanged.)
+:::
 
 ## Roll your own
 
 Prefer to wire it up by hand? The CLI is a single binary — install it (see
-[Getting Started](../getting-started)) and call each rule as its own step, naming the language
-with the required `--language` flag:
+[Getting Started](../getting-started)) and either run the umbrella in one step:
+
+```yaml
+- run: testing-conventions check --config testing-conventions.toml src/
+```
+
+or call each rule as its own step, naming the language with the required `--language` flag:
 
 ```yaml
 - run: testing-conventions unit colocated-test --language python src/

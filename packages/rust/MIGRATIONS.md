@@ -224,6 +224,11 @@ else exits non-zero with a run-`attest` hint. It never runs e2e and never judges
 the recorded exit code/output. Purely additive: a new `e2e verify` subcommand and
 `testing_conventions::e2e::{verify, Verification}`; nothing existing changes.
 
+Also fixes a false positive in the TypeScript `unit isolation` typed-`vi.mock`
+rule (#111): `vi.mock(spec, { spy: true })` — Vitest's options-object form, not a
+factory — is no longer flagged `untyped-mock`. No API change; only a factory
+*function* missing a `vi.importActual<…>` anchor is flagged now.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -291,6 +296,10 @@ Exemptions (#32) change runtime behavior:
 - `integration lint --language typescript` (#43, #75) previously errored
   (`supports --language python only for now`); it now parses the TypeScript test
   files and runs the `no-first-party-mock` lint.
+- `unit isolation --language typescript` no longer reports `untyped-mock` for the
+  options-object mock `vi.mock(spec, { spy: true })` (Vitest ≥2). The spy form
+  wraps the real module and can't drift, like a bare auto-mock; only a factory
+  *function* without a `vi.importActual<…>` anchor is flagged. (#111)
 
 ### Verification
 

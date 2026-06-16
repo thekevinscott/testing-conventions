@@ -43,3 +43,9 @@ fn untyped_red_exits_nonzero() {
 fn untyped_clean_exits_zero() {
     assert_eq!(isolation_exit("untyped_mock/clean"), 0);
 }
+
+// Vitest options-object mock (`{ spy: true }`, #111) — not a factory, must pass.
+#[test]
+fn spy_option_clean_exits_zero() {
+    assert_eq!(isolation_exit("untyped_mock/spy_clean"), 0);
+}

@@ -124,6 +124,15 @@ new `testing_conventions::ts` module (`find_integration_violations`, plus the sh
 specifier classifier `classify` → `Origin`) and a new `--language typescript` arm on
 `integration lint`; nothing existing changes.
 
+Also adds the `workflow` guard (#92): a new `workflow` command and module that keeps the
+reusable workflow's `@v0` consumption path from stranding. `workflow <PATH>` scans a
+workflow file (or directory) for every `testing-conventions …` invocation and flags any
+whose subcommand chain the binary no longer exposes (`no-unknown-subcommand`) — the failure
+mode that broke `@v0` at 0.0.7 after the #55 `location` → `colocated-test` rename. Purely
+additive: a new `testing_conventions::workflow` module (`invocations`, `unknown_subcommands`,
+`check`, `Invocation`) and a `testing_conventions::command()` accessor for the binary's clap
+command tree; nothing existing changes.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -274,3 +283,12 @@ Expected: the isolation tests pass — the red fixture's four out-of-module form
 (first-party cross-module, effectful `std`, external crate, ancestor reach) are
 each flagged and the crate exits `1`, while the clean fixture (`super::` + an
 injected trait double + `Cursor`) reports nothing and exits `0`.
+
+```
+cd packages/rust && cargo test --test workflow --test workflow_e2e
+```
+
+Expected: the workflow guard's integration + e2e suites pass — the clean fixture (only
+live subcommands, version pins, a `\`-continuation, and a comment that must not be read as
+a call) reports nothing and exits `0`, while the red fixture (`unit location` and the flat
+`unit-location`) flags both and the built binary exits `1`.

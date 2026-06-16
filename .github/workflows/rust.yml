@@ -5,6 +5,9 @@ on:
     paths:
       - 'packages/rust/**'
       - '.github/workflows/rust.yml'
+      # The Build job guards the reusable workflow against CLI subcommand drift
+      # (#92), so re-run when that workflow changes too.
+      - '.github/workflows/testing-conventions.yml'
 
 permissions:
   contents: read
@@ -72,3 +75,10 @@ jobs:
       - run: cargo build --release
       - name: Smoke (--version)
         run: ./target/release/testing-conventions --version
+      # Guard the `@v0` consumption path (#92): every `testing-conventions`
+      # invocation in the reusable workflow must name a subcommand the binary still
+      # exposes, so a rename like `unit location` → `unit colocated-test` (#55)
+      # can't strand consumers. Uses the just-built binary (the source of truth) —
+      # the published one won't carry a freshly-added subcommand yet.
+      - name: Guard the reusable workflow against subcommand drift (#92)
+        run: ./target/release/testing-conventions workflow ../../.github/workflows/testing-conventions.yml

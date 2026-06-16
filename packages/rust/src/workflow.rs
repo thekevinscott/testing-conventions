@@ -18,10 +18,12 @@
 //!
 //! Extraction is a line-based, shell-aware scan, not a full GitHub Actions parser:
 //! it tokenizes each non-comment line, finds the `testing-conventions` binary token
-//! (bare, version-pinned `…@x` / `…${VERSION:+@$VERSION}`, or a path), and reads
-//! the tokens after it as the invocation. That is the deterministic bright-line; a
-//! subcommand split across a `\`-continuation, or named in non-`run:` prose, is a
-//! documented limit.
+//! (the bare command word, optionally version-pinned `…@x` /
+//! `…${VERSION:+@$VERSION}` — the `npx` / on-`PATH` form the reusable workflow and
+//! the docs use), and reads the tokens after it as the invocation. That is the
+//! deterministic bright-line; a path-qualified invocation (`./bin/testing-conventions`),
+//! a subcommand split across a `\`-continuation, or one named in non-`run:` prose is
+//! a documented limit.
 
 use std::path::{Path, PathBuf};
 
@@ -106,18 +108,23 @@ fn line_invocation(line: &str) -> Option<Vec<String>> {
     Some(tokens[pos + 1..].to_vec())
 }
 
-/// `true` when `token` names the `testing-conventions` binary: bare, version-
-/// pinned (`testing-conventions@0.1.0`, `testing-conventions${VERSION:+@$VERSION}`),
-/// or a path (`./target/release/testing-conventions`).
+/// `true` when `token` is the `testing-conventions` binary as a command word: bare,
+/// or version-pinned (`testing-conventions@0.1.0`,
+/// `testing-conventions${VERSION:+@$VERSION}`).
+///
+/// Only the bare command word is matched — the `npx` / on-`PATH` form the reusable
+/// workflow and the "roll your own" docs use. A path-qualified token
+/// (`packages/…/testing-conventions`, a `cp` / `install` argument) is deliberately
+/// *not* matched, so a path that merely ends in the binary name isn't read as an
+/// invocation.
 fn is_binary_token(token: &str) -> bool {
-    // Drop any leading directory, then any version pin / shell expansion suffix.
-    let name = token.rsplit('/').next().unwrap_or(token);
-    let end = [name.find('@'), name.find("${")]
+    // Strip any version pin / shell expansion suffix, then require an exact match.
+    let end = [token.find('@'), token.find("${")]
         .into_iter()
         .flatten()
         .min()
-        .unwrap_or(name.len());
-    &name[..end] == "testing-conventions"
+        .unwrap_or(token.len());
+    &token[..end] == "testing-conventions"
 }
 
 /// Split `line` into shell-ish tokens: whitespace separates, `'…'` and `"…"`
@@ -164,12 +171,42 @@ fn tokenize(line: &str) -> Vec<String> {
 
 /// Of `invocations`, the ones whose subcommand chain names a subcommand the binary
 /// — described by `root`, its clap command tree — no longer exposes.
+///
+/// Each invocation's leading tokens are walked against the tree: a token in a
+/// subcommand position (the current command takes subcommands) must name one of
+/// them, else it is flagged. The walk stops at the first flag (`-…`) — subcommands
+/// precede options in clap — and at the first command that takes positionals rather
+/// than subcommands, so a path argument is never mistaken for a subcommand.
 pub fn unknown_subcommands(invocations: &[Invocation], root: &clap::Command) -> Vec<Violation> {
-    // Detection lands next (#92): walk each invocation's leading tokens against
-    // `root`'s command tree and flag the first that the tree does not expose. The
-    // skeleton reports nothing, so the red fixtures fail until it does.
-    let _ = (invocations, root);
-    Vec::new()
+    let mut out = Vec::new();
+    for inv in invocations {
+        let mut node = root;
+        for tok in &inv.args {
+            // Flags begin the options/positionals section: the subcommand chain is
+            // complete. A command that takes positionals (not subcommands) means
+            // this token is an argument, not a subcommand to validate.
+            if tok.starts_with('-') || !node.has_subcommands() {
+                break;
+            }
+            match node.find_subcommand(tok.as_str()) {
+                Some(sub) => node = sub,
+                None => {
+                    out.push(Violation {
+                        file: inv.file.clone(),
+                        line: inv.line,
+                        rule: "no-unknown-subcommand",
+                        message: format!(
+                            "`{}` is not a `{}` subcommand — the published binary no longer exposes it",
+                            tok,
+                            node.get_name()
+                        ),
+                    });
+                    break;
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Check `path` (a workflow file or directory): every `testing-conventions`
@@ -241,11 +278,10 @@ mod tests {
     }
 
     #[test]
-    fn is_binary_token_accepts_every_form() {
+    fn is_binary_token_accepts_the_command_word() {
         assert!(is_binary_token("testing-conventions"));
         assert!(is_binary_token("testing-conventions@0.1.0"));
         assert!(is_binary_token("testing-conventions${VERSION:+@$VERSION}"));
-        assert!(is_binary_token("./target/release/testing-conventions"));
     }
 
     #[test]
@@ -254,6 +290,13 @@ mod tests {
         assert!(!is_binary_token("testing-conventions.yml@v0"));
         assert!(!is_binary_token("actions/checkout@v6"));
         assert!(!is_binary_token("npx"));
+        // Path-qualified tokens — e.g. a `cp` / `install` argument — are not
+        // invocations, even when they end in the binary name (#92, node.yml).
+        assert!(!is_binary_token(
+            "packages/rust/target/release/testing-conventions"
+        ));
+        assert!(!is_binary_token("$target/bin/testing-conventions"));
+        assert!(!is_binary_token("./target/release/testing-conventions"));
     }
 
     #[test]
@@ -297,5 +340,63 @@ mod tests {
     fn invocations_errors_on_a_missing_path() {
         let missing = std::env::temp_dir().join("tc-workflow-does-not-exist-2b1c");
         assert!(invocations(&missing).is_err());
+    }
+
+    /// An [`Invocation`] from a bare token list (file/line are placeholders).
+    fn inv(line: usize, args: &[&str]) -> Invocation {
+        Invocation {
+            file: PathBuf::from("ci.yml"),
+            line,
+            args: args.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn unknown_subcommands_flags_a_renamed_nested_rule() {
+        let v = unknown_subcommands(
+            &[inv(9, &["unit", "location", "--language", "python", "src"])],
+            &crate::command(),
+        );
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].line, 9);
+        assert_eq!(v[0].rule, "no-unknown-subcommand");
+        // Named under its parent group, not the root.
+        assert!(v[0].message.contains("`location`"), "{}", v[0].message);
+        assert!(v[0].message.contains("`unit`"), "{}", v[0].message);
+    }
+
+    #[test]
+    fn unknown_subcommands_flags_a_removed_top_level_command() {
+        let v = unknown_subcommands(
+            &[inv(1, &["unit-location", "--lang", "python", "src"])],
+            &crate::command(),
+        );
+        assert_eq!(v.len(), 1);
+        assert!(v[0].message.contains("`unit-location`"), "{}", v[0].message);
+        assert!(
+            v[0].message.contains("`testing-conventions`"),
+            "{}",
+            v[0].message
+        );
+    }
+
+    #[test]
+    fn unknown_subcommands_accepts_every_live_invocation() {
+        let invs = [
+            inv(
+                1,
+                &["unit", "colocated-test", "--language", "python", "src"],
+            ),
+            inv(2, &["unit", "coverage", "--language", "typescript", "src"]),
+            inv(3, &["unit", "isolation", "--language", "rust", "."]),
+            inv(4, &["integration", "lint", "--language", "python", "src"]),
+            // A leaf's positional must not be read as a subcommand.
+            inv(5, &["packaging", "--language", "python", "dist"]),
+            inv(6, &["check"]),
+            // Flags-only and empty invocations have no subcommand to check.
+            inv(7, &["--version"]),
+            inv(8, &[]),
+        ];
+        assert!(unknown_subcommands(&invs, &crate::command()).is_empty());
     }
 }

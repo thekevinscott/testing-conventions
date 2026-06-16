@@ -100,6 +100,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Python `lint` and Rust `isolation` detectors so the CLI prints every rule the
   same way. `testing_conventions::lint::Violation` remains as a re-export, so the
   prior path still resolves (no break). (#44)
+- `workflow` module + `workflow` CLI command — guard the reusable workflow against
+  CLI subcommand drift (#92). `workflow <PATH>` scans a workflow file (or a directory
+  of them) for every `testing-conventions …` invocation and checks each one's
+  subcommand chain against the binary's own command tree, exiting non-zero — and
+  naming each offender as `path:line: no-unknown-subcommand — …` — when a workflow
+  invokes a subcommand the binary no longer exposes. This keeps the documented `@v0`
+  consumption path from stranding the way it did at 0.0.7 (broken by the #55
+  `location` → `colocated-test` rename). Library API:
+  `testing_conventions::workflow::{invocations, unknown_subcommands, check, Invocation}`,
+  plus `testing_conventions::command()` exposing the binary's clap command tree. (#92)
 
 ### Changed
 

@@ -223,6 +223,29 @@ path) when one is.
 *build* step that produces that tree — wheel/sdist (Python), `dist` (TypeScript), `cargo
 package` tarball (Rust, which also adds `--language rust`) — is landing per language.
 
+### workflow
+
+Guard a CI workflow against CLI subcommand drift. The reusable workflow's documented
+consumption path is `…/testing-conventions.yml@v0`: the workflow file is frozen at the tag
+while a consumer's `npx` pulls the latest published binary, so a renamed or removed
+subcommand strands every `@v0` consumer (as it did at 0.0.7, broken by the
+`location` → `colocated-test` rename). This check fails the build the moment a workflow
+invokes a subcommand the binary no longer exposes.
+
+```
+testing-conventions workflow <PATH>
+```
+
+| Argument / flag | Description                                                                  |
+| --------------- | ---------------------------------------------------------------------------- |
+| `<PATH>`        | A workflow file, or a directory scanned recursively for `*.yml` / `*.yaml`.  |
+
+Finds every `testing-conventions …` invocation in the workflow's shell — the bare
+`npx -y testing-conventions` / on-`PATH` command word, version pin and all — and checks each
+one's subcommand chain against the binary's own command tree (the source of truth). Reports
+each offending invocation to stderr as `path:line: no-unknown-subcommand — <message>` and
+exits `1` if any are found, `0` otherwise.
+
 ## Configuration
 
 The standard is config-driven: one TOML file is the single source of truth for every rule's

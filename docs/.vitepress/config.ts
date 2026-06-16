@@ -6,7 +6,7 @@ export default defineConfig({
   // every CSS/JS/font URL resolves to /assets/... (404) and the site renders unstyled.
   base: '/testing-conventions/',
   title: 'testing-conventions',
-  description: 'One config-driven, deterministic standard for how tests are structured, isolated, and measured — across Python, TypeScript, and Rust.',
+  description: 'One config-driven standard for how tests are structured, isolated, and measured across Python, TypeScript, and Rust.',
   cleanUrls: true,
   themeConfig: {
     nav: [

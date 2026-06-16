@@ -1,8 +1,7 @@
 # Enforce conventions in CI
 
-A convention is only worth something if it runs on every change. `testing-conventions` ships
-a **reusable GitHub Actions workflow**, so a consumer repo can enforce its conventions in one
-drop-in job.
+`testing-conventions` ships a **reusable GitHub Actions workflow**, so a consumer repo can
+enforce its conventions in one job.
 
 ## Use the reusable workflow
 
@@ -22,20 +21,20 @@ jobs:
 ```
 
 It installs the published `testing-conventions` binary and runs every requested rule for each
-language as its own matrix job, failing the build — with the offending files in the log — on
-any violation. No config file is required: every rule runs with sane defaults, so this one job
-opts a new library into the full check set. Add a `testing-conventions.toml` only to tighten a
-floor or declare exemptions.
+language as its own matrix job, failing the build on any violation (with the offending files in
+the log). No config file is required: every rule runs with defaults, so this one job opts a new
+library into the full check set. Add a `testing-conventions.toml` only to tighten a floor or
+declare exemptions.
 
-A requested language the repo has no sources for is **skipped, not run** — the workflow scans
-`path` for each language first — so the zero-config default `["python", "typescript"]` is safe
-to keep on a single-language library: the absent language's jobs simply don't fire.
+A requested language the repo has no sources for is **skipped, not run**: the workflow scans
+`path` for each language first. So the zero-config default `["python", "typescript"]` is safe to
+keep on a single-language library, and the absent language's jobs don't fire.
 
 The **unit isolation** rule runs for TypeScript and Rust. Rust isn't part of the default
 `languages`, so the scan detects it separately for this job: request `rust` and the workflow
 looks for a crate (a `Cargo.toml` / `*.rs`) under `path`. Keeping Rust on its own set holds it
 out of the coverage matrix, which has no Rust toolchain. (Python isolation is implemented but
-not yet on npm, so it's deferred until a release ships it — see
+not yet on npm, so it's deferred until a release ships it; see
 [#146](https://github.com/thekevinscott/testing-conventions/issues/146).)
 
 ### Inputs
@@ -45,25 +44,25 @@ not yet on npm, so it's deferred until a release ships it — see
 | `languages`          | `["python", "typescript"]`  | JSON array of languages to check (`python`, `typescript`; also `rust`, for the integration-lint rule). |
 | `path`               | `src`                       | Directory scanned recursively for sources.                 |
 | `version`            | latest                      | `testing-conventions` version to install (e.g. `0.1.0`).   |
-| `config`             | `testing-conventions.toml`  | Optional config file to refine the checks (coverage thresholds, exemptions). Absent → every check runs with sane defaults. |
+| `config`             | `testing-conventions.toml`  | Optional config file to refine the checks (coverage thresholds, exemptions). Absent → every check runs with defaults. |
 | `packaging_artifact` | `''` (skipped)              | Name of an uploaded build artifact holding your built distributions; when set, the packaging rule downloads and inspects it. See [Check the built distribution](#check-the-built-distribution-packaging). |
 
 The **coverage** job runs once per requested language that has sources (a language with none is
-skipped, not failed). Without a config file it enforces the
-language's default floor — Python `fail_under = 85` with branch coverage on; TypeScript `lines`
-/ `functions` / `statements` 80 and `branches` 75 — and a `[<language>].coverage` table
-overrides it. For `python` it runs your unit suite under `coverage.py` (branch on, `*_test.py`
-excluded) and fails if the total is below the floor, installing `coverage` + `pytest`. For
-`typescript` it runs the suite under `vitest` v8 coverage and fails below any of the four
-thresholds (`lines` / `branches` / `functions` / `statements`), installing your project's deps with `pnpm`
-so `vitest` + `@vitest/coverage-v8` are present. A project on a different toolchain — a non-`pnpm`
-package manager, or Python sources that need third-party runtime deps installed — should drive
-the CLI directly (below) until #56 makes this config-driven.
+skipped, not failed). Without a config file it enforces the language's default floor (Python
+`fail_under = 85` with branch coverage on; TypeScript `lines` / `functions` / `statements` 80 and
+`branches` 75), and a `[<language>].coverage` table overrides it. For `python` it runs your unit
+suite under `coverage.py` (branch on, `*_test.py` excluded) and fails if the total is below the
+floor, installing `coverage` + `pytest`. For `typescript` it runs the suite under `vitest` v8
+coverage and fails below any of the four thresholds (`lines` / `branches` / `functions` /
+`statements`), installing your project's deps with `pnpm` so `vitest` + `@vitest/coverage-v8` are
+present. A project on a different toolchain (a non-`pnpm` package manager, or Python sources that
+need third-party runtime deps installed) should drive the CLI directly (below) until #56 makes
+this config-driven.
 
 ### Check the built distribution (packaging)
 
 The other rules read your **source tree**; the **packaging** rule reads your **built
-distribution** — it verifies that no test file slipped into the artifact you publish. A built
+distribution**. It verifies that no test file slipped into the artifact you publish. A built
 artifact only exists after a build, so this rule doesn't ride the source matrix. Build your
 dists in your own job, upload them with `actions/upload-artifact`, and pass that artifact's name
 as `packaging_artifact`:
@@ -89,16 +88,15 @@ jobs:
 
 The packaging job downloads the artifact and inspects every distribution it finds, inferring the
 language from each file's extension: `.whl` / `.tar.gz` (Python wheel / sdist), `.tgz`
-(`npm pack` tarball, TypeScript), `.crate` (Cargo crate, Rust). It fails — naming the offending
-path — if any of them ships a test file, and also fails if the artifact held no recognized
-distribution at all (a sign the upload was misconfigured). Leave `packaging_artifact` unset and
+(`npm pack` tarball, TypeScript), `.crate` (Cargo crate, Rust). It fails (naming the offending
+path) if any of them ships a test file, and also fails if the artifact held no recognized
+distribution at all, which signals a misconfigured upload. Leave `packaging_artifact` unset and
 the packaging job is skipped, never failed.
 
 ## Roll your own
 
-Prefer to wire it up by hand? The CLI is a single binary — install it (see
-[Getting Started](../getting-started)) and call each rule as its own step, naming the language
-with the required `--language` flag:
+The CLI is a single binary. Install it (see [Getting Started](../getting-started)) and call each
+rule as its own step, naming the language with the required `--language` flag:
 
 ```yaml
 - run: testing-conventions unit colocated-test --language python src/

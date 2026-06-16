@@ -34,7 +34,7 @@ You can customize options with a `testing-conventions.toml` at your repo root:
 [python]
 coverage = { branch = true, fail_under = 95 }
 
-# Exempt a launcher shim — explicit, and a reason is required:
+# Exempt a launcher shim; explicit, and a reason is required:
 [[python.exempt]]
 path = "mypkg/cli.py"
 rules = ["colocated-test", "coverage"]
@@ -48,19 +48,19 @@ Anything you omit keeps its default, so a config can be as small as a single tig
 one exemption. See [Configuration](./reference/#configuration) for every key and
 [Exempt a file](./guide/exemptions) for the exemption rules.
 
-## Prefer to run it yourself? Install the CLI
+## Install the CLI
 
-The workflow just runs a single binary, published to three registries under the same name.
-Install it whichever way matches your toolchain:
+The workflow runs a single binary, published to three registries under the same name.
+Install it the way that matches your toolchain:
 
 ```sh
 # Rust (crates.io)
 cargo install testing-conventions
 
-# Python (PyPI) — the wheel bundles the binary
+# Python (PyPI): the wheel bundles the binary
 pip install testing-conventions
 
-# Node (npm) — as a dev dependency, run via npx
+# Node (npm): a dev dependency, run via npx
 npm install --save-dev testing-conventions
 ```
 
@@ -70,8 +70,8 @@ Confirm it's available (prefix `npx` if you installed it as an npm dev dependenc
 testing-conventions --version
 ```
 
-Then call any rule directly, naming the language with the required `--language` flag. For example
-the **colocated test** rule — every source file must have a colocated unit test named after it:
+Then call any rule directly, naming the language with the required `--language` flag. For example,
+the **colocated test** rule checks that every source file has a colocated unit test named after it:
 
 ```sh
 # Python: foo.py must have a sibling foo_test.py
@@ -90,11 +90,10 @@ missing colocated unit test: src/pkg/orphan.ts
 error: 2 source file(s) missing a colocated unit test
 ```
 
-That non-zero exit is the whole point: in CI an orphaned (or missing) test can't slip through
-green. `unit coverage` runs the same way, and its `--config` is optional too — omit it and the
-default floor above applies.
+The non-zero exit fails CI, so an orphaned or missing test is caught. `unit coverage` runs the
+same way, and its `--config` is optional too: omit it and the default floor above applies.
 
 ## Next steps
 
-- [Guides](./guide/) — task-oriented recipes (enforce a rule, wire it into CI, exempt a file).
-- [Reference](./reference/) — every subcommand, flag, exit code, and config key.
+- [Guides](./guide/): task-oriented recipes (enforce a rule, wire it into CI, exempt a file).
+- [Reference](./reference/): every subcommand, flag, exit code, and config key.

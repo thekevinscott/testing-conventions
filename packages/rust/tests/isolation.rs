@@ -167,3 +167,48 @@ fn isolation_requires_language() {
         clap::error::ErrorKind::MissingRequiredArgument
     );
 }
+
+// ---- waivers: config-driven `exempt` list (#102) -------------------------
+
+/// Exit code of `unit isolation --language rust --config <config> <fixture>`.
+fn iso_exit_config(fixture_name: &str, config_rel: &str) -> i32 {
+    let argv: Vec<OsString> = vec![
+        "testing-conventions".into(),
+        "unit".into(),
+        "isolation".into(),
+        "--language".into(),
+        "rust".into(),
+        "--config".into(),
+        fixture(config_rel).into_os_string(),
+        fixture(fixture_name).into_os_string(),
+    ];
+    run(argv).expect("a readable tree should not error")
+}
+
+#[test]
+fn waived_out_of_module_call_exits_zero() {
+    // The out-of-module call in `unit/waived` is lifted by its testing-conventions.toml.
+    assert_eq!(
+        iso_exit_config("unit/waived", "unit/waived/testing-conventions.toml"),
+        0
+    );
+}
+
+#[test]
+fn stale_exempt_entry_errors() {
+    // A stale exempt path must make the run error, not silently pass.
+    let argv: Vec<OsString> = vec![
+        "testing-conventions".into(),
+        "unit".into(),
+        "isolation".into(),
+        "--language".into(),
+        "rust".into(),
+        "--config".into(),
+        fixture("unit/stale_exempt.toml").into_os_string(),
+        fixture("unit/waived").into_os_string(),
+    ];
+    assert!(
+        run(argv).is_err(),
+        "a stale exempt entry must error, not silently pass"
+    );
+}

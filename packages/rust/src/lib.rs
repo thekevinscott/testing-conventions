@@ -89,13 +89,17 @@ enum UnitRule {
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
-    /// Check that inline unit tests call nothing out of their own module (Rust).
+    /// Check that unit tests isolate the unit under test (Rust, TypeScript).
     Isolation {
-        /// Crate root to scan recursively (its `Cargo.toml` names external crates).
+        /// Crate root / source dir to scan recursively.
         path: PathBuf,
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
         language: isolation::Language,
+        /// testing-conventions config file providing the `exempt` list (waivers).
+        /// Optional: if the file is absent, nothing is waived.
+        #[arg(long, default_value = "testing-conventions.toml")]
+        config: PathBuf,
     },
 }
 
@@ -166,7 +170,11 @@ where
                 language,
                 config,
             } => run_unit_coverage(&path, language, &config),
-            UnitRule::Isolation { path, language } => run_unit_isolation(&path, language),
+            UnitRule::Isolation {
+                path,
+                language,
+                config,
+            } => run_unit_isolation(&path, language, &config),
         },
         Some(Command::Integration { rule }) => match rule {
             IntegrationRule::Lint {
@@ -297,11 +305,18 @@ fn run_unit_coverage(
 /// Run the unit-isolation check over `root` for `language`, printing each
 /// violation to stderr as `path:line: rule — message` and returning `1` when any
 /// are found, `0` otherwise.
-fn run_unit_isolation(root: &Path, language: isolation::Language) -> anyhow::Result<i32> {
-    let violations = match language {
-        isolation::Language::Rust => isolation::find_violations(root)?,
-        isolation::Language::TypeScript => ts::find_unit_violations(root)?,
+fn run_unit_isolation(
+    root: &Path,
+    language: isolation::Language,
+    config_path: &Path,
+) -> anyhow::Result<i32> {
+    let (raw, select): (Vec<lint::Violation>, ExemptSelect) = match language {
+        isolation::Language::Rust => (isolation::find_violations(root)?, |c| c.rust_exemptions()),
+        isolation::Language::TypeScript => (ts::find_unit_violations(root)?, |c| {
+            c.exemptions(colocated_test::Language::TypeScript)
+        }),
     };
+    let violations = apply_waivers(raw, root, config_path, select)?;
     if violations.is_empty() {
         return Ok(0);
     }
@@ -326,26 +341,18 @@ fn run_integration_lint(
     language: IntegrationLintLanguage,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
-    let (raw, waived) = match language {
-        IntegrationLintLanguage::Python => (
-            lint::find_violations(root)?,
-            lint_waivers(root, colocated_test::Language::Python, config_path)?,
-        ),
-        IntegrationLintLanguage::TypeScript => (
-            ts::find_integration_violations(root)?,
-            lint_waivers(root, colocated_test::Language::TypeScript, config_path)?,
-        ),
-        // The Rust `no-first-party-double` lint is bright-line; the inline
-        // `waiver:` hatch is a separate slice, so nothing is waived here yet.
-        IntegrationLintLanguage::Rust => (
-            isolation::find_integration_violations(root)?,
-            std::collections::BTreeSet::new(),
-        ),
+    let (raw, select): (Vec<lint::Violation>, ExemptSelect) = match language {
+        IntegrationLintLanguage::Python => (lint::find_violations(root)?, |c| {
+            c.exemptions(colocated_test::Language::Python)
+        }),
+        IntegrationLintLanguage::TypeScript => (ts::find_integration_violations(root)?, |c| {
+            c.exemptions(colocated_test::Language::TypeScript)
+        }),
+        IntegrationLintLanguage::Rust => (isolation::find_integration_violations(root)?, |c| {
+            c.rust_exemptions()
+        }),
     };
-    let violations: Vec<lint::Violation> = raw
-        .into_iter()
-        .filter(|v| !is_waived(v, root, &waived))
-        .collect();
+    let violations = apply_waivers(raw, root, config_path, select)?;
     if violations.is_empty() {
         return Ok(0);
     }
@@ -362,38 +369,56 @@ fn run_integration_lint(
     Ok(1)
 }
 
-/// The `no-constant-patch` waivers (root-relative paths) from the config at
-/// `config_path` — the only waivable lint (#52). A missing config file means
-/// nothing is waived.
-fn lint_waivers(
+/// Selects a language's `[[<lang>.exempt]]` table from a loaded config — the one
+/// varying piece between the `unit isolation` and `integration lint` waiver paths.
+type ExemptSelect = fn(&config::Config) -> &[config::Exemption];
+
+/// Drop the violations waived by the config's `exempt` list (#32/#102). A
+/// violation is waived when its `rule` is a known [`config::Rule`] and its
+/// `root`-relative path is exempt for that rule. `exemptions` selects the
+/// language's `[[<lang>.exempt]]` table from the loaded config. A missing config
+/// file waives nothing; a reason-less or stale entry errors (via `load_config` /
+/// `resolve_exempt`), so the escape hatch can't silently rot.
+fn apply_waivers(
+    violations: Vec<lint::Violation>,
     root: &Path,
-    language: colocated_test::Language,
     config_path: &Path,
-) -> anyhow::Result<std::collections::BTreeSet<String>> {
+    exemptions: ExemptSelect,
+) -> anyhow::Result<Vec<lint::Violation>> {
+    use std::collections::hash_map::Entry;
+
     if !config_path.exists() {
-        return Ok(std::collections::BTreeSet::new());
+        return Ok(violations);
     }
     let config = config::load_config(config_path)?;
-    config::resolve_exempt(
-        root,
-        config.exemptions(language),
-        config::Rule::NoConstantPatch,
-    )
-}
-
-/// `true` when `violation` is a `no-constant-patch` finding in a waived file.
-fn is_waived(
-    violation: &lint::Violation,
-    root: &Path,
-    waived: &std::collections::BTreeSet<String>,
-) -> bool {
-    violation.rule == "no-constant-patch"
-        && violation
-            .file
-            .strip_prefix(root)
-            .ok()
-            .map(|rel| rel.to_string_lossy().replace('\\', "/"))
-            .is_some_and(|rel| waived.contains(&rel))
+    let exempt = exemptions(&config);
+    // Resolve each rule's exempt set once (and surface a stale entry as an error).
+    let mut resolved: std::collections::HashMap<config::Rule, std::collections::BTreeSet<String>> =
+        std::collections::HashMap::new();
+    let mut kept = Vec::new();
+    for violation in violations {
+        let waived = match config::Rule::from_id(violation.rule) {
+            Some(rule) => {
+                let exempt_paths = match resolved.entry(rule) {
+                    Entry::Occupied(entry) => entry.into_mut(),
+                    Entry::Vacant(entry) => {
+                        entry.insert(config::resolve_exempt(root, exempt, rule)?)
+                    }
+                };
+                violation
+                    .file
+                    .strip_prefix(root)
+                    .ok()
+                    .map(|rel| rel.to_string_lossy().replace('\\', "/"))
+                    .is_some_and(|rel| exempt_paths.contains(&rel))
+            }
+            None => false,
+        };
+        if !waived {
+            kept.push(violation);
+        }
+    }
+    Ok(kept)
 }
 
 /// Run the packaging check: inspect the built artifact at `artifact` for test

@@ -184,6 +184,17 @@ not a pass). Purely additive: a new `e2e` command group and the
 `testing_conventions::e2e` module (`attest`, `Attestation`, `ATTESTATION_PATH`);
 nothing existing changes. The CI-side `e2e verify` follows in #68.
 
+Also makes the **isolation rules waivable** via the config `exempt` list (#102),
+reusing the #32 machinery. `unit isolation` gains a `--config` flag (default
+`testing-conventions.toml`); both it and `integration lint` now filter findings
+against the config, so a `[[<lang>.exempt]]` entry naming an isolation rule —
+`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`
+(Rust), or `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock` (TS) —
+lifts it for that file (reason required; a stale entry still errors). Additive:
+new `config::Rule` variants plus `Rule::id` / `Rule::from_id` and
+`Config::rust_exemptions`; the `--config` flag is optional, so existing
+invocations are unaffected.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -390,3 +401,12 @@ Expected: the Rust integration tests pass — the red fixture's `#[double] use
 widget::Renderer` (doubling the crate under test) is flagged and exits `1`, while
 the clean fixture (runs `gadget::compute` for real, doubles only `rand`) reports
 nothing and exits `0`.
+
+```
+cd packages/rust && cargo test --test isolation --test rust_integration_lint waived
+cd packages/rust && cargo test --test isolation stale_exempt
+```
+
+Expected: the waiver tests pass (#102) — a `unit/waived` out-of-module call and an
+integration `waived` first-party double, each lifted by a `[[rust.exempt]]` entry,
+exit `0`; a stale exempt entry makes the run error.

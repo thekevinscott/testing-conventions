@@ -87,16 +87,18 @@ never called out to (Rust). A unit test that touches a real collaborator is an i
 wearing a unit's name.
 
 ```
-testing-conventions unit isolation --language <LANG> <PATH>
+testing-conventions unit isolation --language <LANG> [--config <CONFIG>] <PATH>
 ```
 
 | Argument / flag     | Description                                                                            |
 | ------------------- | ------------------------------------------------------------------------------------- |
 | `<PATH>`            | Directory to scan recursively (for Rust, the crate root, whose `Cargo.toml` names the external crates). |
 | `--language <LANG>` | **Required.** `rust` or `typescript` (Python isolation is a separate item).            |
+| `--config <CONFIG>` | Config file supplying the `exempt` list (waivers). Optional (default `testing-conventions.toml`); if absent, nothing is waived. |
 
 Reports each violation to stderr as `path:line: <rule> — <message>` and exits `1` if any are
-found, `0` otherwise.
+found, `0` otherwise. Any rule below is **waivable** per file via a reason-required
+[`exempt`](#exemptions) entry (`rules = ["no-out-of-module-call"]`, etc.).
 
 **Rust** — parses each `*.rs` file under the crate root with `syn` and walks its inline
 `#[cfg(test)]` modules:
@@ -160,7 +162,7 @@ reason = "thin launcher; logic in run(), tested in run_test.py"  # required
 | Field | Meaning |
 | ----- | ------- |
 | `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists — a stale entry is a hard error, so the list can't silently rot. |
-| `rules` | Which checks the exemption lifts: `colocated-test` (skip the colocated-test requirement) and/or `coverage` (omit from the coverage denominator). |
+| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, the mocking lint `no-constant-patch`, or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
 | `reason` | Why the omission is deliberate. **Required** — an empty reason is rejected on load. |
 
 Because every exemption lives in the one config file, names its rules, and carries a reason,

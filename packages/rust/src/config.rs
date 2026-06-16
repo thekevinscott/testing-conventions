@@ -112,16 +112,62 @@ pub struct RustCoverage {
 }
 
 /// A rule a file can be exempted from (issue #32).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Rule {
     /// The unit-test colocated-test check ([`crate::colocated_test`]).
     ColocatedTest,
     /// The unit-test coverage floor ([`crate::coverage`]).
     Coverage,
-    /// The `no-constant-patch` lint ([`crate::lint`], issue #52) — the one
-    /// waivable mocking lint.
+    /// The `no-constant-patch` lint ([`crate::lint`], issue #52).
     NoConstantPatch,
+    /// `unit isolation` — a call out of a Rust unit's own module ([`crate::isolation`], #44).
+    NoOutOfModuleCall,
+    /// `unit isolation` — a foreign `use` in a Rust unit test ([`crate::isolation`], #44).
+    NoOutOfModuleImport,
+    /// `integration lint` — doubling a first-party item in a Rust integration test (#44).
+    NoFirstPartyDouble,
+    /// `unit isolation` — an un-mocked first-party/external import in a TS unit test ([`crate::ts`], #76).
+    UnmockedCollaborator,
+    /// `unit isolation` — a `vi.mock` without a typed anchor in a TS unit test (#77).
+    UntypedMock,
+    /// `integration lint` — a `vi.mock` of a first-party module in a TS integration test (#75).
+    NoFirstPartyMock,
+}
+
+impl Rule {
+    /// The rule's kebab-case id — the string used in a `Violation` and in a config
+    /// `rules` value. Mirrors the `serde(rename_all = "kebab-case")` encoding.
+    pub fn id(self) -> &'static str {
+        match self {
+            Rule::ColocatedTest => "colocated-test",
+            Rule::Coverage => "coverage",
+            Rule::NoConstantPatch => "no-constant-patch",
+            Rule::NoOutOfModuleCall => "no-out-of-module-call",
+            Rule::NoOutOfModuleImport => "no-out-of-module-import",
+            Rule::NoFirstPartyDouble => "no-first-party-double",
+            Rule::UnmockedCollaborator => "unmocked-collaborator",
+            Rule::UntypedMock => "untyped-mock",
+            Rule::NoFirstPartyMock => "no-first-party-mock",
+        }
+    }
+
+    /// The [`Rule`] for a lint id, or `None` for an unknown / non-waivable id.
+    pub fn from_id(id: &str) -> Option<Rule> {
+        [
+            Rule::ColocatedTest,
+            Rule::Coverage,
+            Rule::NoConstantPatch,
+            Rule::NoOutOfModuleCall,
+            Rule::NoOutOfModuleImport,
+            Rule::NoFirstPartyDouble,
+            Rule::UnmockedCollaborator,
+            Rule::UntypedMock,
+            Rule::NoFirstPartyMock,
+        ]
+        .into_iter()
+        .find(|rule| rule.id() == id)
+    }
 }
 
 /// One auditable per-file exemption — a `[[<language>.exempt]]` entry.
@@ -172,6 +218,13 @@ impl Config {
                 self.typescript.as_ref().map_or(&[], |c| &c.exempt)
             }
         }
+    }
+
+    /// The `[[rust.exempt]]` list (empty when the table is absent). Separate from
+    /// [`Self::exemptions`] because the file-pairing `colocated_test::Language` has
+    /// no Rust variant; the Rust isolation rules (#44) waive through here.
+    pub fn rust_exemptions(&self) -> &[Exemption] {
+        self.rust.as_ref().map_or(&[], |c| &c.exempt)
     }
 
     /// Reject any `exempt` entry that names no rule or carries an empty reason —

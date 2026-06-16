@@ -1,0 +1,10 @@
+# Waived fixture: a real out-of-module call lifted by a config `exempt` entry.
+[package]
+name = "widget"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8"
+
+[workspace]

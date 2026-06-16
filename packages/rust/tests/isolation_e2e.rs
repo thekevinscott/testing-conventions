@@ -42,3 +42,17 @@ fn imports_red_exits_nonzero() {
 fn imports_clean_exits_zero() {
     assert_eq!(iso_exit("imports/clean"), 0);
 }
+
+// waivers (#102)
+#[test]
+fn waived_exits_zero() {
+    let code = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "isolation", "--language", "rust", "--config"])
+        .arg(fixture("unit/waived/testing-conventions.toml"))
+        .arg(fixture("unit/waived"))
+        .status()
+        .expect("the built binary should run")
+        .code()
+        .expect("the process should exit with a code");
+    assert_eq!(code, 0);
+}

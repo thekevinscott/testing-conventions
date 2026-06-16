@@ -59,3 +59,21 @@ fn red_exits_nonzero() {
 fn clean_exits_zero() {
     assert_eq!(lint_exit("clean"), 0);
 }
+
+// ---- waivers: config-driven `exempt` list (#102) -------------------------
+
+#[test]
+fn waived_first_party_double_exits_zero() {
+    // The first-party double in `waived/` is lifted by its testing-conventions.toml.
+    let argv: Vec<OsString> = vec![
+        "testing-conventions".into(),
+        "integration".into(),
+        "lint".into(),
+        "--language".into(),
+        "rust".into(),
+        "--config".into(),
+        fixture("waived/testing-conventions.toml").into_os_string(),
+        fixture("waived").into_os_string(),
+    ];
+    assert_eq!(run(argv).expect("a readable tree should not error"), 0);
+}

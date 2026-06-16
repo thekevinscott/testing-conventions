@@ -1,0 +1,6 @@
+# Lifts the first-party double in tests/integration.rs (#32/#102). `path` is
+# relative to the scanned root.
+[[rust.exempt]]
+path = "tests/integration.rs"
+rules = ["no-first-party-double"]
+reason = "legacy integration test doubles the renderer; migration tracked in a follow-up"

@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Config-driven **waivers for the isolation rules** (#102). The escape hatch from
+  #32 (a reason-required `[[<lang>.exempt]]` entry, auditable in one diff) now
+  lifts the isolation rules too: `unit isolation` gains a `--config` flag (default
+  `testing-conventions.toml`, like the other `unit` rules), and both `unit isolation`
+  and `integration lint` filter findings against the config. New `config::Rule`
+  variants (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`,
+  `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`) plus
+  `Rule::id()` / `Rule::from_id()` and `Config::rust_exemptions()`. A waived file
+  passes; an un-waived violation still fails; a reason-less or stale entry still
+  errors. Example: `[[rust.exempt]] rules = ["no-out-of-module-call"]`.
 - `config` module — `load_config()` parses one TOML config file into the
   in-memory `Config` and self-validates on load: unknown keys, malformed TOML,
   and (#32) any `exempt` entry that names no rule or has an empty reason are

@@ -114,6 +114,24 @@ fn python_subcommand_exits_nonzero_on_a_red_tree() {
     assert_eq!(unit_colocated_test_exit("red", "python"), 1);
 }
 
+// ---- conftest.py is pytest support, never a subject (#112) ---------------
+
+#[test]
+fn python_conftest_is_a_non_subject() {
+    // conftest.py holds pytest fixtures — test support, not a unit under test
+    // (there is no `conftest_test.py`). With widget.py paired, conftest.py is the
+    // only file that could be flagged; it must not be reported as an orphan.
+    assert!(
+        relative_orphans(&fixture("python_conftest"), Language::Python).is_empty(),
+        "conftest.py is pytest support, never a colocated-test subject"
+    );
+}
+
+#[test]
+fn python_conftest_subcommand_exits_zero() {
+    assert_eq!(unit_colocated_test_exit("python_conftest", "python"), 0);
+}
+
 // ---- TypeScript (#18) ----------------------------------------------------
 
 #[test]

@@ -1,0 +1,2 @@
+def widget():
+    return "widget"

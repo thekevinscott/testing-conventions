@@ -127,9 +127,9 @@ pub fn find_unit_isolation_violations(root: impl AsRef<Path>) -> Result<Vec<Viol
                 line: import.line,
                 rule: "unmocked-collaborator",
                 message: format!(
-                    "unit test imports first-party `{}` without mocking it — a unit test \
-                     isolates the unit under test, so mock the collaborator (patch it by \
-                     string in a fixture)",
+                    "unit test imports `{}` without mocking it — a unit test isolates the \
+                     unit under test, so mock every collaborator (patch it by string in a \
+                     fixture)",
                     import.display
                 ),
             });
@@ -197,7 +197,7 @@ impl Visitor for UnitIsolationVisitor<'_> {
             let line = line_of(self.source, node.range.start());
             for alias in &node.names {
                 let module = alias.name.as_str();
-                if import_head(module) == self.first_party {
+                if is_checked_import(import_head(module), self.first_party) {
                     self.imports.push(ImportRecord {
                         display: module.to_string(),
                         line,
@@ -215,9 +215,11 @@ impl Visitor for UnitIsolationVisitor<'_> {
         if self.type_checking_depth == 0 {
             let level = relative_level(&node);
             let module = node.module.as_ref().map(|m| m.as_str());
-            let is_first_party =
-                level > 0 || module.is_some_and(|m| import_head(m) == self.first_party);
-            if is_first_party {
+            // Relative imports are first-party; an absolute import is checked when
+            // its head is first-party or external (third-party / effectful stdlib).
+            let should_check = level > 0
+                || module.is_some_and(|m| is_checked_import(import_head(m), self.first_party));
+            if should_check {
                 let line = line_of(self.source, node.range.start());
                 let dots = ".".repeat(level);
                 match module {
@@ -279,6 +281,299 @@ impl Visitor for UnitIsolationVisitor<'_> {
 fn import_head(module: &str) -> &str {
     module.split('.').next().unwrap_or(module)
 }
+
+/// `true` when an import head names a collaborator the unit-isolation rule checks:
+/// **first-party** (the dist package) or **external** — a third-party package, or an
+/// effectful-stdlib module. The test framework and **pure** stdlib are not
+/// collaborators (#121).
+fn is_checked_import(head: &str, first_party: &str) -> bool {
+    if head == first_party {
+        return true; // first-party
+    }
+    if TEST_FRAMEWORK.contains(&head) {
+        return false; // pytest et al. — the harness, never a collaborator
+    }
+    if EFFECTFUL_STDLIB.contains(&head) {
+        return true; // external — effectful stdlib
+    }
+    if STDLIB_MODULES.contains(&head) {
+        return false; // pure stdlib
+    }
+    true // external — a third-party package
+}
+
+/// The test harness — never a collaborator to mock. `unittest` / `unittest.mock`
+/// are stdlib (handled by [`STDLIB_MODULES`]); these are the rest.
+const TEST_FRAMEWORK: &[&str] = &["pytest", "_pytest", "mock"];
+
+/// Standard-library modules that are **effectful at the head** — the README's
+/// External Dependencies (network / subprocess / process & IPC / randomness /
+/// database / low-level OS). **Dual-nature** heads (`os`, `pathlib`, `datetime`,
+/// `time`, `io`, `logging`, `threading`) are deliberately excluded: a pure use
+/// (`os.path.join`, `datetime(2020, 1, 1)`) can't be told from an effectful one at
+/// the import, so the clock / filesystem stay caught by the patch convention, not
+/// here (a documented non-goal). A tunable heuristic, not an exhaustive map.
+const EFFECTFUL_STDLIB: &[&str] = &[
+    "asynchat",
+    "asyncore",
+    "ctypes",
+    "curses",
+    "dbm",
+    "fcntl",
+    "ftplib",
+    "imaplib",
+    "mmap",
+    "msvcrt",
+    "multiprocessing",
+    "nis",
+    "nntplib",
+    "ossaudiodev",
+    "poplib",
+    "pty",
+    "random",
+    "secrets",
+    "select",
+    "selectors",
+    "signal",
+    "smtpd",
+    "smtplib",
+    "socket",
+    "socketserver",
+    "spwd",
+    "sqlite3",
+    "ssl",
+    "subprocess",
+    "syslog",
+    "telnetlib",
+    "termios",
+    "tty",
+    "webbrowser",
+    "winreg",
+    "winsound",
+];
+
+/// Top-level standard-library module names (Python's `sys.stdlib_module_names`).
+/// Used to tell **pure** stdlib (allowed) from a **third-party** package (checked);
+/// the [`EFFECTFUL_STDLIB`] subset is what's actually flagged.
+const STDLIB_MODULES: &[&str] = &[
+    "abc",
+    "aifc",
+    "antigravity",
+    "argparse",
+    "array",
+    "ast",
+    "asynchat",
+    "asyncio",
+    "asyncore",
+    "atexit",
+    "audioop",
+    "base64",
+    "bdb",
+    "binascii",
+    "bisect",
+    "builtins",
+    "bz2",
+    "cProfile",
+    "calendar",
+    "cgi",
+    "cgitb",
+    "chunk",
+    "cmath",
+    "cmd",
+    "code",
+    "codecs",
+    "codeop",
+    "collections",
+    "colorsys",
+    "compileall",
+    "concurrent",
+    "configparser",
+    "contextlib",
+    "contextvars",
+    "copy",
+    "copyreg",
+    "crypt",
+    "csv",
+    "ctypes",
+    "curses",
+    "dataclasses",
+    "datetime",
+    "dbm",
+    "decimal",
+    "difflib",
+    "dis",
+    "distutils",
+    "doctest",
+    "email",
+    "encodings",
+    "ensurepip",
+    "enum",
+    "errno",
+    "faulthandler",
+    "fcntl",
+    "filecmp",
+    "fileinput",
+    "fnmatch",
+    "fractions",
+    "ftplib",
+    "functools",
+    "gc",
+    "genericpath",
+    "getopt",
+    "getpass",
+    "gettext",
+    "glob",
+    "graphlib",
+    "grp",
+    "gzip",
+    "hashlib",
+    "heapq",
+    "hmac",
+    "html",
+    "http",
+    "idlelib",
+    "imaplib",
+    "imghdr",
+    "imp",
+    "importlib",
+    "inspect",
+    "io",
+    "ipaddress",
+    "itertools",
+    "json",
+    "keyword",
+    "lib2to3",
+    "linecache",
+    "locale",
+    "logging",
+    "lzma",
+    "mailbox",
+    "mailcap",
+    "marshal",
+    "math",
+    "mimetypes",
+    "mmap",
+    "modulefinder",
+    "msilib",
+    "msvcrt",
+    "multiprocessing",
+    "netrc",
+    "nis",
+    "nntplib",
+    "nt",
+    "ntpath",
+    "nturl2path",
+    "numbers",
+    "opcode",
+    "operator",
+    "optparse",
+    "os",
+    "ossaudiodev",
+    "pathlib",
+    "pdb",
+    "pickle",
+    "pickletools",
+    "pipes",
+    "pkgutil",
+    "platform",
+    "plistlib",
+    "poplib",
+    "posix",
+    "posixpath",
+    "pprint",
+    "profile",
+    "pstats",
+    "pty",
+    "pwd",
+    "py_compile",
+    "pyclbr",
+    "pydoc",
+    "pydoc_data",
+    "pyexpat",
+    "queue",
+    "quopri",
+    "random",
+    "re",
+    "readline",
+    "reprlib",
+    "resource",
+    "rlcompleter",
+    "runpy",
+    "sched",
+    "secrets",
+    "select",
+    "selectors",
+    "shelve",
+    "shlex",
+    "shutil",
+    "signal",
+    "site",
+    "smtpd",
+    "smtplib",
+    "sndhdr",
+    "socket",
+    "socketserver",
+    "spwd",
+    "sqlite3",
+    "sre_compile",
+    "sre_constants",
+    "sre_parse",
+    "ssl",
+    "stat",
+    "statistics",
+    "string",
+    "stringprep",
+    "struct",
+    "subprocess",
+    "sunau",
+    "symtable",
+    "sys",
+    "sysconfig",
+    "syslog",
+    "tabnanny",
+    "tarfile",
+    "telnetlib",
+    "tempfile",
+    "termios",
+    "textwrap",
+    "this",
+    "threading",
+    "time",
+    "timeit",
+    "tkinter",
+    "token",
+    "tokenize",
+    "tomllib",
+    "trace",
+    "traceback",
+    "tracemalloc",
+    "tty",
+    "turtle",
+    "turtledemo",
+    "types",
+    "typing",
+    "unicodedata",
+    "unittest",
+    "urllib",
+    "uu",
+    "uuid",
+    "venv",
+    "warnings",
+    "wave",
+    "weakref",
+    "webbrowser",
+    "winreg",
+    "winsound",
+    "wsgiref",
+    "xdrlib",
+    "xml",
+    "xmlrpc",
+    "zipapp",
+    "zipfile",
+    "zipimport",
+    "zlib",
+    "zoneinfo",
+];
 
 /// The trailing dotted segment of a module path (`myproject.db` → `db`).
 fn last_segment(module: &str) -> &str {
@@ -858,8 +1153,9 @@ mod tests {
     }
 
     #[test]
-    fn visitor_flags_first_party_collaborators_only() {
-        // UUT and third-party are left alone; the first-party collaborator is flagged.
+    fn visitor_flags_first_party_and_external_collaborators() {
+        // The UUT is left alone; the first-party collaborator and the third-party
+        // import are both flagged (slice 3 broadened the rule to external deps).
         let found = unmocked(
             "widget",
             "myproject",
@@ -867,7 +1163,10 @@ mod tests {
              from myproject.ledger import record\n\
              import requests\n",
         );
-        assert_eq!(found, vec!["myproject.ledger".to_string()]);
+        assert_eq!(
+            found,
+            vec!["myproject.ledger".to_string(), "requests".to_string()]
+        );
     }
 
     #[test]
@@ -920,6 +1219,36 @@ mod tests {
             "if TYPE_CHECKING:\n    from myproject.models import Widget\nelse:\n    from myproject.ledger import record\n",
         );
         assert_eq!(found, vec!["myproject.ledger".to_string()]);
+    }
+
+    #[test]
+    fn is_checked_import_classifies_origins() {
+        assert!(is_checked_import("myproject", "myproject")); // first-party
+        assert!(!is_checked_import("pytest", "myproject")); // test framework
+        assert!(!is_checked_import("_pytest", "myproject"));
+        assert!(is_checked_import("subprocess", "myproject")); // effectful stdlib
+        assert!(is_checked_import("socket", "myproject"));
+        assert!(!is_checked_import("json", "myproject")); // pure stdlib
+        assert!(!is_checked_import("dataclasses", "myproject"));
+        assert!(is_checked_import("requests", "myproject")); // third-party
+        assert!(is_checked_import("stripe", "myproject"));
+        // dual-nature stdlib heads stay pure (not flagged) — caught by patching, not import
+        assert!(!is_checked_import("os", "myproject"));
+        assert!(!is_checked_import("pathlib", "myproject"));
+        assert!(!is_checked_import("datetime", "myproject"));
+    }
+
+    #[test]
+    fn visitor_flags_external_collaborators() {
+        // Third-party + effectful stdlib are flagged; pure stdlib and the framework aren't.
+        let found = unmocked(
+            "widget",
+            "myproject",
+            "import requests\nimport subprocess\nimport json\nimport pytest\n",
+        );
+        assert_eq!(found.len(), 2, "got: {found:?}");
+        assert!(found.contains(&"requests".to_string()));
+        assert!(found.contains(&"subprocess".to_string()));
     }
 
     #[test]

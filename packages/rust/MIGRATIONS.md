@@ -257,7 +257,6 @@ randomness / database / low-level OS), classifying import heads against an embed
 `pathlib`, `datetime`, `time`, `io`) are not flagged. Behavior-only —
 `find_unit_isolation_violations` reports the extra findings; no signature or rule-id
 change, so the #102 waiver still applies.
->>>>>>> db034a8 (test(rust): red — Python unit isolation external deps (#121))
 
 ### Required changes
 

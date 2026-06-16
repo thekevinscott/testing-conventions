@@ -25,10 +25,10 @@ end to end.
   - `rust-red/` — the same shape but its unit test performs real filesystem I/O
     (`std::fs`), an out-of-module effectful-`std` call, so `unit isolation` exits
     non-zero. (The fail path drives the published command directly, since a failing
-    `uses:` call would fail the whole run.) Rust + TypeScript isolation ship in the
-    released binary; Python isolation landed after the latest release, so the
-    Python isolation run in the `clean` job above goes green only once a release
-    ships it.
+    `uses:` call would fail the whole run.) The workflow's isolation job covers
+    TypeScript + Rust today; Python isolation is merged but unreleased, so it's
+    deferred to [#146](https://github.com/thekevinscott/testing-conventions/issues/146)
+    until a release ships it.
 
 `clean/` and `below-floor/` each carry their own `testing-conventions.toml` with
 the `[python].coverage` floor for that run. The self-test drives the *published*

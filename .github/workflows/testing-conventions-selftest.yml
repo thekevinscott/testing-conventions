@@ -30,11 +30,10 @@ name: Testing Conventions (self-test)
 #   packaging-red    drives the published `packaging` command on a committed wheel
 #                    that ships a `*_test.py` and asserts a non-zero exit.
 #
-# unit isolation (#125) — wired for Python, TypeScript, and Rust. The published
-# binary (what `npx` pulls) ships Rust + TypeScript isolation today; Python landed
-# after the latest npm release, so the Python self-test path (the existing `clean`
-# job, which carries `.py`) goes green only once a release ships it. The workflow is
-# the forward-looking @v0 contract, so it wires all three regardless.
+# unit isolation (#125) — wired for TypeScript and Rust, the languages the published
+# binary (what `npx` pulls) ships today. Python isolation is merged but unreleased,
+# so it's deferred to #146 until a release ships it (wiring it now would fail every
+# consumer on `npx` latest, which rejects `--language python`).
 #   isolation-wired  asserts the reusable workflow actually invokes `unit isolation`
 #                    — the red→green signal for the wiring itself.
 #   isolation-clean  calls the reusable workflow against a clean Rust crate, proving

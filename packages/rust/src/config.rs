@@ -119,6 +119,12 @@ pub enum Rule {
     ColocatedTest,
     /// The unit-test coverage floor ([`crate::coverage`]).
     Coverage,
+    /// `integration lint` — a test/fixture takes pytest's `monkeypatch` fixture ([`crate::lint`], #49).
+    NoMonkeypatch,
+    /// `integration lint` — a `patch(...)` called inline in a Python test body ([`crate::lint`], #50).
+    NoInlinePatch,
+    /// `integration lint` — direct mutation of `os.environ` in a Python test ([`crate::lint`], #51).
+    NoEnvironMutation,
     /// The `no-constant-patch` lint ([`crate::lint`], issue #52).
     NoConstantPatch,
     /// `integration lint` — patching a first-party target in a Python integration test ([`crate::lint`], #42).
@@ -144,6 +150,9 @@ impl Rule {
         match self {
             Rule::ColocatedTest => "colocated-test",
             Rule::Coverage => "coverage",
+            Rule::NoMonkeypatch => "no-monkeypatch",
+            Rule::NoInlinePatch => "no-inline-patch",
+            Rule::NoEnvironMutation => "no-environ-mutation",
             Rule::NoConstantPatch => "no-constant-patch",
             Rule::NoFirstPartyPatch => "no-first-party-patch",
             Rule::NoOutOfModuleCall => "no-out-of-module-call",
@@ -160,6 +169,9 @@ impl Rule {
         [
             Rule::ColocatedTest,
             Rule::Coverage,
+            Rule::NoMonkeypatch,
+            Rule::NoInlinePatch,
+            Rule::NoEnvironMutation,
             Rule::NoConstantPatch,
             Rule::NoFirstPartyPatch,
             Rule::NoOutOfModuleCall,

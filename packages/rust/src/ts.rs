@@ -180,6 +180,7 @@ fn unit_violations_in(file: &Path, source: &str) -> Result<Vec<Violation>> {
         source,
         imports: Vec::new(),
         mocked: BTreeSet::new(),
+        untyped: Vec::new(),
     };
     collector.visit_program(&ret.program);
 
@@ -202,15 +203,29 @@ fn unit_violations_in(file: &Path, source: &str) -> Result<Vec<Violation>> {
             ),
         });
     }
+    for (spec, line) in &collector.untyped {
+        violations.push(Violation {
+            file: file.to_path_buf(),
+            line: *line,
+            rule: "untyped-mock",
+            message: format!(
+                "`vi.mock('{spec}', …)` has an untyped factory — anchor it to the real module \
+                 with `vi.importActual<typeof import('{spec}')>()` so the double can't drift \
+                 from the source"
+            ),
+        });
+    }
+    violations.sort_by_key(|v| v.line);
     Ok(violations)
 }
 
-/// Collects a unit test's runtime imports (specifier + line) and its `vi.mock()`
-/// targets in one AST pass.
+/// Collects a unit test's runtime imports (specifier + line), its `vi.mock()`
+/// targets, and any `vi.mock()` with an untyped factory in one AST pass.
 struct UnitCollector<'s> {
     source: &'s str,
     imports: Vec<(String, usize)>,
     mocked: BTreeSet<String>,
+    untyped: Vec<(String, usize)>,
 }
 
 impl<'a> Visit<'a> for UnitCollector<'_> {
@@ -227,6 +242,15 @@ impl<'a> Visit<'a> for UnitCollector<'_> {
 
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
         if let Some(spec) = vi_mock_target(call) {
+            // A factory (2nd arg) that doesn't anchor to the real module's type via
+            // `vi.importActual<…>()` lets the double drift from the source (#77). A
+            // bare `vi.mock(spec)` is an auto-mock — typed from the real module.
+            if let Some(factory) = call.arguments.get(1) {
+                if !factory_is_typed(factory) {
+                    self.untyped
+                        .push((spec.clone(), line_of(self.source, call.span.start)));
+                }
+            }
             self.mocked.insert(spec);
         }
         walk::walk_call_expression(self, call);
@@ -263,6 +287,39 @@ fn strip_module_ext(spec: &str) -> &str {
 /// the harness, never a collaborator to mock.
 fn is_test_runner(spec: &str) -> bool {
     spec == "vitest" || spec.starts_with("vitest/") || spec.starts_with("@vitest/")
+}
+
+/// `true` when a `vi.mock` factory anchors to the real module's type — i.e. its
+/// body contains a `vi.importActual<…>()` call carrying a type argument (#77).
+/// The conventional form is `vi.importActual<typeof import('<spec>')>()`.
+fn factory_is_typed(factory: &Argument) -> bool {
+    let mut finder = ImportActualFinder { typed: false };
+    finder.visit_argument(factory);
+    finder.typed
+}
+
+/// Walks a `vi.mock` factory looking for a typed `vi.importActual<…>()` call.
+struct ImportActualFinder {
+    typed: bool,
+}
+
+impl<'a> Visit<'a> for ImportActualFinder {
+    fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
+        if is_typed_import_actual(call) {
+            self.typed = true;
+        }
+        walk::walk_call_expression(self, call);
+    }
+}
+
+/// `true` for `vi.importActual<…>(…)` — a call to `vi.importActual` that carries a
+/// type argument (an untyped `vi.importActual(…)` returns `unknown`).
+fn is_typed_import_actual(call: &CallExpression) -> bool {
+    let Expression::StaticMemberExpression(member) = &call.callee else {
+        return false;
+    };
+    let is_vi = matches!(&member.object, Expression::Identifier(id) if id.name == "vi");
+    is_vi && member.property.name.as_str() == "importActual" && call.type_arguments.is_some()
 }
 
 /// Parse one TypeScript test file and collect its `no-first-party-mock`
@@ -478,6 +535,47 @@ mod tests {
         assert!(is_test_runner("@vitest/spy"));
         assert!(!is_test_runner("./vitest-helpers"));
         assert!(!is_test_runner("lodash"));
+    }
+
+    #[test]
+    fn unit_flags_untyped_factory_mock() {
+        let found = unit_violations(
+            "widget.test.ts",
+            "import { x } from './x';\nvi.mock('./x', () => ({ x: vi.fn() }));\n",
+        );
+        // Mocked, so not an `unmocked-collaborator`; but the factory has no
+        // `vi.importActual<…>` anchor.
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert_eq!(found[0].rule, "untyped-mock");
+        assert!(found[0].message.contains("./x"));
+    }
+
+    #[test]
+    fn unit_typed_factory_mock_is_clean() {
+        let found = unit_violations(
+            "widget.test.ts",
+            "import { x } from './x';\n\
+             vi.mock('./x', async () => {\n\
+             \x20 const actual = await vi.importActual<typeof import('./x')>('./x');\n\
+             \x20 return { ...actual, x: vi.fn() };\n\
+             });\n",
+        );
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    #[test]
+    fn unit_untyped_import_actual_is_still_untyped() {
+        // `vi.importActual` without a type argument returns `unknown` — not a type anchor.
+        let found = unit_violations(
+            "widget.test.ts",
+            "import { x } from './x';\n\
+             vi.mock('./x', async () => {\n\
+             \x20 const actual = await vi.importActual('./x');\n\
+             \x20 return { ...(actual as object), x: vi.fn() };\n\
+             });\n",
+        );
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert_eq!(found[0].rule, "untyped-mock");
     }
 
     #[test]

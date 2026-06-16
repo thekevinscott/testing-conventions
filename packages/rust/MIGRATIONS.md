@@ -132,6 +132,12 @@ imports, and the test runner (`vitest`). Additive — adds a `TypeScript` varian
 `isolation::Language` and the `testing_conventions::ts::find_unit_violations`
 function; the Rust `unit isolation` behavior from #44 is unchanged.
 
+Finally, `unit isolation --language typescript` also enforces **typed** mocks
+(#43, #77): a `vi.mock(spec, factory)` whose factory carries no `vi.importActual<…>()`
+type anchor is flagged `untyped-mock` (a bare `vi.mock(spec)` auto-mock and a typed
+factory both pass). Behavior-only — `find_unit_violations` now reports the extra
+rule; no signature changes. This completes #43's TypeScript isolation (#75/#76/#77).
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -260,10 +266,12 @@ Expected: the TypeScript lint's integration + e2e tests pass — the clean fixtu
 cd packages/rust && cargo test --test unit_isolation --test unit_isolation_e2e
 ```
 
-Expected: the TypeScript unit-isolation tests pass — the clean fixture (every
-collaborator `vi.mock()`-ed) reports no violations and exits `0`, and the red fixture
-(an un-mocked first-party `./formatter` and external `lodash`, with the unit under
-test and a mocked collaborator left alone) is flagged and exits `1`.
+Expected: the TypeScript unit-isolation tests pass — both rules. For
+`unmocked-collaborator`, the clean fixture (every collaborator `vi.mock()`-ed) exits
+`0` and the red fixture (an un-mocked `./formatter` and `lodash`) is flagged. For
+`untyped-mock` (#77), the `untyped_mock` red fixture (a `vi.mock` factory with no
+`vi.importActual<…>` anchor) is flagged while its clean fixture (a typed factory and a
+bare auto-mock) exits `0`.
 
 ```
 cd packages/rust && cargo test --test coverage_e2e --test coverage_ts_e2e

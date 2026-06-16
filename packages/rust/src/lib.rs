@@ -2,6 +2,7 @@ pub mod colocated_test;
 pub mod config;
 pub mod coverage;
 pub mod lint;
+pub mod packaging;
 
 use std::path::{Path, PathBuf};
 
@@ -32,6 +33,14 @@ enum Command {
     Integration {
         #[command(subcommand)]
         rule: IntegrationRule,
+    },
+    /// Packaging conventions: test files must not ship in the built artifact.
+    Packaging {
+        /// Root of the built artifact to inspect (e.g. an unpacked wheel or `dist/`).
+        path: PathBuf,
+        /// Language convention to enforce (required).
+        #[arg(long, value_enum)]
+        language: colocated_test::Language,
     },
 }
 
@@ -114,6 +123,7 @@ where
                 config,
             } => run_integration_lint(&path, language, &config),
         },
+        Some(Command::Packaging { path, language }) => run_packaging(&path, language),
     }
 }
 
@@ -288,6 +298,33 @@ fn is_waived(
             .ok()
             .map(|rel| rel.to_string_lossy().replace('\\', "/"))
             .is_some_and(|rel| waived.contains(&rel))
+}
+
+/// Run the packaging check: scan the built artifact at `root` for test files
+/// that must not ship (README "Packaging"), per `language`'s test-file globs.
+///
+/// `root` is the already-unpacked artifact (e.g. an unpacked wheel, or a `dist/`
+/// tree); the per-language slices (#72/#73/#74) prepend the build step that
+/// produces it. Returns `0` when no test file is present, `1` otherwise (after
+/// printing each offending path).
+fn run_packaging(root: &Path, language: colocated_test::Language) -> anyhow::Result<i32> {
+    let globs = match language {
+        colocated_test::Language::Python => vec!["*_test.py".to_string()],
+        colocated_test::Language::TypeScript => vec!["*.test.*".to_string()],
+    };
+    let offenders = packaging::scan(root, &globs)?;
+    if offenders.is_empty() {
+        return Ok(0);
+    }
+    for offender in &offenders {
+        eprintln!("test file in built artifact: {}", offender.display());
+    }
+    eprintln!(
+        "error: {} test file(s) present in the built artifact \
+         (they must be excluded from packaging)",
+        offenders.len()
+    );
+    Ok(1)
 }
 
 #[cfg(test)]

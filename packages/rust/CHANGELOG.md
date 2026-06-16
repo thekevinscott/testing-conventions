@@ -65,6 +65,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`patch("pkg.config.CACHE_DIR", …)`), waivable per file via a `--config` `exempt`
   entry (`rules = ["no-constant-patch"]`, reusing #32). Library API:
   `testing_conventions::lint::{find_violations, Violation}`. (#48, #49, #50, #51, #52)
+- `packaging` module + `packaging` CLI command (foundation) — enforce the README's
+  Packaging rule that test files never ship in the built artifact.
+  `packaging --language <python|typescript> <PATH>` scans the built artifact at
+  `<PATH>` (an already-unpacked wheel or `dist/`) for that language's test-file
+  glob — Python `*_test.py`, TypeScript `*.test.*` — and exits non-zero, printing
+  each offending path, when any are present. Library API:
+  `packaging::scan(root, globs)`, the deterministic walker returning the matching
+  files (sorted, `*` wildcards). The per-language *build* step that produces the
+  artifact follows in #72 (Python wheel/sdist), #73 (TypeScript `dist`), and #74
+  (Rust crate tarball, which also adds `--language rust`). (#41, #70)
 
 ### Changed
 

@@ -7,6 +7,33 @@ isolated, and measured in a library. One config file drives every rule, and rule
 are enforced deterministically in CI: a violation fails the build. It's primarily
 useful for enforcing agent (LLM) behavior.
 
+<!-- Single source of truth for the rule list: docs/index.md pulls the region below via VitePress @include. Keep it in sync with the #3 checklist. -->
+<!-- #region rules -->
+## Rules at a glance
+
+Every rule is a CLI command that fails CI on a violation, and links to its reference entry. Where a rule isn't shipped for all three languages yet, that's noted inline.
+
+**Unit**
+
+- [`unit colocated-test`](https://thekevinscott.github.io/testing-conventions/reference/#unit-colocated-test) — every source file has a colocated, matching-named unit test (Python, TypeScript, Rust).
+- [`unit coverage`](https://thekevinscott.github.io/testing-conventions/reference/#unit-coverage) — enforce a coverage floor on the unit suite (Python, TypeScript; Rust in flight, [#37](https://github.com/thekevinscott/testing-conventions/issues/37)).
+- [`unit patch-coverage`](https://thekevinscott.github.io/testing-conventions/reference/#unit-patch-coverage) — require every line a change touches to be covered by the unit suite (Python, TypeScript; Rust planned, [#136](https://github.com/thekevinscott/testing-conventions/issues/136)).
+- [`unit isolation`](https://thekevinscott.github.io/testing-conventions/reference/#unit-isolation) — a unit test mocks every collaborator: no out-of-module calls or imports (Rust); no un-mocked first-party or external collaborators (Python, TypeScript); typed mocks (TypeScript).
+- [`unit co-change`](https://thekevinscott.github.io/testing-conventions/reference/#unit-co-change) — a changed source file requires its colocated test to change in the same range (Python, TypeScript; [#33](https://github.com/thekevinscott/testing-conventions/issues/33)).
+
+**Integration**
+
+- [`integration lint`](https://thekevinscott.github.io/testing-conventions/reference/#integration-lint) — integration tests run first-party code for real: no first-party mock, double, or patch (Python, TypeScript, Rust); plus Python mock-mechanism hygiene (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`).
+
+**Packaging**
+
+- [`packaging`](https://thekevinscott.github.io/testing-conventions/reference/#packaging) — test files never ship in the built artifact (wheel, sdist, npm tarball, crate).
+
+**E2E**
+
+- [`e2e attest`](https://thekevinscott.github.io/testing-conventions/reference/#e2e-attest) / [`e2e verify`](https://thekevinscott.github.io/testing-conventions/reference/#e2e-verify) — `attest` runs the e2e suite locally and records the commit it ran against; `verify` checks that receipt in CI and never runs e2e.
+<!-- #endregion rules -->
+
 ## The three kinds of tests
 
 Tests assert the behavior of code. This standard recognizes three kinds:

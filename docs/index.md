@@ -21,3 +21,5 @@ features:
   - title: One standard, three languages
     details: A single config drives Python, TypeScript, and Rust. Every rule is enforced deterministically in CI.
 ---
+
+<!--@include: ../README.md#rules-->

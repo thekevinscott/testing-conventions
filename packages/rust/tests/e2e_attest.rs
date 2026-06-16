@@ -127,3 +127,20 @@ fn attest_records_a_failing_run_and_still_commits() {
         "a failing run is still committed (force-run, not force-pass)"
     );
 }
+
+#[test]
+fn attest_errors_outside_a_git_repo() {
+    // No git repo → no HEAD to attest against → a clear error, not a panic.
+    let dir = std::env::temp_dir().join(format!(
+        "tc-e2e-attest-nogit-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let result = attest(&dir, "true");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(result.is_err(), "attest outside a git repo should error");
+}

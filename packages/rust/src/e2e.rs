@@ -5,12 +5,13 @@
 //! code commit is attested. The point is to *nudge* agents to run e2e locally —
 //! CI never runs e2e, it only checks the committed attestation.
 //!
-//! This is the stub surface for the red tests (#67): it compiles so the
-//! integration + e2e tests run (and fail) against it; the behavior lands next.
+//! This slice (#67) implements `attest`; `verify` is a later slice (#68).
 
 use std::path::Path;
+use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// Where the committed attestation lives, relative to the repo root.
@@ -39,6 +40,81 @@ pub struct Attestation {
 /// Writes regardless of the command's exit code — this forces a *run*, not a
 /// *pass*.
 pub fn attest(repo: &Path, command: &str) -> Result<Attestation> {
-    let _ = (repo, command);
-    bail!("e2e attest is not implemented yet (#67)")
+    let commit = git_capture(repo, &["rev-parse", "HEAD"])
+        .context("resolving HEAD — `e2e attest` must run inside a git repo with a commit")?;
+
+    // Run the e2e command via the shell, streaming its output through.
+    let status = Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .current_dir(repo)
+        .status()
+        .with_context(|| format!("running e2e command `{command}`"))?;
+    let exit_code = status.code().unwrap_or(-1);
+
+    let ran_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let attestation = Attestation {
+        command: command.to_string(),
+        ran_at,
+        exit_code,
+        commit: commit.clone(),
+    };
+
+    // Write the attestation, then commit just that file on top — it names the
+    // code commit it was run against (a commit can't name its own SHA).
+    let path = repo.join(ATTESTATION_PATH);
+    let json = serde_json::to_string_pretty(&attestation).context("serializing the attestation")?;
+    std::fs::write(&path, format!("{json}\n"))
+        .with_context(|| format!("writing {}", path.display()))?;
+
+    git_run(repo, &["add", ATTESTATION_PATH])?;
+    let short = &commit[..commit.len().min(7)];
+    let message = format!("e2e attestation for {short}");
+    git_run(
+        repo,
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "-m",
+            message.as_str(),
+        ],
+    )?;
+
+    Ok(attestation)
+}
+
+/// Run `git` with `args` in `repo`, returning trimmed stdout; errors if git fails.
+fn git_capture(repo: &Path, args: &[&str]) -> Result<String> {
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .with_context(|| format!("running `git {}`", args.join(" ")))?;
+    if !out.status.success() {
+        bail!(
+            "`git {}` failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8(out.stdout)?.trim().to_string())
+}
+
+/// Run `git` with `args` in `repo` for its side effect; errors if git fails.
+fn git_run(repo: &Path, args: &[&str]) -> Result<()> {
+    let status = Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .status()
+        .with_context(|| format!("running `git {}`", args.join(" ")))?;
+    if !status.success() {
+        bail!("`git {}` failed", args.join(" "));
+    }
+    Ok(())
 }

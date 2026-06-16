@@ -180,7 +180,7 @@ testing-conventions integration lint --language <LANG> [--config <CONFIG>] <PATH
 | Argument / flag     | Description                                                        |
 | ------------------- | ----------------------------------------------------------------- |
 | `<PATH>`            | Directory to scan recursively for test files.                     |
-| `--language <LANG>` | **Required.** `python` or `typescript`. Omitting it is a usage error. |
+| `--language <LANG>` | **Required.** `python`, `typescript`, or `rust`. Omitting it is a usage error. |
 | `--config <CONFIG>` | Config file supplying the `exempt` list (waivers). Optional (default `testing-conventions.toml`); if absent, nothing is waived. |
 
 Reports each violation to stderr as `path:line: <lint> — <message>` and exits `1` if any are
@@ -211,6 +211,15 @@ walks the AST:
   first-party code for real, so only third-party packages (`stripe`) and Node built-ins
   (`node:fs`, `child_process`) may be mocked. A non-literal target (`vi.mock(name)`) can't be
   classified deterministically and is left alone. See the [Isolation guide](../guide/isolation).
+
+**Rust** — parses each `*.rs` file in a `tests/` directory (the integration crates) with `syn`:
+
+- **`no-first-party-double`** — a `#[double]` (mockall_double) import of a **first-party** item:
+  the crate under test (its `Cargo.toml` `[package].name`) or a `path` dependency. An
+  integration test runs first-party code for real, so only external crates and `std` may be
+  doubled. `crate::` here is the integration-test crate itself (not the library under test), so
+  it isn't flagged. This is the integration mirror of [`unit isolation`](#unit-isolation)'s
+  out-of-module rules; full precision (renames, `mock!` macros) is a future `dylint` pass.
 
 ### `check`
 

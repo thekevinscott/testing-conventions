@@ -37,6 +37,8 @@ pub use crate::violation::Violation;
 const RULE_CALL: &str = "no-out-of-module-call";
 /// Rule id reported for an out-of-module `use` import (D2).
 const RULE_IMPORT: &str = "no-out-of-module-import";
+/// Rule id reported for doubling a first-party item in an integration test.
+const RULE_DOUBLE: &str = "no-first-party-double";
 
 /// A language whose unit-isolation convention can be checked (Python #42 is a
 /// separate detector). Each detector lives in its own module; this enum is the
@@ -91,25 +93,113 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
 /// import of a first-party item. An integration test runs first-party code for
 /// real, so doubling it is the error; doubling an external crate is fine. `root`
 /// is the crate root; its `Cargo.toml` names the first-party crates.
-///
-/// Skeleton: this commit wires the `tests/` walk + parse and reports nothing; the
-/// detector lands in the green step.
 pub fn find_integration_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     let root = root.as_ref();
+    let first_party = first_party_crates(root)?;
+
     let mut files = Vec::new();
     collect_rust_files(root, &mut files)?;
     files.retain(|file| is_integration_test(root, file));
     files.sort();
 
-    let mut violations: Vec<Violation> = Vec::new();
+    let mut violations = Vec::new();
     for file in &files {
         let source = std::fs::read_to_string(file)
             .with_context(|| format!("reading source file `{}`", file.display()))?;
-        syn::parse_file(&source).map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
+        let ast = syn::parse_file(&source)
+            .map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
+        let mut visitor = DoubleVisitor {
+            file,
+            first_party: &first_party,
+            violations: Vec::new(),
+        };
+        visitor.visit_file(&ast);
+        violations.append(&mut visitor.violations);
     }
 
     violations.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
     Ok(violations)
+}
+
+/// Walks one parsed integration-test file, flagging a `#[double]` import whose
+/// path names a first-party crate.
+struct DoubleVisitor<'a> {
+    file: &'a Path,
+    first_party: &'a BTreeSet<String>,
+    violations: Vec<Violation>,
+}
+
+impl<'ast> Visit<'ast> for DoubleVisitor<'_> {
+    fn visit_item_use(&mut self, node: &'ast syn::ItemUse) {
+        if has_double_attr(&node.attrs) {
+            let mut imports = Vec::new();
+            flatten_use(&node.tree, &mut Vec::new(), &mut imports);
+            // One finding per `#[double] use`: flag if any leaf is first-party.
+            if let Some((segs, is_glob)) = imports.iter().find(|(segs, _)| {
+                segs.first()
+                    .is_some_and(|root| self.first_party.contains(root))
+            }) {
+                self.violations.push(Violation {
+                    file: self.file.to_path_buf(),
+                    line: node.span().start().line,
+                    rule: RULE_DOUBLE,
+                    message: format!(
+                        "integration test doubles first-party `{}` with `#[double]`; \
+                         run first-party code for real — only external crates may be doubled",
+                        render_use(segs, *is_glob),
+                    ),
+                });
+            }
+        }
+        visit::visit_item_use(self, node);
+    }
+}
+
+/// `true` when `attrs` carries a `#[double]` (or `#[mockall_double::double]`)
+/// attribute — `mockall_double` swapping a real item for its mock.
+fn has_double_attr(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path()
+            .segments
+            .last()
+            .is_some_and(|seg| seg.ident == "double")
+    })
+}
+
+/// The crate's first-party crates: its own `[package].name` plus every `path`
+/// dependency (your own crates, run for real), hyphens normalized to underscores.
+/// In a `tests/` integration crate the library under test is referenced by its
+/// crate name (not `crate::`, which is the test crate itself). Registry deps —
+/// including `mockall` / `mockall_double` — are external and absent here. Empty
+/// when there is no `Cargo.toml` at `root`.
+fn first_party_crates(root: &Path) -> Result<BTreeSet<String>> {
+    let manifest = root.join("Cargo.toml");
+    let mut set = BTreeSet::new();
+    if !manifest.is_file() {
+        return Ok(set);
+    }
+    let text = std::fs::read_to_string(&manifest)
+        .with_context(|| format!("reading `{}`", manifest.display()))?;
+    let value: toml::Value =
+        toml::from_str(&text).with_context(|| format!("parsing `{}`", manifest.display()))?;
+
+    if let Some(name) = value
+        .get("package")
+        .and_then(|package| package.get("name"))
+        .and_then(toml::Value::as_str)
+    {
+        set.insert(name.replace('-', "_"));
+    }
+    for table_name in ["dependencies", "dev-dependencies"] {
+        if let Some(table) = value.get(table_name).and_then(toml::Value::as_table) {
+            for (name, spec) in table {
+                if spec.as_table().is_some_and(|t| t.contains_key("path")) {
+                    set.insert(name.replace('-', "_"));
+                }
+            }
+        }
+    }
+    Ok(set)
 }
 
 /// `true` when `file` (under `root`) is a Rust integration test — a `*.rs` file
@@ -581,5 +671,55 @@ mod tests {
     fn imports_outside_test_modules_are_ignored() {
         let src = "use crate::other::*; fn run() {}";
         assert!(violations_in(src, &[]).is_empty());
+    }
+
+    /// Run the `#[double]` detector over an integration-test snippet.
+    fn integration_violations_in(src: &str, first_party: &[&str]) -> Vec<Violation> {
+        let ast = syn::parse_file(src).expect("snippet parses");
+        let set: BTreeSet<String> = first_party.iter().map(|s| (*s).to_string()).collect();
+        let mut visitor = DoubleVisitor {
+            file: Path::new("integration.rs"),
+            first_party: &set,
+            violations: Vec::new(),
+        };
+        visitor.visit_file(&ast);
+        visitor.violations
+    }
+
+    #[test]
+    fn flags_double_of_first_party_only() {
+        let src = "\
+use mockall_double::double;
+#[double]
+use widget::Renderer;
+#[double]
+use rand::rngs::ThreadRng;
+#[double]
+use crate::support::Helper;
+";
+        // Only the first-party `widget` double is flagged; `rand` (external) and
+        // `crate::` (the test crate itself, not the library under test) are not.
+        let violations = integration_violations_in(src, &["widget"]);
+        assert_eq!(violations.len(), 1, "got {violations:?}");
+        assert_eq!(violations[0].rule, RULE_DOUBLE);
+    }
+
+    #[test]
+    fn ignores_use_without_double() {
+        let src = "use widget::Renderer; fn t() {}";
+        assert!(integration_violations_in(src, &["widget"]).is_empty());
+    }
+
+    #[test]
+    fn recognizes_double_attribute() {
+        let item = |s: &str| syn::parse_str::<syn::ItemUse>(s).expect("use parses");
+        assert!(has_double_attr(&item("#[double] use a::B;").attrs));
+        assert!(has_double_attr(
+            &item("#[mockall_double::double] use a::B;").attrs
+        ));
+        assert!(!has_double_attr(
+            &item("#[allow(unused_imports)] use a::B;").attrs
+        ));
+        assert!(!has_double_attr(&item("use a::B;").attrs));
     }
 }

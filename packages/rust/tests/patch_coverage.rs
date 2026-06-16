@@ -197,11 +197,41 @@ fn python_covered_change_is_clean() {
     return "neg"
 "#,
     );
-    repo.commit("reword a covered line");
+    repo.write(
+        "widget_test.py",
+        r#"from widget import widget
+
+
+def test_widget():
+    assert widget(1) == "positive"
+    assert widget(-1) == "neg"
+"#,
+    );
+    repo.commit("reword a covered line and update its test");
 
     assert!(
         uncovered(&repo, &base).is_empty(),
         "a change to a covered line is clean"
+    );
+}
+
+#[test]
+fn a_change_touching_no_python_is_clean() {
+    // A diff with no `.py` source returns clean immediately — there's no changed
+    // line to measure, so the suite isn't even run.
+    let repo = TempRepo::new("no-py");
+    repo.write("widget.py", WIDGET_PY);
+    repo.write("widget_test.py", WIDGET_TEST_PY);
+    repo.write("README.md", "# project\n");
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("README.md", "# project\n\nnow with docs\n");
+    repo.commit("docs only");
+
+    assert!(
+        uncovered(&repo, &base).is_empty(),
+        "a change that touches no Python source is clean"
     );
 }
 
@@ -296,7 +326,17 @@ fn python_subcommand_exits_zero_when_the_change_is_covered() {
     return "neg"
 "#,
     );
-    repo.commit("reword a covered line");
+    repo.write(
+        "widget_test.py",
+        r#"from widget import widget
+
+
+def test_widget():
+    assert widget(1) == "positive"
+    assert widget(-1) == "neg"
+"#,
+    );
+    repo.commit("reword a covered line and update its test");
 
     assert_eq!(run_patch_coverage(&repo, "python", &base, None).unwrap(), 0);
 }

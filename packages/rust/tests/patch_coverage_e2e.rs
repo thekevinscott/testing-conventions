@@ -155,7 +155,17 @@ fn covered_change_exits_zero() {
     return "neg"
 "#,
     );
-    repo.commit("reword a covered line");
+    repo.write(
+        "widget_test.py",
+        r#"from widget import widget
+
+
+def test_widget():
+    assert widget(1) == "positive"
+    assert widget(-1) == "neg"
+"#,
+    );
+    repo.commit("reword a covered line and update its test");
 
     let (code, stderr) = patch_coverage(&repo, "python", &base, None);
     assert_eq!(code, 0, "a fully covered change passes; stderr: {stderr}");

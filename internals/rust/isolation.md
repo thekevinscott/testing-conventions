@@ -17,7 +17,7 @@ deterministic for Rust.
 | **Unit** | An inline `#[cfg(test)] mod tests` exercises only the unit under test — its parent module, reached via `super`. Collaborators are injected as trait doubles (hand-rolled or `mockall`); the compiler checks the double. | A call *out of the test's own module* — into another first-party module, an external crate, or effectful `std`. A glob import of anything but `super`. |
 | **Integration** | A `tests/` integration crate runs first-party code for real; only external crates / effectful `std` may be doubled. | Doubling a **first-party** item (e.g. `#[double]` on a `use crate::…` import). |
 
-Both honor an inline `waiver:` escape hatch (see [Waiver](#waiver)).
+Both are blocking gates; per-file waiving is config-driven via the `exempt` list (#32) — see [Waiver](#waiver).
 
 ## Approach: `syn` heuristic now, `dylint` later
 
@@ -40,10 +40,11 @@ name-resolution precision").
 - **#40 (Rust location, Phase 2)** introduces the first `syn` parse and a
   `Language::Rust`. This rule **reuses that foundation**; if #40 hasn't landed when
   the first slice here starts, slice 1 below bootstraps it (and #40 consumes it).
-- **Inline `waiver:` mechanism** (the per-finding marker, distinct from #32's
-  whole-file `exempt` list) is **not built yet** — #42 / #43 / #52 all wait on the
-  same primitive. Build it **once, cross-rule**; the waiver slice here is a consumer,
-  not the owner.
+- **Waiving** these rules is **config-driven** — the existing reason-required
+  `exempt` list (#32), the same machinery `colocated-test` / `coverage` /
+  `no-constant-patch` already use. Wiring it to `unit isolation` / `integration lint`
+  is tracked in [#102](https://github.com/thekevinscott/testing-conventions/issues/102),
+  separate from these detection slices.
 
 ## Unit detection
 
@@ -135,17 +136,17 @@ allowlist.
 
 ## Waiver
 
-Per-finding inline marker, **owned by a shared cross-rule slice** (not this rule):
+Waiving is **config-driven**, not inline: a file is lifted from a named rule via the
+existing reason-required `exempt` list (#32) — the same single-file-auditable
+mechanism `colocated-test` / `coverage` / `no-constant-patch` already use. There is
+**no** inline `// waiver:` comment marker; an in-code escape hatch is exactly the
+scattered, hard-to-audit omit-list the `exempt` list exists to replace.
 
-- Form: `// waiver: <reason>` on, or on the line above, the flagged construct.
-- A non-empty `<reason>` is required (empty reason ⇒ hard error, mirroring #32's
-  exempt `reason`).
-- Machine-read + auditable (one grep), never a prose omit-list.
-- `syn` keeps spans (via `proc-macro2` `span-locations`); map the source's comment
-  lines to finding lines to suppress.
-
-Until that primitive lands, the bright-line slices (D1/D2) ship **without** waiver
-support, exactly as #49/#50/#51 shipped before waivers — the marker is additive.
+Wiring the `exempt` list to `unit isolation` / `integration lint` (so these rules
+become waivable per-file) is tracked in
+[#102](https://github.com/thekevinscott/testing-conventions/issues/102) and is out of
+scope for this detection design — the bright-line slices (D1/D2) ship as blocking
+gates, exactly as #49/#50/#51 did.
 
 ## Surface & module shape
 
@@ -201,7 +202,6 @@ Each is its own test-first increment with CHANGELOG + MIGRATIONS + a VitePress d
 2. **Unit D1** — out-of-module path calls (`crate::`, effectful `std`, external).
 3. **Unit D2** — foreign imports (glob + specific; `super`-only carve-out).
 4. **Integration** — flag `#[double] use <first-party>`.
-5. **Waiver** — consume the shared inline `waiver:` primitive (gated on it landing).
 
-Order: 1 → 2 → 3 → 4 → 5. Slices 2–4 are independent once 1 lands; 5 waits on the
-shared waiver primitive.
+Order: 1 → 2 → 3 → 4. Slices 2–4 are independent once 1 lands. (Waiving is
+config-driven and tracked separately in #102 — see [Waiver](#waiver).)

@@ -32,6 +32,18 @@ end to end.
   (passes); `red/` mocks a first-party module (`no-first-party-mock`, fails). Both
   are driven directly (a TypeScript `uses:` call would also pull in the vitest
   coverage job).
+- `isolation/` — fixtures for the `unit isolation` job (#125):
+  - `rust-clean/` — a minimal crate whose inline `#[cfg(test)]` unit reaches only
+    `super::`. Driven through the reusable workflow under `["rust"]`, it proves
+    `detect` recognizes a crate (a `Cargo.toml` / `*.rs`) and fans the isolation job
+    over `rust`, then passes the well-isolated unit.
+  - `rust-red/` — the same shape but its unit test performs real filesystem I/O
+    (`std::fs`), an out-of-module effectful-`std` call, so `unit isolation` exits
+    non-zero. (The fail path drives the published command directly, since a failing
+    `uses:` call would fail the whole run.) The workflow's isolation job covers
+    TypeScript + Rust today; Python isolation is merged but unreleased, so it's
+    deferred to [#146](https://github.com/thekevinscott/testing-conventions/issues/146)
+    until a release ships it.
 
 `clean/`, `below-floor/`, and `integration-waiver/` each carry their own
 `testing-conventions.toml` with the `[python].coverage` floor for that run. The

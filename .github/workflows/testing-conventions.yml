@@ -15,9 +15,10 @@ name: Testing Conventions
 # per-platform npm package — no Rust toolchain, no compile from source), once
 # per rule and language as its own matrix job, failing the build on any
 # violation. Today that is the unit-test colocated-test check (every language),
-# the unit-test coverage floor (Python and TypeScript), and the integration-test
-# lint (mocking mechanism & style, Python, TypeScript, and Rust); as more rules
-# land they run here too.
+# the unit-test isolation check (TypeScript and Rust — Python is merged but not yet
+# released, deferred to #146), the unit-test coverage floor (Python and TypeScript),
+# and the integration-test lint (mocking mechanism & style, Python, TypeScript, and
+# Rust); as more rules land they run here too.
 #
 # A `detect` pre-step scans `path` for each requested language's sources, and the
 # rule jobs fan out over the languages that are both requested *and* present
@@ -25,7 +26,11 @@ name: Testing Conventions
 # zero-config default ["python", "typescript"] against a repo with no `.py` — is
 # dropped from the matrix and skipped, not failed: its coverage job would
 # otherwise error on an empty measurement (pytest collects nothing; an empty
-# vitest denominator is a failed run).
+# vitest denominator is a failed run). Both `integration lint` (#126) and `unit
+# isolation` (#125) also cover Rust, so `detect` additionally recognizes a crate
+# (`Cargo.toml` / `*.rs`) and emits separate `integration_lint_languages` /
+# `isolation_languages` sets for those jobs — keeping Rust out of the coverage
+# matrix, which has no Rust toolchain.
 #
 # The Packaging rule (#41) is the exception: it inspects the *built distribution*,
 # not the source tree, so it doesn't ride the source matrix. Build your dists in
@@ -91,10 +96,13 @@ jobs:
       # JSON array of the requested languages with sources under `path` — the matrix
       # the colocated-test and unit-coverage jobs fan out over (python, typescript).
       languages: ${{ steps.scan.outputs.languages }}
-      # The same set, additionally covering rust — the matrix the integration-lint
-      # job fans out over (#126). Kept separate from `languages` so the coverage
-      # matrix is unchanged: `unit coverage` has no rust arm and would error on it.
+      # The same set plus rust — the matrix the integration-lint job fans out over
+      # (#126). Kept separate from `languages` so the coverage matrix is unchanged:
+      # `unit coverage` has no rust arm and would error on it.
       integration_lint_languages: ${{ steps.scan.outputs.integration_lint_languages }}
+      # `unit isolation` (#125): TypeScript + rust, also kept off the coverage matrix.
+      # (Python is merged but unreleased, deferred to #146.)
+      isolation_languages: ${{ steps.scan.outputs.isolation_languages }}
     steps:
       - uses: actions/checkout@v6
       - id: scan
@@ -109,39 +117,52 @@ jobs:
           # and integration-lint pass vacuously on an absent language, but `unit
           # coverage` has nothing to measure and errors (pytest collects nothing; an
           # empty vitest denominator is a failed run) — so a requested-but-absent
-          # language is dropped here and skipped, not failed. Detection covers the
-          # languages the workflow's checks support: python/typescript for
-          # colocated-test & coverage, plus rust for integration-lint (#126).
+          # language is dropped here and skipped, not failed.
+          #
+          # Three sets come out: `languages` (python/typescript) drives colocated-test
+          # and coverage; `integration_lint_languages` (#126) and `isolation_languages`
+          # (#125) add rust for those static checks — so rust never reaches the
+          # coverage matrix, which has no rust toolchain.
           #
           # `set -f` so the shell leaves the *.ext globs for `find` to match itself.
           set -f
+          # Requested? — the language name appears in the JSON `languages` input.
+          requested () {
+            case "$LANGUAGES" in *"\"$1\""*) return 0 ;; *) return 1 ;; esac
+          }
+          # Present? — a file matching the given `find` name-predicates exists.
+          present_under () {
+            [ -n "$(find "$SCAN_PATH" -type f \( "$@" \) -print -quit 2>/dev/null)" ]
+          }
           present=()
-          # $1 = language; $2.. = the find name-predicates for its sources. Adds the
-          # language only when it was requested and a matching source file exists.
-          scan () {
+          scan () {  # $1 = language; $2.. = the find name-predicates for its sources
             local lang="$1"; shift
-            case "$LANGUAGES" in
-              *"\"$lang\""*) ;;   # requested
-              *) return ;;        # not requested — never in the matrix
-            esac
-            if [ -n "$(find "$SCAN_PATH" -type f \( "$@" \) -print -quit 2>/dev/null)" ]; then
+            if requested "$lang" && present_under "$@"; then
               present+=("$lang")
             fi
           }
           # colocated-test + unit-coverage fan out over python/typescript.
           scan python -name '*.py'
           scan typescript -name '*.ts' -o -name '*.tsx' -o -name '*.mts' -o -name '*.cts'
-          # The integration-lint matrix is the same set plus rust (#126), which only
-          # that check supports — a Cargo.toml or any *.rs marks a crate. Built on top
-          # of `present` so rust never enters the coverage matrix.
+          # The integration-lint matrix is `present` plus rust (#126), which only that
+          # check supports — a Cargo.toml or any *.rs marks a crate. Built on `present`
+          # so rust never enters the coverage matrix.
           lint=("${present[@]}")
-          case "$LANGUAGES" in
-            *'"rust"'*)
-              if [ -n "$(find "$SCAN_PATH" -type f \( -name 'Cargo.toml' -o -name '*.rs' \) -print -quit 2>/dev/null)" ]; then
-                lint+=("rust")
-              fi
-              ;;
-          esac
+          rust_crate=0
+          if requested rust && present_under -name 'Cargo.toml' -o -name '*.rs'; then
+            rust_crate=1
+            lint+=("rust")
+          fi
+          # `unit isolation` (#125) runs for TypeScript and Rust — the languages the
+          # published binary ships. Python isolation is merged (#42) but unreleased, so
+          # it's deferred to #146 until a release ships it (wiring it now would fail
+          # `npx` latest, which rejects `--language python`). TypeScript rides the scan
+          # above; rust reuses the crate check.
+          isolation=()
+          for lang in "${present[@]}"; do
+            if [ "$lang" = "typescript" ]; then isolation+=("$lang"); fi
+          done
+          if [ "$rust_crate" -eq 1 ]; then isolation+=("rust"); fi
           # Emit each as a compact JSON array (`[]` when nothing matched).
           to_json () {
             local json='[' first=1 x
@@ -153,11 +174,13 @@ jobs:
           }
           languages_json="$(to_json "${present[@]}")"
           lint_json="$(to_json "${lint[@]}")"
+          isolation_json="$(to_json "${isolation[@]}")"
           {
             echo "languages=$languages_json"
             echo "integration_lint_languages=$lint_json"
+            echo "isolation_languages=$isolation_json"
           } >> "$GITHUB_OUTPUT"
-          echo "requested $LANGUAGES under '$SCAN_PATH' → coverage/colocated $languages_json, integration-lint $lint_json"
+          echo "requested $LANGUAGES under '$SCAN_PATH' → coverage/colocated $languages_json, integration-lint $lint_json, isolation $isolation_json"
 
   colocated-test:
     name: Colocated test (${{ matrix.language }})
@@ -180,6 +203,35 @@ jobs:
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" "$SCAN_PATH"
+
+  unit-isolation:
+    name: Unit-test isolation (${{ matrix.language }})
+    needs: detect
+    # `unit isolation` is a static AST check (no language toolchain), like
+    # colocated-test — a cheap matrix job, not a toolchain-heavy one like coverage.
+    # It enforces the rule for TypeScript (#43/#76/#77) and Rust (#44); Python (#42)
+    # is merged but unreleased, so it's deferred to #146 until a release ships it.
+    # The matrix is `isolation_languages` — the requested-and-present set, which
+    # (unlike `languages`) includes rust — so a requested-but-absent language is
+    # skipped, not failed. #56 (config-driven `check`) will later drive which
+    # rules/languages run here.
+    if: needs.detect.outputs.isolation_languages != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.detect.outputs.isolation_languages) }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check unit isolation
+        # Static check — just the binary via npx, no toolchain. `--config` applies
+        # the #102 `[[<language>.exempt]]` waivers, like the other unit jobs.
+        env:
+          LANGUAGE: ${{ matrix.language }}
+          SCAN_PATH: ${{ inputs.path }}
+          VERSION: ${{ inputs.version }}
+          CONFIG: ${{ inputs.config }}
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit isolation --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   unit-coverage:
     name: Unit-test coverage (${{ matrix.language }})

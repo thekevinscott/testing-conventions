@@ -1,0 +1,11 @@
+# Violating fixture crate for the reusable workflow's `unit isolation` job (#125):
+# its inline unit test performs real filesystem I/O (`std::fs`) — an effectful-`std`
+# call out of the unit's own module (`no-out-of-module-call`). The published binary
+# exits non-zero on it, the build-failing behavior the workflow promises.
+# `[workspace]` isolates it from cargo (the rule parses it, never compiles it).
+[package]
+name = "iso_selftest_red"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

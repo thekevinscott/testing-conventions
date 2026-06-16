@@ -1,4 +1,4 @@
-//! Integration tests for the Rust `unit isolation` rule (#44). Two detectors: D1
+//! Integration tests for the Rust `unit lint` rule (#44). Two detectors: D1
 //! flags a call out of an inline `#[cfg(test)]` module's own module
 //! (`no-out-of-module-call`); D2 flags a foreign `use` import
 //! (`no-out-of-module-import`). Per the #3 guardrail, each ships a red fixture
@@ -17,12 +17,12 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Exit code of `unit isolation --language rust <fixture>`.
+/// Exit code of `unit lint --language rust <fixture>`.
 fn iso_exit(fixture_name: &str) -> i32 {
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),
         "unit".into(),
-        "isolation".into(),
+        "lint".into(),
         "--language".into(),
         "rust".into(),
         fixture(fixture_name).into_os_string(),
@@ -157,8 +157,8 @@ fn imports_clean_exits_zero() {
 #[test]
 fn isolation_requires_language() {
     // Omitting `--language` is a usage error, never a silent run.
-    let err = run(["testing-conventions", "unit", "isolation", "src"])
-        .expect_err("--language is required");
+    let err =
+        run(["testing-conventions", "unit", "lint", "src"]).expect_err("--language is required");
     let clap_err = err
         .downcast_ref::<clap::Error>()
         .expect("a missing required flag should surface as a clap::Error");
@@ -170,12 +170,12 @@ fn isolation_requires_language() {
 
 // ---- waivers: config-driven `exempt` list (#102) -------------------------
 
-/// Exit code of `unit isolation --language rust --config <config> <fixture>`.
+/// Exit code of `unit lint --language rust --config <config> <fixture>`.
 fn iso_exit_config(fixture_name: &str, config_rel: &str) -> i32 {
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),
         "unit".into(),
-        "isolation".into(),
+        "lint".into(),
         "--language".into(),
         "rust".into(),
         "--config".into(),
@@ -200,7 +200,7 @@ fn stale_exempt_entry_errors() {
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),
         "unit".into(),
-        "isolation".into(),
+        "lint".into(),
         "--language".into(),
         "rust".into(),
         "--config".into(),

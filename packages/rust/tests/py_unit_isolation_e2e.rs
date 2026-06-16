@@ -11,10 +11,10 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Exit code of `testing-conventions unit isolation --language python <codebase>`.
+/// Exit code of `testing-conventions unit lint --language python <codebase>`.
 fn isolation_exit(codebase: &str) -> i32 {
     Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
-        .args(["unit", "isolation", "--language", "python"])
+        .args(["unit", "lint", "--language", "python"])
         .arg(fixture(codebase))
         .status()
         .expect("the built binary should run")
@@ -25,7 +25,7 @@ fn isolation_exit(codebase: &str) -> i32 {
 /// Exit code of the built binary with `--config`.
 fn isolation_exit_with_config(codebase: &str, config: &str) -> i32 {
     Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
-        .args(["unit", "isolation", "--language", "python", "--config"])
+        .args(["unit", "lint", "--language", "python", "--config"])
         .arg(fixture(config))
         .arg(fixture(codebase))
         .status()

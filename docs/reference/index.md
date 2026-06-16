@@ -162,7 +162,7 @@ reason = "thin launcher; logic in run(), tested in run_test.py"  # required
 | Field | Meaning |
 | ----- | ------- |
 | `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists — a stale entry is a hard error, so the list can't silently rot. |
-| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, the mocking lint `no-constant-patch`, or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
+| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, a mocking lint (`no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
 | `reason` | Why the omission is deliberate. **Required** — an empty reason is rejected on load. |
 
 Because every exemption lives in the one config file, names its rules, and carries a reason,
@@ -204,6 +204,14 @@ parser and walks the AST:
   `patch("pkg.config.CACHE_DIR", …)`. Inject the config explicitly instead. **Waivable**
   per file: add a `[[python.exempt]]` entry with `rules = ["no-constant-patch"]` (and a
   reason) and pass it via `--config`; a waived file is silent.
+- **`no-first-party-patch`** — a `patch(...)` whose string target is **first-party**, e.g.
+  `patch("ourpkg.mod.fn")`. An integration test runs first-party code for real, so only
+  third-party packages (`requests.get`) and effectful stdlib (`subprocess.run`,
+  `builtins.open`) may be patched. The dist's own top-level package is read from the nearest
+  `pyproject.toml` `[project].name` (normalized to an import name); a tree with no declared
+  package flags nothing. `patch.object(module, …)` and non-literal targets are left alone.
+  **Waivable** via `rules = ["no-first-party-patch"]`. See the
+  [Isolation guide](../guide/isolation).
 
 **TypeScript** — parses each test file (`*.test.{ts,tsx,mts,cts}`) with the `oxc` parser and
 walks the AST:

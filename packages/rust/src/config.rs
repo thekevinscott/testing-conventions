@@ -121,6 +121,8 @@ pub enum Rule {
     Coverage,
     /// The `no-constant-patch` lint ([`crate::lint`], issue #52).
     NoConstantPatch,
+    /// `integration lint` — patching a first-party target in a Python integration test ([`crate::lint`], #42).
+    NoFirstPartyPatch,
     /// `unit isolation` — a call out of a Rust unit's own module ([`crate::isolation`], #44).
     NoOutOfModuleCall,
     /// `unit isolation` — a foreign `use` in a Rust unit test ([`crate::isolation`], #44).
@@ -143,6 +145,7 @@ impl Rule {
             Rule::ColocatedTest => "colocated-test",
             Rule::Coverage => "coverage",
             Rule::NoConstantPatch => "no-constant-patch",
+            Rule::NoFirstPartyPatch => "no-first-party-patch",
             Rule::NoOutOfModuleCall => "no-out-of-module-call",
             Rule::NoOutOfModuleImport => "no-out-of-module-import",
             Rule::NoFirstPartyDouble => "no-first-party-double",
@@ -158,6 +161,7 @@ impl Rule {
             Rule::ColocatedTest,
             Rule::Coverage,
             Rule::NoConstantPatch,
+            Rule::NoFirstPartyPatch,
             Rule::NoOutOfModuleCall,
             Rule::NoOutOfModuleImport,
             Rule::NoFirstPartyDouble,

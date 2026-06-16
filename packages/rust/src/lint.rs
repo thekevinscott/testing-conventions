@@ -48,6 +48,10 @@ pub use crate::violation::Violation;
 /// cannot be read or parsed is an error.
 pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     let root = root.as_ref();
+    // The dist's own top-level package, for `no-first-party-patch` (#42). Resolved
+    // once for the whole tree; `None` (no declared package) means that rule flags
+    // nothing.
+    let first_party = first_party_package(root);
     let mut files = Vec::new();
     collect_python_test_files(root, &mut files)?;
     files.sort();
@@ -62,6 +66,7 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
             file,
             source: &source,
             fixture_depth: 0,
+            first_party: first_party.as_deref(),
             violations: Vec::new(),
         };
         for stmt in suite {
@@ -81,6 +86,8 @@ struct LintVisitor<'a> {
     file: &'a Path,
     source: &'a str,
     fixture_depth: usize,
+    /// The dist's own top-level package (#42), or `None` when undiscoverable.
+    first_party: Option<&'a str>,
     violations: Vec<Violation>,
 }
 
@@ -156,6 +163,19 @@ impl Visitor for LintVisitor<'_> {
         // Fires regardless of fixture — config constants are usually patched in one.
         if is_patch && patches_constant(&node) {
             self.report(node.range, "no-constant-patch", CONSTANT_PATCH_MSG);
+        }
+        // `no-first-party-patch` (#42): in an integration test, patching a
+        // first-party target — `patch("ourpkg.mod.fn")` — is forbidden; an
+        // integration test runs first-party code for real. Fires regardless of
+        // fixture (the patch belongs in one); only when the dist's own package is
+        // known (`first_party`) and the target's head segment names it.
+        if is_patch {
+            if let Some(pkg) = self.first_party {
+                if patch_string_target(&node).is_some_and(|target| patches_first_party(target, pkg))
+                {
+                    self.report(node.range, "no-first-party-patch", FIRST_PARTY_PATCH_MSG);
+                }
+            }
         }
         // `no-environ-mutation` (#51): `os.environ.update(...)` and friends.
         if is_environ_mutation_call(&node) {
@@ -243,16 +263,36 @@ fn attr_base_is_patch(expr: &Expr) -> bool {
 /// Message for the `no-constant-patch` lint.
 const CONSTANT_PATCH_MSG: &str = "patches a module-global config constant; inject config explicitly (a consumer that did `from pkg import CONSTANT` snapshots the value at import time and ignores the patch)";
 
+/// Message for the `no-first-party-patch` lint (#42).
+const FIRST_PARTY_PATCH_MSG: &str = "patches a first-party target; an integration test must run first-party code for real — only third-party packages and effectful stdlib may be patched";
+
+/// The string-literal first argument of a `patch(...)` call — the dotted target
+/// like `"pkg.mod.attr"`. `None` when the first argument isn't a string literal
+/// (a non-literal target can't be classified deterministically).
+fn patch_string_target(call: &ExprCall) -> Option<&str> {
+    if let Some(Expr::Constant(constant)) = call.args.first() {
+        if let Constant::Str(target) = &constant.value {
+            return Some(target.as_str());
+        }
+    }
+    None
+}
+
 /// `true` when a `patch(...)` call's first string argument names a module-global
 /// UPPER_CASE constant, e.g. `patch("pkg.config.CACHE_DIR", …)`.
 fn patches_constant(call: &ExprCall) -> bool {
-    let Some(Expr::Constant(constant)) = call.args.first() else {
-        return false;
-    };
-    let Constant::Str(target) = &constant.value else {
-        return false;
-    };
-    target.rsplit('.').next().is_some_and(is_upper_constant)
+    patch_string_target(call)
+        .and_then(|target| target.rsplit('.').next())
+        .is_some_and(is_upper_constant)
+}
+
+/// `true` when a patch `target`'s head dotted segment names the first-party
+/// package `pkg`, e.g. `target = "ourpkg.mod.fn"`, `pkg = "ourpkg"` (#42).
+fn patches_first_party(target: &str, pkg: &str) -> bool {
+    target
+        .split('.')
+        .next()
+        .is_some_and(|head| !head.is_empty() && head == pkg)
 }
 
 /// `true` for an ALL-CAPS constant name — letters uppercase, digits and
@@ -313,6 +353,44 @@ fn line_of(source: &str, offset: TextSize) -> usize {
         + 1
 }
 
+/// The dist's own top-level import package — the first-party root for
+/// `no-first-party-patch` (#42).
+///
+/// Walk up from `root` to the nearest `pyproject.toml`, read its `[project].name`,
+/// and [normalize](normalize_dist_name) it to an import name. Returns `None` when
+/// no `pyproject.toml` (with a `[project].name`) is found, so a tree with no
+/// declared package flags nothing rather than guess. The walk stops at a `.git`
+/// boundary so it can't escape the project into an unrelated `pyproject.toml`.
+fn first_party_package(root: &Path) -> Option<String> {
+    for dir in root.ancestors() {
+        let candidate = dir.join("pyproject.toml");
+        if candidate.is_file() {
+            return read_project_name(&candidate).map(|name| normalize_dist_name(&name));
+        }
+        if dir.join(".git").exists() {
+            break;
+        }
+    }
+    None
+}
+
+/// `[project].name` from a `pyproject.toml`, if present and a string.
+fn read_project_name(path: &Path) -> Option<String> {
+    let contents = std::fs::read_to_string(path).ok()?;
+    let value: toml::Value = toml::from_str(&contents).ok()?;
+    value
+        .get("project")?
+        .get("name")?
+        .as_str()
+        .map(str::to_owned)
+}
+
+/// Normalize a distribution name to its import package name: lower-cased, with
+/// `-` and `.` mapped to `_` (PEP 503-flavoured — `My-Project` → `my_project`).
+fn normalize_dist_name(name: &str) -> String {
+    name.trim().to_ascii_lowercase().replace(['-', '.'], "_")
+}
+
 /// Recursively collect every Python test file under `dir` into `out`.
 fn collect_python_test_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries =
@@ -345,6 +423,104 @@ fn is_python_test_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// A throwaway directory, removed on drop — for the `pyproject.toml` discovery.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new() -> Self {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let dir = std::env::temp_dir().join(format!(
+                "tc-lint-{}-{}",
+                std::process::id(),
+                COUNTER.fetch_add(1, Ordering::Relaxed),
+            ));
+            std::fs::create_dir_all(&dir).unwrap();
+            TempDir(dir)
+        }
+
+        fn write(&self, name: &str, contents: &str) {
+            std::fs::write(self.0.join(name), contents).unwrap();
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn normalize_dist_name_maps_to_import_name() {
+        assert_eq!(normalize_dist_name("My-Project"), "my_project");
+        assert_eq!(normalize_dist_name("ns.pkg"), "ns_pkg");
+        assert_eq!(normalize_dist_name("  myproject  "), "myproject");
+        assert_eq!(normalize_dist_name("myproject"), "myproject");
+    }
+
+    /// Parse `src` (a single expression statement) and return its call.
+    fn parse_call(src: &str) -> ExprCall {
+        let suite = ast::Suite::parse(src, "t.py").expect("snippet should parse");
+        match suite.into_iter().next().expect("one statement") {
+            ast::Stmt::Expr(stmt) => match *stmt.value {
+                Expr::Call(call) => call,
+                other => panic!("expected a call, got {other:?}"),
+            },
+            other => panic!("expected an expression statement, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn patch_string_target_only_reads_string_literals() {
+        let str_call = parse_call("patch(\"pkg.mod.attr\")\n");
+        assert_eq!(patch_string_target(&str_call), Some("pkg.mod.attr"));
+        // A non-string literal (`patch(42)`), a name (`patch(target)`), and no args
+        // all yield `None` — a non-literal target can't be classified.
+        let int_call = parse_call("patch(42)\n");
+        assert_eq!(patch_string_target(&int_call), None);
+        let name_call = parse_call("patch(target)\n");
+        assert_eq!(patch_string_target(&name_call), None);
+        let empty_call = parse_call("patch()\n");
+        assert_eq!(patch_string_target(&empty_call), None);
+    }
+
+    #[test]
+    fn patches_first_party_matches_head_segment() {
+        assert!(patches_first_party("myproject.ledger.record", "myproject"));
+        assert!(patches_first_party("myproject", "myproject"));
+        assert!(!patches_first_party("requests.get", "myproject"));
+        assert!(!patches_first_party("myproject_extra.x", "myproject"));
+        assert!(!patches_first_party("", "myproject"));
+        assert!(!patches_first_party(".leading", "myproject"));
+    }
+
+    #[test]
+    fn first_party_package_reads_pyproject_name() {
+        let tree = TempDir::new();
+        tree.write(
+            "pyproject.toml",
+            "[project]\nname = \"My-Project\"\nversion = \"0.0.0\"\n",
+        );
+        // Normalized to the import name.
+        assert_eq!(first_party_package(&tree.0).as_deref(), Some("my_project"));
+    }
+
+    #[test]
+    fn first_party_package_is_none_without_a_project_name() {
+        let tree = TempDir::new();
+        // A pyproject with no `[project].name` — found, but no usable package.
+        tree.write("pyproject.toml", "[build-system]\nrequires = []\n");
+        tree.write(".git", "");
+        assert_eq!(first_party_package(&tree.0), None);
+    }
+
+    #[test]
+    fn first_party_package_is_none_when_absent() {
+        // No pyproject.toml anywhere up the (temp) tree → nothing first-party.
+        let tree = TempDir::new();
+        assert_eq!(first_party_package(&tree.0), None);
+    }
 
     #[test]
     fn recognizes_python_test_files() {

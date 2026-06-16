@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Python integration isolation** — `no-first-party-patch` (#42). `integration lint
+  --language python` now flags a `patch(...)` whose string target is **first-party**
+  — e.g. `patch("ourpkg.mod.fn")` — because an integration test must run first-party
+  code for real; only third-party packages and effectful stdlib (`requests.get`,
+  `subprocess.run`, `builtins.open`, …) may be patched. The dist's own top-level
+  package is read from the nearest `pyproject.toml` `[project].name` (normalized to
+  an import name), mirroring how the Rust rule reads `Cargo.toml`; a tree with no
+  declared package flags nothing. Waivable like the other lints via
+  `[[python.exempt]] rules = ["no-first-party-patch"]` (#32/#102). The
+  `patch.object(module, …)` and non-literal-target forms are documented non-goals.
+  See [`internals/python/isolation.md`](../../internals/python/isolation.md) for the
+  design and the deferred unit direction.
 - Config-driven **waivers for the isolation rules** (#102). The escape hatch from
   #32 (a reason-required `[[<lang>.exempt]]` entry, auditable in one diff) now
   lifts the isolation rules too: `unit isolation` gains a `--config` flag (default

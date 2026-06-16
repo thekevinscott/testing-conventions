@@ -228,6 +228,54 @@ fn constant_patch_waived_exits_zero() {
     );
 }
 
+// ---- Integration isolation: no first-party patch (#42) -------------------
+
+#[test]
+fn first_party_patch_red_reports_a_violation() {
+    let violations = find_violations(fixture("no_first_party_patch/red"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "no-first-party-patch" && v.file.ends_with("charge_test.py")),
+        "patching a first-party target (`myproject.ledger.record`) in an integration test \
+         must be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn first_party_patch_clean_reports_no_violations() {
+    let violations = find_violations(fixture("no_first_party_patch/clean"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "the clean fixture patches only third-party / effectful-stdlib targets \
+         (`requests.post`, `subprocess.run`); got {violations:?}"
+    );
+}
+
+#[test]
+fn first_party_patch_red_exits_nonzero() {
+    assert_eq!(lint_exit("no_first_party_patch/red"), 1);
+}
+
+#[test]
+fn first_party_patch_clean_exits_zero() {
+    assert_eq!(lint_exit("no_first_party_patch/clean"), 0);
+}
+
+#[test]
+fn first_party_patch_waived_exits_zero() {
+    // Same first-party patch as the red fixture, but the file is waived in the config.
+    assert_eq!(
+        lint_exit_with_config(
+            "no_first_party_patch/waived",
+            "no_first_party_patch/waived/testing-conventions.toml"
+        ),
+        0
+    );
+}
+
 // ---- CLI surface ---------------------------------------------------------
 
 #[test]

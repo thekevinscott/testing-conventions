@@ -1,0 +1,5 @@
+# Same first-party package as the red fixture — `myproject`. The first-party
+# patch below is flagged, then lifted by the `testing-conventions.toml` waiver.
+[project]
+name = "myproject"
+version = "0.0.0"

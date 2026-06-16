@@ -230,16 +230,18 @@ testing-conventions packaging --language <LANG> <PATH>
 
 | Argument / flag     | Description                                                                       |
 | ------------------- | --------------------------------------------------------------------------------- |
-| `<PATH>`            | Root of the built artifact to inspect — an already-unpacked wheel, or a `dist/`.  |
+| `<PATH>`            | The built artifact to inspect: a Python wheel (`.whl`), or a directory (an already-unpacked artifact, e.g. a `dist/` tree). |
 | `--language <LANG>` | **Required.** `python` or `typescript`.                                           |
 
-Scans `<PATH>` recursively for the language's test-file glob — `python` → `*_test.py`,
+Scans the artifact recursively for the language's test-file glob — `python` → `*_test.py`,
 `typescript` → `*.test.*` — and exits `0` when none are present, `1` (printing each offending
-path) when one is.
+path, relative to the artifact root) when one is. A Python `.whl` is unpacked first, then
+scanned; a directory is scanned in place.
 
-**Status (foundation):** the command scans an already-built artifact tree. The per-language
-*build* step that produces that tree — wheel/sdist (Python), `dist` (TypeScript), `cargo
-package` tarball (Rust, which also adds `--language rust`) — is landing per language.
+**Status:** Python inspects a built wheel (#72). Still landing per language: the Python sdist
+(`.tar.gz`), the TypeScript `dist` archive (#73), and the Rust `cargo package` tarball (#74,
+which also adds `--language rust`). Until a language's archive is wired, point `<PATH>` at an
+already-unpacked directory.
 
 ## Configuration
 

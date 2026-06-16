@@ -119,6 +119,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Python `lint` and Rust `isolation` detectors so the CLI prints every rule the
   same way. `testing_conventions::lint::Violation` remains as a re-export, so the
   prior path still resolves (no break). (#44)
+- `packaging` now inspects a **Python wheel** (#72) — point `packaging --language
+  python <PATH>` at a built `.whl` and it unpacks the archive and scans for
+  `*_test.py`, so a colocated test that leaked into the wheel fails the check.
+  `<PATH>` still accepts an already-unpacked directory too. New library API
+  `packaging::inspect(path, globs)` unpacks an archive (a `.whl`/`.zip`) or reads
+  a directory, then reuses `scan`, returning offenders relative to the artifact
+  root. New dependency: `zip` (read-only). (sdist `.tar.gz`, and the TypeScript /
+  Rust archives, are still to come.) (#41, #72)
 
 ### Changed
 

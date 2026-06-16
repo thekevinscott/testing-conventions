@@ -1,0 +1,16 @@
+name: Conventions
+on: [pull_request]
+
+# Enforce conventions with `testing-conventions` in CI.
+jobs:
+  conventions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # Run testing-conventions once per rule (this comment is not an invocation).
+      - run: npx -y testing-conventions unit colocated-test --language python src
+      - run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit coverage \
+          --language typescript --config testing-conventions.toml src
+      - run: npx -y testing-conventions integration lint --language python src
+      - run: npx -y testing-conventions packaging --language python dist
+      - run: npx -y testing-conventions check

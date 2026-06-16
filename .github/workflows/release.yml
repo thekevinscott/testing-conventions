@@ -104,3 +104,27 @@ jobs:
           done
           echo "dist/ contents:"; ls -l dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  # Advance the moving major tag (@v0) to the just-released commit (#92). The
+  # reusable workflow's documented consumption path is `…/testing-conventions.yml@v0`:
+  # the workflow file is frozen at the tag while a consumer's `npx` pulls the latest
+  # published binary, so unless the tag moves with each release it strands the moment
+  # a subcommand is renamed (as it did at 0.0.7, broken by #55). Runs only after the
+  # publish succeeds; a failure here leaves the packages published and just the tag
+  # un-moved (recoverable by re-running). The PR-time guard (the Rust `workflow`
+  # check) keeps the workflow and binary consistent, so advancing is always safe.
+  advance-major-tag:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Move @v0 to the released commit
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git tag -f v0 "$SHA"
+          git push -f origin "refs/tags/v0"
+          echo "Advanced v0 -> $SHA"

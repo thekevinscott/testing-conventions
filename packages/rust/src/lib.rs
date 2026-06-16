@@ -6,10 +6,11 @@ pub mod lint;
 pub mod packaging;
 pub mod ts;
 pub mod violation;
+pub mod workflow;
 
 use std::path::{Path, PathBuf};
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -44,6 +45,12 @@ enum Command {
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
         language: colocated_test::Language,
+    },
+    /// Workflow guard: every `testing-conventions` invocation in a CI workflow must
+    /// name a subcommand this binary still exposes (guards the `@v0` path, #92).
+    Workflow {
+        /// Workflow file (or a directory of them) to scan.
+        path: PathBuf,
     },
 }
 
@@ -136,7 +143,15 @@ where
             } => run_integration_lint(&path, language, &config),
         },
         Some(Command::Packaging { path, language }) => run_packaging(&path, language),
+        Some(Command::Workflow { path }) => run_workflow(&path),
     }
+}
+
+/// The binary's own clap command tree — the source of truth for which subcommands
+/// it exposes. The `workflow` guard (#92) checks a workflow's invocations against
+/// it, so a renamed or removed subcommand is caught the moment they diverge.
+pub fn command() -> clap::Command {
+    Cli::command()
 }
 
 /// Run the unit-test colocated-test check over `root` for `language`, reporting orphans.
@@ -358,6 +373,31 @@ fn run_packaging(artifact: &Path, language: colocated_test::Language) -> anyhow:
         "error: {} test file(s) present in the built artifact \
          (they must be excluded from packaging)",
         offenders.len()
+    );
+    Ok(1)
+}
+
+/// Run the workflow guard over `path` (a workflow file or directory): flag every
+/// `testing-conventions` invocation that names a subcommand this binary no longer
+/// exposes, printing each as `path:line: rule — message` and returning `1` when any
+/// are found, `0` otherwise.
+fn run_workflow(path: &Path) -> anyhow::Result<i32> {
+    let violations = workflow::check(path, &command())?;
+    if violations.is_empty() {
+        return Ok(0);
+    }
+    for v in &violations {
+        eprintln!(
+            "{}:{}: {} — {}",
+            v.file.display(),
+            v.line,
+            v.rule,
+            v.message
+        );
+    }
+    eprintln!(
+        "error: {} workflow invocation(s) name a subcommand this binary no longer exposes",
+        violations.len()
     );
     Ok(1)
 }

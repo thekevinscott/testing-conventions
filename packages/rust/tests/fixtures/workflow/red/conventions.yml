@@ -1,0 +1,11 @@
+name: Conventions
+on: [pull_request]
+
+jobs:
+  conventions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: npx -y testing-conventions unit location --language python src
+      - name: legacy
+        run: npx -y testing-conventions unit-location --lang python src

@@ -272,6 +272,15 @@ randomness / database / low-level OS), classifying import heads against an embed
 `find_unit_isolation_violations` reports the extra findings; no signature or rule-id
 change, so the #102 waiver still applies.
 
+Finally, makes the remaining Python integration lints **waivable** (#123):
+`no-monkeypatch` (#49), `no-inline-patch` (#50), and `no-environ-mutation` (#51)
+join `no-constant-patch` in the reason-required `[[python.exempt]]` escape hatch
+(#32/#102) — they were the only blocking findings without one, because their ids
+weren't `config::Rule` variants (so `apply_waivers` skipped them and the loader
+rejected `rules = ["no-monkeypatch"]` outright). Additive: new `config::Rule`
+variants `NoMonkeypatch` / `NoInlinePatch` / `NoEnvironMutation` (with `id()` /
+`from_id()`); the lint behavior and every other surface are unchanged.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -347,6 +356,11 @@ Exemptions (#32) change runtime behavior:
   missing-test orphan, and `unit coverage --language python` omits `conftest.py`
   from the denominator (alongside `*_test.py`). conftest.py is pytest support,
   never a subject. (#112)
+- A `[[python.exempt]]` entry naming `no-monkeypatch`, `no-inline-patch`, or
+  `no-environ-mutation` is now accepted and waives that lint for the file. Previously
+  the loader **rejected** those ids as an unknown `rules` variant (and even parsed,
+  `integration lint` could never have waived them). A reason-less or stale entry still
+  errors. (#123)
 
 ### Verification
 
@@ -394,6 +408,15 @@ cd packages/rust && cargo test --test e2e_attest --test e2e_attest_e2e
 Expected: the `e2e attest` tests pass — in a throwaway git repo, `attest` names
 HEAD, writes `e2e-attestation.json`, and commits it on top, exiting `0` even when
 the wrapped command fails (force a run, not a pass). Requires `git`.
+
+```
+cd packages/rust && cargo test --test integration_lint --test integration_lint_e2e
+```
+
+Expected: the integration-lint tests pass — including the `monkeypatch`, `inline_patch`,
+and `environ` `waived` fixtures, each identical to its red fixture but cleared to exit `0`
+by a reason-required `[[python.exempt]]` entry, alongside the existing `constant_patch`
+and `no_first_party_patch` waivers. (#123)
 
 ```
 cd packages/rust && cargo test --test integration_lint --test integration_lint_e2e

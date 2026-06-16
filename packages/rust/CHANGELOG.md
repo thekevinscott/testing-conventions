@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Waivers for the remaining Python integration lints** (#123). The reason-required
+  `[[python.exempt]]` escape hatch (#32/#102) now covers the last three lints that
+  lacked it — `no-monkeypatch` (#49), `no-inline-patch` (#50), and
+  `no-environ-mutation` (#51) — so they waive like their sibling `no-constant-patch`
+  (#52) and every other rule. Previously their ids weren't `config::Rule` variants, so
+  `apply_waivers` could never waive them and the loader rejected
+  `rules = ["no-monkeypatch"]` outright. Decision per #3: the waiver is reason-required,
+  single-file, auditable, and stale-checked, so an honest hatch doesn't weaken the gate.
+  New `config::Rule` variants `NoMonkeypatch` / `NoInlinePatch` / `NoEnvironMutation`
+  (with `id()` / `from_id()`). A waived file passes; an un-waived violation still fails;
+  a reason-less or stale entry still errors. Example:
+  `[[python.exempt]] rules = ["no-inline-patch"]`.
 - **Python unit isolation — external deps** (#121, slice 3). `unit isolation
   --language python` now also flags an imported, un-mocked **external** collaborator:
   a **third-party** package (any bare import that isn't first-party or stdlib) or an

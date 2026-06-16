@@ -189,7 +189,7 @@ reason = "thin launcher; logic in run(), tested in run_test.py"  # required
 | Field | Meaning |
 | ----- | ------- |
 | `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists — a stale entry is a hard error, so the list can't silently rot. |
-| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, a mocking lint (`no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
+| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
 | `reason` | Why the omission is deliberate. **Required** — an empty reason is rejected on load. |
 
 Because every exemption lives in the one config file, names its rules, and carries a reason,
@@ -220,13 +220,16 @@ parser and walks the AST:
 
 - **`no-monkeypatch`** — a test or fixture function that declares the `monkeypatch` parameter.
   pytest's `monkeypatch` is banned; patch with `unittest.mock` (`patch` / `patch.object` /
-  `patch.dict`) wrapped in a `pytest.fixture` instead.
+  `patch.dict`) wrapped in a `pytest.fixture` instead. **Waivable** per file via
+  `rules = ["no-monkeypatch"]` (reason required).
 - **`no-inline-patch`** — a `patch(...)` / `patch.object(...)` / `patch.dict(...)` call in a
   test body, whether the `with patch(...)` form or a bare call. Move the patch into a
-  `pytest.fixture`; a patch inside a fixture is allowed.
+  `pytest.fixture`; a patch inside a fixture is allowed. **Waivable** via
+  `rules = ["no-inline-patch"]`.
 - **`no-environ-mutation`** — direct mutation of `os.environ`: `os.environ[...] = …`,
   `del os.environ[...]`, or a mutating method (`update` / `pop` / `setdefault` / `clear` /
   `popitem`). Set env via `patch.dict(os.environ, {...})`; reading `os.environ` is fine.
+  **Waivable** via `rules = ["no-environ-mutation"]`.
 - **`no-constant-patch`** — patching a module-global UPPER_CASE constant, e.g.
   `patch("pkg.config.CACHE_DIR", …)`. Inject the config explicitly instead. **Waivable**
   per file: add a `[[python.exempt]]` entry with `rules = ["no-constant-patch"]` (and a

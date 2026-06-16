@@ -1,0 +1,6 @@
+# Waiver for R3 (#51): exempt the file from `no-environ-mutation`, with a reason
+# (auditable, reason-required — #32/#102).
+[[python.exempt]]
+path = "subscript_assignment_test.py"
+rules = ["no-environ-mutation"]
+reason = "legacy test; the move to patch.dict(os.environ, ...) is tracked separately"

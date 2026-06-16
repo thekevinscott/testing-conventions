@@ -1,0 +1,6 @@
+# Waiver for R1 (#49): exempt the file from `no-monkeypatch`, with a reason
+# (auditable, reason-required — #32/#102).
+[[python.exempt]]
+path = "uses_monkeypatch_test.py"
+rules = ["no-monkeypatch"]
+reason = "legacy test; the monkeypatch-to-fixture rewrite is tracked separately"

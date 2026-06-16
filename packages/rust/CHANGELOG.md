@@ -33,6 +33,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (with `id()` / `from_id()`). A waived file passes; an un-waived violation still fails;
   a reason-less or stale entry still errors. Example:
   `[[python.exempt]] rules = ["no-inline-patch"]`.
+- **Coverage non-regression ratchet — Python** (#131, parent #46). `unit coverage
+  --language python` now also fails on a **regression**: a committed
+  `coverage-baseline.json` beside the measured tree records the last total per
+  language, and a run whose Python total drops below the recorded baseline fails
+  even when it still clears the configured floor. A missing baseline file means no
+  ratchet — floor-only, backward compatible / zero-config. The baseline is the
+  committed-file design from #46 (parallel to `e2e-attestation.json`): auditable in
+  one diff, deterministic, no CI-provider state. New library API:
+  `coverage::{read_baseline, evaluate_ratchet, measure_report, Baseline,
+  PythonBaseline, BASELINE_PATH}`; the existing `measure` / `evaluate` are unchanged.
+  The TypeScript (#133) and Rust (#134) arms, and the explicit baseline-record step,
+  are later slices.
 - **Python unit isolation — external deps** (#121, slice 3). `unit isolation
   --language python` now also flags an imported, un-mocked **external** collaborator:
   a **third-party** package (any bare import that isn't first-party or stdlib) or an

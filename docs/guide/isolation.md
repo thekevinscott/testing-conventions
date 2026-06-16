@@ -80,6 +80,29 @@ vi.mock('./service', async () => {
 });
 ```
 
+Python works the same way, against the colocated `*_test.py` suite:
+
+```sh
+testing-conventions unit isolation --language python src/
+```
+
+It flags an imported **first-party** collaborator (the dist's own package, per `pyproject.toml`)
+that the unit test doesn't mock (`unmocked-collaborator`). The unit under test, `pytest` /
+`unittest`, pure stdlib, and type-only imports are never collaborators. The idiom is to *not*
+import the collaborator at all — patch it by string in a fixture, so the unit uses the double
+internally:
+
+```python
+# ❌ flagged — `record` is a first-party collaborator imported and used for real
+from myproject.ledger import record
+
+# ✅ fine — patch the name as the unit under test looks it up; don't import it
+@pytest.fixture(autouse=True)
+def mock_record():
+    with patch("myproject.widget.record") as mock:
+        yield mock
+```
+
 (Rust enforces the same intent structurally with `unit isolation --language rust` —
 `no-out-of-module-call`.) See the
 [README](https://github.com/thekevinscott/testing-conventions#isolation) for the full rule.

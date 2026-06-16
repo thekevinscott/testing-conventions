@@ -82,8 +82,8 @@ floor is met, `1` (naming each metric below its floor on stderr) when any isn't.
 
 ### `unit isolation`
 
-Check that unit tests isolate the unit under test — everything else is mocked (TypeScript) or
-never called out to (Rust). A unit test that touches a real collaborator is an integration test
+Check that unit tests isolate the unit under test — collaborators are mocked (Python, TypeScript)
+or never called out to (Rust). A unit test that touches a real collaborator is an integration test
 wearing a unit's name.
 
 ```
@@ -93,7 +93,7 @@ testing-conventions unit isolation --language <LANG> [--config <CONFIG>] <PATH>
 | Argument / flag     | Description                                                                            |
 | ------------------- | ------------------------------------------------------------------------------------- |
 | `<PATH>`            | Directory to scan recursively (for Rust, the crate root, whose `Cargo.toml` names the external crates). |
-| `--language <LANG>` | **Required.** `rust` or `typescript` (Python isolation is a separate item).            |
+| `--language <LANG>` | **Required.** `python`, `rust`, or `typescript`.                                       |
 | `--config <CONFIG>` | Config file supplying the `exempt` list (waivers). Optional (default `testing-conventions.toml`); if absent, nothing is waived. |
 
 Reports each violation to stderr as `path:line: <rule> — <message>` and exits `1` if any are
@@ -132,6 +132,23 @@ deterministic bright-line.
   type anchor, so the double can drift from the real module. Anchor it with
   `vi.importActual<typeof import(spec)>()` (the README pattern). A bare `vi.mock(spec)`
   (vitest auto-mock, typed from the real module) and an already-typed factory both pass.
+
+**Python** — parses each colocated unit test (`*_test.py` / `test_*.py`, not `conftest.py`) with
+the Rust Python parser:
+
+- **`unmocked-collaborator`** — an imported **first-party** collaborator that the test doesn't
+  mock. First-party is the dist's own package (read from the nearest `pyproject.toml`
+  `[project].name`, as in [`integration lint`](#integration-lint)'s `no-first-party-patch`), or a
+  relative import. Three things are never collaborators: the **unit under test** (the import whose
+  module's last segment matches the test's base name — `widget_test.py` ↔ `myproject.widget`), the
+  **test framework** (`pytest` / `unittest` / `unittest.mock`), and **pure stdlib** / `__future__` /
+  `TYPE_CHECKING`-guarded (type-only) imports. An import counts as **mocked** when a `patch("…")` in
+  the file targets a matching last segment — `patch("myproject.widget.record")` mocks an imported
+  `record` (the convention patches the name in the consuming module). The canonical unit test
+  imports only the unit under test and patches collaborators by string, so it has no collaborator
+  imports to flag. Un-mocked third-party / effectful-stdlib imports are a separate slice; a
+  first-party *value/type* import used to build test data is a documented non-goal (waive it). See
+  the [Isolation guide](../guide/isolation).
 
 ## Exemptions
 

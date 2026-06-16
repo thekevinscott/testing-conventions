@@ -79,6 +79,21 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     Ok(violations)
 }
 
+/// Scan the colocated Python unit tests under `root` and return every
+/// `unmocked-collaborator` violation (#42 slice 2): a first-party collaborator a
+/// unit test imports without mocking it. The Python arm of `unit isolation`
+/// ([`crate::isolation::Language::Python`]).
+///
+/// A *unit test* here is `*_test.py` / `test_*.py` (not `conftest.py`). First-party
+/// is the dist's own package ([`first_party_package`]); a tree with no declared
+/// package has no first-party collaborators and so reports nothing.
+pub fn find_unit_isolation_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
+    // Skeleton (#42 slice 2): the detector lands in the green commit; until then
+    // the command is wired but reports nothing.
+    let _ = root.as_ref();
+    Ok(Vec::new())
+}
+
 /// Walks one parsed test file, collecting lint violations. Tracks how deep we
 /// are inside `@pytest.fixture` functions so `no-inline-patch` can allow patches
 /// there while flagging them in test bodies.

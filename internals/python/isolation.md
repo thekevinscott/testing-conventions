@@ -91,21 +91,45 @@ This reuses the existing patch-target extraction (`patches_constant` already pul
 place (it doesn't trip `no-inline-patch`), so the red fixture puts its first-party
 patch in a fixture to isolate the new rule.
 
-## Unit detection — `unmocked-collaborator` (slice 2, deferred)
+## Unit detection — `unmocked-collaborator` (slice 2)
 
-The mirror image, for `unit isolation --language python`: a colocated unit test
-(`foo_test.py` next to `foo.py`) must mock every collaborator it imports — flag an
-imported first-party / external / effectful-stdlib name that is **not** mocked,
-leaving alone the unit under test (`foo`), pure stdlib, and pytest itself.
+The mirror image, for `unit isolation --language python <PATH>`: a colocated unit
+test (`foo_test.py` next to `foo.py`) must isolate the unit under test, so an
+imported **first-party collaborator** that isn't mocked is the violation
+(`unmocked-collaborator` — the same rule id TypeScript's #76 emits, so the #102
+waiver `Rule` already covers it).
 
-The hard part — and why this is its own slice — is deciding *"is this import
-mocked?"* deterministically. `vi.mock('./x')` names the import specifier, but
-Python's `patch("pkg.mod.name")` names the symbol's **definition site**, not the
-test's `from pkg.mod import name`. Matching the two is exactly the
-name-resolution #19 ruled a non-goal ("patch the name in the *consuming* module").
-The slice's design pass must pick a bright line — candidates: treat a first-party
-collaborator import as un-mocked unless a `patch(...)` mentions its module path; or
-require the conventional autouse-fixture form. Carved out here, designed when built.
+**The bright line for "is this import mocked?"** `vi.mock('./x')` names the import
+specifier, but Python's `patch("pkg.mod.name")` names a *symbol*, and the
+convention patches the name in the **consuming** module (`patch("pkg.foo.thing")`,
+not `patch("pkg.other.thing")`) — the name-resolution #19 ruled a non-goal. The
+deterministic signal the convention *does* give us: a mocked collaborator is
+**patched by string** and, in the canonical form, **not imported** — the unit uses
+it internally. So the rule keys off imports:
+
+- Scan `*_test.py` / `test_*.py` only (not `conftest.py` — that holds fixtures,
+  not units).
+- The **unit under test** is the import whose module's last segment equals the
+  test's base name (`widget_test.py` → `widget`; `from pkg.widget import build`,
+  `from .widget import build`, and `import pkg.widget` all match). Never flagged.
+- An import is **first-party** when it's relative (`from . import x`,
+  `from .mod import y`) or its head segment is the dist package (slice 1's
+  `pyproject.toml` discovery).
+- An import is **mocked** when some `patch("…")` target in the file has a **last
+  dotted segment** equal to the imported symbol: `from pkg.other import thing` +
+  `patch("pkg.widget.thing")` → last segment `thing` matches (catches the
+  consuming-module patch); `patch("pkg.other.thing")` matches too.
+- **Flag** a first-party import that is neither the unit under test nor mocked.
+
+Pure stdlib, the test framework (`pytest`, `unittest`, `unittest.mock`),
+`__future__`, and `TYPE_CHECKING`-guarded (type-only) imports are never
+collaborators.
+
+This slice covers **first-party** — exactly #42's acceptance ("un-mocked
+first-party (unit)"). Un-mocked **external / effectful-stdlib** imports (importing
+`requests` / `subprocess` unmocked) are a clean follow-up that needs a stdlib
+classifier to separate effectful (`subprocess`) from pure (`dataclasses`); carved
+out as slice 3.
 
 ## Surface & module shape
 
@@ -141,7 +165,13 @@ plainly (à la #19) so nobody over-trusts green:
 - A dist whose **import package name differs** from its normalized
   `[project].name`, or a multi-package dist — slice 1 reads the single normalized
   name; the `exempt` waiver covers the stray case until discovery is widened.
-- The unit direction's import-↔-patch matching (see [slice 2](#unit-detection--unmocked-collaborator-slice-2-deferred)).
+- **Unit (slice 2):** a first-party **value/type** import used to build test data
+  (rather than a collaborator to mock) — distinguishing the two needs data-flow, so
+  the rule treats every un-mocked first-party import as a collaborator; the `exempt`
+  waiver covers the legitimate case. A collaborator **mocked across files** (an
+  autouse fixture in `conftest.py`) — the rule only reads the test file's own
+  patches; the canonical form patches *and doesn't import*, so this bites only the
+  import-and-mock-elsewhere mix. Alias edges (`import x as y`).
 
 ## Fixtures (per slice, red + clean — #3 guardrail)
 
@@ -153,17 +183,25 @@ plainly (à la #19) so nobody over-trusts green:
   `patch("builtins.open")`) — first-party runs for real. Zero findings.
 - **Integration waived:** the red test, plus a `testing-conventions.toml` waiving
   `no-first-party-patch` for that file with a reason → passes.
-- **Unit (slice 2):** red = a unit test with an un-mocked first-party collaborator;
-  clean = every collaborator mocked.
+- **Unit red:** a `pyproject.toml` + a colocated `widget_test.py` that imports an
+  un-mocked first-party collaborator (`from myproject.ledger import record`)
+  alongside the unit under test (`from myproject.widget import build`).
+- **Unit clean:** same `pyproject.toml`; the canonical form — imports only the unit
+  under test (and `pytest` / `patch`), patches the collaborator by string in a
+  fixture. Zero findings.
+- **Unit waived:** the red test, plus a `testing-conventions.toml` waiving
+  `unmocked-collaborator` for that file with a reason → passes.
 
 ## Implementation slices (red→green)
 
 Each is its own test-first increment with CHANGELOG + MIGRATIONS + a VitePress doc.
 
 1. **Integration** — `no-first-party-patch`: `pyproject.toml` first-party
-   discovery + flag `patch("<first-party>…")`; register the waiver `Rule`. *(This
-   slice.)*
-2. **Unit** — `unmocked-collaborator` for `unit isolation --language python`, after
-   its own design pass picks the import-↔-patch bright line.
+   discovery + flag `patch("<first-party>…")`; register the waiver `Rule`. ✅
+2. **Unit (first-party)** — `unmocked-collaborator` for `unit isolation --language
+   python`: flag an imported first-party collaborator (not the unit under test, not
+   `patch`-ed by string) — reuses slice 1's first-party discovery. *(This slice.)*
+3. **Unit (external)** — extend slice 2 to un-mocked third-party / effectful-stdlib
+   imports, behind a stdlib effectful/pure classifier.
 
-Order: 1 → 2. Slice 2 reuses slice 1's first-party discovery.
+Order: 1 → 2 → 3.

@@ -328,6 +328,9 @@ fn run_unit_isolation(
         isolation::Language::TypeScript => (ts::find_unit_violations(root)?, |c| {
             c.exemptions(colocated_test::Language::TypeScript)
         }),
+        isolation::Language::Python => (lint::find_unit_isolation_violations(root)?, |c| {
+            c.exemptions(colocated_test::Language::Python)
+        }),
     };
     let violations = apply_waivers(raw, root, config_path, select)?;
     if violations.is_empty() {

@@ -45,3 +45,8 @@ const Widget = getWidget({ load: fakeLoad, run: fakeRun });
 ```
 
 Factory injection works identically in every test runner and keeps the test plumbing visible at the call site.
+
+**E2E attestation** — e2e tests aren't run in CI. Run them locally and attest:
+`testing-conventions e2e attest 'vitest run tests/e2e'` commits a receipt naming the
+commit they ran against; in CI, `e2e verify` checks it's current (re-run `attest`
+when it goes stale). CI never runs the e2e suite.

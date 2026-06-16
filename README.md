@@ -115,9 +115,24 @@ run on demand, not for CI.
 - **TypeScript** — `tests/e2e/`, files end in `.test.ts`.
 - **Rust** — under `tests/`, typically driving the built binary (`CARGO_BIN_EXE_<name>` or `assert_cmd`).
 
-**Checked** — e2e location is a convention, not an enforced gate; e2e is
-deliberately excluded from the CI gate (the nudge is to run it locally, not a
-folder check).
+**Attestation** — CI never runs e2e (real contracts are slow, flaky, and cost
+money), but it shouldn't let the suite silently rot either — so the agent runs it
+locally and *attests* that it did:
+
+```
+testing-conventions e2e attest '<your e2e command>'
+```
+
+`attest` runs the suite and commits an `e2e-attestation.json` recording the
+command, the exit code, and the **commit it ran against**. In CI,
+`testing-conventions e2e verify` passes only if that attestation names the latest
+code commit — push code without re-attesting and it goes stale, so CI nudges you to
+re-run e2e. CI confirms someone ran the suite against *this* code; it never runs the
+suite itself.
+
+**Checked** — the e2e *location* is a convention, not its own gate, and CI never
+runs the suite; what CI checks is the attestation — `e2e verify` requires the
+committed `e2e-attestation.json` to name the latest code commit.
 
 ### Coverage
 

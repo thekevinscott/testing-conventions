@@ -69,6 +69,14 @@ silently rot. New config types `Rule` and `Exemption` plus `resolve_exempt()`;
 and `missing_unit_tests` / `coverage::measure` take the resolved exemptions
 (signatures below).
 
+Also adds the optional `[<language>.e2e]` config block (#17, #65) — `sources`
+(globs feeding the E2E freshness gate's content hash) and `required` (default
+`true`). A present block turns the gate on for that language, an absent one
+leaves it off; a non-empty `sources` and `deny_unknown_fields` are enforced on
+load. Purely additive — a new optional config key and the `E2eConfig` type;
+nothing consumes it yet (the `e2e attest` / `e2e verify` commands are later
+slices of #17).
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -137,8 +145,10 @@ cd packages/rust && cargo test --test config_loader
 ```
 
 Expected: the loader's integration tests pass — the canonical config loads, an
-exempt-only config (no coverage thresholds) loads, and unknown-key, malformed,
-missing-file, and reason-less-exemption configs are rejected.
+exempt-only config (no coverage thresholds) loads, a present `[*.e2e]` block
+loads (the gate is off when the block is absent), and unknown-key, malformed,
+missing-file, reason-less-exemption, unknown-e2e-key, and empty-`sources` configs
+are rejected.
 
 ```
 cd packages/rust && cargo test --test colocated_test --test colocated_test_e2e

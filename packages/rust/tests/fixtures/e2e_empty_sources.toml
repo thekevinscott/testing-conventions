@@ -1,0 +1,6 @@
+# Red fixture: a present [*.e2e] block with no sources. An empty `sources` makes
+# the receipt's content hash meaningless (it would match any tree, so the gate
+# could never go stale), so the loader rejects it. Turn the gate off by omitting
+# the block, not by emptying its sources.
+[typescript.e2e]
+sources = []

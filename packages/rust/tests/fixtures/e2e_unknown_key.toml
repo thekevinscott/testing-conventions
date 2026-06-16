@@ -1,0 +1,7 @@
+# Red fixture: an [*.e2e] block with a key the schema doesn't know
+# (`frequency`). The loader's self-guard (serde `deny_unknown_fields` on
+# `E2eConfig`) must reject it — keeping `sources` valid means this fixture fails
+# *only* on the bad key.
+[python.e2e]
+sources = ["src/**"]
+frequency = "daily"

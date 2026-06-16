@@ -43,6 +43,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `del`, or `update`/`pop`/`setdefault`/`clear`/`popitem`), which belongs in
   `patch.dict(os.environ, …)`. Library API:
   `testing_conventions::lint::{find_violations, Violation}`. (#48, #49, #50, #51)
+- `[<language>.e2e]` config block (#17, #65) — an optional, per-language E2E
+  attestation block: `sources` (globs fed to the freshness gate's `source_hash`)
+  and `required` (default `true`). A present block turns the gate on for that
+  language; an absent one leaves it off, and an empty `sources` is rejected on
+  load. New type `E2eConfig` on `{Python,TypeScript,Rust}Config`. Nothing consumes
+  it yet — `e2e attest` / `e2e verify` are later slices of #17.
 
 ### Changed
 

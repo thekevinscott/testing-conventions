@@ -167,3 +167,25 @@ coverage = { regions = 100, lines = 100 }
 `[python].coverage` is consumed by `unit coverage` and the `exempt` lists by both rules; the
 other coverage tables are accepted but not yet enforced (their rules are forthcoming). Each
 package's `MIGRATIONS.md` carries the public-API upgrade history.
+
+### The optional `[*.e2e]` block
+
+Each language table can also carry an `e2e` block, which configures the E2E **freshness gate**
+(the forthcoming `e2e attest` / `e2e verify` commands). The block is optional and off by
+default: a present `[<language>.e2e]` turns the gate on for that package, an absent one leaves
+it off.
+
+```toml
+[typescript.e2e]
+sources = ["src/**", "tests/e2e/**"]  # files whose change forces a fresh e2e run
+required = true                       # default; gate `e2e verify` on this package
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| `sources` | Globs whose content feeds the attestation's `source_hash` — choose them so a real code change invalidates the receipt while unrelated edits (docs, other packages) don't. **Required and non-empty**: an empty set would match any tree, so the loader rejects it. |
+| `required` | Whether `e2e verify` gates this package. Optional, defaults to `true`. |
+
+The commands that read this block — `e2e attest` to record a run, `e2e verify` to check the
+receipt — are not shipped yet; this slice adds only the config. The receipt format and the
+verify contract are tracked under issue #17.

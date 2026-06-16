@@ -1,0 +1,13 @@
+# Clean fixture: the optional [*.e2e] attestation block (issues #17 / #65). A
+# present block turns the E2E freshness gate on for that language. `required`
+# defaults to true, so [python.e2e] omits it; [typescript.e2e] sets it
+# explicitly. The [rust] table is absent entirely ⇒ the gate is off for Rust.
+[python.e2e]
+sources = ["src/**", "tests/e2e/**"]
+
+[typescript]
+coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
+
+[typescript.e2e]
+sources = ["lib/**"]
+required = false

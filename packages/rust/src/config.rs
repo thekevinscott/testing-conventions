@@ -35,6 +35,7 @@ pub struct PythonConfig {
     pub coverage: Option<PythonCoverage>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
+    pub e2e: Option<E2eConfig>,
 }
 
 /// The `[typescript]` table.
@@ -44,6 +45,7 @@ pub struct TypeScriptConfig {
     pub coverage: Option<TypeScriptCoverage>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
+    pub e2e: Option<E2eConfig>,
 }
 
 /// The `[rust]` table.
@@ -53,6 +55,7 @@ pub struct RustConfig {
     pub coverage: Option<RustCoverage>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
+    pub e2e: Option<E2eConfig>,
 }
 
 /// `[python].coverage`.
@@ -80,6 +83,28 @@ pub struct TypeScriptCoverage {
 pub struct RustCoverage {
     pub regions: u8,
     pub lines: u8,
+}
+
+/// `[python.e2e]` / `[typescript.e2e]` / `[rust.e2e]` — the optional E2E
+/// attestation block (issue #17). A present block turns the E2E freshness gate
+/// on for that language; an absent one leaves it off. Nothing consumes this yet
+/// — `e2e attest` / `e2e verify` are later slices of #17.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct E2eConfig {
+    /// Globs whose content feeds the receipt's `source_hash` — pick them so a
+    /// real code change invalidates the receipt while unrelated edits (docs,
+    /// other packages) don't. Must be non-empty: an empty set would match any
+    /// tree, so the gate could never go stale. Validated on load.
+    pub sources: Vec<String>,
+    /// Whether `e2e verify` gates this package. Defaults to `true`.
+    #[serde(default = "default_required")]
+    pub required: bool,
+}
+
+/// The default for [`E2eConfig::required`] — a configured block gates by default.
+fn default_required() -> bool {
+    true
 }
 
 /// A rule a file can be exempted from (issue #32).
@@ -168,6 +193,26 @@ impl Config {
                 }
             }
         }
+        let e2e_tables = [
+            ("python", self.python.as_ref().and_then(|c| c.e2e.as_ref())),
+            (
+                "typescript",
+                self.typescript.as_ref().and_then(|c| c.e2e.as_ref()),
+            ),
+            ("rust", self.rust.as_ref().and_then(|c| c.e2e.as_ref())),
+        ];
+        for (table, e2e) in e2e_tables
+            .into_iter()
+            .filter_map(|(t, e)| e.map(|e| (t, e)))
+        {
+            if e2e.sources.is_empty() {
+                bail!(
+                    "[{table}.e2e] names no sources — set `sources = [\"src/**\", …]` so a \
+                     code change invalidates the receipt, or remove the block to turn the \
+                     gate off"
+                );
+            }
+        }
         Ok(())
     }
 }
@@ -253,6 +298,20 @@ mod tests {
         let exempt = &config.python.unwrap().exempt;
         assert_eq!(exempt.len(), 1);
         assert_eq!(exempt[0].rules, vec![Rule::ColocatedTest, Rule::Coverage]);
+    }
+
+    #[test]
+    fn an_e2e_block_defaults_required_to_true() {
+        let config = parse("[python.e2e]\nsources = [\"src/**\"]\n").unwrap();
+        let e2e = config.python.unwrap().e2e.unwrap();
+        assert_eq!(e2e.sources, vec!["src/**".to_string()]);
+        assert!(e2e.required, "an omitted `required` defaults to true");
+    }
+
+    #[test]
+    fn an_e2e_block_with_empty_sources_is_rejected() {
+        let err = parse("[rust.e2e]\nsources = []\n").unwrap_err();
+        assert!(err.to_string().contains("names no sources"), "got: {err}");
     }
 
     /// A throwaway directory tree, removed on drop.

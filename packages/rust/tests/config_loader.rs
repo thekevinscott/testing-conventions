@@ -31,6 +31,7 @@ fn expected_valid() -> Config {
                 fail_under: 100,
             }),
             exempt: vec![],
+            e2e: None,
         }),
         typescript: Some(TypeScriptConfig {
             coverage: Some(TypeScriptCoverage {
@@ -40,6 +41,7 @@ fn expected_valid() -> Config {
                 statements: 100,
             }),
             exempt: vec![],
+            e2e: None,
         }),
         rust: Some(RustConfig {
             coverage: Some(RustCoverage {
@@ -47,6 +49,7 @@ fn expected_valid() -> Config {
                 lines: 100,
             }),
             exempt: vec![],
+            e2e: None,
         }),
     }
 }
@@ -119,5 +122,50 @@ fn rejects_an_exemption_with_a_blank_reason_self_guard() {
     assert!(
         load_config(fixture("exempt_empty_reason.toml")).is_err(),
         "an exemption with a blank reason must be rejected (self-guard)"
+    );
+}
+
+#[test]
+fn loads_e2e_blocks_and_a_present_block_turns_the_gate_on() {
+    // A present `[*.e2e]` block enables the freshness gate for that language
+    // (issue #17). `required` defaults to true when omitted and is taken
+    // verbatim when set; an absent table means no gate for that language.
+    let config = load_config(fixture("e2e.toml")).expect("an e2e config should load");
+
+    let python = config.python.expect("[python] table present");
+    let py_e2e = python.e2e.expect("[python.e2e] present");
+    assert_eq!(
+        py_e2e.sources,
+        vec!["src/**".to_string(), "tests/e2e/**".to_string()]
+    );
+    assert!(py_e2e.required, "`required` defaults to true when omitted");
+
+    let ts_e2e = config
+        .typescript
+        .expect("[typescript] table present")
+        .e2e
+        .expect("[typescript.e2e] present");
+    assert_eq!(ts_e2e.sources, vec!["lib/**".to_string()]);
+    assert!(!ts_e2e.required, "explicit `required = false` is honored");
+
+    assert!(
+        config.rust.is_none(),
+        "no [rust] table ⇒ no e2e gate for rust"
+    );
+}
+
+#[test]
+fn rejects_an_unknown_key_in_an_e2e_block_self_guard() {
+    assert!(
+        load_config(fixture("e2e_unknown_key.toml")).is_err(),
+        "an unknown key under [*.e2e] must be rejected (self-guard)"
+    );
+}
+
+#[test]
+fn rejects_an_e2e_block_with_empty_sources_self_guard() {
+    assert!(
+        load_config(fixture("e2e_empty_sources.toml")).is_err(),
+        "an [*.e2e] block with empty sources must be rejected (self-guard)"
     );
 }

@@ -77,6 +77,13 @@ For **`python`**, runs `coverage.py` with branch coverage on — measuring the s
 actual vs. required percent on stderr) when it isn't. `coverage` and `pytest` must be installed.
 Files with a `coverage` [exemption](#exemptions) are also excluded from the denominator.
 
+**Non-regression ratchet (`python`).** When a `coverage-baseline.json` sits beside `<PATH>`, the
+check also fails if the measured total drops below the recorded `python` baseline — a regression —
+even when the floor is still met (`coverage NN.NN% regressed below the recorded baseline MM.MM%`).
+The file is keyed by language (`{ "python": { "percent_covered": 100.0 } }`); a missing file means
+floor-only, so it stays backward compatible. (TypeScript and Rust, and the baseline-record step,
+are forthcoming.)
+
 For **`typescript`**, runs `vitest` with v8 coverage (the json-summary reporter) — measuring the
 `.ts` / `.tsx` / `.mts` / `.cts` sources under `<PATH>` with `*.test.*` and declaration files
 excluded from the denominator — and compares each of the four metrics against

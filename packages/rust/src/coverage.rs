@@ -100,6 +100,70 @@ pub fn evaluate(report: &CoverageReport, thresholds: Thresholds) -> Outcome {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Non-regression ratchet (Python — #131, parent #46).
+//
+// Coverage can't regress: a committed `coverage-baseline.json` beside the
+// measured tree records the last total per language, and a run that drops below
+// the recorded baseline fails even when it still clears the configured floor.
+// `read_baseline` loads the committed file (absent → no ratchet, backward
+// compatible) and `evaluate_ratchet` is the pure comparison, mirroring
+// `evaluate`'s float tolerance. The CLI runs both and fails if either does. The
+// TypeScript/Rust arms and the explicit baseline-record step are later slices.
+// ---------------------------------------------------------------------------
+
+/// Where the committed coverage baseline lives, relative to the scanned root —
+/// beside the measured tree, the way `--config` resolves alongside it.
+pub const BASELINE_PATH: &str = "coverage-baseline.json";
+
+/// The committed coverage baseline — the last recorded coverage per language.
+/// Keyed by language so one file serves a multi-language repo; a language with
+/// no entry has no ratchet (the floor still applies). The TypeScript and Rust
+/// keys land with their slices.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Baseline {
+    /// The recorded Python total, when present.
+    #[serde(default)]
+    pub python: Option<PythonBaseline>,
+}
+
+/// The recorded Python baseline: the last total percent the unit suite cleared.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PythonBaseline {
+    /// The recorded total covered percent (line, plus branch when measured).
+    pub percent_covered: f64,
+}
+
+/// Read the committed baseline at `root`/[`BASELINE_PATH`], or `None` when the
+/// file is absent — an absent baseline means no ratchet, the same way a missing
+/// config means nothing is exempt.
+pub fn read_baseline(root: &Path) -> Result<Option<Baseline>> {
+    let path = root.join(BASELINE_PATH);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let contents = std::fs::read_to_string(&path)
+        .with_context(|| format!("reading coverage baseline `{}`", path.display()))?;
+    let baseline = serde_json::from_str(&contents)
+        .with_context(|| format!("parsing coverage baseline `{}`", path.display()))?;
+    Ok(Some(baseline))
+}
+
+/// Decide whether `percent` regresses below `baseline`, the recorded total the
+/// suite must not drop under. `None` (nothing recorded) is no ratchet →
+/// [`Outcome::Pass`]. Carries the same hair of float tolerance as [`evaluate`] so
+/// a percent that rounds to the baseline isn't failed by noise.
+pub fn evaluate_ratchet(percent: f64, baseline: Option<f64>) -> Outcome {
+    match baseline {
+        Some(required) if percent + 1e-9 < required => Outcome::Fail(format!(
+            "coverage {percent:.2}% regressed below the recorded baseline {required:.2}%"
+        )),
+        _ => Outcome::Pass,
+    }
+}
+
 /// Run the unit suite under coverage.py in `root` and check it against
 /// `thresholds`.
 ///
@@ -109,8 +173,14 @@ pub fn evaluate(report: &CoverageReport, thresholds: Thresholds) -> Outcome {
 /// `root`-relative paths. The `coverage` CLI — with `pytest` importable — must be
 /// on `PATH`.
 pub fn measure(root: &Path, thresholds: Thresholds, omit: &[String]) -> Result<Outcome> {
-    let report = run_coverage(root, omit)?;
-    Ok(evaluate(&report, thresholds))
+    Ok(evaluate(&measure_report(root, omit)?, thresholds))
+}
+
+/// Run the Python unit suite under coverage.py in `root` and return the parsed
+/// report — the totals the floor ([`evaluate`]) and the ratchet
+/// ([`evaluate_ratchet`]) both read. `omit` is as in [`measure`].
+pub fn measure_report(root: &Path, omit: &[String]) -> Result<CoverageReport> {
+    run_coverage(root, omit)
 }
 
 /// A coverage.py data file under the temp dir — unique per call (so checks
@@ -512,6 +582,87 @@ mod tests {
             build_omit(&exempt),
             "*_test.py,*conftest.py,pkg/gen.py,shim.py"
         );
+    }
+
+    // --- Non-regression ratchet (#131) ---
+
+    #[test]
+    fn ratchet_passes_when_coverage_holds_at_the_baseline() {
+        assert_eq!(evaluate_ratchet(100.0, Some(100.0)), Outcome::Pass);
+    }
+
+    #[test]
+    fn ratchet_passes_when_coverage_improves_over_the_baseline() {
+        assert_eq!(evaluate_ratchet(92.0, Some(85.0)), Outcome::Pass);
+    }
+
+    #[test]
+    fn ratchet_fails_on_a_drop_below_the_baseline() {
+        assert!(matches!(
+            evaluate_ratchet(86.0, Some(90.0)),
+            Outcome::Fail(message) if message.contains("regressed") && message.contains("90")
+        ));
+    }
+
+    #[test]
+    fn ratchet_is_vacuous_without_a_recorded_baseline() {
+        assert_eq!(evaluate_ratchet(10.0, None), Outcome::Pass);
+    }
+
+    #[test]
+    fn ratchet_tolerates_float_noise_at_the_baseline() {
+        assert_eq!(evaluate_ratchet(99.999_999_999, Some(100.0)), Outcome::Pass);
+    }
+
+    static BASELINE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    /// A throwaway directory under the temp dir, removed on drop — for the
+    /// `read_baseline` file cases.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new() -> Self {
+            let dir = std::env::temp_dir().join(format!(
+                "tc-baseline-{}-{}",
+                std::process::id(),
+                BASELINE_COUNTER.fetch_add(1, Ordering::Relaxed),
+            ));
+            std::fs::create_dir_all(&dir).unwrap();
+            TempDir(dir)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn read_baseline_is_none_when_the_file_is_absent() {
+        let dir = TempDir::new();
+        assert!(read_baseline(&dir.0).unwrap().is_none());
+    }
+
+    #[test]
+    fn read_baseline_parses_the_recorded_python_total() {
+        let dir = TempDir::new();
+        std::fs::write(
+            dir.0.join(BASELINE_PATH),
+            r#"{"python":{"percent_covered":91.5}}"#,
+        )
+        .unwrap();
+        let baseline = read_baseline(&dir.0)
+            .unwrap()
+            .expect("a baseline file is present");
+        assert_eq!(baseline.python.unwrap().percent_covered, 91.5);
+    }
+
+    #[test]
+    fn read_baseline_errors_on_a_malformed_file() {
+        let dir = TempDir::new();
+        std::fs::write(dir.0.join(BASELINE_PATH), "{ not json").unwrap();
+        assert!(read_baseline(&dir.0).is_err());
     }
 
     // --- TypeScript (vitest) — issue #31 ---

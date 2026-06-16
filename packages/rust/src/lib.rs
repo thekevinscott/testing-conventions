@@ -128,7 +128,7 @@ enum UnitRule {
 /// so adding Rust here doesn't touch the colocated-test/coverage rules.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum IntegrationLintLanguage {
-    /// Python test files (`*_test.py`, `test_*.py`, `conftest.py`).
+    /// Python test files (`*_test.py`, `conftest.py`).
     #[value(name = "python")]
     Python,
     /// TypeScript test files (`*.test.{ts,tsx,mts,cts}`).

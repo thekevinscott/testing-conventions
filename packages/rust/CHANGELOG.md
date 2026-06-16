@@ -47,7 +47,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `unmocked-collaborator` rule (still waivable via #102), no new `config::Rule`. See
   [`internals/python/isolation.md`](../../internals/python/isolation.md).
 - **Python unit isolation** — `unmocked-collaborator` (#42, slice 2). `unit isolation
-  --language python <PATH>` now flags a colocated unit test (`*_test.py` / `test_*.py`)
+  --language python <PATH>` now flags a colocated unit test (`*_test.py`)
   that **imports a first-party collaborator without mocking it** — a unit test must
   isolate the unit under test. The unit under test (the import whose module's last
   segment matches the test's base name), the test framework (`pytest` / `unittest`),
@@ -139,7 +139,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   VitestTotals, VitestMetric}`, sharing the existing `Outcome`. (#31)
 - `lint` module + `integration lint` CLI — the first deterministic *lint* on test
   code. `integration lint --language python <PATH>` parses each Python test file
-  (`*_test.py`, `test_*.py`, `conftest.py`) with `rustpython_parser` and walks the
+  (`*_test.py`, `conftest.py`) with `rustpython_parser` and walks the
   AST, exiting non-zero on any violation. Lints:
   **`no-monkeypatch`** (#49) — a test/fixture that declares the `monkeypatch`
   parameter; **`no-inline-patch`** (#50) — a `patch(...)` / `patch.object(...)` /
@@ -312,3 +312,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `conftest.py` as a unit-test subject: it holds pytest fixtures (test support), so
   it is never reported as a missing-test orphan, and it is omitted from the
   coverage denominator alongside `*_test.py`. (#112)
+- `integration lint` and `unit isolation` (`--language python`) no longer scan a
+  legacy `test_*.py` as a test file — it is ordinary source. This completes #112's
+  unification: every Python rule now agrees on one test-file definition
+  (`*_test.py`, plus `conftest.py` for fixtures), with no legacy `test_*.py`. (#112)

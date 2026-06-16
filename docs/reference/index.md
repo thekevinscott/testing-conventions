@@ -138,7 +138,7 @@ deterministic bright-line.
   `vi.importActual<typeof import(spec)>()` (the README pattern). A bare `vi.mock(spec)`
   (vitest auto-mock, typed from the real module) and an already-typed factory both pass.
 
-**Python** — parses each colocated unit test (`*_test.py` / `test_*.py`, not `conftest.py`) with
+**Python** — parses each colocated unit test (`*_test.py`, not `conftest.py`) with
 the Rust Python parser:
 
 - **`unmocked-collaborator`** — an imported collaborator that the test doesn't mock. Two kinds are
@@ -250,7 +250,7 @@ testing-conventions integration lint --language <LANG> [--config <CONFIG>] <PATH
 Reports each violation to stderr as `path:line: <lint> — <message>` and exits `1` if any are
 found, `0` otherwise.
 
-**Python** — parses each test file (`*_test.py`, `test_*.py`, `conftest.py`) with a Rust Python
+**Python** — parses each test file (`*_test.py`, `conftest.py`) with a Rust Python
 parser and walks the AST:
 
 - **`no-monkeypatch`** — a test or fixture function that declares the `monkeypatch` parameter.

@@ -57,7 +57,7 @@ previously errored as unimplemented; nothing existing changes.
 
 Also adds the `integration lint` command and its `lint` module (#48, #49): a
 deterministic, AST-based lint on Python test files. `integration lint --language
-python <PATH>` parses each test file (`*_test.py`, `test_*.py`, `conftest.py`) with
+python <PATH>` parses each test file (`*_test.py`, `conftest.py`) with
 `rustpython_parser` and flags the mocking-mechanism lints — `no-monkeypatch` (a
 test/fixture that declares pytest's `monkeypatch` parameter), `no-inline-patch` (a
 `patch(...)` call in a test body, which belongs in a `pytest.fixture`),
@@ -245,7 +245,7 @@ factory — is no longer flagged `untyped-mock`. No API change; only a factory
 
 Also adds **Python unit isolation** (#42, slice 2): `unit isolation --language
 python <PATH>` — the unit-direction twin of the above. It flags
-`unmocked-collaborator` on a colocated unit test (`*_test.py` / `test_*.py`) that
+`unmocked-collaborator` on a colocated unit test (`*_test.py`) that
 imports a first-party collaborator without mocking it; the unit under test, the
 test framework, pure stdlib, and type-only imports are never collaborators, and an
 import counts as mocked when a `patch("…")` targets a matching last segment.
@@ -260,7 +260,10 @@ flagging it as a missing-test orphan and counting it in the coverage denominator
 because only `*_test.py` was recognized as a non-subject. It is now test support:
 never a subject, and omitted from the denominator alongside the test files. No API
 change; the legacy `test_*.py` prefix stays unsupported (the colocated rule
-requires `foo_test.py`).
+requires `foo_test.py`). `integration lint` and `unit isolation` now drop legacy
+`test_*.py` too — a `test_foo.py` is ordinary source, not a test file — so every
+Python rule agrees on one test-file definition (`*_test.py`, plus `conftest.py`
+for fixtures). (#112)
 
 Then extends Python `unit isolation` to **external** collaborators (#121, slice 3):
 the same `unmocked-collaborator` rule now also flags an imported, un-mocked
@@ -372,6 +375,11 @@ Exemptions (#32) change runtime behavior:
   the loader **rejected** those ids as an unknown `rules` variant (and even parsed,
   `integration lint` could never have waived them). A reason-less or stale entry still
   errors. (#123)
+- `integration lint --language python` and `unit isolation --language python` no
+  longer scan a legacy `test_*.py`: it is ordinary source, not a test file, so its
+  contents are not linted (`no-monkeypatch`, `unmocked-collaborator`, …). Name unit
+  tests `foo_test.py`. Every Python rule now shares one test-file definition
+  (`*_test.py`, plus `conftest.py` for the integration lints). (#112)
 
 ### Verification
 

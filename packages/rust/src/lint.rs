@@ -43,9 +43,8 @@ pub use crate::violation::Violation;
 /// Scan the Python test files under `root` and return every lint violation,
 /// sorted by `(file, line)` for deterministic output.
 ///
-/// A *Python test file* is `*_test.py`, the legacy `test_*.py`, or
-/// `conftest.py` (where fixtures live). Each is parsed and walked. A file that
-/// cannot be read or parsed is an error.
+/// A *Python test file* is `*_test.py` or `conftest.py` (where fixtures live).
+/// Each is parsed and walked. A file that cannot be read or parsed is an error.
 pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     let root = root.as_ref();
     // The dist's own top-level package, for `no-first-party-patch` (#42). Resolved
@@ -84,7 +83,7 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
 /// unit test imports without mocking it. The Python arm of `unit isolation`
 /// ([`crate::isolation::Language::Python`]).
 ///
-/// A *unit test* here is `*_test.py` / `test_*.py` (not `conftest.py`). First-party
+/// A *unit test* here is `*_test.py` (not `conftest.py`). First-party
 /// is the dist's own package ([`first_party_package`]); a tree with no declared
 /// package has no first-party collaborators and so reports nothing.
 pub fn find_unit_isolation_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
@@ -596,21 +595,14 @@ fn is_type_checking(test: &Expr) -> bool {
     }
 }
 
-/// The unit-under-test base name for a test file: `widget_test.py` → `widget`,
-/// legacy `test_widget.py` → `widget`.
+/// The unit-under-test base name for a test file: `widget_test.py` → `widget`.
 fn unit_under_test_base(file: &Path) -> String {
     let name = file
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default();
     let stem = name.strip_suffix(".py").unwrap_or(name);
-    if let Some(base) = stem.strip_suffix("_test") {
-        base.to_string()
-    } else if let Some(base) = stem.strip_prefix("test_") {
-        base.to_string()
-    } else {
-        stem.to_string()
-    }
+    stem.strip_suffix("_test").unwrap_or(stem).to_string()
 }
 
 /// Walks one parsed test file, collecting lint violations. Tracks how deep we
@@ -946,27 +938,26 @@ fn collect_python_files(
     Ok(())
 }
 
-/// `true` for a file the integration lints scan: `*_test.py`, legacy `test_*.py`,
-/// or `conftest.py` (where fixtures live).
+/// `true` for a file the integration lints scan: `*_test.py` or `conftest.py`
+/// (where fixtures live). A legacy `test_*.py` is ordinary source, not a test
+/// file (#112).
 fn is_python_test_file(path: &Path) -> bool {
     let name = path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default();
-    name == "conftest.py"
-        || name.ends_with("_test.py")
-        || (name.starts_with("test_") && name.ends_with(".py"))
+    name == "conftest.py" || name.ends_with("_test.py")
 }
 
-/// `true` for a colocated *unit* test the isolation rule scans: `*_test.py` or
-/// legacy `test_*.py`, but **not** `conftest.py` (fixtures, not a unit).
+/// `true` for a colocated *unit* test the isolation rule scans: `*_test.py`. A
+/// legacy `test_*.py` is source, and `conftest.py` holds fixtures, not a unit
+/// (#112).
 fn is_python_unit_test_file(path: &Path) -> bool {
     let name = path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default();
-    name != "conftest.py"
-        && (name.ends_with("_test.py") || (name.starts_with("test_") && name.ends_with(".py")))
+    name.ends_with("_test.py")
 }
 
 #[cfg(test)]
@@ -1107,22 +1098,23 @@ mod tests {
     }
 
     #[test]
-    fn unit_under_test_base_strips_test_affixes() {
+    fn unit_under_test_base_strips_the_test_suffix() {
         assert_eq!(
             unit_under_test_base(Path::new("pkg/widget_test.py")),
             "widget"
         );
-        assert_eq!(unit_under_test_base(Path::new("test_widget.py")), "widget");
-        // A name without a test affix falls back to its stem.
+        // A name without the `_test` suffix falls back to its stem (a legacy
+        // `test_*.py` is source, never passed here).
         assert_eq!(unit_under_test_base(Path::new("plain.py")), "plain");
     }
 
     #[test]
     fn recognizes_python_unit_test_files() {
         assert!(is_python_unit_test_file(Path::new("widget_test.py")));
-        assert!(is_python_unit_test_file(Path::new("test_widget.py")));
         // conftest holds fixtures, not a unit — excluded from unit isolation.
         assert!(!is_python_unit_test_file(Path::new("conftest.py")));
+        // #112: a legacy `test_*.py` is source, not a unit test.
+        assert!(!is_python_unit_test_file(Path::new("test_widget.py")));
         assert!(!is_python_unit_test_file(Path::new("widget.py")));
     }
 
@@ -1301,13 +1293,14 @@ mod tests {
     fn recognizes_python_test_files() {
         assert!(is_python_test_file(Path::new("widget_test.py")));
         assert!(is_python_test_file(Path::new("pkg/widget_test.py")));
-        assert!(is_python_test_file(Path::new("test_widget.py")));
         assert!(is_python_test_file(Path::new("conftest.py")));
     }
 
     #[test]
     fn ignores_non_test_files() {
         assert!(!is_python_test_file(Path::new("widget.py")));
+        // #112: a legacy `test_*.py` is source, not a scanned test file.
+        assert!(!is_python_test_file(Path::new("test_widget.py")));
         assert!(!is_python_test_file(Path::new("conftest.pyi")));
         assert!(!is_python_test_file(Path::new("README.md")));
         assert!(!is_python_test_file(Path::new("testing.py")));

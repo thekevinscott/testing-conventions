@@ -5,6 +5,7 @@
 //! Starts red against the stub in `src/e2e.rs` and goes green once `attest` is
 //! implemented.
 
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -71,6 +72,44 @@ fn attest_exit(repo: &Path, command: &str) -> i32 {
         .expect("the process should exit with a code")
 }
 
+/// Write an executable stand-in signer into `dir` and return its path. git's
+/// OpenPGP path runs `gpg --status-fd=2 -bsau <key>`, reads the signature from
+/// stdout, and treats `[GNUPG:] SIG_CREATED` on the status fd as success — so
+/// this records a signature with no real key material or network.
+fn write_fake_gpg(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-gpg");
+    std::fs::write(
+        &path,
+        "#!/bin/sh\n\
+         echo '[GNUPG:] SIG_CREATED S' >&2\n\
+         printf '%s\\n' '-----BEGIN PGP SIGNATURE-----' '' 'ZmFrZQ==' '-----END PGP SIGNATURE-----'\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path
+}
+
+/// Configure `repo` to require an OpenPGP-signed commit, signed by `fake_gpg`.
+fn require_signing(repo: &Path, fake_gpg: &Path) {
+    git(repo, &["config", "gpg.format", "openpgp"]);
+    git(repo, &["config", "gpg.program", fake_gpg.to_str().unwrap()]);
+    git(repo, &["config", "user.signingkey", "fake"]);
+    git(repo, &["config", "commit.gpgsign", "true"]);
+}
+
+/// Whether the commit at `rev` carries a signature (a `gpgsig` header).
+fn commit_is_signed(dir: &Path, rev: &str) -> bool {
+    let out = Command::new("git")
+        .args(["cat-file", "commit", rev])
+        .current_dir(dir)
+        .output()
+        .expect("git cat-file should run");
+    assert!(out.status.success(), "git cat-file {rev} failed");
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .any(|line| line.starts_with("gpgsig"))
+}
+
 #[test]
 fn attest_exits_zero_and_commits_an_attestation() {
     let repo = TempRepo::new();
@@ -99,4 +138,24 @@ fn attest_exits_zero_even_when_the_command_fails() {
     let repo = TempRepo::new();
     assert_eq!(attest_exit(&repo.0, "exit 1"), 0);
     assert!(repo.0.join(ATTESTATION_PATH).is_file());
+}
+
+#[test]
+fn attest_signs_the_attestation_commit_when_the_repo_requires_signing() {
+    // #128: driving the built binary, attest in a signing-required repo must
+    // produce a *signed* attestation commit (inheriting commit.gpgsign) so it can
+    // merge where verified signatures are required — and still exit 0.
+    let repo = TempRepo::new();
+    let fake_gpg = write_fake_gpg(&repo.0);
+    require_signing(&repo.0, &fake_gpg);
+
+    assert_eq!(
+        attest_exit(&repo.0, "true"),
+        0,
+        "attest force-runs and exits 0"
+    );
+    assert!(
+        commit_is_signed(&repo.0, "HEAD"),
+        "the attestation commit should be signed when the repo requires signing"
+    );
 }

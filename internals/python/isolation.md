@@ -125,11 +125,33 @@ Pure stdlib, the test framework (`pytest`, `unittest`, `unittest.mock`),
 `__future__`, and `TYPE_CHECKING`-guarded (type-only) imports are never
 collaborators.
 
-This slice covers **first-party** — exactly #42's acceptance ("un-mocked
-first-party (unit)"). Un-mocked **external / effectful-stdlib** imports (importing
-`requests` / `subprocess` unmocked) are a clean follow-up that needs a stdlib
-classifier to separate effectful (`subprocess`) from pure (`dataclasses`); carved
-out as slice 3.
+#42's acceptance ("un-mocked first-party (unit)") is met by **first-party** alone.
+**Slice 3 (#121)** broadens the same rule to un-mocked **external** imports, so the
+README's full "flag any un-mocked first-party / external import" holds.
+
+### External classification (slice 3)
+
+An import head that isn't first-party is classified against an embedded copy of the
+stdlib module set (`sys.stdlib_module_names`) and a curated **effectful** subset:
+
+| Head | Class | Verdict |
+| --- | --- | --- |
+| relative, or `== dist package` | first-party | check (slice 2) |
+| `pytest` / `_pytest` / `mock` | test framework | allow |
+| in the **effectful-stdlib** set | external | **check** |
+| in the stdlib set (otherwise) | pure stdlib | allow |
+| anything else (bare, non-stdlib) | third-party | **check** |
+
+The effectful set is deliberately **conservative** — the modules that are
+effectful *at the head* (network / subprocess / process & IPC / randomness /
+database / low-level OS): `socket`, `ssl`, `ftplib`, `smtplib`, `subprocess`,
+`multiprocessing`, `signal`, `random`, `secrets`, `sqlite3`, `ctypes`, … It
+**excludes dual-nature** modules whose head can't distinguish a pure use from an
+effectful one — `os` (`os.path` vs `os.system`), `pathlib` (`PurePath` vs
+`Path.read_text`), `datetime` / `time` (a literal vs `now()`), `io`, `logging`. At
+the head level those are a [non-goal](#precision-limits--non-goals): the clock /
+filesystem are caught when patched-by-string (the convention), not at import. The
+list is a tunable heuristic, not an exhaustive map (à la #19).
 
 ## Surface & module shape
 
@@ -172,6 +194,14 @@ plainly (à la #19) so nobody over-trusts green:
   autouse fixture in `conftest.py`) — the rule only reads the test file's own
   patches; the canonical form patches *and doesn't import*, so this bites only the
   import-and-mock-elsewhere mix. Alias edges (`import x as y`).
+- **Unit (slice 3):** a **dual-nature stdlib** module used purely (`os.path.join`,
+  `pathlib.PurePath`, `datetime(2020, 1, 1)`) — its head can't tell pure from
+  effectful, so those heads are excluded from the effectful set and not flagged;
+  the clock / filesystem stay caught by the patch-by-string convention, not at
+  import. A pure **test-helper** third-party package (`freezegun`, `responses`, …)
+  is imported-and-used, not mocked — beyond the `pytest` / `_pytest` / `mock`
+  allowlist it's flagged like any third-party import; waive it (or extend the
+  allowlist) until a config-level test-dep list exists.
 
 ## Fixtures (per slice, red + clean — #3 guardrail)
 
@@ -200,8 +230,18 @@ Each is its own test-first increment with CHANGELOG + MIGRATIONS + a VitePress d
    discovery + flag `patch("<first-party>…")`; register the waiver `Rule`. ✅
 2. **Unit (first-party)** — `unmocked-collaborator` for `unit isolation --language
    python`: flag an imported first-party collaborator (not the unit under test, not
-   `patch`-ed by string) — reuses slice 1's first-party discovery. *(This slice.)*
+   `patch`-ed by string) — reuses slice 1's first-party discovery. ✅ (#117)
 3. **Unit (external)** — extend slice 2 to un-mocked third-party / effectful-stdlib
-   imports, behind a stdlib effectful/pure classifier.
+   imports, behind the [stdlib effectful/pure classifier](#external-classification-slice-3)
+   above. Same `unmocked-collaborator` rule (no new `config::Rule`). *(This slice — #121.)*
 
-Order: 1 → 2 → 3.
+Order: 1 → 2 → 3. Slice 3 reuses slice 2's visitor, `is_mocked`, and waiver.
+
+## Unit fixtures (slice 3)
+
+- **External red:** the `pyproject.toml` + a `widget_test.py` importing un-mocked
+  `requests` (third-party) and `subprocess` (effectful stdlib), plus `json` (pure
+  stdlib, allowed) and the unit under test.
+- **External clean:** the canonical form — mocks the external collaborators by
+  string (so they're never imported) and uses only pure stdlib. Zero findings.
+- **External waived:** the red test waived for `unmocked-collaborator` → passes.

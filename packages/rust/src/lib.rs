@@ -247,11 +247,10 @@ fn run_unit_coverage(
 /// violation to stderr as `path:line: rule — message` and returning `1` when any
 /// are found, `0` otherwise.
 fn run_unit_isolation(root: &Path, language: isolation::Language) -> anyhow::Result<i32> {
-    match language {
-        // Rust-only for now; #42 / #43 add Python / TypeScript arms here.
-        isolation::Language::Rust => {}
-    }
-    let violations = isolation::find_violations(root)?;
+    let violations = match language {
+        isolation::Language::Rust => isolation::find_violations(root)?,
+        isolation::Language::TypeScript => ts::find_unit_violations(root)?,
+    };
     if violations.is_empty() {
         return Ok(0);
     }

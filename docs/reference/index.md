@@ -126,6 +126,10 @@ deterministic bright-line.
   imports (`import type …` — erased at compile time), and the **test runner** (`vitest` /
   `@vitest/*`). This is the unit-suite mirror of [`integration lint`](#integration-lint)'s
   `no-first-party-mock`; see the [Isolation guide](../guide/isolation).
+- **`untyped-mock`** — a `vi.mock(spec, factory)` whose factory has no `vi.importActual<…>()`
+  type anchor, so the double can drift from the real module. Anchor it with
+  `vi.importActual<typeof import(spec)>()` (the README pattern). A bare `vi.mock(spec)`
+  (vitest auto-mock, typed from the real module) and an already-typed factory both pass.
 
 ## Exemptions
 

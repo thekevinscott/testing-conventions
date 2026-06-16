@@ -32,3 +32,14 @@ fn red_exits_nonzero() {
 fn clean_exits_zero() {
     assert_eq!(isolation_exit("clean"), 0);
 }
+
+// typed `vi.mock` (#77)
+#[test]
+fn untyped_red_exits_nonzero() {
+    assert_eq!(isolation_exit("untyped_mock/red"), 1);
+}
+
+#[test]
+fn untyped_clean_exits_zero() {
+    assert_eq!(isolation_exit("untyped_mock/clean"), 0);
+}

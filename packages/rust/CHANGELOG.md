@@ -109,6 +109,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   **test runner** (`vitest` / `@vitest/*`). Adds `TypeScript` to `isolation::Language`
   and reuses slice #75's `oxc` parser. Library API:
   `testing_conventions::ts::find_unit_violations`. (#43, #76)
+- `unit isolation --language typescript` also enforces **typed** mocks (#43, #77):
+  a `vi.mock(spec, factory)` whose factory has no `vi.importActual<…>()` type anchor
+  is flagged **`untyped-mock`**, since an untyped double can drift from the source.
+  A bare `vi.mock(spec)` (vitest auto-mock, typed from the real module) and a typed
+  factory (`vi.importActual<typeof import(spec)>()`) both pass. With this, #43's
+  TypeScript isolation is complete (#75 / #76 / #77). (#43, #77)
 - `violation` module — the `Violation` type is hoisted here and shared by the
   Python `lint` and Rust `isolation` detectors so the CLI prints every rule the
   same way. `testing_conventions::lint::Violation` remains as a re-export, so the

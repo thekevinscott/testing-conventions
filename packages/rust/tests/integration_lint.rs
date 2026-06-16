@@ -309,6 +309,27 @@ fn first_party_patch_waived_exits_zero() {
     );
 }
 
+// ---- #145: a legacy `test_*.py` is source, not scanned -------------------
+
+#[test]
+fn legacy_test_prefix_is_not_scanned() {
+    // After #112 a unit test is `*_test.py` and a legacy `test_*.py` is ordinary
+    // source. The integration lints must agree: this `test_widget.py` carries a
+    // `no-monkeypatch` violation, but it is source — so nothing is reported.
+    let violations =
+        find_violations(fixture("legacy_prefix")).expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "a legacy `test_*.py` is source (not a test file) and must not be scanned; \
+         got {violations:?}"
+    );
+}
+
+#[test]
+fn legacy_test_prefix_exits_zero() {
+    assert_eq!(lint_exit("legacy_prefix"), 0);
+}
+
 // ---- CLI surface ---------------------------------------------------------
 
 #[test]

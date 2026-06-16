@@ -1,0 +1,6 @@
+# Declares the dist's own top-level package so the unit-isolation rule classifies
+# `myproject.*` imports as first-party. Even with first-party discoverable, a legacy
+# `test_*.py` must not be scanned — it is ordinary source after #112 (see #145).
+[project]
+name = "myproject"
+version = "0.0.0"

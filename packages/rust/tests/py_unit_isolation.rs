@@ -93,6 +93,27 @@ fn waived_exits_zero() {
     );
 }
 
+// ---- #145: a legacy `test_*.py` is source, not scanned -------------------
+
+#[test]
+fn legacy_test_prefix_is_not_scanned() {
+    // After #112 a unit test is `*_test.py` and a legacy `test_*.py` is ordinary
+    // source. `unit isolation` must agree: this `test_widget.py` imports an
+    // un-mocked first-party collaborator, but it is source — so nothing is reported.
+    let violations = find_unit_isolation_violations(fixture("legacy_prefix"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "a legacy `test_*.py` is source (not a unit test) and must not be scanned; \
+         got {violations:?}"
+    );
+}
+
+#[test]
+fn legacy_test_prefix_exits_zero() {
+    assert_eq!(isolation_exit("legacy_prefix"), 0);
+}
+
 // ---- external & effectful-stdlib deps (#121, slice 3) --------------------
 
 #[test]

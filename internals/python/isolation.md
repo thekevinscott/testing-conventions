@@ -93,7 +93,7 @@ patch in a fixture to isolate the new rule.
 
 ## Unit detection — `unmocked-collaborator` (slice 2)
 
-The mirror image, for `unit isolation --language python <PATH>`: a colocated unit
+The mirror image, for `unit lint --language python <PATH>`: a colocated unit
 test (`foo_test.py` next to `foo.py`) must isolate the unit under test, so an
 imported **first-party collaborator** that isn't mocked is the violation
 (`unmocked-collaborator` — the same rule id TypeScript's #76 emits, so the #102
@@ -158,7 +158,7 @@ list is a tunable heuristic, not an exhaustive map (à la #19).
 - **CLI.** Integration: extend the existing `integration lint --language python
   <PATH>` (the home for deterministic integration-test lints) — `no-first-party-patch`
   joins #48–#52 there, no new subcommand. Unit (slice 2): a Python arm of
-  `unit isolation --language python <PATH>`.
+  `unit lint --language python <PATH>`.
 - **Module.** Lives in [`lint.rs`](../../packages/rust/src/lint.rs), the Python
   AST home, reusing its `is_patch_call` / patch-target extraction and the shared
   `Violation` shape — the Python parallel to all-Rust-in-`isolation.rs`,
@@ -228,7 +228,7 @@ Each is its own test-first increment with CHANGELOG + MIGRATIONS + a VitePress d
 
 1. **Integration** — `no-first-party-patch`: `pyproject.toml` first-party
    discovery + flag `patch("<first-party>…")`; register the waiver `Rule`. ✅
-2. **Unit (first-party)** — `unmocked-collaborator` for `unit isolation --language
+2. **Unit (first-party)** — `unmocked-collaborator` for `unit lint --language
    python`: flag an imported first-party collaborator (not the unit under test, not
    `patch`-ed by string) — reuses slice 1's first-party discovery. ✅ (#117)
 3. **Unit (external)** — extend slice 2 to un-mocked third-party / effectful-stdlib

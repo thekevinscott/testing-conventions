@@ -13,7 +13,7 @@ Global flags: `--help`, `--version`.
 ### `unit colocated-test`
 
 Check that every source file under a directory has a colocated unit test. `colocated-test` is
-one rule under the `unit` command group; sibling rules (`unit coverage`, `unit isolation`) and
+one rule under the `unit` command group; sibling rules (`unit coverage`, `unit lint`) and
 other test kinds (`integration`, `e2e`) nest the same way.
 
 ```
@@ -138,14 +138,14 @@ and `@vitest/coverage-v8` must be installed under `<PATH>`, and `git` must resol
 same rules apply as for Python: comments and blanks aren't subjects, a `coverage`-exempt file's
 changed lines are lifted, and an added file's new lines *are* subjects.
 
-### `unit isolation`
+### `unit lint`
 
 Check that unit tests isolate the unit under test: collaborators are mocked (Python, TypeScript)
 or never called out to (Rust). A unit test that touches a real collaborator behaves like an
 integration test.
 
 ```
-testing-conventions unit isolation --language <LANG> [--config <CONFIG>] <PATH>
+testing-conventions unit lint --language <LANG> [--config <CONFIG>] <PATH>
 ```
 
 | Argument / flag     | Description                                                                            |
@@ -346,7 +346,7 @@ walks the AST:
   the crate under test (its `Cargo.toml` `[package].name`) or a `path` dependency. An
   integration test runs first-party code for real, so only external crates and `std` may be
   doubled. `crate::` here is the integration-test crate itself (not the library under test), so
-  it isn't flagged. This is the integration mirror of [`unit isolation`](#unit-isolation)'s
+  it isn't flagged. This is the integration mirror of [`unit lint`](#unit-lint)'s
   out-of-module rules; full precision (renames, `mock!` macros) is a future `dylint` pass.
 
 ### `e2e attest`

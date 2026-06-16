@@ -1,4 +1,4 @@
-# Clean fixture crate for the reusable workflow's `unit isolation` job (#125),
+# Clean fixture crate for the reusable workflow's `unit lint` job (#125),
 # exercising the Rust path end to end: the workflow's `detect` step must recognize
 # a crate (a `Cargo.toml` / `*.rs`) and fan the isolation job over `rust`, then the
 # rule must pass this well-isolated unit. `[workspace]` isolates it from cargo.

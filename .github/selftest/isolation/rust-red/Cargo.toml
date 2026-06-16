@@ -1,4 +1,4 @@
-# Violating fixture crate for the reusable workflow's `unit isolation` job (#125):
+# Violating fixture crate for the reusable workflow's `unit lint` job (#125):
 # its inline unit test performs real filesystem I/O (`std::fs`) — an effectful-`std`
 # call out of the unit's own module (`no-out-of-module-call`). The published binary
 # exits non-zero on it, the build-failing behavior the workflow promises.

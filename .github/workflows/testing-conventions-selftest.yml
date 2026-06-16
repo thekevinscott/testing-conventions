@@ -30,16 +30,18 @@ name: Testing Conventions (self-test)
 #   packaging-red    drives the published `packaging` command on a committed wheel
 #                    that ships a `*_test.py` and asserts a non-zero exit.
 #
-# unit isolation (#125) — wired for TypeScript and Rust, the languages the published
-# binary (what `npx` pulls) ships today. Python isolation is merged but unreleased,
-# so it's deferred to #146 until a release ships it (wiring it now would fail every
-# consumer on `npx` latest, which rejects `--language python`).
-#   isolation-wired  asserts the reusable workflow actually invokes `unit isolation`
+# unit lint (#125; renamed from `unit isolation` in #160) — wired for TypeScript and
+# Rust, the languages the published binary (what `npx` pulls) ships. Python is merged
+# but unreleased, deferred to #146.
+#   isolation-wired  asserts the reusable workflow actually invokes `unit lint`
 #                    — the red→green signal for the wiring itself.
 #   isolation-clean  calls the reusable workflow against a clean Rust crate, proving
-#                    `detect` recognizes a crate and fans the isolation job over it.
-#   isolation-red    drives the published `unit isolation` on a violating crate and
+#                    `detect` recognizes a crate and fans the lint job over it.
+#   isolation-red    drives the published `unit lint` on a violating crate and
 #                    asserts a non-zero exit.
+# NOTE: isolation-clean / isolation-red drive the *published* binary, which won't
+# recognize `unit lint` until the #160 release ships — so both are disabled
+# (`if: false`) until then; isolation-wired (a static grep of the workflow) stays on.
 #
 # integration lint — the TypeScript + Rust arms and the config waiver (#126):
 #   integration-lint-config-waiver   a #102 waiver in a *non-default* config path
@@ -179,54 +181,57 @@ jobs:
           echo "below-floor suite correctly tripped the coverage gate"
 
   isolation-wired:
-    name: The reusable workflow enforces unit isolation
+    name: The reusable workflow enforces unit lint
     # The red→green signal for #125: the reusable workflow must actually invoke
-    # `unit isolation`, or the shipped rule isn't enforced on the @v0 path. This is
-    # the one assertion that fails *before* the job is wired and passes after; the
-    # clean/violating jobs below pass either way (the published binary already
-    # implements the rule), so they prove behavior, not that the workflow runs it.
+    # `unit lint`, or the shipped rule isn't enforced on the @v0 path. A static grep of
+    # the workflow file, so it passes regardless of what the published binary ships.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: testing-conventions.yml must invoke `unit isolation`
+      - name: testing-conventions.yml must invoke `unit lint`
         run: |
           set -euo pipefail
-          if ! grep -q 'unit isolation --language' .github/workflows/testing-conventions.yml; then
-            echo "::error::the reusable workflow does not invoke \`unit isolation\` — the shipped isolation rule is not enforced on the @v0 path (#125)"
+          if ! grep -q 'unit lint --language' .github/workflows/testing-conventions.yml; then
+            echo "::error::the reusable workflow does not invoke \`unit lint\` — the shipped lint rule is not enforced on the @v0 path (#125)"
             exit 1
           fi
-          echo "reusable workflow invokes \`unit isolation\`"
+          echo "reusable workflow invokes \`unit lint\`"
 
   isolation-clean:
-    name: A clean crate passes the unit-isolation job
-    # Exercises the Rust path end to end: requesting ["rust"] over a clean crate, the
-    # workflow's `detect` must recognize the crate (a Cargo.toml / *.rs) and fan the
-    # isolation job over `rust` (#125) — then the rule passes the well-isolated unit,
-    # so the whole call passes. The colocated-test / coverage / integration jobs key
-    # off `languages` (python/typescript only), so they skip on this rust-only fixture.
+    name: A clean crate passes the unit-lint job
+    # DEFERRED until the #160 release publishes `unit lint`: this drives the *published*
+    # binary through the reusable workflow, which now invokes `unit lint` — a command
+    # `npx` latest won't recognize until the rename ships. Re-enable (drop `if: false`)
+    # once released. Exercises the Rust path end to end: ["rust"] over a clean crate, so
+    # `detect` recognizes the crate and fans the lint job over `rust` (#125); the
+    # source-matrix jobs skip on this rust-only fixture.
+    if: false
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["rust"]'
       path: .github/selftest/isolation/rust-clean
 
   isolation-red:
-    name: A crate with an un-isolated unit trips the isolation check
-    # The fail path: a `uses:` call that fails would fail the whole run, so drive the
-    # published `unit isolation` command directly on a crate whose unit test reaches
-    # out of its module (effectful `std::fs`) and assert the non-zero exit that fails
-    # a consumer's build.
+    name: A crate with an un-isolated unit trips the lint check
+    # DEFERRED until the #160 release publishes `unit lint` (same reason as
+    # isolation-clean: it drives the *published* binary, which won't know `unit lint`
+    # until then). Re-enable by dropping `if: false`. The fail path: a `uses:` call that
+    # fails would fail the whole run, so drive the published `unit lint` command directly
+    # on a crate whose unit test reaches out of its module (effectful `std::fs`) and
+    # assert the non-zero exit that fails a consumer's build.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: A crate with an out-of-module unit-test call must fail `unit isolation`
+      - name: A crate with an out-of-module unit-test call must fail `unit lint`
         run: |
-          if npx -y testing-conventions unit isolation \
+          if npx -y testing-conventions unit lint \
             --language rust \
             .github/selftest/isolation/rust-red; then
-            echo "::error::expected the un-isolated crate to fail the isolation check, but it passed"
+            echo "::error::expected the un-isolated crate to fail the lint check, but it passed"
             exit 1
           fi
-          echo "un-isolated crate correctly tripped the isolation check"
+          echo "un-isolated crate correctly tripped the lint check"
 
   upload-clean-dist:
     name: Upload the clean built wheel as an artifact

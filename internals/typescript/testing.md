@@ -50,7 +50,7 @@ Factory injection works identically in every test runner and keeps the test plum
 three mechanism lints — `no-monkeypatch`, `no-inline-patch`, `no-environ-mutation` — that
 police *how* a pytest test mocks. TypeScript has none, deliberately: factory injection has
 no `monkeypatch` or in-place `os.environ` analog, and the "don't hand-roll an untyped mock"
-concern is already the `untyped-mock` *unit* rule (`unit isolation`). The TypeScript
+concern is already the `untyped-mock` *unit* rule (`unit lint`). The TypeScript
 `integration lint` is the first-party *direction* check alone — `no-first-party-mock` (don't
 `vi.mock()` a first-party module).
 

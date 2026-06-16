@@ -42,7 +42,7 @@ const RULE_DOUBLE: &str = "no-first-party-double";
 
 /// A language whose unit-isolation convention can be checked (Python #42 is a
 /// separate detector). Each detector lives in its own module; this enum is the
-/// shared `unit isolation` language selector.
+/// shared `unit lint` language selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Language {
     /// Inline `#[cfg(test)]` modules in `*.rs` files (`no-out-of-module-call`).

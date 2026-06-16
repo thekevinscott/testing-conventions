@@ -18,7 +18,7 @@ Every rule is a CLI command that fails CI on a violation, and links to its refer
 - [`unit colocated-test`](https://thekevinscott.github.io/testing-conventions/reference/#unit-colocated-test) — every source file has a colocated, matching-named unit test (Python, TypeScript, Rust).
 - [`unit coverage`](https://thekevinscott.github.io/testing-conventions/reference/#unit-coverage) — enforce a coverage floor on the unit suite (Python, TypeScript; Rust in flight, [#37](https://github.com/thekevinscott/testing-conventions/issues/37)).
 - [`unit patch-coverage`](https://thekevinscott.github.io/testing-conventions/reference/#unit-patch-coverage) — require every line a change touches to be covered by the unit suite (Python, TypeScript; Rust planned, [#136](https://github.com/thekevinscott/testing-conventions/issues/136)).
-- [`unit isolation`](https://thekevinscott.github.io/testing-conventions/reference/#unit-isolation) — a unit test mocks every collaborator: no out-of-module calls or imports (Rust); no un-mocked first-party or external collaborators (Python, TypeScript); typed mocks (TypeScript).
+- [`unit lint`](https://thekevinscott.github.io/testing-conventions/reference/#unit-lint) — a unit test mocks every collaborator: no out-of-module calls or imports (Rust); no un-mocked first-party or external collaborators (Python, TypeScript); typed mocks (TypeScript).
 - [`unit co-change`](https://thekevinscott.github.io/testing-conventions/reference/#unit-co-change) — a changed source file requires its colocated test to change in the same range (Python, TypeScript; [#33](https://github.com/thekevinscott/testing-conventions/issues/33)).
 
 **Integration**
@@ -118,7 +118,7 @@ coverage is measured on.
 - **Rust:** `tests/` at the crate root. Each file compiles as its own crate, so the location is the signal.
 
 **Checked:** the boundary is enforced behaviorally, not by a folder gate.
-`unit isolation` requires unit tests to mock every collaborator, `integration lint`
+`unit lint` requires unit tests to mock every collaborator, `integration lint`
 requires integration tests to run first-party code for real, and `unit coverage`
 measures only the colocated unit suite. The `tests/integration/` folder is a
 convention, not a separately checked rule.

@@ -62,10 +62,10 @@ alone.
 
 ## Mock every collaborator in a unit test
 
-The mirror-image rule for the **unit** suite, enforced by `unit isolation`:
+The mirror-image rule for the **unit** suite, enforced by `unit lint`:
 
 ```sh
-testing-conventions unit isolation --language typescript src/
+testing-conventions unit lint --language typescript src/
 ```
 
 It flags any runtime import a unit test doesn't `vi.mock()` (`unmocked-collaborator`), leaving
@@ -83,7 +83,7 @@ vi.mock('./service', async () => {
 Python works the same way, against the colocated `*_test.py` suite:
 
 ```sh
-testing-conventions unit isolation --language python src/
+testing-conventions unit lint --language python src/
 ```
 
 It flags an imported collaborator the unit test doesn't mock (`unmocked-collaborator`), both
@@ -108,7 +108,7 @@ def mock_record():
 (Dual-nature stdlib like `os` / `pathlib` / `datetime` isn't flagged at the import; the clock and
 filesystem are caught by patching, not by the import check.)
 
-(Rust enforces the same intent structurally with `unit isolation --language rust`, via
+(Rust enforces the same intent structurally with `unit lint --language rust`, via
 `no-out-of-module-call`.) See the
 [README](https://github.com/thekevinscott/testing-conventions#isolation) for the full rule.
 

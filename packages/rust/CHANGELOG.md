@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed
+
+- **BREAKING — `unit isolation` renamed to `unit lint`** (#160, part of the #158 CLI
+  taxonomy redesign). The unit-suite lint command is now `unit lint`, mirroring
+  `integration lint`: each lints its test kind's files for that kind's rules. The rules
+  it runs are unchanged — `unmocked-collaborator`, `untyped-mock` (TypeScript),
+  `no-out-of-module-call`, `no-out-of-module-import` (Rust), Python
+  `unmocked-collaborator` — and so are their ids, so **config and `[[<lang>.exempt]]`
+  waivers need no change**. Internally `UnitRule::Isolation` became `UnitRule::Lint`
+  (`run_unit_isolation` → `run_unit_lint`); the `isolation` module, the
+  `isolation::Language` selector, and every library entry point are untouched.
+  Migration: replace `unit isolation` with `unit lint` wherever you invoke it (e.g. the
+  reusable `testing-conventions.yml` workflow). (#160)
+
 ### Added
 
 - **Patch (changed-line) coverage — TypeScript** (#135, parent #46). `unit patch-coverage

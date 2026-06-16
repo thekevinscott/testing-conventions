@@ -322,7 +322,7 @@ mod tests {
             ("ci.yml", "- run: testing-conventions check\n"),
             (
                 "nested/more.yaml",
-                "- run: testing-conventions unit isolation --language rust .\n",
+                "- run: testing-conventions unit lint --language rust .\n",
             ),
             ("notes.txt", "testing-conventions check\n"),
         ]);
@@ -388,7 +388,7 @@ mod tests {
                 &["unit", "colocated-test", "--language", "python", "src"],
             ),
             inv(2, &["unit", "coverage", "--language", "typescript", "src"]),
-            inv(3, &["unit", "isolation", "--language", "rust", "."]),
+            inv(3, &["unit", "lint", "--language", "rust", "."]),
             inv(4, &["integration", "lint", "--language", "python", "src"]),
             // A leaf's positional must not be read as a subcommand.
             inv(5, &["packaging", "--language", "python", "dist"]),

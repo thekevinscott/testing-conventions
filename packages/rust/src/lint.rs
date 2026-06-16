@@ -81,7 +81,7 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
 
 /// Scan the colocated Python unit tests under `root` and return every
 /// `unmocked-collaborator` violation (#42 slice 2): a first-party collaborator a
-/// unit test imports without mocking it. The Python arm of `unit isolation`
+/// unit test imports without mocking it. The Python arm of `unit lint`
 /// ([`crate::isolation::Language::Python`]).
 ///
 /// A *unit test* here is `*_test.py` (not `conftest.py`); a legacy `test_*.py` is
@@ -1122,7 +1122,7 @@ mod tests {
         assert!(is_python_unit_test_file(Path::new("pkg/widget_test.py")));
         // A legacy `test_*.py` is ordinary source, not a unit test (#145).
         assert!(!is_python_unit_test_file(Path::new("test_widget.py")));
-        // conftest holds fixtures, not a unit — excluded from unit isolation.
+        // conftest holds fixtures, not a unit — excluded from unit lint.
         assert!(!is_python_unit_test_file(Path::new("conftest.py")));
         assert!(!is_python_unit_test_file(Path::new("widget.py")));
     }

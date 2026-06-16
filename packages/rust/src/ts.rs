@@ -132,7 +132,7 @@ pub fn find_integration_violations(root: impl AsRef<Path>) -> Result<Vec<Violati
 
 /// Scan the unit test files under `root` and return every isolation violation —
 /// a runtime import that isn't `vi.mock()`-ed (#76) — sorted by `(file, line)`.
-/// The TypeScript arm of `unit isolation`
+/// The TypeScript arm of `unit lint`
 /// ([`crate::isolation::Language::TypeScript`]).
 ///
 /// A *TypeScript unit test* is `*.test.{ts,tsx,mts,cts}`. Each is parsed and

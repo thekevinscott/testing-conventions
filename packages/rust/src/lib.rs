@@ -112,8 +112,8 @@ enum UnitRule {
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
-    /// Check that unit tests isolate the unit under test (Rust, TypeScript).
-    Isolation {
+    /// Lint unit test files for isolation: mock every collaborator (Python, TypeScript, Rust).
+    Lint {
         /// Crate root / source dir to scan recursively.
         path: PathBuf,
         /// Language convention to enforce (required).
@@ -220,11 +220,11 @@ where
                 base,
                 config,
             } => run_unit_patch_coverage(&path, &base, language, &config),
-            UnitRule::Isolation {
+            UnitRule::Lint {
                 path,
                 language,
                 config,
-            } => run_unit_isolation(&path, language, &config),
+            } => run_unit_lint(&path, language, &config),
             UnitRule::CoChange {
                 path,
                 language,
@@ -516,10 +516,11 @@ fn patch_coverage_exemptions(
     )
 }
 
-/// Run the unit-isolation check over `root` for `language`, printing each
-/// violation to stderr as `path:line: rule — message` and returning `1` when any
-/// are found, `0` otherwise.
-fn run_unit_isolation(
+/// Run the `unit lint` check over `root` for `language` — the unit-suite
+/// isolation lints (`unmocked-collaborator`, `untyped-mock`, `no-out-of-module-call`,
+/// `no-out-of-module-import`) — printing each violation to stderr as
+/// `path:line: rule — message` and returning `1` when any are found, `0` otherwise.
+fn run_unit_lint(
     root: &Path,
     language: isolation::Language,
     config_path: &Path,
@@ -587,7 +588,7 @@ fn run_integration_lint(
 }
 
 /// Selects a language's `[[<lang>.exempt]]` table from a loaded config — the one
-/// varying piece between the `unit isolation` and `integration lint` waiver paths.
+/// varying piece between the `unit lint` and `integration lint` waiver paths.
 type ExemptSelect = fn(&config::Config) -> &[config::Exemption];
 
 /// Drop the violations waived by the config's `exempt` list (#32/#102). A

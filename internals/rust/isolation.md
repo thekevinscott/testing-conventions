@@ -149,7 +149,7 @@ rules = ["no-out-of-module-call"]   # the isolation rule to lift
 reason = "legacy unit reaches into store; refactor tracked in #NNN"
 ```
 
-- `unit isolation` takes `--config` (default `testing-conventions.toml`); both it
+- `unit lint` takes `--config` (default `testing-conventions.toml`); both it
   and `integration lint` filter findings through `config::resolve_exempt`.
 - Each rule id (`no-out-of-module-call` / `no-out-of-module-import` /
   `no-first-party-double`, and the TS rules) is a `config::Rule` variant; matching
@@ -162,7 +162,7 @@ reason = "legacy unit reaches into store; refactor tracked in #NNN"
 
 ## Surface & module shape
 
-- **CLI.** Unit: `unit isolation --language rust <PATH>` (new dedicated subcommand,
+- **CLI.** Unit: `unit lint --language rust <PATH>` (new dedicated subcommand,
   matching `unit colocated-test` / `unit coverage`). Integration: extend
   `integration lint --language rust <PATH>` (the existing home for "deterministic
   lints on integration test code"; folds into the #56 config-driven `check`).

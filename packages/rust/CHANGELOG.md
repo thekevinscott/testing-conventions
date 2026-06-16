@@ -7,6 +7,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Patch (changed-line) coverage — Python** (#132, parent #46). New `unit patch-coverage
+  --language python [--base <REF>] [--config <CONFIG>] <PATH>` command: a diff-scoped coverage
+  check that every line `<base>...HEAD` adds or modifies is covered by the unit suite. Where
+  `unit coverage` measures the whole suite against a floor (#26) and its ratchet against a baseline
+  (#131), this measures only the changed lines — failing when a changed, executable line is a
+  coverage.py *missing line* or the *source of a branch* the suite never took (line + branch). The
+  diff machinery (`git diff --unified=0 <base>...HEAD`) is established here and shared by the
+  forthcoming TypeScript / Rust twins; `--base` defaults to `origin/main` (override for another
+  base or an explicit range). Non-executable changed lines (comments, blanks) have nothing to
+  cover, and a file with a `coverage` exemption (reusing #32) is omitted — so its changed lines are
+  lifted, the same waiver the floor honors. **Added** files differ from the co-change rule (#33):
+  their new lines *are* subjects (measured via coverage.py `--source`, so an untested new file is
+  wholly uncovered). Complementary to `unit co-change` — co-change enforces that a changed source
+  and its colocated test move together; patch coverage enforces that the changed lines are
+  exercised. Prints each uncovered line to stderr as `<path>:<line>` and exits non-zero. New
+  library API `testing_conventions::patch_coverage::{check, changed_lines, uncovered_changed_lines,
+  Uncovered}` and `coverage::{FileCoverage, measure_patch_report}` (plus `CoverageReport` gains a
+  `files` map); reuses the `coverage` `config::Rule`. Python only this slice — `--language
+  typescript` / `rust` are rejected as separate items. (#132)
 - **Commit-scoped `co-change`** (#33). New `unit co-change --language <python|typescript>
   --base <REF> [--config <CONFIG>] <PATH>` command: a diff-scoped check that a source file
   **modified** (and still holding code) or **deleted** between `<base>...HEAD` also changed its

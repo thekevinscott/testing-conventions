@@ -92,6 +92,39 @@ floor is met, `1` (naming each metric below its floor on stderr) when any isn't.
 `npx vitest`, so `vitest` and `@vitest/coverage-v8` must be installed under `<PATH>`. Files with a
 `coverage` [exemption](#exemptions) are also excluded from the denominator.
 
+### `unit patch-coverage`
+
+Diff-scoped coverage: require every line a change touches to be covered by the unit suite. Where
+[`unit coverage`](#unit-coverage) measures the whole suite against a floor, this measures only the
+lines `<base>...HEAD` added or modified — the changed-line guarantee the README's Coverage rule
+calls for.
+
+```
+testing-conventions unit patch-coverage --language <LANG> [--base <REF>] [--config <CONFIG>] <PATH>
+```
+
+| Argument / flag     | Description                                                                |
+| ------------------- | -------------------------------------------------------------------------- |
+| `<PATH>`            | Directory whose unit suite is run and measured; also where git runs.       |
+| `--language <LANG>` | **Required.** `python` (the TypeScript and Rust twins are separate items). |
+| `--base <REF>`      | Ref to diff against: the check compares `<base>...HEAD` — the changes this branch introduced (what a PR shows). Defaults to `origin/main`; override for a different base or an explicit range. |
+| `--config <CONFIG>` | Config file supplying the coverage `exempt` list (default `testing-conventions.toml`). Optional — if absent, nothing is exempt. |
+
+For **`python`**, runs `coverage.py` (branch on, with `--source` so an untested changed file is
+seen as wholly uncovered) over the unit suite under `<PATH>`, then intersects coverage.py's per-file
+`missing_lines` / `missing_branches` with the lines the diff touched. A changed line is **uncovered**
+when it's a missing line, or the source of a branch the suite never took (line + branch). Exits `0`
+when every changed line is covered, `1` (printing each `changed line not covered by the unit suite:
+<path>:<line>` on stderr, then a count) when any isn't. `coverage` and `pytest` must be installed,
+and `git` must resolve `<REF>`.
+
+A non-executable changed line (comment, blank) has nothing to cover and is never flagged; a file
+with a `coverage` [exemption](#exemptions) is omitted, so its changed lines are lifted — the same
+waiver the floor honors. Unlike [`unit co-change`](#unit-co-change), an **added** file's new lines
+*are* subjects (brand-new code must be covered too). The two are complementary: co-change enforces
+that a changed source and its colocated *test* move together, patch coverage enforces that the
+changed *lines* are exercised — one can pass while the other fails.
+
 ### `unit isolation`
 
 Check that unit tests isolate the unit under test — collaborators are mocked (Python, TypeScript)

@@ -36,18 +36,9 @@ use rustpython_parser::ast::{
 use rustpython_parser::text_size::{TextRange, TextSize};
 use rustpython_parser::Parse;
 
-/// A single lint violation found in a test file.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Violation {
-    /// File the violation was found in.
-    pub file: PathBuf,
-    /// 1-based line number of the offending construct.
-    pub line: usize,
-    /// Short lint identifier (e.g. `no-monkeypatch`).
-    pub rule: &'static str,
-    /// Human-readable explanation.
-    pub message: String,
-}
+// `Violation` is shared with the Rust `isolation` lint; it lives in `violation`
+// and is re-exported here so `testing_conventions::lint::Violation` still resolves.
+pub use crate::violation::Violation;
 
 /// Scan the Python test files under `root` and return every lint violation,
 /// sorted by `(file, line)` for deterministic output.

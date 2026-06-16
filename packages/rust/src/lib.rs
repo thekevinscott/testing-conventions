@@ -1,9 +1,11 @@
 pub mod colocated_test;
 pub mod config;
 pub mod coverage;
+pub mod isolation;
 pub mod lint;
 pub mod packaging;
 pub mod ts;
+pub mod violation;
 
 use std::path::{Path, PathBuf};
 
@@ -74,6 +76,14 @@ enum UnitRule {
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
+    /// Check that inline unit tests call nothing out of their own module (Rust).
+    Isolation {
+        /// Crate root to scan recursively (its `Cargo.toml` names external crates).
+        path: PathBuf,
+        /// Language convention to enforce (required).
+        #[arg(long, value_enum)]
+        language: isolation::Language,
+    },
 }
 
 /// Lints enforced on integration tests (mocking mechanism & style, and more to
@@ -116,6 +126,7 @@ where
                 language,
                 config,
             } => run_unit_coverage(&path, language, &config),
+            UnitRule::Isolation { path, language } => run_unit_isolation(&path, language),
         },
         Some(Command::Integration { rule }) => match rule {
             IntegrationRule::Lint {
@@ -230,6 +241,31 @@ fn run_unit_coverage(
             Ok(1)
         }
     }
+}
+
+/// Run the unit-isolation check over `root` for `language`, printing each
+/// violation to stderr as `path:line: rule — message` and returning `1` when any
+/// are found, `0` otherwise.
+fn run_unit_isolation(root: &Path, language: isolation::Language) -> anyhow::Result<i32> {
+    match language {
+        // Rust-only for now; #42 / #43 add Python / TypeScript arms here.
+        isolation::Language::Rust => {}
+    }
+    let violations = isolation::find_violations(root)?;
+    if violations.is_empty() {
+        return Ok(0);
+    }
+    for v in &violations {
+        eprintln!(
+            "{}:{}: {} — {}",
+            v.file.display(),
+            v.line,
+            v.rule,
+            v.message
+        );
+    }
+    eprintln!("error: {} isolation violation(s)", violations.len());
+    Ok(1)
 }
 
 /// Run the integration-test lints over `root` for `language`, printing each

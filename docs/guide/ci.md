@@ -30,7 +30,7 @@ A requested language the repo has no sources for is **skipped, not run**: the wo
 `path` for each language first. So the zero-config default `["python", "typescript"]` is safe to
 keep on a single-language library, and the absent language's jobs don't fire.
 
-The **unit isolation** rule runs for TypeScript and Rust. Rust isn't part of the default
+The **unit lint** rule runs for TypeScript and Rust. Rust isn't part of the default
 `languages`, so the scan detects it separately for this job: request `rust` and the workflow
 looks for a crate (a `Cargo.toml` / `*.rs`) under `path`. Keeping Rust on its own set holds it
 out of the coverage matrix, which has no Rust toolchain. (Python isolation is implemented but
@@ -101,8 +101,8 @@ rule as its own step, naming the language with the required `--language` flag:
 ```yaml
 - run: testing-conventions unit colocated-test --language python src/
 - run: testing-conventions unit colocated-test --language typescript src/
-- run: testing-conventions unit isolation --language typescript --config testing-conventions.toml src/
-- run: testing-conventions unit isolation --language rust --config testing-conventions.toml .   # a crate root
+- run: testing-conventions unit lint --language typescript --config testing-conventions.toml src/
+- run: testing-conventions unit lint --language rust --config testing-conventions.toml .   # a crate root
 - run: testing-conventions unit coverage --language python --config testing-conventions.toml src/
 - run: testing-conventions unit coverage --language typescript --config testing-conventions.toml src/
 - run: testing-conventions unit co-change --language python --base origin/main src/   # commit-scoped: needs the PR base ref fetched

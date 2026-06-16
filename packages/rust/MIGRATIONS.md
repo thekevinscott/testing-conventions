@@ -15,6 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Renames the `unit isolation` command to `unit lint` (#160, part of the #158 CLI
+taxonomy redesign), mirroring `integration lint` — each lints its test kind's files
+for that kind's rules. Breaking for the command word only: the rules
+(`unmocked-collaborator`, `untyped-mock`, `no-out-of-module-call`,
+`no-out-of-module-import`) and their ids are unchanged, so config and
+`[[<lang>.exempt]]` waivers need no edits. Internally `UnitRule::Isolation` →
+`UnitRule::Lint` (`run_unit_isolation` → `run_unit_lint`); the `isolation` module and
+the `isolation::Language` selector are unchanged. See **Required changes**.
+
 Adds the `config` module: a `Config` schema holding the per-language `coverage`
 thresholds (`[python]` / `[typescript]` / `[rust]`), plus `load_config()`, which
 reads one TOML file into it and validates the config itself (the self-guard) —
@@ -347,6 +356,19 @@ the Python arm and the existing API are unchanged. `--language rust` is still
 rejected as a separate item.
 
 ### Required changes
+
+`unit isolation` is now `unit lint` (#160), mirroring `integration lint`. Update any
+invocation — CI steps, scripts, the reusable `testing-conventions.yml` workflow:
+
+| Before                                      | After                                  |
+| ------------------------------------------- | -------------------------------------- |
+| `unit isolation --language rust .`          | `unit lint --language rust .`          |
+| `unit isolation --language typescript src/` | `unit lint --language typescript src/` |
+| `unit isolation --language python src/`     | `unit lint --language python src/`     |
+
+The rules, their ids, and the `[[<lang>.exempt]]` waivers are unchanged — only the
+command word moves; the library API is untouched (the `isolation` module and
+`isolation::Language` keep their names).
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
 required. Update any invocation (CI steps, scripts, `npx`/`pip`/`cargo` wrappers)

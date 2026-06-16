@@ -12,10 +12,10 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Exit code of `testing-conventions unit isolation --language typescript <codebase>`.
+/// Exit code of `testing-conventions unit lint --language typescript <codebase>`.
 fn isolation_exit(codebase: &str) -> i32 {
     Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
-        .args(["unit", "isolation", "--language", "typescript"])
+        .args(["unit", "lint", "--language", "typescript"])
         .arg(fixture(codebase))
         .status()
         .expect("the built binary should run")

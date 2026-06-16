@@ -132,15 +132,15 @@ pub enum Rule {
     NoConstantPatch,
     /// `integration lint` — patching a first-party target in a Python integration test ([`crate::lint`], #42).
     NoFirstPartyPatch,
-    /// `unit isolation` — a call out of a Rust unit's own module ([`crate::isolation`], #44).
+    /// `unit lint` — a call out of a Rust unit's own module ([`crate::isolation`], #44).
     NoOutOfModuleCall,
-    /// `unit isolation` — a foreign `use` in a Rust unit test ([`crate::isolation`], #44).
+    /// `unit lint` — a foreign `use` in a Rust unit test ([`crate::isolation`], #44).
     NoOutOfModuleImport,
     /// `integration lint` — doubling a first-party item in a Rust integration test (#44).
     NoFirstPartyDouble,
-    /// `unit isolation` — an un-mocked first-party/external import in a TS unit test ([`crate::ts`], #76).
+    /// `unit lint` — an un-mocked first-party/external import in a TS unit test ([`crate::ts`], #76).
     UnmockedCollaborator,
-    /// `unit isolation` — a `vi.mock` without a typed anchor in a TS unit test (#77).
+    /// `unit lint` — a `vi.mock` without a typed anchor in a TS unit test (#77).
     UntypedMock,
     /// `integration lint` — a `vi.mock` of a first-party module in a TS integration test (#75).
     NoFirstPartyMock,

@@ -1,4 +1,4 @@
-//! E2E tests for the Rust `unit isolation` rule (#44): drive the built CLI binary
+//! E2E tests for the Rust `unit lint` rule (#44): drive the built CLI binary
 //! against the fixture crates and assert the exit code.
 
 use std::path::PathBuf;
@@ -11,10 +11,10 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Exit code of `testing-conventions unit isolation --language rust <codebase>`.
+/// Exit code of `testing-conventions unit lint --language rust <codebase>`.
 fn iso_exit(codebase: &str) -> i32 {
     Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
-        .args(["unit", "isolation", "--language", "rust"])
+        .args(["unit", "lint", "--language", "rust"])
         .arg(fixture(codebase))
         .status()
         .expect("the built binary should run")
@@ -47,7 +47,7 @@ fn imports_clean_exits_zero() {
 #[test]
 fn waived_exits_zero() {
     let code = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
-        .args(["unit", "isolation", "--language", "rust", "--config"])
+        .args(["unit", "lint", "--language", "rust", "--config"])
         .arg(fixture("unit/waived/testing-conventions.toml"))
         .arg(fixture("unit/waived"))
         .status()

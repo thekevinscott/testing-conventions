@@ -100,7 +100,7 @@ jobs:
       # (#126). Kept separate from `languages` so the coverage matrix is unchanged:
       # `unit coverage` has no rust arm and would error on it.
       integration_lint_languages: ${{ steps.scan.outputs.integration_lint_languages }}
-      # `unit isolation` (#125): TypeScript + rust, also kept off the coverage matrix.
+      # `unit lint` (#125): TypeScript + rust, also kept off the coverage matrix.
       # (Python is merged but unreleased, deferred to #146.)
       isolation_languages: ${{ steps.scan.outputs.isolation_languages }}
     steps:
@@ -153,7 +153,7 @@ jobs:
             rust_crate=1
             lint+=("rust")
           fi
-          # `unit isolation` (#125) runs for TypeScript and Rust — the languages the
+          # `unit lint` (#125) runs for TypeScript and Rust — the languages the
           # published binary ships. Python isolation is merged (#42) but unreleased, so
           # it's deferred to #146 until a release ships it (wiring it now would fail
           # `npx` latest, which rejects `--language python`). TypeScript rides the scan
@@ -204,10 +204,10 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" "$SCAN_PATH"
 
-  unit-isolation:
-    name: Unit-test isolation (${{ matrix.language }})
+  unit-lint:
+    name: Unit lint (${{ matrix.language }})
     needs: detect
-    # `unit isolation` is a static AST check (no language toolchain), like
+    # `unit lint` is a static AST check (no language toolchain), like
     # colocated-test — a cheap matrix job, not a toolchain-heavy one like coverage.
     # It enforces the rule for TypeScript (#43/#76/#77) and Rust (#44); Python (#42)
     # is merged but unreleased, so it's deferred to #146 until a release ships it.
@@ -223,7 +223,7 @@ jobs:
         language: ${{ fromJSON(needs.detect.outputs.isolation_languages) }}
     steps:
       - uses: actions/checkout@v6
-      - name: Check unit isolation
+      - name: Check unit lint
         # Static check — just the binary via npx, no toolchain. `--config` applies
         # the #102 `[[<language>.exempt]]` waivers, like the other unit jobs.
         env:
@@ -231,7 +231,7 @@ jobs:
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ inputs.config }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit isolation --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   unit-coverage:
     name: Unit-test coverage (${{ matrix.language }})

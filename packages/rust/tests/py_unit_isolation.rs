@@ -16,12 +16,12 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Exit code of `unit isolation --language python <fixture>`.
+/// Exit code of `unit lint --language python <fixture>`.
 fn isolation_exit(fixture_name: &str) -> i32 {
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),
         "unit".into(),
-        "isolation".into(),
+        "lint".into(),
         "--language".into(),
         "python".into(),
         fixture(fixture_name).into_os_string(),
@@ -29,12 +29,12 @@ fn isolation_exit(fixture_name: &str) -> i32 {
     run(argv).expect("a readable tree should not error")
 }
 
-/// Exit code of `unit isolation --language python --config <config> <fixture>`.
+/// Exit code of `unit lint --language python --config <config> <fixture>`.
 fn isolation_exit_with_config(fixture_name: &str, config_name: &str) -> i32 {
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),
         "unit".into(),
-        "isolation".into(),
+        "lint".into(),
         "--language".into(),
         "python".into(),
         "--config".into(),
@@ -98,7 +98,7 @@ fn waived_exits_zero() {
 #[test]
 fn legacy_test_prefix_is_not_scanned() {
     // After #112 a unit test is `*_test.py` and a legacy `test_*.py` is ordinary
-    // source. `unit isolation` must agree: this `test_widget.py` imports an
+    // source. `unit lint` must agree: this `test_widget.py` imports an
     // un-mocked first-party collaborator, but it is source — so nothing is reported.
     let violations = find_unit_isolation_violations(fixture("legacy_prefix"))
         .expect("walking a readable tree should succeed");

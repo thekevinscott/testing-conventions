@@ -16,12 +16,12 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Exit code of `unit isolation --language typescript <fixture>`.
+/// Exit code of `unit lint --language typescript <fixture>`.
 fn isolation_exit(fixture_name: &str) -> i32 {
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),
         "unit".into(),
-        "isolation".into(),
+        "lint".into(),
         "--language".into(),
         "typescript".into(),
         fixture(fixture_name).into_os_string(),

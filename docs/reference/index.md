@@ -254,6 +254,24 @@ It writes **regardless of the command's exit code** — the point is to force a 
 *pass* — and exits `0` once the attestation is recorded and committed. The companion `e2e verify`
 (a CI gate confirming the latest code commit is attested) is not shipped yet.
 
+### `e2e verify`
+
+The CI side of the e2e attestation nudge: confirm the committed attestation names the current
+code, **without ever running e2e**. Pairs with [`e2e attest`](#e2e-attest).
+
+```
+testing-conventions e2e verify
+```
+
+Run from the repository root. `verify` reads `e2e-attestation.json` and passes (exit `0`) iff its
+recorded SHA equals the **latest code commit** — the newest commit that changed any path other
+than the attestation file itself. Otherwise it exits non-zero with an actionable message naming
+the fix, e.g. *"e2e attestation out of date … run `testing-conventions e2e attest '<your e2e
+command>'`"*. It never inspects the recorded exit code or output — presence + freshness only.
+
+Push new code without re-attesting and the recorded SHA no longer names the latest code commit, so
+`verify` fails until you re-run `attest`. That staleness is the nudge.
+
 ### `check`
 
 Reserved for the config-driven umbrella that runs every configured rule. **Not wired yet** —

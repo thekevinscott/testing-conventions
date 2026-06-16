@@ -146,6 +146,8 @@ enum E2eCommand {
         /// The e2e command to run (e.g. `pnpm run e2e`), executed via the shell.
         command: String,
     },
+    /// Verify the committed attestation names the latest code commit (the CI gate).
+    Verify,
 }
 
 pub fn run<I, T>(args: I) -> anyhow::Result<i32>
@@ -187,6 +189,7 @@ where
         Some(Command::Workflow { path }) => run_workflow(&path),
         Some(Command::E2e { command }) => match command {
             E2eCommand::Attest { command } => run_e2e_attest(&command),
+            E2eCommand::Verify => run_e2e_verify(),
         },
     }
 }
@@ -498,6 +501,31 @@ fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
         attestation.commit, attestation.exit_code
     );
     Ok(0)
+}
+
+/// Verify the committed e2e attestation names the latest code commit (#68) — the
+/// CI side of the nudge. Exits `0` when fresh; otherwise prints the actionable
+/// hint and exits `1`. Never runs e2e, never judges the recorded run.
+fn run_e2e_verify() -> anyhow::Result<i32> {
+    let repo = std::env::current_dir()?;
+    match e2e::verify(&repo)? {
+        e2e::Verification::Fresh => Ok(0),
+        e2e::Verification::Missing => {
+            eprintln!(
+                "e2e attestation missing — run `testing-conventions e2e attest '<your e2e command>'`"
+            );
+            Ok(1)
+        }
+        e2e::Verification::Stale { attested, latest } => {
+            eprintln!(
+                "e2e attestation out of date: attested {}, latest code commit {} — \
+                 run `testing-conventions e2e attest '<your e2e command>'`",
+                &attested[..attested.len().min(7)],
+                &latest[..latest.len().min(7)]
+            );
+            Ok(1)
+        }
+    }
 }
 
 #[cfg(test)]

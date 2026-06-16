@@ -118,6 +118,26 @@ tests at the SDK; keep the CLI a thin wrapper.
 
 **Checked** — deterministic. Py/TS: flag any un-mocked external import. Rust: flag external-crate or effectful-`std` use that isn't behind an injected trait or whitelisted; [`dylint`](https://github.com/trailofbits/dylint) for full precision.
 
+#### Mocking mechanism (Python only)
+
+**Rule** — Python integration tests are held to three additional *mechanism*-hygiene
+lints: `no-monkeypatch` (patch with `unittest.mock` in a `pytest.fixture` rather than
+pytest's `monkeypatch`), `no-inline-patch` (a `patch(...)` belongs in a fixture, not a
+test body), and `no-environ-mutation` (set env with `patch.dict(os.environ, {...})`,
+never mutate `os.environ` in place).
+
+**Why Python only** — these police *how* a test mocks, and every mechanism they target
+is a pytest/Python idiom with no TypeScript or Rust analog: `monkeypatch` is a pytest
+fixture, fixture-vs-inline patching is pytest's model, and in-place `os.environ`
+mutation is Python's global-env footgun. TypeScript's "don't hand-roll an untyped mock"
+concern is already the `untyped-mock` *unit* rule, and Rust injects trait doubles the
+compiler checks — neither has a string-patch mechanism to discipline. So the asymmetry
+is deliberate: **TypeScript and Rust have no mechanism-hygiene integration lints** —
+their `integration lint` is the first-party *direction* check alone
+(`no-first-party-mock` / `no-first-party-double`).
+
+**Checked** — deterministic, Python only (an AST walk of each integration test file).
+
 ### E2E
 
 **Rule** — e2e tests live in a dedicated folder and run with no mocks.

@@ -46,6 +46,14 @@ const Widget = getWidget({ load: fakeLoad, run: fakeRun });
 
 Factory injection works identically in every test runner and keeps the test plumbing visible at the call site.
 
+**No mechanism-hygiene integration lint (by design).** Python's `integration lint` carries
+three mechanism lints — `no-monkeypatch`, `no-inline-patch`, `no-environ-mutation` — that
+police *how* a pytest test mocks. TypeScript has none, deliberately: factory injection has
+no `monkeypatch` or in-place `os.environ` analog, and the "don't hand-roll an untyped mock"
+concern is already the `untyped-mock` *unit* rule (`unit isolation`). The TypeScript
+`integration lint` is the first-party *direction* check alone — `no-first-party-mock` (don't
+`vi.mock()` a first-party module).
+
 **E2E attestation** — e2e tests aren't run in CI. Run them locally and attest:
 `testing-conventions e2e attest 'vitest run tests/e2e'` commits a receipt naming the
 commit they ran against; in CI, `e2e verify` checks it's current (re-run `attest`

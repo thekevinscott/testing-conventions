@@ -14,7 +14,8 @@ name: Testing Conventions
 # It installs the published `testing-conventions` binary (one Rust core, from
 # crates.io) and runs each rule for every requested language as its own matrix
 # job, failing the build on any violation. Today that is the unit-test
-# location/naming check; as more rules land they run here too.
+# location/naming check (every language) and the integration-test lint
+# (mocking mechanism & style, Python only); as more rules land they run here too.
 #
 # `languages` is a JSON array so the matrix can fan out over it directly
 # (reusable-workflow inputs can't be native lists). Once the config-driven
@@ -64,3 +65,34 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
         run: testing-conventions unit location --language "$LANGUAGE" "$SCAN_PATH"
+
+  integration-lint:
+    name: Integration lint (${{ matrix.language }})
+    # `integration lint` (mocking mechanism & style) is Python-only today, so the
+    # matrix lists just `python`; the job is skipped — not failed — for callers
+    # that didn't request python. When the lint gains more languages, add them to
+    # the matrix below. #56 (config-driven `check`) will eventually drive which
+    # rules/languages run here without a workflow edit.
+    if: contains(fromJSON(inputs.languages), 'python')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install testing-conventions
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$VERSION" ]; then
+            cargo install testing-conventions --locked --version "$VERSION"
+          else
+            cargo install testing-conventions --locked
+          fi
+      - name: Lint integration tests
+        env:
+          LANGUAGE: ${{ matrix.language }}
+          SCAN_PATH: ${{ inputs.path }}
+        run: testing-conventions integration lint --language "$LANGUAGE" "$SCAN_PATH"

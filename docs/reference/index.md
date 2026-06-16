@@ -129,6 +129,9 @@ and exits `1` if any are found, `0` otherwise.
 - **`no-inline-patch`** — a `patch(...)` / `patch.object(...)` / `patch.dict(...)` call in a
   test body, whether the `with patch(...)` form or a bare call. Move the patch into a
   `pytest.fixture`; a patch inside a fixture is allowed.
+- **`no-environ-mutation`** — direct mutation of `os.environ`: `os.environ[...] = …`,
+  `del os.environ[...]`, or a mutating method (`update` / `pop` / `setdefault` / `clear` /
+  `popitem`). Set env via `patch.dict(os.environ, {...})`; reading `os.environ` is fine.
 
 ### `check`
 

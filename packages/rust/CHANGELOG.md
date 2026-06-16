@@ -37,10 +37,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`*_test.py`, `test_*.py`, `conftest.py`) with `rustpython_parser` and walks the
   AST, exiting non-zero on any violation. Lints:
   **`no-monkeypatch`** (#49) — a test/fixture that declares the `monkeypatch`
-  parameter; and **`no-inline-patch`** (#50) — a `patch(...)` / `patch.object(...)`
-  / `patch.dict(...)` call in a test body (`with patch(...)` or a bare call), which
-  belongs in a `pytest.fixture`. Library API:
-  `testing_conventions::lint::{find_violations, Violation}`. (#48, #49, #50)
+  parameter; **`no-inline-patch`** (#50) — a `patch(...)` / `patch.object(...)` /
+  `patch.dict(...)` call in a test body (`with patch(...)` or a bare call); and
+  **`no-environ-mutation`** (#51) — direct `os.environ` mutation (`os.environ[...] = …`,
+  `del`, or `update`/`pop`/`setdefault`/`clear`/`popitem`), which belongs in
+  `patch.dict(os.environ, …)`. Library API:
+  `testing_conventions::lint::{find_violations, Violation}`. (#48, #49, #50, #51)
 
 ### Changed
 

@@ -114,6 +114,66 @@ fn inline_patch_clean_exits_zero() {
     assert_eq!(lint_exit("inline_patch/clean"), 0);
 }
 
+// ---- R3: env via patch.dict(os.environ, …) (#51) -------------------------
+
+#[test]
+fn environ_red_flags_subscript_assignment() {
+    let violations =
+        find_violations(fixture("environ/red")).expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "no-environ-mutation"
+                && v.file.ends_with("subscript_assignment_test.py")),
+        "`os.environ[...] = ...` must be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn environ_red_flags_del_statement() {
+    let violations =
+        find_violations(fixture("environ/red")).expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "no-environ-mutation" && v.file.ends_with("del_statement_test.py")),
+        "`del os.environ[...]` must be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn environ_red_flags_mutating_method() {
+    let violations =
+        find_violations(fixture("environ/red")).expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "no-environ-mutation"
+                && v.file.ends_with("mutating_method_test.py")),
+        "`os.environ.update(...)` must be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn environ_clean_reports_no_violations() {
+    let violations =
+        find_violations(fixture("environ/clean")).expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "the clean fixture sets env via patch.dict in a fixture; got {violations:?}"
+    );
+}
+
+#[test]
+fn environ_red_exits_nonzero() {
+    assert_eq!(lint_exit("environ/red"), 1);
+}
+
+#[test]
+fn environ_clean_exits_zero() {
+    assert_eq!(lint_exit("environ/clean"), 0);
+}
+
 // ---- CLI surface ---------------------------------------------------------
 
 #[test]

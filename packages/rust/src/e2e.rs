@@ -110,12 +110,34 @@ pub enum Verification {
 /// Verify that the committed attestation names the latest code commit (#68) — the
 /// CI side of the nudge. Reads only the committed attestation: never runs e2e,
 /// never inspects the recorded exit code or output.
-///
-/// Stub: the real check lands in the implementation commit; this compiles so the
-/// red integration + e2e tests run against it.
 pub fn verify(repo: &Path) -> Result<Verification> {
-    let _ = repo;
-    bail!("e2e verify is not implemented yet (#68)")
+    let path = repo.join(ATTESTATION_PATH);
+    let Ok(contents) = std::fs::read_to_string(&path) else {
+        return Ok(Verification::Missing);
+    };
+    let attestation: Attestation =
+        serde_json::from_str(&contents).context("parsing the attestation")?;
+
+    let latest = latest_code_commit(repo)?;
+    if attestation.commit == latest {
+        Ok(Verification::Fresh)
+    } else {
+        Ok(Verification::Stale {
+            attested: attestation.commit,
+            latest,
+        })
+    }
+}
+
+/// The newest commit that changed any path other than the attestation file — the
+/// "latest code commit" the attestation must name to be fresh. Uses an
+/// `:(exclude)` pathspec so the attestation's own commit never counts as code.
+fn latest_code_commit(repo: &Path) -> Result<String> {
+    let exclude = format!(":(exclude){ATTESTATION_PATH}");
+    git_capture(
+        repo,
+        &["log", "-1", "--format=%H", "--", ".", exclude.as_str()],
+    )
 }
 
 /// Run `git` with `args` in `repo`, returning trimmed stdout; errors if git fails.

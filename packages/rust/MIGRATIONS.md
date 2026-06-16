@@ -290,16 +290,19 @@ rejected `rules = ["no-monkeypatch"]` outright). Additive: new `config::Rule`
 variants `NoMonkeypatch` / `NoInlinePatch` / `NoEnvironMutation` (with `id()` /
 `from_id()`); the lint behavior and every other surface are unchanged.
 
-Also adds the commit-scoped `co-change` check (#33): `unit co-change --language
-<python|typescript> --base <REF> <PATH>` diffs `<base>...HEAD` and flags any source file that
-was **modified** (and still holds code) or **deleted** without its colocated test (`foo.py` →
-`foo_test.py`, `foo.ts` → `foo.test.ts`) changing in the same diff — catching edits and removals
-that leave the test stale. **Added** files aren't subjects (new code is the coverage floor's
-job), a test file / empty file / `conftest.py` is never a subject, and a `co-change` exemption
-lifts a source. Purely additive: a new `unit` subcommand, the `testing_conventions::co_change`
-module (`stale_sources`), and a waivable `config::Rule::CoChange` (`co-change`); nothing existing
-changes. `--language rust` is rejected (inline `#[cfg(test)]` units have no sibling test to go
-stale).
+Also adds the commit-scoped `co-change` check (#33), exposed as the opt-in `--base` scope of
+`unit colocated-test` (#161): `unit colocated-test --language <python|typescript> --base <REF>
+<PATH>` diffs `<base>...HEAD` and flags any source file that was **modified** (and still holds
+code) or **deleted** without its colocated test (`foo.py` → `foo_test.py`, `foo.ts` →
+`foo.test.ts`) changing in the same diff — catching edits and removals that leave the test stale.
+`--base` *adds* this on top of the tree-wide presence check and has no default, so a bare `unit
+colocated-test` is presence-only. **Added** files aren't subjects (new code is the coverage
+floor's job), a test file / empty file / `conftest.py` is never a subject, and a `co-change`
+exemption lifts a source. Additive to the colocated-test command: the
+`testing_conventions::co_change` module (`stale_sources`) and a waivable `config::Rule::CoChange`
+(`co-change`); nothing existing changes. `--base --language rust` is rejected (inline
+`#[cfg(test)]` units have no sibling test to go stale).
+
 Finally, adds the Rust coverage arm (#37), the twin of #26 (Python) / #31 (TypeScript):
 `unit coverage --language rust [--config <CONFIG>] <PATH>` runs `cargo llvm-cov --json
 --summary-only` over the crate at `<PATH>` and enforces the `[rust].coverage` floor on the
@@ -658,11 +661,13 @@ nothing and exits `0`, and `external/waived` lifts both back to `0`.
 cd packages/rust && cargo test --test co_change --test co_change_e2e
 ```
 
-Expected: the commit-scoped co-change tests pass (#33) — in a throwaway git repo,
-editing or deleting a source without touching its colocated test is flagged and the
-binary exits `1`; changing both, changing only a test, adding a brand-new source, or
-touching an empty/`conftest.py` file exits `0`; a `co-change` exemption lifts a stale
-source; and `--language rust` is rejected. Requires `git`.
+Expected: the commit-scoped co-change tests pass (#33, #161) — driven through `unit
+colocated-test --base`, in a throwaway git repo, editing or deleting a source without touching
+its colocated test is flagged and the binary exits `1`; changing both, changing only a test,
+adding a brand-new source, or touching an empty/`conftest.py` file exits `0`; `--base` adds this
+on top of presence (an orphan source still fails) while a bare `unit colocated-test` is
+presence-only; a `co-change` exemption lifts a stale source; and `--base --language rust` is
+rejected. Requires `git`.
 
 ```
 cd packages/rust && cargo test --test patch_coverage --test patch_coverage_e2e

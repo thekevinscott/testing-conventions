@@ -16,14 +16,20 @@ Check that every source file under a directory has a colocated unit test. `coloc
 one rule under the `unit` command group; sibling rules (`unit coverage`, `unit lint`) and
 other test kinds (`integration`, `e2e`) nest the same way.
 
+The check has two scopes. By default it is **tree-wide presence**: every source file on disk has
+its colocated test. With `--base` it *also* runs the commit-scoped **co-change** check over
+`<base>...HEAD` (a source changed in the diff must change its test too). `--base` is opt-in and
+**additive** — it adds the diff-scoped check on top of presence rather than replacing it.
+
 ```
-testing-conventions unit colocated-test --language <LANG> [--config <CONFIG>] <PATH>
+testing-conventions unit colocated-test --language <LANG> [--base <REF>] [--config <CONFIG>] <PATH>
 ```
 
 | Argument / flag     | Description                                                       |
 | ------------------- | ----------------------------------------------------------------- |
-| `<PATH>`            | Directory to scan recursively.                                    |
+| `<PATH>`            | Directory to scan recursively (with `--base`, also where git runs). |
 | `--language <LANG>` | **Required.** Convention to enforce: `python`, `typescript`, or `rust`. No default. Omitting it is a usage error, never a silent `python` run. |
+| `--base <REF>`      | Opt-in commit-scoped co-change check: diff `<base>...HEAD` (the changes this branch introduced, what a PR shows) and also flag a modified or deleted source whose colocated test isn't in the diff. No default — absent means presence-only. `python` / `typescript` only; `--base --language rust` is rejected. In CI, pass the PR's base, e.g. `origin/main`. |
 | `--config <CONFIG>` | Config file supplying the `exempt` list (default `testing-conventions.toml`). Optional; if the file is absent, nothing is exempt. |
 
 **What counts, by language:**
@@ -44,12 +50,26 @@ testing-conventions unit colocated-test --language <LANG> [--config <CONFIG>] <P
 Two things are not subjects regardless of language: **empty or comment-only files** (no logic
 to test) and any file listed in the config [`exempt`](#exemptions) table.
 
+**With `--base`: commit-scoped co-change.** On top of presence, `--base` checks that a source file
+changed in the `<base>...HEAD` diff also changed its colocated test — an edit or removal that
+leaves the test untouched lets it silently go stale. For each source file in the diff:
+
+- **modified** (and still holding code) or **deleted** → its colocated test (`foo.py` →
+  `foo_test.py`, `foo.ts` → `foo.test.ts`) must also be in the diff; otherwise the source is flagged.
+- **added** → not a subject. Brand-new code is the [coverage floor](#unit-coverage)'s concern.
+
+A test file is never a co-change subject (changing a test on its own is fine), and a source with a
+`co-change` [exemption](#exemptions) needn't co-change — independent of the `colocated-test`
+exemption that lifts presence. Rust units are inline `#[cfg(test)]` in the same file, so a sibling
+test can't go stale: `--base --language rust` is rejected (presence, without `--base`, still
+supports Rust).
+
 **Exit codes:**
 
 | Exit | Meaning                                                                                          |
 | ---- | ----------------------------------------------------------------------------------------------- |
-| `0`  | Every source file has its colocated unit test. Nothing is printed.                              |
-| `1`  | One or more orphans, each printed to stderr (`missing colocated unit test: <path>`; for `rust`, `missing inline #[cfg(test)] tests: <path>`), then a count. |
+| `0`  | Presence holds — and, with `--base`, every changed source also changed its colocated test. Nothing is printed. |
+| `1`  | One or more orphans (`missing colocated unit test: <path>`; for `rust`, `missing inline #[cfg(test)] tests: <path>`) and/or — with `--base` — sources that changed without their colocated test (`source changed without its colocated test: <path>`), each printed to stderr, then a count. |
 
 ### `unit coverage`
 
@@ -124,8 +144,8 @@ then a count) when any isn't. `coverage` and `pytest` must be installed, and `gi
 
 A non-executable changed line (comment, blank) has nothing to cover and is never flagged; a file
 with a `coverage` [exemption](#exemptions) is omitted, so its changed lines are lifted, the same
-waiver the floor honors. Unlike [`unit co-change`](#unit-co-change), an **added** file's new lines
-*are* subjects (brand-new code must be covered too). The two are complementary: co-change enforces
+waiver the floor honors. Unlike [`unit colocated-test --base`](#unit-colocated-test), an **added**
+file's new lines *are* subjects (brand-new code must be covered too). The two are complementary: co-change enforces
 that a changed source and its colocated *test* move together, patch coverage enforces that the
 changed *lines* are exercised; one can pass while the other fails.
 
@@ -212,41 +232,6 @@ the Rust Python parser:
   / filesystem are caught by the patch convention, not at import), a *value/type* import used to
   build test data, and pure test-helper packages beyond the framework allowlist. See the
   [Isolation guide](../guide/isolation).
-
-### `unit co-change`
-
-Commit-scoped: check that a source file changed in a git diff also changed its colocated test. An
-edit or removal that leaves the colocated test untouched lets it silently go stale; this is the
-commit-time complement to [`unit colocated-test`](#unit-colocated-test)'s tree-wide pairing.
-
-```
-testing-conventions unit co-change --language <LANG> --base <REF> [--config <CONFIG>] <PATH>
-```
-
-| Argument / flag     | Description                                                                |
-| ------------------- | -------------------------------------------------------------------------- |
-| `<PATH>`            | Directory to inspect (the repo root, or a subtree); also where git runs.   |
-| `--language <LANG>` | **Required.** `python` or `typescript`. Rust units are inline `#[cfg(test)]` in the same file, so a sibling test can't go stale, and `--language rust` is rejected. |
-| `--base <REF>`      | **Required.** Ref to diff against. The check compares `<base>...HEAD` (the changes this branch introduced, what a PR shows), so in CI you pass the PR's base, e.g. `origin/main`. |
-| `--config <CONFIG>` | Config file supplying the `exempt` list (default `testing-conventions.toml`). Optional; if absent, every changed source must co-change its test. |
-
-For each source file in the `<base>...HEAD` diff:
-
-- **modified** (and still holding code) or **deleted** → its colocated test (`foo.py` →
-  `foo_test.py`, `foo.ts` → `foo.test.ts`) must also be in the diff; otherwise the source is flagged.
-- **added** → not a subject. Brand-new code is the [coverage floor](#unit-coverage)'s concern, not
-  this rule's.
-
-A test file is never a subject (changing a test on its own is fine), an empty/comment-only file
-holds no logic, Python's `conftest.py` is pytest support, and a source with a `co-change`
-[exemption](#exemptions) needn't co-change.
-
-**Exit codes:**
-
-| Exit | Meaning                                                                                        |
-| ---- | --------------------------------------------------------------------------------------------- |
-| `0`  | Every changed source also changed its colocated test. Nothing is printed.                     |
-| `1`  | One or more sources changed without their colocated test, each printed to stderr (`source changed without its colocated test: <path>`), then a count. |
 
 ## Exemptions
 

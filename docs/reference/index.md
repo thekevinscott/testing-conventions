@@ -158,6 +158,29 @@ Reserved for the config-driven umbrella that runs every configured rule. **Not w
 it currently exits `0`. Rules ship under their test-kind group (like `unit colocated-test`)
 until `check` orchestrates them from the config.
 
+### `packaging`
+
+Confirm a built artifact doesn't ship test files (README "Packaging"). Colocated unit tests
+live next to the source, so packaging has to strip them; this rule inspects the built artifact
+and fails if any test file survived.
+
+```
+testing-conventions packaging --language <LANG> <PATH>
+```
+
+| Argument / flag     | Description                                                                       |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `<PATH>`            | Root of the built artifact to inspect — an already-unpacked wheel, or a `dist/`.  |
+| `--language <LANG>` | **Required.** `python` or `typescript`.                                           |
+
+Scans `<PATH>` recursively for the language's test-file glob — `python` → `*_test.py`,
+`typescript` → `*.test.*` — and exits `0` when none are present, `1` (printing each offending
+path) when one is.
+
+**Status (foundation):** the command scans an already-built artifact tree. The per-language
+*build* step that produces that tree — wheel/sdist (Python), `dist` (TypeScript), `cargo
+package` tarball (Rust, which also adds `--language rust`) — is landing per language.
+
 ## Configuration
 
 The standard is config-driven: one TOML file is the single source of truth for every rule's

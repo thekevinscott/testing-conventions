@@ -17,6 +17,18 @@ end to end.
   zero-config default `["python", "typescript"]`, the workflow must skip every
   language's jobs and still pass (#94) — the dogfooding case of our own
   `packages/python`, which ships a wheel but carries no `.py`.
+- `isolation/` — fixtures for the `unit isolation` job (#125):
+  - `rust-clean/` — a minimal crate whose inline `#[cfg(test)]` unit reaches only
+    `super::`. Driven through the reusable workflow under `["rust"]`, it proves
+    `detect` recognizes a crate (a `Cargo.toml` / `*.rs`) and fans the isolation job
+    over `rust`, then passes the well-isolated unit.
+  - `rust-red/` — the same shape but its unit test performs real filesystem I/O
+    (`std::fs`), an out-of-module effectful-`std` call, so `unit isolation` exits
+    non-zero. (The fail path drives the published command directly, since a failing
+    `uses:` call would fail the whole run.) Rust + TypeScript isolation ship in the
+    released binary; Python isolation landed after the latest release, so the
+    Python isolation run in the `clean` job above goes green only once a release
+    ships it.
 
 `clean/` and `below-floor/` each carry their own `testing-conventions.toml` with
 the `[python].coverage` floor for that run. The self-test drives the *published*

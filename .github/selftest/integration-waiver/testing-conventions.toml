@@ -1,0 +1,12 @@
+# Drives the integration-waiver self-test. The coverage floor keeps the
+# unit-coverage job honest, and the `[[python.exempt]]` entry lifts the
+# `no-constant-patch` violation in the integration test (#102) — with a reason, in a
+# *non-default* config path. The reusable workflow's integration-lint job applies
+# this waiver only when it forwards `--config` to the CLI (#126).
+[python]
+coverage = { branch = true, fail_under = 90 }
+
+[[python.exempt]]
+path = "tests/integration/billing_test.py"
+rules = ["no-constant-patch"]
+reason = "legacy integration test patches a config constant; config-injection refactor tracked separately"

@@ -35,7 +35,7 @@ to keep on a single-language library: the absent language's jobs simply don't fi
 
 | Input                | Default                     | Description                                                |
 | -------------------- | --------------------------- | ---------------------------------------------------------- |
-| `languages`          | `["python", "typescript"]`  | JSON array of languages to check (`python`, `typescript`). |
+| `languages`          | `["python", "typescript"]`  | JSON array of languages to check (`python`, `typescript`; also `rust`, for the integration-lint rule). |
 | `path`               | `src`                       | Directory scanned recursively for sources.                 |
 | `version`            | latest                      | `testing-conventions` version to install (e.g. `0.1.0`).   |
 | `config`             | `testing-conventions.toml`  | Optional config file to refine the checks (coverage thresholds, exemptions). Absent → every check runs with sane defaults. |
@@ -99,7 +99,9 @@ with the required `--language` flag:
 - run: testing-conventions unit coverage --language python --config testing-conventions.toml src/
 - run: testing-conventions unit coverage --language typescript --config testing-conventions.toml src/
 - run: testing-conventions unit co-change --language python --base origin/main src/   # commit-scoped: needs the PR base ref fetched
-- run: testing-conventions integration lint --language python src/   # python only for now
+- run: testing-conventions integration lint --language python --config testing-conventions.toml src/
+- run: testing-conventions integration lint --language typescript --config testing-conventions.toml src/
+- run: testing-conventions integration lint --language rust --config testing-conventions.toml .   # crate root (scans tests/)
 - run: testing-conventions packaging dist/my_pkg-0.1.0-py3-none-any.whl --language python  # built dist, not src/
 ```
 

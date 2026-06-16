@@ -32,6 +32,13 @@ any violation.
 | `languages` | `["python", "typescript"]`  | JSON array of languages to check (`python`, `typescript`). |
 | `path`      | `src`                       | Directory scanned recursively for sources.                 |
 | `version`   | latest                      | `testing-conventions` version to install (e.g. `0.1.0`).   |
+| `config`    | `testing-conventions.toml`  | Config file with the coverage thresholds (`[python].coverage`). |
+
+The Python **coverage** job runs when `python` is among `languages`: it runs your unit suite
+under `coverage.py` (branch on, `*_test.py` excluded) and fails if the total is below the
+`[python].coverage` floor in your `config`. It installs `coverage` + `pytest`, so it fits
+suites with no third-party runtime imports; a project that needs its own dependencies should
+drive the CLI directly (below) until #56 makes this config-driven.
 
 ## Roll your own
 
@@ -42,6 +49,7 @@ with the required `--language` flag:
 ```yaml
 - run: testing-conventions unit location --language python src/
 - run: testing-conventions unit location --language typescript src/
+- run: testing-conventions unit coverage --language python --config testing-conventions.toml src/
 ```
 
 Either way, the non-zero exit on a violation is what fails the build.

@@ -44,3 +44,14 @@ fn inline_patch_red_exits_nonzero() {
 fn inline_patch_clean_exits_zero() {
     assert_eq!(lint_exit("inline_patch/clean"), 0);
 }
+
+// R3: env via patch.dict(os.environ, …) (#51)
+#[test]
+fn environ_red_exits_nonzero() {
+    assert_eq!(lint_exit("environ/red"), 1);
+}
+
+#[test]
+fn environ_clean_exits_zero() {
+    assert_eq!(lint_exit("environ/clean"), 0);
+}

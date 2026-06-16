@@ -63,7 +63,7 @@ testing-conventions unit coverage --language typescript --config testing-convent
 
 It runs the suite under `vitest` (via `npx`, so `vitest` and `@vitest/coverage-v8` must be
 installed), excludes `*.test.*` and declaration files, and exits non-zero naming any of the four
-metrics below its floor, so CI fails on a coverage regression. Measuring all four matters: line
+metrics below its floor, so CI fails when coverage drops below the floor. Measuring all four matters: line
 coverage can read 100% while branches lag, when every line of a function runs but its `else` is
 never taken.
 

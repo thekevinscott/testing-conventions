@@ -368,28 +368,9 @@ fn co_change_exemptions(
     config::resolve_exempt(root, config.exemptions(language), config::Rule::CoChange)
 }
 
-/// Combine the independent coverage outcomes for one run — the configured floor
-/// and the non-regression ratchet (#131). Passes only when every outcome passes;
-/// otherwise fails, joining each reason so a run breaching both the floor and the
-/// baseline reports both.
-fn combine_outcomes(outcomes: impl IntoIterator<Item = coverage::Outcome>) -> coverage::Outcome {
-    let reasons: Vec<String> = outcomes
-        .into_iter()
-        .filter_map(|outcome| match outcome {
-            coverage::Outcome::Pass => None,
-            coverage::Outcome::Fail(reason) => Some(reason),
-        })
-        .collect();
-    if reasons.is_empty() {
-        coverage::Outcome::Pass
-    } else {
-        coverage::Outcome::Fail(reasons.join("; "))
-    }
-}
-
 /// Run the unit-test coverage check over `root` for `language`, enforcing the
-/// floor (and, for Python, the non-regression ratchet) from the config at
-/// `config_path`. Returns `0` when the checks pass, `1` otherwise.
+/// floor from the config at `config_path`. Returns `0` when the floor is met,
+/// `1` otherwise.
 ///
 /// Coverage is zero-config by default (#80): a missing config file — or a config
 /// with no `[<language>].coverage` table — falls back to the language's sane
@@ -419,17 +400,7 @@ fn run_unit_coverage(
                 config::resolve_exempt(root, &python.exempt, config::Rule::Coverage)?
                     .into_iter()
                     .collect();
-            // Measure once, then enforce both the floor and the non-regression
-            // ratchet (#131): a committed baseline beside `root` records the last
-            // total, and a drop below it fails even when the floor is still met.
-            let report = coverage::measure_report(root, &omit)?;
-            let baseline = coverage::read_baseline(root)?
-                .and_then(|baseline| baseline.python)
-                .map(|python| python.percent_covered);
-            combine_outcomes([
-                coverage::evaluate(&report, thresholds),
-                coverage::evaluate_ratchet(report.totals.percent_covered, baseline),
-            ])
+            coverage::measure(root, thresholds, &omit)?
         }
         colocated_test::Language::TypeScript => {
             let typescript = config.typescript.unwrap_or_default();

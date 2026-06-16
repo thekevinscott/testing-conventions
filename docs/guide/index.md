@@ -30,7 +30,9 @@ launcher shim — get an explicit, reason-required exemption in config; see
 ## Check unit-test coverage
 
 Coverage floors are enforced on the **unit suite only**, with test files excluded from the
-denominator. Put the floors in your config and run `unit coverage`.
+denominator. Put the floors in your config and run `unit coverage` — or skip the config entirely
+and `unit coverage` enforces the language's sane default floor (Python `fail_under = 85` with
+branch on; TypeScript `lines`/`functions`/`statements` 80, `branches` 75).
 
 **Python** — one total floor, branch coverage on, measured by `coverage.py`:
 

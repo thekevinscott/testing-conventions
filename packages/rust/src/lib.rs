@@ -5,7 +5,6 @@ pub mod lint;
 
 use std::path::{Path, PathBuf};
 
-use anyhow::Context;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
@@ -58,7 +57,10 @@ enum UnitRule {
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
         language: colocated_test::Language,
-        /// testing-conventions config file providing the coverage thresholds.
+        /// testing-conventions config file with the coverage thresholds and
+        /// `exempt` list. Optional: if the file — or its `[<language>].coverage`
+        /// table — is absent, the language's sane default floor is used and
+        /// nothing is exempt.
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
@@ -163,22 +165,27 @@ fn colocated_test_exemptions(
 /// Run the unit-test coverage check over `root` for `language`, enforcing the
 /// floor from the config at `config_path`. Returns `0` when the floor is met,
 /// `1` otherwise.
+///
+/// Coverage is zero-config by default (#80): a missing config file — or a config
+/// with no `[<language>].coverage` table — falls back to the language's sane
+/// default floor ([`config::PythonCoverage::default`] /
+/// [`config::TypeScriptCoverage::default`]), the same way `unit colocated-test`
+/// and `integration lint` treat an absent config as "nothing exempt". A present
+/// `coverage` table overrides the default; `coverage`-rule exemptions still apply.
 fn run_unit_coverage(
     root: &Path,
     language: colocated_test::Language,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
-    let config = config::load_config(config_path)?;
+    let config = if config_path.exists() {
+        config::load_config(config_path)?
+    } else {
+        config::Config::default()
+    };
     let outcome = match language {
         colocated_test::Language::Python => {
-            let python = config
-                .python
-                .as_ref()
-                .context("config has no [python] table to read coverage thresholds from")?;
-            let coverage = python
-                .coverage
-                .as_ref()
-                .context("config [python] table has no `coverage` thresholds")?;
+            let python = config.python.unwrap_or_default();
+            let coverage = python.coverage.unwrap_or_default();
             let thresholds = coverage::Thresholds {
                 fail_under: coverage.fail_under,
                 branch: coverage.branch,
@@ -190,14 +197,8 @@ fn run_unit_coverage(
             coverage::measure(root, thresholds, &omit)?
         }
         colocated_test::Language::TypeScript => {
-            let typescript = config
-                .typescript
-                .as_ref()
-                .context("config has no [typescript] table to read coverage thresholds from")?;
-            let coverage = typescript
-                .coverage
-                .as_ref()
-                .context("config [typescript] table has no `coverage` thresholds")?;
+            let typescript = config.typescript.unwrap_or_default();
+            let coverage = typescript.coverage.unwrap_or_default();
             let thresholds = coverage::TypeScriptThresholds {
                 lines: coverage.lines,
                 branches: coverage.branches,

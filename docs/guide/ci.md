@@ -23,7 +23,9 @@ jobs:
 
 It installs the published `testing-conventions` binary and runs every requested rule for each
 language as its own matrix job, failing the build — with the offending files in the log — on
-any violation.
+any violation. No config file is required: every rule runs with sane defaults, so this one job
+opts a new library into the full check set. Add a `testing-conventions.toml` only to tighten a
+floor or declare exemptions.
 
 ### Inputs
 
@@ -32,13 +34,15 @@ any violation.
 | `languages` | `["python", "typescript"]`  | JSON array of languages to check (`python`, `typescript`). |
 | `path`      | `src`                       | Directory scanned recursively for sources.                 |
 | `version`   | latest                      | `testing-conventions` version to install (e.g. `0.1.0`).   |
-| `config`    | `testing-conventions.toml`  | Config file with the coverage thresholds (`[<language>].coverage`). |
+| `config`    | `testing-conventions.toml`  | Optional config file to refine the checks (coverage thresholds, exemptions). Absent → every check runs with sane defaults. |
 
-The **coverage** job runs once per requested language. For `python` it runs your unit suite
-under `coverage.py` (branch on, `*_test.py` excluded) and fails if the total is below the
-`[python].coverage` floor, installing `coverage` + `pytest`. For `typescript` it runs the suite
-under `vitest` v8 coverage and fails below any of the four `[typescript].coverage` thresholds
-(`lines` / `branches` / `functions` / `statements`), installing your project's deps with `pnpm`
+The **coverage** job runs once per requested language. Without a config file it enforces the
+language's default floor — Python `fail_under = 85` with branch coverage on; TypeScript `lines`
+/ `functions` / `statements` 80 and `branches` 75 — and a `[<language>].coverage` table
+overrides it. For `python` it runs your unit suite under `coverage.py` (branch on, `*_test.py`
+excluded) and fails if the total is below the floor, installing `coverage` + `pytest`. For
+`typescript` it runs the suite under `vitest` v8 coverage and fails below any of the four
+thresholds (`lines` / `branches` / `functions` / `statements`), installing your project's deps with `pnpm`
 so `vitest` + `@vitest/coverage-v8` are present. A project on a different toolchain — a non-`pnpm`
 package manager, or Python sources that need third-party runtime deps installed — should drive
 the CLI directly (below) until #56 makes this config-driven.

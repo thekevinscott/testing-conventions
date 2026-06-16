@@ -19,7 +19,7 @@ use serde::Deserialize;
 /// per-language `exempt` lists. Each table is optional so a repo can configure
 /// only the languages it ships. Test locations follow convention, not config, so
 /// there are no location keys here.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub python: Option<PythonConfig>,
@@ -28,8 +28,10 @@ pub struct Config {
 }
 
 /// The `[python]` table. Both keys are optional, so a repo can configure just
-/// coverage, just exemptions, or both.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+/// coverage, just exemptions, or both. `Default` (no coverage table, no
+/// exemptions) backs the zero-config path: an absent `[python]` table means the
+/// rule runs against the default floor with nothing exempt (#80).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PythonConfig {
     pub coverage: Option<PythonCoverage>,
@@ -38,7 +40,7 @@ pub struct PythonConfig {
 }
 
 /// The `[typescript]` table.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TypeScriptConfig {
     pub coverage: Option<TypeScriptCoverage>,
@@ -47,7 +49,7 @@ pub struct TypeScriptConfig {
 }
 
 /// The `[rust]` table.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RustConfig {
     pub coverage: Option<RustCoverage>,
@@ -63,6 +65,19 @@ pub struct PythonCoverage {
     pub fail_under: u8,
 }
 
+/// The sane default Python floor used when coverage isn't configured (#80):
+/// branch coverage on, `fail_under = 85`. Per `internals/python/testing.md`,
+/// "85 is a reasonable floor; aiming for 100 forces tests for trivia." A config
+/// `[python].coverage` table overrides it.
+impl Default for PythonCoverage {
+    fn default() -> Self {
+        Self {
+            branch: true,
+            fail_under: 85,
+        }
+    }
+}
+
 /// `[typescript].coverage`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -71,6 +86,20 @@ pub struct TypeScriptCoverage {
     pub branches: u8,
     pub functions: u8,
     pub statements: u8,
+}
+
+/// The sane default TypeScript floors used when coverage isn't configured (#80),
+/// matching `internals/typescript/testing.md`: lines/functions/statements 80,
+/// branches 75. A config `[typescript].coverage` table overrides it.
+impl Default for TypeScriptCoverage {
+    fn default() -> Self {
+        Self {
+            lines: 80,
+            branches: 75,
+            functions: 80,
+            statements: 80,
+        }
+    }
 }
 
 /// `[rust].coverage`. Branch coverage is still experimental, so only
@@ -243,6 +272,34 @@ mod tests {
              [[python.exempt]]\npath = \"cli.py\"\nrules = [\"packaging\"]\nreason = \"x\"\n",
         )
         .is_err());
+    }
+
+    #[test]
+    fn default_python_coverage_is_the_reasonable_floor() {
+        // The zero-config floor (#80) is the internals' reasonable one: branch on,
+        // 85. Locked here so it can't silently drift from internals/python/testing.md.
+        assert_eq!(
+            PythonCoverage::default(),
+            PythonCoverage {
+                branch: true,
+                fail_under: 85,
+            }
+        );
+    }
+
+    #[test]
+    fn default_typescript_coverage_matches_internals() {
+        // Matches internals/typescript/testing.md: lines/functions/statements 80,
+        // branches 75 (#80).
+        assert_eq!(
+            TypeScriptCoverage::default(),
+            TypeScriptCoverage {
+                lines: 80,
+                branches: 75,
+                functions: 80,
+                statements: 80,
+            }
+        );
     }
 
     #[test]

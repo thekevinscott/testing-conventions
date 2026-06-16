@@ -51,3 +51,18 @@ fn exempt_cov_exits_zero_with_the_shim_exempted() {
         0
     );
 }
+
+// Zero-config (#80): a `--config` pointing at a file that doesn't exist falls
+// back to the default TypeScript floors (lines/functions/statements 80,
+// branches 75) — the same floors as `ts_mid.toml`, so `above` clears them and
+// `below` (100% lines but ~66% branches) fails on branches.
+
+#[test]
+fn above_exits_zero_with_no_config_via_the_default_floor() {
+    assert_eq!(unit_coverage_exit("above", "no-such-config.toml"), 0);
+}
+
+#[test]
+fn below_exits_nonzero_with_no_config_via_the_default_floor() {
+    assert_eq!(unit_coverage_exit("below", "no-such-config.toml"), 1);
+}

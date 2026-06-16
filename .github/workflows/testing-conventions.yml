@@ -19,6 +19,12 @@ name: Testing Conventions
 # integration-test lint (mocking mechanism & style, Python only); as more rules
 # land they run here too.
 #
+# No config file is required: every check runs with sane defaults, opting a new
+# library into the full set in one drop-in (#80). The coverage floor falls back
+# to the language's reasonable default — Python: branch on, 85; TypeScript:
+# lines/functions/statements 80, branches 75 — when no `testing-conventions.toml`
+# is present. Add a config file only to tighten a floor or declare exemptions.
+#
 # `languages` is a JSON array so the matrix can fan out over it directly
 # (reusable-workflow inputs can't be native lists). Once the config-driven
 # `check` umbrella is wired this will read the config file itself.
@@ -39,7 +45,7 @@ on:
         type: string
         default: ''
       config:
-        description: 'Config file with the coverage thresholds (the `[<language>].coverage` table).'
+        description: 'Optional config file to refine the checks (coverage thresholds, exemptions). If absent, every check runs with sane defaults.'
         type: string
         default: 'testing-conventions.toml'
 

@@ -16,7 +16,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 /// Walk `root` — the root of an unpacked built artifact — and return every file
 /// whose name matches one of `globs`, sorted for deterministic output.
@@ -31,6 +31,92 @@ pub fn scan(root: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>> {
     collect_offenders(root, globs, &mut offenders)?;
     offenders.sort();
     Ok(offenders)
+}
+
+/// Inspect a built artifact at `path` for files matching `globs` — the test-file
+/// patterns that must not ship.
+///
+/// `path` is either a **directory** (an already-unpacked artifact) or a packed
+/// archive this rule understands — currently a Python wheel (`.whl`, a zip),
+/// which is unpacked into a scratch directory first. Either way the unpacked
+/// tree is handed to [`scan`]. Offenders come back as paths **relative to the
+/// artifact root** (e.g. `widget/core_test.py`), so they read the same whether
+/// the artifact was a directory or an archive. Errors if the artifact can't be
+/// read, or isn't a directory or a recognized archive.
+pub fn inspect(path: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>> {
+    let path = path.as_ref();
+    if path.is_dir() {
+        return Ok(relative_to(path, scan(path, globs)?));
+    }
+    if is_zip_artifact(path) {
+        let unpacked = unzip_to_temp(path)?;
+        return Ok(relative_to(unpacked.path(), scan(unpacked.path(), globs)?));
+    }
+    bail!(
+        "`{}` is not a directory or a recognized built artifact \
+         (expected a directory or a `.whl`)",
+        path.display()
+    )
+}
+
+/// `true` for an artifact this rule unpacks as a zip: a Python wheel (`.whl`) or
+/// a plain `.zip`.
+fn is_zip_artifact(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|ext| ext.to_str()),
+        Some("whl" | "zip")
+    )
+}
+
+/// Re-express each offender as a path relative to `root`. [`scan`] returns paths
+/// under `root`, so the strip always succeeds; an unexpected path is kept as-is.
+fn relative_to(root: &Path, offenders: Vec<PathBuf>) -> Vec<PathBuf> {
+    offenders
+        .into_iter()
+        .map(|p| p.strip_prefix(root).map(Path::to_path_buf).unwrap_or(p))
+        .collect()
+}
+
+/// Unpack a zip artifact into a fresh scratch directory (removed on drop).
+fn unzip_to_temp(archive: &Path) -> Result<TempDir> {
+    let file = std::fs::File::open(archive)
+        .with_context(|| format!("opening artifact `{}`", archive.display()))?;
+    let mut zip = zip::ZipArchive::new(file)
+        .with_context(|| format!("reading `{}` as a zip archive", archive.display()))?;
+    let dir = TempDir::new()?;
+    zip.extract(dir.path())
+        .with_context(|| format!("unpacking `{}`", archive.display()))?;
+    Ok(dir)
+}
+
+/// A scratch directory removed on drop — where an archive artifact is unpacked.
+/// Unique per call (so parallel checks don't collide) and cleaned up so nothing
+/// leaks into the temp dir.
+struct TempDir(PathBuf);
+
+impl TempDir {
+    fn new() -> Result<Self> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "testing-conventions-pkg-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed),
+        ));
+        std::fs::create_dir_all(&path)
+            .with_context(|| format!("creating scratch directory `{}`", path.display()))?;
+        Ok(TempDir(path))
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 /// Recursively collect every file under `dir` whose name matches one of `globs`.
@@ -191,5 +277,26 @@ mod tests {
     fn scan_errors_when_the_root_cannot_be_read() {
         let missing = std::env::temp_dir().join("tc-packaging-does-not-exist-9f8e7d");
         assert!(scan(&missing, &["*_test.py".to_string()]).is_err());
+    }
+
+    #[test]
+    fn inspect_scans_a_directory_artifact_with_relative_paths() {
+        let tree = TempTree::new(&["pkg/widget.py", "pkg/widget_test.py"]);
+        let offenders = inspect(tree.path(), &["*_test.py".to_string()]).unwrap();
+        assert_eq!(offenders, vec![PathBuf::from("pkg/widget_test.py")]);
+    }
+
+    #[test]
+    fn inspect_rejects_an_unrecognized_artifact() {
+        let tree = TempTree::new(&["not-an-archive.txt"]);
+        let err = inspect(
+            tree.path().join("not-an-archive.txt"),
+            &["*_test.py".to_string()],
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("not a directory or a recognized"),
+            "got: {err}"
+        );
     }
 }

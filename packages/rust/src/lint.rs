@@ -17,13 +17,18 @@
 //!   `patch.dict(...)` call inside a test body — the `with patch(...)` form or a
 //!   bare call. Patches belong in a `pytest.fixture`; a patch *inside* a fixture
 //!   is allowed.
+//! - **`no-environ-mutation`** (#51): direct mutation of `os.environ` —
+//!   `os.environ[...] = …`, `del os.environ[...]`, or a mutating method
+//!   (`update` / `pop` / `setdefault` / `clear` / `popitem`). Set env via
+//!   `patch.dict(os.environ, {...})` instead.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use rustpython_ast::Visitor;
 use rustpython_parser::ast::{
-    self, Arg, Arguments, Expr, ExprCall, StmtAsyncFunctionDef, StmtFunctionDef, WithItem,
+    self, Arg, Arguments, Expr, ExprCall, StmtAssign, StmtAsyncFunctionDef, StmtAugAssign,
+    StmtDelete, StmtFunctionDef, WithItem,
 };
 use rustpython_parser::text_size::{TextRange, TextSize};
 use rustpython_parser::Parse;
@@ -152,6 +157,10 @@ impl Visitor for LintVisitor<'_> {
                 "patch is called inline in a test body; move it into a `pytest.fixture`",
             );
         }
+        // `no-environ-mutation` (#51): `os.environ.update(...)` and friends.
+        if is_environ_mutation_call(&node) {
+            self.report(node.range, "no-environ-mutation", ENVIRON_MUTATION_MSG);
+        }
         self.generic_visit_expr_call(node);
     }
 
@@ -162,6 +171,29 @@ impl Visitor for LintVisitor<'_> {
         if let Some(optional_vars) = node.optional_vars {
             self.visit_expr(*optional_vars);
         }
+    }
+
+    // `no-environ-mutation` (#51): `os.environ[...] = …`, augmented assignment,
+    // and `del os.environ[...]`.
+    fn visit_stmt_assign(&mut self, node: StmtAssign) {
+        if node.targets.iter().any(is_os_environ_subscript) {
+            self.report(node.range, "no-environ-mutation", ENVIRON_MUTATION_MSG);
+        }
+        self.generic_visit_stmt_assign(node);
+    }
+
+    fn visit_stmt_aug_assign(&mut self, node: StmtAugAssign) {
+        if is_os_environ_subscript(node.target.as_ref()) {
+            self.report(node.range, "no-environ-mutation", ENVIRON_MUTATION_MSG);
+        }
+        self.generic_visit_stmt_aug_assign(node);
+    }
+
+    fn visit_stmt_delete(&mut self, node: StmtDelete) {
+        if node.targets.iter().any(is_os_environ_subscript) {
+            self.report(node.range, "no-environ-mutation", ENVIRON_MUTATION_MSG);
+        }
+        self.generic_visit_stmt_delete(node);
     }
 }
 
@@ -206,6 +238,44 @@ fn attr_base_is_patch(expr: &Expr) -> bool {
         Expr::Attribute(attr) => attr.attr.as_str() == "patch",
         _ => false,
     }
+}
+
+/// Message for the `no-environ-mutation` lint.
+const ENVIRON_MUTATION_MSG: &str =
+    "os.environ is mutated directly; set env via `patch.dict(os.environ, {...})` instead";
+
+/// `true` for the expression `os.environ`.
+fn is_os_environ(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::Attribute(attr)
+            if attr.attr.as_str() == "environ"
+                && matches!(attr.value.as_ref(), Expr::Name(name) if name.id.as_str() == "os")
+    )
+}
+
+/// `true` for `os.environ[...]` — a subscript of `os.environ`, the form used as
+/// an assignment or `del` target.
+fn is_os_environ_subscript(expr: &Expr) -> bool {
+    matches!(expr, Expr::Subscript(sub) if is_os_environ(sub.value.as_ref()))
+}
+
+/// `true` for a mutating method call on `os.environ` (`os.environ.update(...)`
+/// and friends).
+fn is_environ_mutation_call(call: &ExprCall) -> bool {
+    matches!(
+        call.func.as_ref(),
+        Expr::Attribute(attr)
+            if is_os_environ(attr.value.as_ref()) && is_environ_mutator(attr.attr.as_str())
+    )
+}
+
+/// `true` for a `dict` method that mutates in place.
+fn is_environ_mutator(method: &str) -> bool {
+    matches!(
+        method,
+        "update" | "pop" | "setdefault" | "clear" | "popitem"
+    )
 }
 
 /// The 1-based line containing byte `offset` in `source`.
@@ -273,5 +343,14 @@ mod tests {
         assert_eq!(line_of(src, TextSize::from(0)), 1);
         assert_eq!(line_of(src, TextSize::from(2)), 2);
         assert_eq!(line_of(src, TextSize::from(4)), 3);
+    }
+
+    #[test]
+    fn recognizes_environ_mutators() {
+        assert!(is_environ_mutator("update"));
+        assert!(is_environ_mutator("pop"));
+        assert!(is_environ_mutator("clear"));
+        assert!(!is_environ_mutator("get"));
+        assert!(!is_environ_mutator("keys"));
     }
 }

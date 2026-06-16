@@ -20,7 +20,7 @@
 //! ([`crate::config::resolve_exempt`]) and passes their paths to [`measure`] /
 //! [`measure_typescript`].
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -489,11 +489,6 @@ impl ReportDir {
         );
         ReportDir(std::env::temp_dir().join(name))
     }
-
-    /// The json-summary file vitest writes under this directory.
-    fn summary(&self) -> PathBuf {
-        self.0.join("coverage-summary.json")
-    }
 }
 
 impl Drop for ReportDir {
@@ -502,26 +497,39 @@ impl Drop for ReportDir {
     }
 }
 
-/// Run vitest over the unit suite in `root` and return the parsed report.
+/// Run vitest over the unit suite in `root` and return the parsed floor report.
 fn run_vitest(root: &Path, exclude: &[String]) -> Result<VitestReport> {
+    let json = run_vitest_coverage(root, exclude, "json-summary", "coverage-summary.json")?;
+    parse_vitest_report(&json)
+}
+
+/// Run vitest coverage over the unit suite in `root` and return the raw contents
+/// of the `report_file` the `reporter` wrote. Shared by the floor (#31, the
+/// `json-summary` → `coverage-summary.json` pair) and patch coverage (#135, the
+/// detailed `json` → `coverage-final.json` Istanbul pair) — the two differ only in
+/// the reporter and how they parse it.
+///
+/// v8 coverage is written to an out-of-tree temp dir so the scanned tree stays
+/// pristine. `include` scopes measurement to the sources under `root`; the test
+/// glob, declaration files, and the config `exclude` paths are excluded from the
+/// denominator. `all=true` counts source files the suite never imported, so an
+/// untested file is measured (lowering the floor / showing as uncovered) rather
+/// than vanishing. `--no-cache` keeps vitest from writing a cache into the tree.
+fn run_vitest_coverage(
+    root: &Path,
+    exclude: &[String],
+    reporter: &str,
+    report_file: &str,
+) -> Result<String> {
     let reports = ReportDir::new();
 
-    // v8 coverage with the json-summary reporter, written to an out-of-tree temp
-    // dir so the scanned tree stays pristine. `include` scopes measurement to the
-    // sources under `root`; the test glob, declaration files, and the config
-    // exemptions are excluded from the denominator. `all=true` counts source files
-    // the suite never imported, so an untested file lowers coverage rather than
-    // vanishing. `--no-cache` keeps vitest from writing a cache into the tree.
     let mut command = Command::new("npx");
     command
         .current_dir(root)
         .args(["--yes", "vitest", "run", "--no-cache"])
-        .args([
-            "--coverage.enabled",
-            "--coverage.provider=v8",
-            "--coverage.reporter=json-summary",
-            "--coverage.all=true",
-        ])
+        .args(["--coverage.enabled", "--coverage.provider=v8"])
+        .arg(format!("--coverage.reporter={reporter}"))
+        .arg("--coverage.all=true")
         .arg(format!(
             "--coverage.reportsDirectory={}",
             reports.0.display()
@@ -545,14 +553,112 @@ fn run_vitest(root: &Path, exclude: &[String]) -> Result<VitestReport> {
         );
     }
 
-    let summary = reports.summary();
-    let json = std::fs::read_to_string(&summary).with_context(|| {
+    let path = reports.0.join(report_file);
+    std::fs::read_to_string(&path).with_context(|| {
         format!(
-            "reading vitest coverage summary `{}` (did the run produce a json-summary report?)",
-            summary.display()
+            "reading vitest coverage report `{}` (did the run produce a {reporter} report?)",
+            path.display()
         )
-    })?;
-    parse_vitest_report(&json)
+    })
+}
+
+// ---------------------------------------------------------------------------
+// TypeScript patch (changed-line) coverage — issue #135.
+//
+// What patch coverage (`crate::patch_coverage::check_typescript`) reads: the set
+// of uncovered lines per file. vitest's `json-summary` gives only per-file totals,
+// so this measures with the detailed `json` (Istanbul `coverage-final.json`)
+// reporter and reduces it to the lines a changed line must avoid — the v8 twin of
+// coverage.py's `missing_lines` / `missing_branches`.
+// ---------------------------------------------------------------------------
+
+/// Run the TypeScript unit suite under vitest in `root` and return the uncovered
+/// lines per file — keyed by the absolute path vitest reports, the caller
+/// re-keying to `root`-relative to match the diff. A line is uncovered when it
+/// carries a statement the suite never executed, or the source of a branch a path
+/// of which the suite never took (the v8 analogue of the Python arm's missing line
+/// / missing branch). `exclude` is the `coverage`-rule exemptions, dropped from the
+/// run so an exempt file's changed lines are lifted. `npx` resolves the
+/// project-local `vitest`, so it and `@vitest/coverage-v8` must be installed under
+/// `root`.
+pub fn measure_patch_typescript(
+    root: &Path,
+    exclude: &[String],
+) -> Result<BTreeMap<String, BTreeSet<u64>>> {
+    let json = run_vitest_coverage(root, exclude, "json", "coverage-final.json")?;
+    uncovered_istanbul_lines(&json)
+}
+
+/// One file's entry in a vitest v8 `coverage-final.json` (Istanbul) report, pared
+/// to what patch coverage reads: the statement / branch maps and their hit counts.
+/// Unmodeled fields (`path`, `fnMap`/`f`, per-node metadata) are ignored.
+#[derive(Debug, Clone, Deserialize)]
+struct IstanbulFile {
+    /// Statement id → source span. A statement whose hit count in `s` is `0` was
+    /// never executed, so its lines are uncovered.
+    #[serde(rename = "statementMap", default)]
+    statement_map: BTreeMap<String, IstanbulSpan>,
+    /// Statement id → execution count.
+    #[serde(default)]
+    s: BTreeMap<String, u64>,
+    /// Branch id → branch location. A branch with a `0` among its `b` counts had a
+    /// path the suite never took, so its source line is uncovered.
+    #[serde(rename = "branchMap", default)]
+    branch_map: BTreeMap<String, IstanbulBranch>,
+    /// Branch id → per-path execution counts.
+    #[serde(default)]
+    b: BTreeMap<String, Vec<u64>>,
+}
+
+/// A source span — only the 1-based line numbers matter to patch coverage.
+#[derive(Debug, Clone, Deserialize)]
+struct IstanbulSpan {
+    start: IstanbulPos,
+    end: IstanbulPos,
+}
+
+/// A position in a source span; the `column` is ignored.
+#[derive(Debug, Clone, Deserialize)]
+struct IstanbulPos {
+    line: u64,
+}
+
+/// A branch entry — only its location (whose start line is the branch's source
+/// line) matters; the `type` and per-path `locations` are ignored.
+#[derive(Debug, Clone, Deserialize)]
+struct IstanbulBranch {
+    loc: IstanbulSpan,
+}
+
+/// Pure: every uncovered line per file from a vitest v8 `coverage-final.json`
+/// (Istanbul) report — a statement the suite never ran (every line it spans) and
+/// the source line of a branch a path of which it never took. Keyed by the path
+/// vitest reports (absolute). A file present but fully covered maps to an empty
+/// set. Mirrors [`crate::patch_coverage::uncovered_changed_lines`]'s Python rule
+/// (missing line ∪ missing-branch source) for the v8 shape.
+fn uncovered_istanbul_lines(json: &str) -> Result<BTreeMap<String, BTreeSet<u64>>> {
+    let files: BTreeMap<String, IstanbulFile> = serde_json::from_str(json)
+        .context("parsing vitest coverage-final (Istanbul) JSON report")?;
+    let mut out = BTreeMap::new();
+    for (path, file) in files {
+        let mut lines = BTreeSet::new();
+        // A statement never executed (`s[id] == 0`) — every line it spans is
+        // uncovered (a single-line statement spans one line).
+        for (id, span) in &file.statement_map {
+            if file.s.get(id) == Some(&0) {
+                lines.extend(span.start.line..=span.end.line);
+            }
+        }
+        // A branch with an untaken path (a `0` among its counts) — its source line
+        // (the location's start) is uncovered, even when the line itself ran.
+        for (id, branch) in &file.branch_map {
+            if file.b.get(id).is_some_and(|counts| counts.contains(&0)) {
+                lines.insert(branch.loc.start.line);
+            }
+        }
+        out.insert(path, lines);
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -911,5 +1017,101 @@ mod tests {
             "branches": {"total": 1, "covered": 1, "skipped": 0, "pct": 100}
         }}"#;
         assert!(parse_vitest_report(json).is_err());
+    }
+
+    // --- TypeScript patch coverage (Istanbul `coverage-final.json`) — issue #135 ---
+
+    #[test]
+    fn istanbul_flags_an_unexecuted_statement() {
+        // s1 (line 2) never ran → line 2 is uncovered; s0 (line 1) ran → not.
+        let json = r#"{"/abs/widget.ts":{
+            "statementMap":{"0":{"start":{"line":1,"column":0},"end":{"line":1,"column":40}},
+                            "1":{"start":{"line":2,"column":2},"end":{"line":2,"column":20}}},
+            "s":{"0":1,"1":0},
+            "branchMap":{},"b":{}
+        }}"#;
+        let out = uncovered_istanbul_lines(json).unwrap();
+        assert_eq!(out["/abs/widget.ts"], BTreeSet::from([2]));
+    }
+
+    #[test]
+    fn istanbul_flags_an_untaken_branch_source() {
+        // The branch out of line 3 has an untaken path (`[4, 0]`) → line 3 is
+        // uncovered, even though its statement ran.
+        let json = r#"{"/abs/widget.ts":{
+            "statementMap":{"0":{"start":{"line":3,"column":2},"end":{"line":3,"column":20}}},
+            "s":{"0":5},
+            "branchMap":{"0":{"loc":{"start":{"line":3,"column":2},"end":{"line":3,"column":40}}}},
+            "b":{"0":[4,0]}
+        }}"#;
+        let out = uncovered_istanbul_lines(json).unwrap();
+        assert_eq!(out["/abs/widget.ts"], BTreeSet::from([3]));
+    }
+
+    #[test]
+    fn istanbul_v8_single_arm_branch_counts_as_uncovered() {
+        // vitest's v8 provider models each branch arm as its own entry with a
+        // single-element count array; `[0]` is an arm the suite never took.
+        let json = r#"{"/abs/widget.ts":{
+            "statementMap":{},"s":{},
+            "branchMap":{"0":{"loc":{"start":{"line":7,"column":0},"end":{"line":7,"column":3}}}},
+            "b":{"0":[0]}
+        }}"#;
+        let out = uncovered_istanbul_lines(json).unwrap();
+        assert_eq!(out["/abs/widget.ts"], BTreeSet::from([7]));
+    }
+
+    #[test]
+    fn istanbul_spans_every_line_of_an_unexecuted_multiline_statement() {
+        // A statement that never ran and spans lines 4-6 marks all three.
+        let json = r#"{"/abs/widget.ts":{
+            "statementMap":{"0":{"start":{"line":4,"column":2},"end":{"line":6,"column":3}}},
+            "s":{"0":0},
+            "branchMap":{},"b":{}
+        }}"#;
+        let out = uncovered_istanbul_lines(json).unwrap();
+        assert_eq!(out["/abs/widget.ts"], BTreeSet::from([4, 5, 6]));
+    }
+
+    #[test]
+    fn istanbul_fully_covered_file_has_no_uncovered_lines() {
+        let json = r#"{"/abs/widget.ts":{
+            "statementMap":{"0":{"start":{"line":1,"column":0},"end":{"line":1,"column":40}}},
+            "s":{"0":3},
+            "branchMap":{"0":{"loc":{"start":{"line":1,"column":0},"end":{"line":1,"column":40}}}},
+            "b":{"0":[2,1]}
+        }}"#;
+        let out = uncovered_istanbul_lines(json).unwrap();
+        assert!(out["/abs/widget.ts"].is_empty());
+    }
+
+    #[test]
+    fn istanbul_widget_report_flags_statement_and_branch_lines() {
+        // The realistic shape vitest emits for the `if (n === 42) { return 'answer';
+        // }` red fixture: lines 4-5 are unexecuted statements and line 3 is an
+        // untaken branch source → {3, 4, 5}.
+        let json = r#"{"/abs/widget.ts":{
+            "statementMap":{
+                "0":{"start":{"line":1,"column":0},"end":{"line":1,"column":43}},
+                "1":{"start":{"line":2,"column":2},"end":{"line":2,"column":25}},
+                "2":{"start":{"line":3,"column":2},"end":{"line":3,"column":16}},
+                "3":{"start":{"line":4,"column":4},"end":{"line":4,"column":20}},
+                "4":{"start":{"line":5,"column":2},"end":{"line":5,"column":3}},
+                "5":{"start":{"line":6,"column":2},"end":{"line":6,"column":15}}
+            },
+            "s":{"0":1,"1":2,"2":2,"3":0,"4":0,"5":1},
+            "branchMap":{
+                "0":{"loc":{"start":{"line":2,"column":2},"end":{"line":2,"column":25}}},
+                "1":{"loc":{"start":{"line":3,"column":2},"end":{"line":3,"column":16}}}
+            },
+            "b":{"0":[2],"1":[0]}
+        }}"#;
+        let out = uncovered_istanbul_lines(json).unwrap();
+        assert_eq!(out["/abs/widget.ts"], BTreeSet::from([3, 4, 5]));
+    }
+
+    #[test]
+    fn istanbul_malformed_json_is_an_error() {
+        assert!(uncovered_istanbul_lines("{ not json").is_err());
     }
 }

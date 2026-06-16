@@ -10,14 +10,25 @@ name: Testing Conventions (self-test)
 # `npx`), not this branch's source — so it tracks the released surface, which is
 # the contract consumers actually depend on.
 #
-# Two halves, both around `unit coverage` (the rule this self-test was added for, #57):
+# Each rule is self-tested as a clean/fail pair: a "clean" fixture driven through
+# the reusable workflow's `uses:` call that must pass, and a violating fixture that
+# must fail. A `uses:` call that fails would fail the whole run, so the fail path
+# drives the published command directly and asserts on its non-zero exit.
+#
+# unit coverage (the rule this self-test was added for, #57):
 #   clean        calls the reusable workflow against a fixture that meets its
 #                floor and is clean for the colocated-test & integration-lint
 #                jobs that run alongside coverage — the whole call must pass.
 #   below-floor  runs the same `unit coverage` invocation the workflow's job runs
-#                against a sub-floor fixture and asserts a non-zero exit. (A
-#                `uses:` call that fails would fail the whole run, so the fail
-#                path drives the command directly and asserts on its exit code.)
+#                against a sub-floor fixture and asserts a non-zero exit.
+#
+# packaging (#41) — this inspects a built artifact, not the source tree, so its
+# clean path exercises the upload-artifact → packaging_artifact wiring end to end:
+#   packaging-clean  uploads a clean built wheel as an artifact and calls the
+#                    reusable workflow with `packaging_artifact` — the packaging
+#                    job downloads and inspects it; the whole call must pass.
+#   packaging-red    drives the published `packaging` command on a committed wheel
+#                    that ships a `*_test.py` and asserts a non-zero exit.
 
 on:
   pull_request:
@@ -88,3 +99,47 @@ jobs:
             exit 1
           fi
           echo "below-floor suite correctly tripped the coverage gate"
+
+  upload-clean-dist:
+    name: Upload the clean built wheel as an artifact
+    # The packaging job consumes a build artifact, so stage one the way a consumer
+    # would: upload the committed clean wheel under a known name for packaging-clean
+    # to pass through `packaging_artifact`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/upload-artifact@v4
+        with:
+          name: selftest-clean-dist
+          path: .github/selftest/packaging/clean/
+
+  packaging-clean:
+    name: A clean built artifact passes the packaging check
+    # The reusable workflow's `uses:` clean path for packaging: download the
+    # uploaded wheel and inspect it. `path` points at the source-free fixture so the
+    # source-matrix jobs all skip (#94) and only the packaging job runs — the whole
+    # call must pass.
+    needs: upload-clean-dist
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["python"]'
+      path: .github/selftest/no-sources
+      packaging_artifact: selftest-clean-dist
+
+  packaging-red:
+    name: A built artifact shipping a test file trips the packaging check
+    # The fail path: a `uses:` call that fails would fail the whole run, so drive the
+    # published `packaging` command directly on a committed wheel that ships
+    # widget/core_test.py and assert the non-zero exit that fails a consumer's build.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: A wheel that ships a `*_test.py` must fail `packaging`
+        run: |
+          if npx -y testing-conventions packaging \
+            .github/selftest/packaging/red/widget-0.1.0-py3-none-any.whl \
+            --language python; then
+            echo "::error::expected the red wheel to fail the packaging check, but it passed"
+            exit 1
+          fi
+          echo "red wheel correctly tripped the packaging check"

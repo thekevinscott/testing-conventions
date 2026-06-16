@@ -33,12 +33,13 @@ to keep on a single-language library: the absent language's jobs simply don't fi
 
 ### Inputs
 
-| Input       | Default                     | Description                                                |
-| ----------- | --------------------------- | ---------------------------------------------------------- |
-| `languages` | `["python", "typescript"]`  | JSON array of languages to check (`python`, `typescript`). |
-| `path`      | `src`                       | Directory scanned recursively for sources.                 |
-| `version`   | latest                      | `testing-conventions` version to install (e.g. `0.1.0`).   |
-| `config`    | `testing-conventions.toml`  | Optional config file to refine the checks (coverage thresholds, exemptions). Absent → every check runs with sane defaults. |
+| Input                | Default                     | Description                                                |
+| -------------------- | --------------------------- | ---------------------------------------------------------- |
+| `languages`          | `["python", "typescript"]`  | JSON array of languages to check (`python`, `typescript`). |
+| `path`               | `src`                       | Directory scanned recursively for sources.                 |
+| `version`            | latest                      | `testing-conventions` version to install (e.g. `0.1.0`).   |
+| `config`             | `testing-conventions.toml`  | Optional config file to refine the checks (coverage thresholds, exemptions). Absent → every check runs with sane defaults. |
+| `packaging_artifact` | `''` (skipped)              | Name of an uploaded build artifact holding your built distributions; when set, the packaging rule downloads and inspects it. See [Check the built distribution](#check-the-built-distribution-packaging). |
 
 The **coverage** job runs once per requested language that has sources (a language with none is
 skipped, not failed). Without a config file it enforces the
@@ -52,6 +53,40 @@ so `vitest` + `@vitest/coverage-v8` are present. A project on a different toolch
 package manager, or Python sources that need third-party runtime deps installed — should drive
 the CLI directly (below) until #56 makes this config-driven.
 
+### Check the built distribution (packaging)
+
+The other rules read your **source tree**; the **packaging** rule reads your **built
+distribution** — it verifies that no test file slipped into the artifact you publish. A built
+artifact only exists after a build, so this rule doesn't ride the source matrix. Build your
+dists in your own job, upload them with `actions/upload-artifact`, and pass that artifact's name
+as `packaging_artifact`:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: python -m build            # → dist/*.whl, dist/*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  conventions:
+    needs: build
+    uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
+    with:
+      packaging_artifact: dist
+```
+
+The packaging job downloads the artifact and inspects every distribution it finds, inferring the
+language from each file's extension: `.whl` / `.tar.gz` (Python wheel / sdist), `.tgz`
+(`npm pack` tarball, TypeScript), `.crate` (Cargo crate, Rust). It fails — naming the offending
+path — if any of them ships a test file, and also fails if the artifact held no recognized
+distribution at all (a sign the upload was misconfigured). Leave `packaging_artifact` unset and
+the packaging job is skipped, never failed.
+
 ## Roll your own
 
 Prefer to wire it up by hand? The CLI is a single binary — install it (see
@@ -64,6 +99,7 @@ with the required `--language` flag:
 - run: testing-conventions unit coverage --language python --config testing-conventions.toml src/
 - run: testing-conventions unit coverage --language typescript --config testing-conventions.toml src/
 - run: testing-conventions integration lint --language python src/   # python only for now
+- run: testing-conventions packaging dist/my_pkg-0.1.0-py3-none-any.whl --language python  # built dist, not src/
 ```
 
 Either way, the non-zero exit on a violation is what fails the build.

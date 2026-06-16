@@ -48,17 +48,23 @@ to test) and any file listed in the config [`exempt`](#exemptions) table.
 
 ### `unit coverage`
 
-Run the unit suite under coverage and fail if it's below the configured floor.
+Run the unit suite under coverage and fail if it's below the floor.
 
 ```
-testing-conventions unit coverage --language <LANG> --config <CONFIG> <PATH>
+testing-conventions unit coverage --language <LANG> [--config <CONFIG>] <PATH>
 ```
 
 | Argument / flag     | Description                                                                |
 | ------------------- | -------------------------------------------------------------------------- |
 | `<PATH>`            | Directory whose unit suite is run and measured.                            |
 | `--language <LANG>` | **Required.** `python` or `typescript` (Rust coverage is a separate item). |
-| `--config <CONFIG>` | Config file providing the thresholds (default `testing-conventions.toml`). |
+| `--config <CONFIG>` | Config file providing the thresholds and `exempt` list (default `testing-conventions.toml`). Optional — if the file, or its `[<language>].coverage` table, is absent, the language's default floor is used and nothing is exempt. |
+
+With no `[<language>].coverage` table — or no config file at all — the check uses the language's
+**default floor**, the reasonable one from the internals style guides: Python
+`branch = true, fail_under = 85`; TypeScript `lines = 80, branches = 75, functions = 80,
+statements = 80`. A config table overrides it. This is what lets the [reusable workflow](../guide/ci)
+opt a new library into coverage with no config file.
 
 For **`python`**, runs `coverage.py` with branch coverage on — measuring the sources under
 `<PATH>` with `*_test.py` excluded from the denominator — and compares the total against

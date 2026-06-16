@@ -26,12 +26,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   default `testing-conventions.toml`) supplies the `exempt` list; an absent file
   means no exemptions. (#15, #18, #22, #32, #55)
 - `coverage` module + `unit coverage` CLI — enforce the Python coverage floor.
-  `unit coverage --language python --config <CONFIG> <PATH>` runs the unit suite
+  `unit coverage --language python [--config <CONFIG>] <PATH>` runs the unit suite
   under `coverage.py` (branch on, `*_test.py` plus every `coverage`-exempt path
   omitted from the denominator), then checks the total against the config's
   `[python].coverage` `fail_under` / `branch` and exits non-zero if below. Library
   API: `coverage::{measure, evaluate, parse_report, Thresholds, CoverageReport,
   Outcome}`. (#26, #32)
+- `unit coverage` is zero-config by default (#80): with no config file — or a
+  config that omits the `[<language>].coverage` table — it enforces the language's
+  sane default floor instead of erroring, the same way `unit colocated-test` and
+  `integration lint` treat an absent config. The defaults are the reasonable
+  floors from `internals/<lang>/testing.md`: Python `branch = true, fail_under = 85`;
+  TypeScript `lines = 80, branches = 75, functions = 80, statements = 80`. A
+  `[<language>].coverage` table still overrides them, and `exempt` lists still
+  apply. Library API: `Config`, `{Python,TypeScript,Rust}Config`, `PythonCoverage`,
+  and `TypeScriptCoverage` now implement `Default` (the two coverage structs
+  default to those floors). (#80)
 - `unit coverage --language typescript` — the TypeScript twin (#31). Runs the unit
   suite under `vitest` v8 coverage (json-summary reporter), excludes `*.test.*`,
   declaration files, and every `coverage`-exempt path from the denominator, and

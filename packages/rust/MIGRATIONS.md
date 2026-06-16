@@ -83,6 +83,17 @@ silently rot. New config types `Rule` and `Exemption` plus `resolve_exempt()`;
 and `missing_unit_tests` / `coverage::measure` take the resolved exemptions
 (signatures below).
 
+Zero-config coverage (#80): `unit coverage` now enforces the language's sane
+default floor when coverage isn't configured — a missing config file, or a config
+without the `[<language>].coverage` table — instead of erroring (Python
+`branch = true, fail_under = 85`; TypeScript `lines = 80, branches = 75,
+functions = 80, statements = 80`, the reasonable floors from the internals style
+guides). This matches how `unit colocated-test` and `integration lint` already
+treat an absent config, and lets the reusable workflow opt a new library into
+every check with no config file. Additive: `Config`,
+`{Python,TypeScript,Rust}Config`, `PythonCoverage`, and `TypeScriptCoverage` gain
+`Default` impls; no existing signature changes.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -143,6 +154,10 @@ Exemptions (#32) change runtime behavior:
 - CLI error output now prints the full cause chain (e.g. `error: exempt entry
   \`ghost.py\` matches no file under \`…\`: …`) instead of only the outermost
   context. Exit codes are unchanged.
+- `unit coverage` no longer errors on a missing config file (or a config without
+  the `[<language>].coverage` table): it enforces the language's default floor
+  instead — Python 85 with branch on; TypeScript lines/functions/statements 80,
+  branches 75. A `[<language>].coverage` table still overrides it. (#80)
 
 ### Verification
 
@@ -190,3 +205,13 @@ cd packages/rust && cargo test --test integration_lint --test integration_lint_e
 Expected: the lint's integration + e2e tests pass — the clean fixture reports no
 violations and exits `0`, and the red fixture (a test taking `monkeypatch`) is
 flagged and exits `1`.
+
+```
+cd packages/rust && cargo test --test coverage_e2e --test coverage_ts_e2e
+```
+
+Expected: the coverage e2e suites pass, including the zero-config cases (#80) — a
+`--config` pointing at a nonexistent file falls back to the default floor: Python
+`full` and `above_85` (85.71%) pass while `below_85` (71.43%) fails; TypeScript
+`above` passes while `below` (66.66% branches) fails. Requires the coverage
+toolchains (`coverage` + `pytest`; vitest installed in the TS fixture).

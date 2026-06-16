@@ -729,17 +729,33 @@ impl Drop for TargetDir {
     }
 }
 
-/// Run cargo llvm-cov over the unit suite in `root` and return the parsed export.
+/// Run cargo llvm-cov over the unit suite in `root` and return the parsed
+/// `--summary-only` export — the totals the floor checks.
 fn run_llvm_cov(root: &Path, ignore: &[String]) -> Result<LlvmCovReport> {
+    parse_llvm_cov_report(&run_cargo_llvm_cov(
+        root,
+        ignore,
+        &["--json", "--summary-only"],
+    )?)
+}
+
+/// Run `cargo llvm-cov` over the unit suite in `root` with the given coverage
+/// `format` args (`["--json", "--summary-only"]` for the floor's totals,
+/// `["--lcov"]` for patch coverage's per-line detail) and return its stdout.
+/// Shared by the floor (#37) and patch coverage (#136).
+///
+/// The build goes to an out-of-tree target dir (via `CARGO_TARGET_DIR`) so the
+/// scanned crate stays pristine; the `coverage`-rule exemptions become one
+/// `--ignore-filename-regex`; and the outer run's instrumentation env is stripped
+/// for nested-run hygiene (the loop below explains why).
+fn run_cargo_llvm_cov(root: &Path, ignore: &[String], format: &[&str]) -> Result<String> {
     let target = TargetDir::new();
 
-    // `--summary-only` keeps the export to the `totals` block; the build goes to an
-    // out-of-tree target dir (via `CARGO_TARGET_DIR`) so the scanned crate stays
-    // pristine. The `coverage`-rule exemptions become one `--ignore-filename-regex`.
     let mut command = Command::new("cargo");
     command
         .current_dir(root)
-        .args(["llvm-cov", "--json", "--summary-only"])
+        .arg("llvm-cov")
+        .args(format)
         .env("CARGO_TARGET_DIR", &target.0);
     if let Some(regex) = ignore_filename_regex(ignore) {
         command.arg("--ignore-filename-regex").arg(regex);
@@ -772,7 +788,7 @@ fn run_llvm_cov(root: &Path, ignore: &[String]) -> Result<LlvmCovReport> {
     }
     let output = command
         .output()
-        .context("running `cargo llvm-cov --json` (is cargo-llvm-cov installed?)")?;
+        .context("running `cargo llvm-cov` (is cargo-llvm-cov installed?)")?;
     if !output.status.success() {
         bail!(
             "the unit suite did not run cleanly under cargo llvm-cov in `{}`:\n{}{}",
@@ -781,7 +797,58 @@ fn run_llvm_cov(root: &Path, ignore: &[String]) -> Result<LlvmCovReport> {
             String::from_utf8_lossy(&output.stderr),
         );
     }
-    parse_llvm_cov_report(&String::from_utf8_lossy(&output.stdout))
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Run the Rust unit suite under `cargo llvm-cov` in `root` and return the
+/// uncovered lines per file — keyed by the absolute path llvm-cov reports, the
+/// caller re-keying to `root`-relative to match the diff. A line is uncovered when
+/// llvm-cov records no execution for it (an LCOV `DA:<line>,0`). What patch
+/// coverage (#136, [`crate::patch_coverage::check_rust`]) reads; `ignore` is the
+/// `coverage`-rule exemptions, dropped from the run so an exempt file's changed
+/// lines are lifted. `cargo-llvm-cov` must be installed.
+pub fn measure_patch_rust(
+    root: &Path,
+    ignore: &[String],
+) -> Result<BTreeMap<String, BTreeSet<u64>>> {
+    Ok(uncovered_lcov_lines(&run_cargo_llvm_cov(
+        root,
+        ignore,
+        &["--lcov"],
+    )?))
+}
+
+/// Pure: every uncovered line per file from a `cargo llvm-cov --lcov` report — a
+/// `DA:<line>,<count>` record with a zero count, grouped under the `SF:<path>` it
+/// falls within (an `end_of_record` closes the file). Keyed by the path llvm-cov
+/// reports (absolute). A measured file with no zero-count line maps to an empty
+/// set. Lines a file's records don't mention (a comment, a blank) aren't executable
+/// and so are never uncovered.
+fn uncovered_lcov_lines(lcov: &str) -> BTreeMap<String, BTreeSet<u64>> {
+    let mut out: BTreeMap<String, BTreeSet<u64>> = BTreeMap::new();
+    let mut current: Option<String> = None;
+    for line in lcov.lines() {
+        if let Some(path) = line.strip_prefix("SF:") {
+            let path = path.trim().to_string();
+            out.entry(path.clone()).or_default();
+            current = Some(path);
+        } else if let Some(rest) = line.strip_prefix("DA:") {
+            // `DA:<line>,<count>[,<checksum>]` — a zero count is an uncovered line.
+            if let Some(file) = &current {
+                let mut fields = rest.split(',');
+                if let (Some(line_no), Some(count)) = (fields.next(), fields.next()) {
+                    if let (Ok(line_no), Ok(0)) =
+                        (line_no.trim().parse::<u64>(), count.trim().parse::<u64>())
+                    {
+                        out.entry(file.clone()).or_default().insert(line_no);
+                    }
+                }
+            }
+        } else if line.trim() == "end_of_record" {
+            current = None;
+        }
+    }
+    out
 }
 
 /// The single `--ignore-filename-regex` value for the run, or `None` when nothing
@@ -1322,5 +1389,49 @@ mod tests {
             ignore_filename_regex(&exempt).as_deref(),
             Some(r"src/shim\.rs|src/gen\.rs")
         );
+    }
+
+    // --- Rust patch coverage (`cargo llvm-cov --lcov`) — issue #136 ---
+
+    #[test]
+    fn lcov_flags_an_unexecuted_line() {
+        // The `below` fixture's shape: line 10 is the uncovered `else` arm.
+        let lcov = "SF:/abs/grade.rs\nDA:6,1\nDA:7,1\nDA:8,1\nDA:10,0\nDA:12,1\nend_of_record\n";
+        let out = uncovered_lcov_lines(lcov);
+        assert_eq!(out["/abs/grade.rs"], BTreeSet::from([10]));
+    }
+
+    #[test]
+    fn lcov_a_fully_covered_file_maps_to_an_empty_set() {
+        let lcov = "SF:/abs/widget.rs\nDA:1,2\nDA:2,1\nend_of_record\n";
+        let out = uncovered_lcov_lines(lcov);
+        assert!(out["/abs/widget.rs"].is_empty());
+    }
+
+    #[test]
+    fn lcov_groups_uncovered_lines_by_source_file() {
+        let lcov =
+            "SF:/abs/a.rs\nDA:3,0\nend_of_record\nSF:/abs/b.rs\nDA:5,1\nDA:6,0\nend_of_record\n";
+        let out = uncovered_lcov_lines(lcov);
+        assert_eq!(out["/abs/a.rs"], BTreeSet::from([3]));
+        assert_eq!(out["/abs/b.rs"], BTreeSet::from([6]));
+    }
+
+    #[test]
+    fn lcov_a_da_record_outside_a_file_is_ignored() {
+        // A stray `DA` before any `SF` (shouldn't happen) contributes nothing
+        // rather than panicking; the `end_of_record` closes the file.
+        let lcov = "DA:9,0\nSF:/abs/a.rs\nDA:1,1\nend_of_record\nDA:2,0\n";
+        let out = uncovered_lcov_lines(lcov);
+        assert_eq!(out.len(), 1);
+        assert!(out["/abs/a.rs"].is_empty());
+    }
+
+    #[test]
+    fn lcov_a_checksummed_da_record_parses() {
+        // LCOV may append a line checksum: `DA:<line>,<count>,<checksum>`.
+        let lcov = "SF:/abs/a.rs\nDA:4,0,abc123\nend_of_record\n";
+        let out = uncovered_lcov_lines(lcov);
+        assert_eq!(out["/abs/a.rs"], BTreeSet::from([4]));
     }
 }

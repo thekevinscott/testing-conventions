@@ -1,4 +1,5 @@
-//! Patch (changed-line) coverage (Python — #132; TypeScript — #135; parent #46).
+//! Patch (changed-line) coverage (Python — #132; TypeScript — #135; Rust — #136;
+//! parent #46).
 //!
 //! Enforces the README Coverage rule's changed-line guarantee: every line a diff
 //! touches must be covered by the unit suite. Where [`crate::coverage`] measures
@@ -9,17 +10,19 @@
 //! Two inputs are combined:
 //!   - the **diff** — [`changed_lines`] runs `git diff --unified=0 <base>...HEAD`
 //!     and returns the new-side line numbers each file gained. This diff machinery
-//!     is language-agnostic, shared by both arms (and the forthcoming Rust twin).
+//!     is language-agnostic, shared by all three arms.
 //!   - the **coverage** — per the language. Python ([`check`]) reads coverage.py's
 //!     per-file `missing_lines` / `missing_branches`
 //!     ([`crate::coverage::measure_patch_report`]); a changed line is uncovered
 //!     when it is a missing line or the source of a branch the suite never took
-//!     ([`uncovered_changed_lines`]). TypeScript ([`check_typescript`]) reads
-//!     vitest's per-file v8 coverage reduced to one uncovered-line set per file
-//!     ([`crate::coverage::measure_patch_typescript`]) and intersects it directly
-//!     ([`uncovered_changed_lines_ts`]). Either way, non-executable changed lines
-//!     (comments, blanks) and `coverage`-exempt files have nothing to cover and
-//!     are skipped.
+//!     ([`uncovered_changed_lines`]). TypeScript ([`check_typescript`]) and Rust
+//!     ([`check_rust`]) reduce their per-file coverage (vitest's v8 export /
+//!     `cargo llvm-cov`'s LCOV) to one uncovered-line set per file
+//!     ([`crate::coverage::measure_patch_typescript`] /
+//!     [`crate::coverage::measure_patch_rust`]) and intersect it directly with the
+//!     set-based [`uncovered_changed_lines_ts`]. Either way, non-executable changed
+//!     lines (comments, blanks) and `coverage`-exempt files have nothing to cover
+//!     and are skipped.
 //!
 //! Relationship to the commit-scoped co-change rule ([`crate::co_change`], #33):
 //! co-change enforces that a changed source and its colocated *test* move
@@ -104,13 +107,21 @@ pub fn check_typescript(root: &Path, base: &str, exclude: &[String]) -> Result<V
 /// The Rust twin of [`check`] (#136), built on the Rust coverage rule (#37):
 /// reuses the same `<base>...HEAD` diff machinery ([`changed_lines`]), scoped to
 /// `.rs` sources, and maps the changed lines against `cargo llvm-cov`'s per-line
-/// coverage.
-pub fn check_rust(_root: &Path, _base: &str, _exclude: &[String]) -> Result<Vec<Uncovered>> {
-    // Stub (#136): the `unit patch-coverage --language rust` command surface and
-    // the `coverage`-exemption plumbing are wired; the diff + `cargo llvm-cov`
-    // detection lands once the red integration tests are witnessed failing on CI
-    // (and the e2e tests fail locally).
-    Ok(Vec::new())
+/// coverage ([`crate::coverage::measure_patch_rust`]). Returns early — with no
+/// coverage run — when the diff touches no Rust source, so a PR that changes only
+/// docs or other languages doesn't pay for a measurement. Requires `cargo-llvm-cov`
+/// + git; an unresolvable `base` surfaces as an error rather than a silent pass.
+pub fn check_rust(root: &Path, base: &str, exclude: &[String]) -> Result<Vec<Uncovered>> {
+    let mut changed = changed_lines(root, base)?;
+    changed.retain(|path, _| path.ends_with(".rs"));
+    if changed.is_empty() {
+        return Ok(Vec::new());
+    }
+    // `cargo llvm-cov`'s per-line coverage reduces to one uncovered-line set per
+    // file (an LCOV `DA:<line>,0`), the same shape vitest's does — so the
+    // intersection is the set-based [`uncovered_changed_lines_ts`].
+    let uncovered = relative_keys(coverage::measure_patch_rust(root, exclude)?, root);
+    Ok(uncovered_changed_lines_ts(&changed, &uncovered))
 }
 
 /// The new-side lines each file gained in `repo`'s `<base>...HEAD` diff, keyed by

@@ -28,6 +28,7 @@ the reusable workflow at `thekevinscott/putitoutthere`. Edits under
 - Per-language workflow (`rust.yml`, `python.yml`, `node.yml`) runs lint + test + build with path filters.
 - `changelog.yml` enforces `CHANGELOG.md` + `MIGRATIONS.md` updates on PRs that touch package code.
 - `docs.yml` builds + deploys the VitePress site.
+- `testing-conventions-selftest.yml` smoke-tests the reusable `testing-conventions.yml` against fixtures in `.github/selftest/` (a clean suite passes; a below-floor suite trips the coverage gate).
 - `pr-monitor.yml` gates merge on the aggregate CI status.
 
 ## Public-API surface

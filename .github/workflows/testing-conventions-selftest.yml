@@ -1,0 +1,64 @@
+name: Testing Conventions (self-test)
+
+# Smoke-test the reusable workflow (`testing-conventions.yml`) end to end, so a
+# regression in its *wiring* — a renamed input, a broken `npx` invocation, a
+# dropped toolchain step — is caught here rather than only in a consumer repo.
+# The rule *logic* is already covered by the Rust e2e tests (`coverage_e2e.rs`,
+# `coverage_ts_e2e.rs`, …); this covers the workflow that drives it.
+#
+# It exercises the *published* `testing-conventions` (what consumers run via
+# `npx`), not this branch's source — so it tracks the released surface, which is
+# the contract consumers actually depend on.
+#
+# Two halves, both around `unit coverage` (the rule this self-test was added for, #57):
+#   clean        calls the reusable workflow against a fixture that meets its
+#                floor and is clean for the colocated-test & integration-lint
+#                jobs that run alongside coverage — the whole call must pass.
+#   below-floor  runs the same `unit coverage` invocation the workflow's job runs
+#                against a sub-floor fixture and asserts a non-zero exit. (A
+#                `uses:` call that fails would fail the whole run, so the fail
+#                path drives the command directly and asserts on its exit code.)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/testing-conventions.yml'
+      - '.github/workflows/testing-conventions-selftest.yml'
+      - '.github/selftest/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  clean:
+    name: Clean suite passes the reusable workflow
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["python"]'
+      path: .github/selftest/clean
+      config: .github/selftest/clean/testing-conventions.toml
+
+  below-floor:
+    name: Below-floor suite trips the coverage gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install coverage toolchain (coverage.py + pytest)
+        run: python -m pip install --quiet coverage pytest
+      - name: A sub-floor suite must fail `unit coverage`
+        # The same invocation the reusable workflow's unit-coverage job runs. The
+        # non-zero exit is what fails a consumer's build, so assert it here: this
+        # job stays green precisely when the gate correctly trips.
+        run: |
+          if npx -y testing-conventions unit coverage \
+            --language python \
+            --config .github/selftest/below-floor/testing-conventions.toml \
+            .github/selftest/below-floor; then
+            echo "::error::expected the below-floor suite to fail the coverage gate, but it passed"
+            exit 1
+          fi
+          echo "below-floor suite correctly tripped the coverage gate"

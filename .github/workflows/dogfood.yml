@@ -13,6 +13,12 @@ name: Dogfood
 # for coverage to measure — so it can't pass there. colocated-test is the rule
 # #30 asks for (coverage is deferred, #26). Rust uses inline `#[cfg(test)]`, out
 # of scope for the file-based rule.
+#
+# The e2e-verify job (#71) dogfoods the e2e attestation nudge: packages/node
+# carries a small tests/e2e suite and a committed e2e-attestation.json, and CI
+# runs `e2e verify` to confirm the attestation names packages/node's latest code
+# commit — going red if the code moved on without a re-attest. It builds the CLI
+# from source (not the published `npx`) because `e2e verify` isn't published yet.
 
 on:
   pull_request:
@@ -37,3 +43,27 @@ jobs:
         run: npx -y testing-conventions unit colocated-test --language typescript packages/node/src
       - name: Python — packages/python
         run: npx -y testing-conventions unit colocated-test --language python packages/python
+
+  e2e-verify:
+    name: E2E attestation (packages/node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # `e2e verify` finds packages/node's latest code commit via `git log`,
+          # so it needs full history — a shallow clone would miss it whenever
+          # HEAD itself doesn't touch the package.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/rust
+      - name: Build the CLI from source
+        run: cargo build --release --bin testing-conventions
+        working-directory: packages/rust
+      # cwd = packages/node, so verify is scoped to that package: it passes only
+      # when the committed e2e-attestation.json names the package's latest code
+      # commit, and nudges to re-attest (exit 1) when the code has moved on.
+      - name: Verify the e2e attestation is current
+        run: ../rust/target/release/testing-conventions e2e verify
+        working-directory: packages/node

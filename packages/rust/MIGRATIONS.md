@@ -272,7 +272,7 @@ randomness / database / low-level OS), classifying import heads against an embed
 `find_unit_isolation_violations` reports the extra findings; no signature or rule-id
 change, so the #102 waiver still applies.
 
-Finally, makes the remaining Python integration lints **waivable** (#123):
+Also makes the remaining Python integration lints **waivable** (#123):
 `no-monkeypatch` (#49), `no-inline-patch` (#50), and `no-environ-mutation` (#51)
 join `no-constant-patch` in the reason-required `[[python.exempt]]` escape hatch
 (#32/#102) — they were the only blocking findings without one, because their ids
@@ -280,6 +280,17 @@ weren't `config::Rule` variants (so `apply_waivers` skipped them and the loader
 rejected `rules = ["no-monkeypatch"]` outright). Additive: new `config::Rule`
 variants `NoMonkeypatch` / `NoInlinePatch` / `NoEnvironMutation` (with `id()` /
 `from_id()`); the lint behavior and every other surface are unchanged.
+
+Finally, adds the commit-scoped `co-change` check (#33): `unit co-change --language
+<python|typescript> --base <REF> <PATH>` diffs `<base>...HEAD` and flags any source file that
+was **modified** (and still holds code) or **deleted** without its colocated test (`foo.py` →
+`foo_test.py`, `foo.ts` → `foo.test.ts`) changing in the same diff — catching edits and removals
+that leave the test stale. **Added** files aren't subjects (new code is the coverage floor's
+job), a test file / empty file / `conftest.py` is never a subject, and a `co-change` exemption
+lifts a source. Purely additive: a new `unit` subcommand, the `testing_conventions::co_change`
+module (`stale_sources`), and a waivable `config::Rule::CoChange` (`co-change`); nothing existing
+changes. `--language rust` is rejected (inline `#[cfg(test)]` units have no sibling test to go
+stale).
 
 ### Required changes
 
@@ -557,3 +568,13 @@ Expected: the external-deps tests pass (#121, slice 3) — the `external/red` fi
 (imports un-mocked `requests` + `subprocess`) is flagged and exits `1`, the
 `external/clean` fixture (mocks them by string, uses only pure `json`) reports
 nothing and exits `0`, and `external/waived` lifts both back to `0`.
+
+```
+cd packages/rust && cargo test --test co_change --test co_change_e2e
+```
+
+Expected: the commit-scoped co-change tests pass (#33) — in a throwaway git repo,
+editing or deleting a source without touching its colocated test is flagged and the
+binary exits `1`; changing both, changing only a test, adding a brand-new source, or
+touching an empty/`conftest.py` file exits `0`; a `co-change` exemption lifts a stale
+source; and `--language rust` is rejected. Requires `git`.

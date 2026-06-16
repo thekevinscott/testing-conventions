@@ -65,6 +65,20 @@ vi.mock('./service', async () => {
 
 **Checked** — deterministic. Py/TS: flag any un-mocked first-party/external import. Rust: flag any call out of the test's own module (cross-module, external crate, or effectful `std`); [`dylint`](https://github.com/trailofbits/dylint) for full name-resolution precision.
 
+#### Co-change
+
+**Rule** — when a source file changes, its colocated unit test changes with it.
+
+**Why** — an edit or a removal that leaves the colocated test untouched lets it silently rot; the
+test should move in lockstep with the code it pins. (Adding *new* code is the coverage floor's
+job — this targets edits and removals, where the test can quietly go stale.)
+
+- **Python** — a modified or deleted `foo.py` requires `foo_test.py` in the same diff.
+- **TypeScript** — a modified or deleted `foo.ts` requires `foo.test.ts` in the same diff.
+- **Rust** — not applicable: units are an inline `#[cfg(test)]` module in the same file, so the test moves with the source by construction.
+
+**Checked** — commit-scoped and deterministic: `unit co-change --base <ref>` diffs `<ref>...HEAD` and flags any changed source whose colocated test didn't change. Added files and exempt sources are excused.
+
 ### Integration
 
 #### Location

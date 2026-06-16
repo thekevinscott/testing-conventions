@@ -7,6 +7,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Commit-scoped `co-change`** (#33). New `unit co-change --language <python|typescript>
+  --base <REF> [--config <CONFIG>] <PATH>` command: a diff-scoped check that a source file
+  **modified** (and still holding code) or **deleted** between `<base>...HEAD` also changed its
+  colocated test (the #15/#18 pairing — `foo.py` → `foo_test.py`, `foo.ts` → `foo.test.ts`), so
+  an edit or removal can't leave the test silently stale. **Added** source files are not subjects
+  (brand-new code is the coverage floor's job); a test file, an empty/comment-only file, and
+  Python's `conftest.py` are never subjects; and a source with a `co-change` exemption needn't
+  co-change. `<base>...HEAD` is the changes this branch introduced (what a PR shows), so CI passes
+  the PR base (e.g. `--base origin/main`). `--language rust` is rejected — Rust units are inline
+  `#[cfg(test)]` in the same file, so a sibling test can't go stale (mirrors how `unit coverage`
+  rejects Rust). Runs `git diff` in `<PATH>`, prints each stale source to stderr, and exits
+  non-zero. New library API `testing_conventions::co_change::stale_sources(repo, base, language,
+  exempt)` and a new waivable `config::Rule` variant `co-change` (`[[<language>.exempt]] rules =
+  ["co-change"]`, reusing #32). (#33)
 - **Waivers for the remaining Python integration lints** (#123). The reason-required
   `[[python.exempt]]` escape hatch (#32/#102) now covers the last three lints that
   lacked it — `no-monkeypatch` (#49), `no-inline-patch` (#50), and

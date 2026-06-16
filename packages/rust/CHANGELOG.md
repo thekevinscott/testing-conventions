@@ -22,6 +22,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Un-mocked third-party / effectful-stdlib imports are a follow-up slice; value-type
   imports and cross-file (`conftest.py`) mocks are documented non-goals. See
   [`internals/python/isolation.md`](../../internals/python/isolation.md).
+- **Rust colocated-test** — `unit colocated-test --language rust <PATH>` now checks
+  inline-`#[cfg(test)]` **presence** (#40), the Rust arm of the colocated-test rule.
+  Rust units are inline `#[cfg(test)]` modules, so a `src` file that defines a
+  function with a body but carries no inline `#[cfg(test)]` module is flagged as an
+  orphan; module-declaration and type-only files (and `tests/` / `benches/` /
+  `examples/` / `build.rs`) are not subjects. Previously this combination errored
+  ("Rust units are inline … see `unit isolation`"). Waivable per file via
+  `[[rust.exempt]] rules = ["colocated-test"]`. New library function
+  `colocated_test::missing_inline_tests(root, exempt)`.
 - **Python integration isolation** — `no-first-party-patch` (#42). `integration lint
   --language python` now flags a `patch(...)` whose string target is **first-party**
   — e.g. `patch("ourpkg.mod.fn")` — because an integration test must run first-party

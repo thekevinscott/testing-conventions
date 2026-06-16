@@ -17,7 +17,8 @@
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
+use syn::visit::{self, Visit};
 
 /// A language whose colocated unit-test convention can be checked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -30,9 +31,9 @@ pub enum Language {
     #[value(name = "typescript")]
     TypeScript,
     /// Rust units are inline `#[cfg(test)]` modules, not separate files, so the
-    /// file-based colocated-test check does not apply (that's the Rust isolation
-    /// rule, #44). The variant exists so the shared `--language` flag accepts
-    /// `rust` for the rules that support it — e.g. `packaging` (#74).
+    /// file-pairing walk below does not apply to Rust; its arm of the rule checks
+    /// inline-`#[cfg(test)]` *presence* instead ([`missing_inline_tests`], #40). The
+    /// variant is also accepted by the other `--language` rules (e.g. `packaging`, #74).
     #[value(name = "rust")]
     Rust,
 }
@@ -45,10 +46,9 @@ impl Language {
             Language::TypeScript => {
                 has_extension(path, &["ts", "tsx", "mts", "cts"]) && !is_declaration(path)
             }
-            // No file-based colocated convention (inline `#[cfg(test)]`), so the
-            // walk tracks nothing; `unit colocated-test` guards `--language rust`
-            // upstream, so `is_test` / `has_code` / `expected_test_path` are never
-            // reached for it.
+            // Rust uses [`missing_inline_tests`] (inline `#[cfg(test)]` presence),
+            // not this file-pairing walk, so nothing is tracked here and `is_test`
+            // / `has_code` / `expected_test_path` are never reached for Rust.
             Language::Rust => false,
         }
     }
@@ -172,6 +172,129 @@ fn collect_files(dir: &Path, language: Language, out: &mut Vec<PathBuf>) -> Resu
         }
     }
     Ok(())
+}
+
+/// Walk `root` for Rust source files and return every one that defines testable
+/// behavior — a function with a body, outside any `#[cfg(test)]` module — but
+/// carries no inline `#[cfg(test)]` module, sorted for deterministic output.
+///
+/// The Rust arm of the colocated-test rule (#40): Rust units are inline
+/// `#[cfg(test)]` modules, so "colocated" means a test module in the *same file*,
+/// not a sibling file. A file with no testable function (only `mod` / `use`
+/// declarations, types, or constants) is not a subject; integration crates under
+/// `tests/` (and `benches/` / `examples/`) are not unit sources and are skipped; a
+/// file whose `root`-relative path is in `exempt` is a deliberate, reason-required
+/// omission. Errors if the tree can't be read or a file can't be parsed.
+pub fn missing_inline_tests(
+    root: impl AsRef<Path>,
+    exempt: &BTreeSet<String>,
+) -> Result<Vec<PathBuf>> {
+    let root = root.as_ref();
+    let mut files = Vec::new();
+    collect_rust_source_files(root, &mut files)?;
+    files.sort();
+
+    let mut orphans = Vec::new();
+    for file in &files {
+        let source = std::fs::read_to_string(file)
+            .with_context(|| format!("reading source file `{}`", file.display()))?;
+        let ast = syn::parse_file(&source)
+            .map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
+        let mut visitor = PresenceVisitor::default();
+        visitor.visit_file(&ast);
+        // No behavior to test → not a subject; an inline `#[cfg(test)]` module → covered.
+        if !visitor.has_testable_fn || visitor.has_test_module {
+            continue;
+        }
+        let relative = file
+            .strip_prefix(root)
+            .unwrap_or(file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if exempt.contains(&relative) {
+            continue;
+        }
+        orphans.push(file.clone());
+    }
+    // `files` is already sorted, so `orphans` is in order.
+    Ok(orphans)
+}
+
+/// Recursively collect `*.rs` unit-source files under `dir` into `out`, skipping
+/// the non-unit trees — `tests/` (integration crates), `benches/`, `examples/`,
+/// `target/` — and the `build.rs` build script. Inline `#[cfg(test)]` tests live in
+/// the library/binary source, so only those files are presence subjects.
+fn collect_rust_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+    let entries =
+        std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
+    for entry in entries {
+        let path = entry
+            .with_context(|| format!("reading an entry under `{}`", dir.display()))?
+            .path();
+        if path.is_dir() {
+            let skip = matches!(
+                path.file_name().and_then(|name| name.to_str()),
+                Some("tests" | "benches" | "examples" | "target")
+            );
+            if !skip {
+                collect_rust_source_files(&path, out)?;
+            }
+        } else if has_extension(&path, &["rs"]) && file_name_of(&path) != "build.rs" {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Walks a parsed Rust file to answer two questions for the inline-`#[cfg(test)]`
+/// presence rule (#40): does the file define testable behavior — a function with a
+/// body outside any `#[cfg(test)]` module — and does it carry an inline
+/// `#[cfg(test)]` module? `test_depth` tracks nesting inside test modules so the
+/// test functions themselves never count as subjects.
+#[derive(Default)]
+struct PresenceVisitor {
+    test_depth: usize,
+    has_testable_fn: bool,
+    has_test_module: bool,
+}
+
+impl<'ast> Visit<'ast> for PresenceVisitor {
+    fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
+        let is_test = crate::isolation::has_cfg_test(&node.attrs);
+        if is_test {
+            self.has_test_module = true;
+            self.test_depth += 1;
+        }
+        visit::visit_item_mod(self, node);
+        if is_test {
+            self.test_depth -= 1;
+        }
+    }
+
+    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+        // A free `fn` with a body is testable behavior — unless it is itself
+        // `#[cfg(test)]`-gated (test-only code, not a shipping subject).
+        if self.test_depth == 0 && !crate::isolation::has_cfg_test(&node.attrs) {
+            self.has_testable_fn = true;
+        }
+        visit::visit_item_fn(self, node);
+    }
+
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        if self.test_depth == 0 {
+            self.has_testable_fn = true;
+        }
+        visit::visit_impl_item_fn(self, node);
+    }
+
+    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
+        // Only a default method (with a body) is behavior to test; a bare signature
+        // is not.
+        if self.test_depth == 0 && node.default.is_some() {
+            self.has_testable_fn = true;
+        }
+        visit::visit_trait_item_fn(self, node);
+    }
 }
 
 /// `true` when the file's extension is one of `extensions`.
@@ -377,6 +500,79 @@ mod tests {
         assert_eq!(
             Language::Rust.expected_test_path(Path::new("src/lib.rs")),
             PathBuf::from("src/lib.rs")
+        );
+    }
+
+    /// `(has_testable_fn, has_test_module)` for a Rust source snippet — the two
+    /// signals the inline-`#[cfg(test)]` presence rule (#40) decides on.
+    fn presence(src: &str) -> (bool, bool) {
+        let ast = syn::parse_file(src).expect("snippet parses");
+        let mut visitor = PresenceVisitor::default();
+        visitor.visit_file(&ast);
+        (visitor.has_testable_fn, visitor.has_test_module)
+    }
+
+    #[test]
+    fn rust_presence_free_fn_with_test_module_is_covered() {
+        assert_eq!(
+            presence(
+                "pub fn make(n: u8) -> u8 { n + 1 }\n\
+                 #[cfg(test)]\nmod tests { #[test] fn t() {} }\n"
+            ),
+            (true, true)
+        );
+    }
+
+    #[test]
+    fn rust_presence_free_fn_without_test_module_needs_one() {
+        assert_eq!(
+            presence("pub fn make(n: u8) -> u8 { n + 1 }\n"),
+            (true, false)
+        );
+    }
+
+    #[test]
+    fn rust_presence_type_only_file_is_not_a_subject() {
+        assert_eq!(presence("pub struct Point { pub x: u8 }\n"), (false, false));
+    }
+
+    #[test]
+    fn rust_presence_impl_method_is_testable() {
+        assert_eq!(
+            presence("pub struct W;\nimpl W { pub fn go(&self) -> u8 { 1 } }\n"),
+            (true, false)
+        );
+    }
+
+    #[test]
+    fn rust_presence_trait_default_is_testable_but_bare_signature_is_not() {
+        assert_eq!(
+            presence("pub trait T { fn d(&self) -> u8 { 1 } }\n"),
+            (true, false)
+        );
+        assert_eq!(
+            presence("pub trait T { fn s(&self) -> u8; }\n"),
+            (false, false)
+        );
+    }
+
+    #[test]
+    fn rust_presence_test_module_functions_are_not_subjects() {
+        // Only a test module: its functions are at test depth, so the file has no
+        // shipping subject and needs no further inline test.
+        assert_eq!(
+            presence("#[cfg(test)]\nmod tests { fn helper() {} #[test] fn t() {} }\n"),
+            (false, true)
+        );
+    }
+
+    #[test]
+    fn rust_presence_cfg_test_gated_free_fn_is_not_a_subject() {
+        // A directly `#[cfg(test)]`-gated free fn is test-only code, not a subject,
+        // and is not a `#[cfg(test)] mod`.
+        assert_eq!(
+            presence("#[cfg(test)]\nfn only_in_tests() {}\n"),
+            (false, false)
         );
     }
 }

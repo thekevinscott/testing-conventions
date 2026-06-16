@@ -32,7 +32,8 @@ launcher shim, get an explicit, reason-required exemption in config; see
 Coverage floors are enforced on the **unit suite only**, with test files excluded from the
 denominator. Put the floors in your config and run `unit coverage`. Skip the config and `unit
 coverage` uses the language's default floor (Python `fail_under = 85` with branch on; TypeScript
-`lines`/`functions`/`statements` 80, `branches` 75).
+`lines`/`functions`/`statements` 80, `branches` 75). Rust is the exception: it has no default
+floor yet, so give it an explicit `[rust].coverage` table.
 
 **Python:** one total floor, branch coverage on, measured by `coverage.py`:
 
@@ -66,6 +67,24 @@ installed), excludes `*.test.*` and declaration files, and exits non-zero naming
 metrics below its floor, so CI fails when coverage drops below the floor. Measuring all four matters: line
 coverage can read 100% while branches lag, when every line of a function runs but its `else` is
 never taken.
+
+**Rust** — two floors (regions and lines), measured by `cargo llvm-cov`:
+
+```toml
+# testing-conventions.toml
+[rust]
+coverage = { regions = 90, lines = 90 }
+```
+
+```sh
+testing-conventions unit coverage --language rust --config testing-conventions.toml .
+```
+
+It runs `cargo llvm-cov` over the crate, compares the regions and lines totals to their floors, and
+exits non-zero naming either below it (`cargo-llvm-cov` must be installed). Branch coverage is still
+experimental, so it isn't enforced. Note a stable-toolchain caveat: inline `#[cfg(test)]` test code
+can't be excluded from the denominator by filename (`#[coverage(off)]` is nightly), so it's measured
+alongside the source — a `coverage` exemption still drops whole files via `--ignore-filename-regex`.
 
 ## Keep integration tests honest
 

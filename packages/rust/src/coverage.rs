@@ -591,6 +591,33 @@ fn uncovered_istanbul_lines(json: &str) -> Result<BTreeMap<String, BTreeSet<u64>
     Ok(out)
 }
 
+// ---------------------------------------------------------------------------
+// Rust (cargo llvm-cov) — issue #37.
+//
+// The Rust twin of the rules above. `cargo llvm-cov` reports LLVM source-based
+// coverage as regions + lines (branch coverage is still experimental), so the
+// Rust rule carries its own thresholds and `measure_rust` entry point; only the
+// `Outcome` type is shared. Mirroring the Python/TypeScript split, a pure
+// `evaluate_rust` over a parsed llvm-cov export and the thin subprocess layer
+// that produces one land with the implementation (#37).
+// ---------------------------------------------------------------------------
+
+/// The two `cargo llvm-cov` coverage floors, from a `[rust].coverage` table.
+/// Branch coverage is still experimental, so only regions and lines are enforced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RustThresholds {
+    pub regions: u8,
+    pub lines: u8,
+}
+
+/// Run the unit suite under `cargo llvm-cov` in `root` and check it against
+/// `thresholds`, omitting every `coverage`-exempt path in `ignore` from the
+/// denominator. (#37)
+pub fn measure_rust(root: &Path, thresholds: RustThresholds, ignore: &[String]) -> Result<Outcome> {
+    let _ = (root, thresholds, ignore);
+    todo!("#37: run cargo llvm-cov --json and enforce the regions/lines floor")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

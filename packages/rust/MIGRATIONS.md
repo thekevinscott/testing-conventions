@@ -291,6 +291,20 @@ lifts a source. Purely additive: a new `unit` subcommand, the `testing_conventio
 module (`stale_sources`), and a waivable `config::Rule::CoChange` (`co-change`); nothing existing
 changes. `--language rust` is rejected (inline `#[cfg(test)]` units have no sibling test to go
 stale).
+Finally, adds the Rust coverage arm (#37), the twin of #26 (Python) / #31 (TypeScript):
+`unit coverage --language rust [--config <CONFIG>] <PATH>` runs `cargo llvm-cov --json
+--summary-only` over the crate at `<PATH>` and enforces the `[rust].coverage` floor on the
+export's **regions** and **lines** totals (branch coverage is still experimental, so it isn't
+enforced), exiting non-zero and naming each metric below its floor. A `coverage` exemption drops a
+file from the denominator via `cargo llvm-cov`'s `--ignore-filename-regex`. Two Rust-specific
+caveats: inline `#[cfg(test)]` units can't be excluded by filename and `#[coverage(off)]` is still
+nightly, so on a stable toolchain the inline test code is measured alongside the source; and Rust
+has **no zero-config default floor** yet — `--language rust` previously errored as a separate item,
+and now runs the check, but a config without a `[rust].coverage` table still errors (it does not
+fall back to a default the way Python/TypeScript do under #80). Purely additive on the library
+side: `coverage::{measure_rust, evaluate_rust, parse_llvm_cov_report, RustThresholds,
+LlvmCovReport, LlvmCovData, LlvmCovTotals, LlvmCovMetric}`, sharing the existing `Outcome`; nothing
+existing changes.
 
 Also corrects the Python test-file recognition in the two `lint.rs` scans (#145,
 follow-up to #112): `integration lint --language python` and `unit isolation
@@ -417,6 +431,10 @@ Exemptions (#32) change runtime behavior:
   `test_*.py` carrying a `no-monkeypatch` / `unmocked-collaborator` violation is no
   longer flagged. The integration lints scan `*_test.py` + `conftest.py`, and the
   unit-isolation scan scans `*_test.py`, only. A `*_test.py` is unaffected.
+- `unit coverage --language rust` previously errored (`Rust coverage … is a separate item`);
+  it now runs `cargo llvm-cov` and enforces the `[rust].coverage` floor (#37). With no
+  `[rust].coverage` table it still errors — Rust has no zero-config default floor yet — so this is
+  not a silent new default, only a newly-working subcommand.
 
 ### Verification
 
@@ -647,3 +665,12 @@ comment, exits `0`; a `[typescript].coverage` exemption lifts an uncovered file;
 an unresolvable `--base` errors. Requires `git` + a Node toolchain with `vitest` and
 `@vitest/coverage-v8` installed (`npm ci` under
 `packages/rust/tests/fixtures/unit_coverage/typescript`).
+
+```
+cd packages/rust && cargo test --test coverage_rust --test coverage_rust_e2e
+```
+
+Expected: the Rust coverage tests pass (#37) — the `above` fixture crate (every region and line
+exercised by colocated inline tests) clears a 100 floor, `below` (one `else` arm left uncovered)
+fails 100 but clears an 80 floor, and `exempt_cov` clears 100 once its untested `src/shim.rs` is
+omitted by a `coverage` exemption (`--ignore-filename-regex`). Requires `cargo-llvm-cov`.

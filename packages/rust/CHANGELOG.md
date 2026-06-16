@@ -66,6 +66,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (with `id()` / `from_id()`). A waived file passes; an un-waived violation still fails;
   a reason-less or stale entry still errors. Example:
   `[[python.exempt]] rules = ["no-inline-patch"]`.
+- **Rust unit coverage** — `unit coverage --language rust [--config <CONFIG>] <PATH>` now
+  enforces a `cargo llvm-cov` floor on the unit suite (#37), the Rust arm of the coverage rule
+  (Python #26 / TypeScript #31). It runs `cargo llvm-cov --json --summary-only` over the crate at
+  `<PATH>` and checks the export's **regions** and **lines** totals against `[rust].coverage`
+  (`regions` / `lines`) — branch coverage is still experimental, so it isn't enforced — exiting
+  non-zero, and naming each metric below its floor, when either falls short. `cargo-llvm-cov` must
+  be installed. Files with a `coverage` exemption are dropped from the denominator via
+  `--ignore-filename-regex` (`[[rust.exempt]] rules = ["coverage"]`, reusing #32). Two caveats are
+  Rust-specific: inline `#[cfg(test)]` units can't be excluded by filename and `#[coverage(off)]`
+  is still nightly, so on a stable toolchain the inline test code is measured alongside the source;
+  and Rust has **no zero-config default floor** yet (unlike #80's Python/TypeScript defaults), so a
+  config without a `[rust].coverage` table errors rather than guessing one. New library API:
+  `coverage::{measure_rust, evaluate_rust, parse_llvm_cov_report, RustThresholds, LlvmCovReport,
+  LlvmCovData, LlvmCovTotals, LlvmCovMetric}`, sharing the existing `Outcome`. (#37)
 - **Python unit isolation — external deps** (#121, slice 3). `unit isolation
   --language python` now also flags an imported, un-mocked **external** collaborator:
   a **third-party** package (any bare import that isn't first-party or stdlib) or an

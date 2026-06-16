@@ -1,0 +1,13 @@
+# `exempt_cov` fixture for the Rust coverage rule (#37): `core.rs` is fully
+# covered, but `shim.rs` carries an untested launcher whose region/line drag the
+# crate below 100. A `coverage`-rule exemption for `shim.rs` (resolved from
+# config by the CLI, passed to `cargo llvm-cov` as `--ignore-filename-regex`)
+# omits it from the denominator, leaving `core.rs` to clear a 100 floor — the
+# Rust twin of the Python/TS `exempt_cov` codebases (#32). `[workspace]` isolates
+# the fixture from the parent cargo workspace.
+[package]
+name = "cov_rust_exempt"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

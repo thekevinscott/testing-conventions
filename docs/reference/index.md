@@ -62,14 +62,15 @@ testing-conventions unit coverage --language <LANG> [--config <CONFIG>] <PATH>
 | Argument / flag     | Description                                                                |
 | ------------------- | -------------------------------------------------------------------------- |
 | `<PATH>`            | Directory whose unit suite is run and measured.                            |
-| `--language <LANG>` | **Required.** `python` or `typescript` (Rust coverage is a separate item). |
-| `--config <CONFIG>` | Config file providing the thresholds and `exempt` list (default `testing-conventions.toml`). Optional; if the file, or its `[<language>].coverage` table, is absent, the language's default floor is used and nothing is exempt. |
+| `--language <LANG>` | **Required.** `python`, `typescript`, or `rust`. |
+| `--config <CONFIG>` | Config file providing the thresholds and `exempt` list (default `testing-conventions.toml`). Optional for Python / TypeScript — if the file, or its `[<language>].coverage` table, is absent, the language's default floor is used and nothing is exempt. **Rust has no default floor yet**, so a `[rust].coverage` table is required (see below). |
 
 With no `[<language>].coverage` table (or no config file at all), the check uses the language's
 **default floor**, the reasonable one from the internals style guides: Python
 `branch = true, fail_under = 85`; TypeScript `lines = 80, branches = 75, functions = 80,
 statements = 80`. A config table overrides it. This lets the [reusable workflow](../guide/ci)
-opt a new library into coverage with no config file.
+opt a new library into coverage with no config file. **Rust is the exception** — it has no default
+floor yet, so `--language rust` requires a `[rust].coverage` table and errors without one.
 
 For **`python`**, runs `coverage.py` with branch coverage on (measuring the sources under
 `<PATH>` with `*_test.py` excluded from the denominator) and compares the total against
@@ -84,6 +85,16 @@ excluded from the denominator, and compares each of the four metrics against
 floor is met, `1` (naming each metric below its floor on stderr) when any isn't. The tool invokes
 `npx vitest`, so `vitest` and `@vitest/coverage-v8` must be installed under `<PATH>`. Files with a
 `coverage` [exemption](#exemptions) are also excluded from the denominator.
+
+For **`rust`**, runs `cargo llvm-cov --json --summary-only` over the crate at `<PATH>` and compares
+the export's **regions** and **lines** totals against `[rust].coverage` (`regions`, `lines`) —
+branch coverage is still experimental, so it isn't enforced. Exits `0` when both floors are met,
+`1` (naming each metric below its floor on stderr) when either isn't. `cargo-llvm-cov` must be
+installed. Files with a `coverage` [exemption](#exemptions) are dropped from the denominator via
+`--ignore-filename-regex`. Two caveats are Rust-specific: inline `#[cfg(test)]` units can't be
+excluded by filename, and `#[coverage(off)]` is still nightly, so on a stable toolchain the inline
+test code is measured alongside the source. And unlike Python / TypeScript, Rust has **no default
+floor** — a config without a `[rust].coverage` table errors rather than guessing one.
 
 ### `unit patch-coverage`
 

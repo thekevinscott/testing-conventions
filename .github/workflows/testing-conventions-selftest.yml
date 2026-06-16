@@ -118,11 +118,17 @@ jobs:
 
   integration-lint-rust:
     name: A clean Rust library passes the reusable workflow (rust arm runs)
-    # The integration-lint matrix now fans out over rust too (#126). A clean Rust
-    # crate must pass the reusable workflow: the rust arm runs `integration lint`,
-    # and the rust sources must *not* enter the coverage/colocated matrix — `unit
-    # coverage` has no rust arm and would error. Only the integration-lint rust job
-    # runs here; the source-matrix jobs skip.
+    # DEFERRED until the #160 release publishes `unit lint`. Calling the reusable
+    # workflow with a rust crate fans out the renamed `unit-lint (rust)` job too (its
+    # matrix includes rust), which runs `npx unit lint` against the *published* binary
+    # — and npx latest won't know `unit lint` until this release ships, so it fails
+    # (same root cause as isolation-clean / isolation-red). Re-enable by dropping
+    # `if: false` once released. The rust integration-lint *behavior* stays covered
+    # meanwhile by `integration-lint-new-arms-trip`, which drives the command directly.
+    if: false
+    # A clean Rust crate must pass the reusable workflow: the rust arm runs
+    # `integration lint`, and the rust sources must *not* enter the coverage/colocated
+    # matrix — `unit coverage` has no rust arm and would error.
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["rust"]'

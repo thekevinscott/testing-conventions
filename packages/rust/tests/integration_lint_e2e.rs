@@ -118,6 +118,14 @@ fn constant_patch_waived_exits_zero() {
     );
 }
 
+// Greenfield: a legacy `test_*.py` is source, not a scanned test (#112)
+#[test]
+fn a_legacy_test_prefix_file_exits_zero() {
+    // The built binary does not scan a legacy `test_*.py` (it is source), so the
+    // `monkeypatch` it declares is not reported and the run exits 0 (#112).
+    assert_eq!(lint_exit("legacy_name"), 0);
+}
+
 // Integration isolation: no first-party patch (#42)
 #[test]
 fn first_party_patch_red_exits_nonzero() {

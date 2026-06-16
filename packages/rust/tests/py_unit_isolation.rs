@@ -93,6 +93,27 @@ fn waived_exits_zero() {
     );
 }
 
+// ---- greenfield: a legacy `test_*.py` is source, not a scanned unit test (#112) ----
+
+#[test]
+fn a_legacy_test_prefix_file_is_not_scanned() {
+    // `test_*.py` is ordinary source under the greenfield convention, so
+    // `unit isolation` never scans it. `legacy_name/test_widget.py` imports a
+    // first-party collaborator without mocking it — an `unmocked-collaborator`
+    // violation in a real unit test — yet nothing is reported (#112).
+    let violations = find_unit_isolation_violations(fixture("legacy_name"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "a legacy test_*.py is source, never a scanned unit test; got {violations:?}"
+    );
+}
+
+#[test]
+fn a_legacy_test_prefix_file_exits_zero() {
+    assert_eq!(isolation_exit("legacy_name"), 0);
+}
+
 // ---- external & effectful-stdlib deps (#121, slice 3) --------------------
 
 #[test]

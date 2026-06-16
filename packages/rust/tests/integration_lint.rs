@@ -309,6 +309,27 @@ fn first_party_patch_waived_exits_zero() {
     );
 }
 
+// ---- greenfield: a legacy `test_*.py` is source, not a scanned test (#112) ----
+
+#[test]
+fn a_legacy_test_prefix_file_is_not_scanned() {
+    // `test_*.py` is ordinary source under the greenfield convention, so the
+    // integration lints never scan it. `legacy_name/test_widget.py` declares
+    // pytest's `monkeypatch` — a `no-monkeypatch` violation in a real test file —
+    // yet nothing is reported, because the file is source, not a test (#112).
+    let violations =
+        find_violations(fixture("legacy_name")).expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "a legacy test_*.py is source, never a scanned test file; got {violations:?}"
+    );
+}
+
+#[test]
+fn a_legacy_test_prefix_file_exits_zero() {
+    assert_eq!(lint_exit("legacy_name"), 0);
+}
+
 // ---- CLI surface ---------------------------------------------------------
 
 #[test]

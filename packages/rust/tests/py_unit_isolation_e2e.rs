@@ -52,6 +52,14 @@ fn waived_exits_zero() {
     );
 }
 
+// Greenfield: a legacy `test_*.py` is source, not a scanned unit test (#112)
+#[test]
+fn a_legacy_test_prefix_file_exits_zero() {
+    // The built binary does not scan a legacy `test_*.py` (it is source), so its
+    // un-mocked collaborator is not reported and the run exits 0 (#112).
+    assert_eq!(isolation_exit("legacy_name"), 0);
+}
+
 // external & effectful-stdlib deps (#121, slice 3)
 #[test]
 fn external_red_exits_nonzero() {

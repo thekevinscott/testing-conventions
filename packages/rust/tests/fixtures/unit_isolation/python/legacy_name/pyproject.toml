@@ -1,0 +1,4 @@
+# Declares the dist's own top-level package — `myproject` is first-party.
+[project]
+name = "myproject"
+version = "0.0.0"

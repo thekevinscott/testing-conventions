@@ -135,17 +135,30 @@ allowlist.
 
 ## Waiver
 
-Per-finding inline marker, **owned by a shared cross-rule slice** (not this rule):
+**Decided (#102): config-driven, not an inline marker.** The escape hatch reuses
+the shipped #32 machinery — a reason-required `[[<lang>.exempt]]` entry naming the
+rule — rather than a `// waiver:` comment. This is the repo's one waiver pattern
+(`colocated-test` / `coverage` / `no-constant-patch` all use it), auditable in a
+single config diff, and it kept the detection slices free of a bespoke
+comment-parsing primitive.
 
-- Form: `// waiver: <reason>` on, or on the line above, the flagged construct.
-- A non-empty `<reason>` is required (empty reason ⇒ hard error, mirroring #32's
-  exempt `reason`).
-- Machine-read + auditable (one grep), never a prose omit-list.
-- `syn` keeps spans (via `proc-macro2` `span-locations`); map the source's comment
-  lines to finding lines to suppress.
+```toml
+[[rust.exempt]]
+path = "src/widget.rs"
+rules = ["no-out-of-module-call"]   # the isolation rule to lift
+reason = "legacy unit reaches into store; refactor tracked in #NNN"
+```
 
-Until that primitive lands, the bright-line slices (D1/D2) ship **without** waiver
-support, exactly as #49/#50/#51 shipped before waivers — the marker is additive.
+- `unit isolation` takes `--config` (default `testing-conventions.toml`); both it
+  and `integration lint` filter findings through `config::resolve_exempt`.
+- Each rule id (`no-out-of-module-call` / `no-out-of-module-import` /
+  `no-first-party-double`, and the TS rules) is a `config::Rule` variant; matching
+  is on `(rule, root-relative path)`. A reason-less or stale entry errors.
+- The bright-line slices (D1/D2/integration) shipped **before** this, exactly as
+  #49/#50/#51 did — the waiver is additive.
+
+(The earlier sketch here — a per-finding `// waiver:` comment — is superseded by
+#102's config-driven decision.)
 
 ## Surface & module shape
 

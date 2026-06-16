@@ -13,7 +13,6 @@ export default defineConfig({
       { text: 'Getting Started', link: '/getting-started' },
       { text: 'Guides', link: '/guide/' },
       { text: 'Reference', link: '/reference/' },
-      { text: 'Migrations', link: '/migrations' },
     ],
     sidebar: {
       '/': [
@@ -35,7 +34,6 @@ export default defineConfig({
           text: 'Reference',
           items: [
             { text: 'API', link: '/reference/' },
-            { text: 'Migrations', link: '/migrations' },
           ],
         },
       ],

@@ -135,5 +135,5 @@ coverage = { regions = 100, lines = 100 }
 ```
 
 `[python].coverage` is consumed by `unit coverage` and the `exempt` lists by both rules; the
-other coverage tables are accepted but not yet enforced (their rules are forthcoming). See
-[Migrations](../migrations) for the public-API history.
+other coverage tables are accepted but not yet enforced (their rules are forthcoming). Each
+package's `MIGRATIONS.md` carries the public-API upgrade history.

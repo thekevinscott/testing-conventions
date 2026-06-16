@@ -242,11 +242,14 @@ impl<'a> Visit<'a> for UnitCollector<'_> {
 
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
         if let Some(spec) = vi_mock_target(call) {
-            // A factory (2nd arg) that doesn't anchor to the real module's type via
-            // `vi.importActual<…>()` lets the double drift from the source (#77). A
-            // bare `vi.mock(spec)` is an auto-mock — typed from the real module.
+            // A factory *function* (2nd arg) that doesn't anchor to the real
+            // module's type via `vi.importActual<…>()` lets the double drift from
+            // the source (#77). The 2nd arg is only a factory when it's a function:
+            // a bare `vi.mock(spec)` is an auto-mock (typed from the real module),
+            // and so is the options form `vi.mock(spec, { spy: true })`, which spies
+            // on the real module and can't drift (#111) — neither is flagged.
             if let Some(factory) = call.arguments.get(1) {
-                if !factory_is_typed(factory) {
+                if is_factory(factory) && !factory_is_typed(factory) {
                     self.untyped
                         .push((spec.clone(), line_of(self.source, call.span.start)));
                 }
@@ -287,6 +290,19 @@ fn strip_module_ext(spec: &str) -> &str {
 /// the harness, never a collaborator to mock.
 fn is_test_runner(spec: &str) -> bool {
     spec == "vitest" || spec.starts_with("vitest/") || spec.starts_with("@vitest/")
+}
+
+/// `true` when a `vi.mock` second argument is a factory *function* — an arrow or
+/// `function` expression. Vitest's other 2nd-arg form is an options object
+/// (`vi.mock(spec, { spy: true })`), which is **not** a factory: it spies on the
+/// real module, so the double can't drift, exactly like a bare `vi.mock(spec)`
+/// auto-mock (#111). Only a function factory can return a hand-built double that
+/// needs a `vi.importActual<…>` type anchor.
+fn is_factory(arg: &Argument) -> bool {
+    matches!(
+        arg.as_expression(),
+        Some(Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_))
+    )
 }
 
 /// `true` when a `vi.mock` factory anchors to the real module's type — i.e. its
@@ -559,6 +575,18 @@ mod tests {
              \x20 const actual = await vi.importActual<typeof import('./x')>('./x');\n\
              \x20 return { ...actual, x: vi.fn() };\n\
              });\n",
+        );
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    #[test]
+    fn unit_options_object_mock_is_not_a_factory() {
+        // Vitest's options form `vi.mock(spec, { spy: true })` is not a factory —
+        // it spies on the real module (can't drift), like a bare auto-mock — so it
+        // must not be flagged `untyped-mock` (#111).
+        let found = unit_violations(
+            "widget.test.ts",
+            "import { x } from './x';\nvi.mock('./x', { spy: true });\n",
         );
         assert!(found.is_empty(), "got: {found:?}");
     }

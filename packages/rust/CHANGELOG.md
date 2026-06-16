@@ -240,3 +240,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The CLI now prints the full error cause chain (`{err:#}`) instead of only the
   outermost context, so a wrapped failure shows both the *where* and the *why* —
   e.g. a stale exempt entry reports the offending path and config. (#32)
+- `unit isolation --language typescript` no longer flags Vitest's options-object
+  mock `vi.mock(spec, { spy: true })` as `untyped-mock`. The options form is not a
+  factory — it spies on the real module, so the double can't drift, exactly like a
+  bare `vi.mock(spec)` auto-mock; only a factory *function* missing a
+  `vi.importActual<…>` anchor is flagged. (#111)

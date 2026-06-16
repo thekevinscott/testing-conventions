@@ -1,0 +1,10 @@
+# Clean fixture for the Rust colocated-test rule — inline `#[cfg(test)]` presence
+# (#40). Every source module with testable behavior carries an inline test module;
+# type-only and module-declaration files are not subjects. `[workspace]` isolates
+# the fixture from the parent cargo workspace.
+[package]
+name = "colo_rust_clean"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

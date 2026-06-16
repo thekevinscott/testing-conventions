@@ -104,6 +104,20 @@ per-language *build* step that produces the artifact lands in #72 / #73 / #74
 (the last also adding `--language rust`). Purely additive — a new command and
 module; no existing signature or behavior changes.
 
+Also adds the Rust colocated-test arm (#40): `unit colocated-test --language rust
+<PATH>` now checks inline-`#[cfg(test)]` *presence* — a `src` file that defines a
+function with a body but carries no inline `#[cfg(test)]` module is an orphan
+(module-declaration / type-only files, and `tests/` / `benches/` / `examples/` /
+`build.rs`, are not subjects). This is a **behavior change without a signature
+change**: `unit colocated-test --language rust` previously exited 1 with an error
+("Rust units are inline … see `unit isolation`") and now runs the check (exit 0 when
+every source module has an inline test, 1 with an actionable list otherwise).
+Additive on the library side: a new `colocated_test::missing_inline_tests(root,
+exempt)`. Waivable per file via `[[rust.exempt]] rules = ["colocated-test"]`. Verify
+with `testing-conventions unit colocated-test --language rust <crate>`: a crate whose
+every behavior-bearing `src` module has an inline `#[cfg(test)]` exits 0; one that
+doesn't lists each orphan and exits 1.
+
 Also adds the Rust `unit isolation` rule (#44) and its `isolation`
 module: a deterministic, `syn`-based lint on Rust test code. `unit isolation
 --language rust <PATH>` parses each `*.rs` file under the crate root and flags a

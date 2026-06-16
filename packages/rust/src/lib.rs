@@ -211,25 +211,32 @@ fn run_unit_colocated_test(
     language: colocated_test::Language,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
-    if language == colocated_test::Language::Rust {
-        anyhow::bail!(
-            "`unit colocated-test` checks file-based colocation (Python/TypeScript); \
-             Rust units are inline `#[cfg(test)]` modules — see `unit isolation`"
-        );
-    }
     let exempt = colocated_test_exemptions(root, language, config_path)?;
-    let orphans = colocated_test::missing_unit_tests(root, language, &exempt)?;
+    let orphans = match language {
+        // Rust units are inline `#[cfg(test)]` modules, so "colocated" means a test
+        // module in the same file, not a sibling file (#40).
+        colocated_test::Language::Rust => colocated_test::missing_inline_tests(root, &exempt)?,
+        _ => colocated_test::missing_unit_tests(root, language, &exempt)?,
+    };
     if orphans.is_empty() {
         return Ok(0);
     }
+    let (label, summary) = match language {
+        colocated_test::Language::Rust => (
+            "missing inline `#[cfg(test)]` tests",
+            "source file(s) with testable code but no inline `#[cfg(test)]` module \
+             (add an inline test module, or an `exempt` entry with a reason)",
+        ),
+        _ => (
+            "missing colocated unit test",
+            "source file(s) missing a colocated unit test \
+             (add a colocated test, or an `exempt` entry with a reason)",
+        ),
+    };
     for orphan in &orphans {
-        eprintln!("missing colocated unit test: {}", orphan.display());
+        eprintln!("{label}: {}", orphan.display());
     }
-    eprintln!(
-        "error: {} source file(s) missing a colocated unit test \
-         (add a colocated test, or an `exempt` entry with a reason)",
-        orphans.len()
-    );
+    eprintln!("error: {} {summary}", orphans.len());
     Ok(1)
 }
 
@@ -566,20 +573,6 @@ mod tests {
             .downcast_ref::<clap::Error>()
             .expect("error should be a clap::Error");
         assert_eq!(clap_err.kind(), clap::error::ErrorKind::DisplayVersion);
-    }
-
-    #[test]
-    fn unit_colocated_test_rejects_rust() {
-        let err = run([
-            "testing-conventions",
-            "unit",
-            "colocated-test",
-            "pkg",
-            "--language",
-            "rust",
-        ])
-        .unwrap_err();
-        assert!(err.to_string().contains("inline"), "got: {err}");
     }
 
     #[test]

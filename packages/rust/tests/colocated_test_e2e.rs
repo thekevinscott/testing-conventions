@@ -46,3 +46,44 @@ fn conftest_is_not_an_orphan() {
     // no orphans and exits zero. (#112)
     assert_eq!(unit_colocated_test_exit("python_conftest", "python"), 0);
 }
+
+// ---- Rust (#40 — inline `#[cfg(test)]` presence) -------------------------
+
+/// Exit code + stderr of the same invocation, for assertions that inspect the
+/// reported orphan (not just the exit code).
+fn unit_colocated_test_output(fixture: &str, language: &str) -> (i32, String) {
+    let dir = fixtures().join(fixture);
+    let output = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "colocated-test", "--language", language, "--config"])
+        .arg(dir.join("testing-conventions.toml"))
+        .arg(&dir)
+        .output()
+        .expect("the built binary should run");
+    (
+        output
+            .status
+            .code()
+            .expect("the process should exit with a code"),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
+}
+
+#[test]
+fn rust_clean_tree_exits_zero() {
+    // Every source module with behavior carries an inline `#[cfg(test)]` module.
+    assert_eq!(unit_colocated_test_exit("rust/clean", "rust"), 0);
+}
+
+#[test]
+fn rust_red_tree_flags_the_untested_module() {
+    // `src/untested.rs` has a function but no inline `#[cfg(test)]` module.
+    let (code, stderr) = unit_colocated_test_output("rust/red", "rust");
+    assert_eq!(
+        code, 1,
+        "a missing inline test must exit non-zero; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("untested.rs"),
+        "stderr should name the orphan module; got: {stderr}"
+    );
+}

@@ -408,8 +408,9 @@ fn render_path(path: &syn::Path) -> String {
 }
 
 /// `true` when `attrs` carries a `#[cfg(test)]` gate (including `cfg(all(test, …))`
-/// / `cfg(any(test, …))`) — the signal for an inline unit-test module.
-fn has_cfg_test(attrs: &[syn::Attribute]) -> bool {
+/// / `cfg(any(test, …))`) — the signal for an inline unit-test module. Shared with
+/// the colocated-test presence rule ([`crate::colocated_test::missing_inline_tests`], #40).
+pub(crate) fn has_cfg_test(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
         attr.path().is_ident("cfg")
             && attr

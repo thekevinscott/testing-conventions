@@ -165,6 +165,22 @@ fn typescript_subcommand_exits_nonzero_on_a_red_tree() {
     assert_eq!(unit_colocated_test_exit("typescript/red", "typescript"), 1);
 }
 
+// ---- Rust (#40 — inline `#[cfg(test)]` presence) -------------------------
+
+#[test]
+fn rust_clean_tree_exits_zero() {
+    // Every source module with testable behavior carries an inline `#[cfg(test)]`
+    // module; module-declaration (`lib.rs`) and type-only files are not subjects.
+    assert_eq!(unit_colocated_test_exit("rust/clean", "rust"), 0);
+}
+
+#[test]
+fn rust_red_tree_exits_nonzero() {
+    // `src/untested.rs` has a function but no inline `#[cfg(test)]` module, so the
+    // presence check must flag it; the correctly-tested `widget.rs` must not be.
+    assert_eq!(unit_colocated_test_exit("rust/red", "rust"), 1);
+}
+
 // ---- Exemptions (#32) ----------------------------------------------------
 
 #[test]

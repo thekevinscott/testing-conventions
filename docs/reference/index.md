@@ -23,7 +23,7 @@ testing-conventions unit colocated-test --language <LANG> [--config <CONFIG>] <P
 | Argument / flag     | Description                                                       |
 | ------------------- | ----------------------------------------------------------------- |
 | `<PATH>`            | Directory to scan recursively.                                    |
-| `--language <LANG>` | **Required.** Convention to enforce: `python` or `typescript`. No default — omitting it is a usage error, never a silent `python` run. |
+| `--language <LANG>` | **Required.** Convention to enforce: `python`, `typescript`, or `rust`. No default — omitting it is a usage error, never a silent `python` run. |
 | `--config <CONFIG>` | Config file supplying the `exempt` list (default `testing-conventions.toml`). Optional — if the file is absent, nothing is exempt. |
 
 **What counts, by language:**
@@ -35,6 +35,11 @@ testing-conventions unit colocated-test --language <LANG> [--config <CONFIG>] <P
   `*.test.*` of the matching extension (`foo.mts` → `foo.test.mts`). `*.test.*` files are the
   tests; declaration files (`*.d.ts` / `*.d.mts` / `*.d.cts`) carry no runtime code and are
   ignored.
+- **`rust`** — units are inline `#[cfg(test)]` modules, not sibling files, so the check is
+  *presence*: a `src` file that defines a function with a body but has no inline `#[cfg(test)]`
+  module is an orphan. Module-declaration files (a `lib.rs`/`mod.rs` of only `mod`/`use`) and
+  type-only files (no `fn`) aren't subjects; integration crates under `tests/` (and `benches/` /
+  `examples/` / `build.rs`) are skipped.
 
 Two things are not subjects regardless of language: **empty or comment-only files** (no logic
 to test) and any file listed in the config [`exempt`](#exemptions) table.
@@ -44,7 +49,7 @@ to test) and any file listed in the config [`exempt`](#exemptions) table.
 | Exit | Meaning                                                                                          |
 | ---- | ----------------------------------------------------------------------------------------------- |
 | `0`  | Every source file has its colocated unit test. Nothing is printed.                              |
-| `1`  | One or more orphans. Each prints to stderr as `missing colocated unit test: <path>`, then a count. |
+| `1`  | One or more orphans, each printed to stderr (`missing colocated unit test: <path>`; for `rust`, `missing inline #[cfg(test)] tests: <path>`), then a count. |
 
 ### `unit coverage`
 

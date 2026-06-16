@@ -1,0 +1,11 @@
+# Red fixture for the Rust colocated-test rule — inline `#[cfg(test)]` presence
+# (#40). `src/untested.rs` has behavior but no inline `#[cfg(test)]` module, so it
+# is the orphan the check must flag; `widget.rs` is correctly tested and must not
+# be flagged; type-only / module-declaration files are not subjects. `[workspace]`
+# isolates the fixture from the parent cargo workspace.
+[package]
+name = "colo_rust_red"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

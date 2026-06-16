@@ -79,3 +79,43 @@ fn red_exits_nonzero() {
 fn clean_exits_zero() {
     assert_eq!(isolation_exit("clean"), 0);
 }
+
+// ---- typed `vi.mock` (#77): a mock factory must anchor to the real module ----
+
+#[test]
+fn red_flags_untyped_mock() {
+    let violations = find_unit_violations(fixture("untyped_mock/red"))
+        .expect("walking a readable tree should succeed");
+    // The `lodash` mock has a factory but no `vi.importActual<…>` anchor.
+    assert_eq!(violations.len(), 1, "got: {violations:?}");
+    assert_eq!(violations[0].rule, "untyped-mock");
+    assert!(
+        violations[0].message.contains("lodash"),
+        "the untyped factory mock must be flagged; got {violations:?}"
+    );
+    // The typed `./formatter` mock (`importActual<typeof import(...)>`) is fine.
+    assert!(
+        !violations.iter().any(|v| v.message.contains("./formatter")),
+        "a typed mock must not be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn untyped_clean_reports_no_violations() {
+    let violations = find_unit_violations(fixture("untyped_mock/clean"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "a typed factory mock and a bare auto-mock are both fine; got {violations:?}"
+    );
+}
+
+#[test]
+fn untyped_red_exits_nonzero() {
+    assert_eq!(isolation_exit("untyped_mock/red"), 1);
+}
+
+#[test]
+fn untyped_clean_exits_zero() {
+    assert_eq!(isolation_exit("untyped_mock/clean"), 0);
+}

@@ -135,7 +135,7 @@ real unit tests lets integration tests inflate the number.
 shipping test code bloats the artifact and leaks fixtures.
 
 - **Python** — exclude `*_test.py` from the wheel/sdist (`build_py` + `MANIFEST.in`).
-- **TypeScript** — exclude `*.test.ts` from the published `dist`.
+- **TypeScript** — exclude `*.test.*` from the published `dist` (source `.test.{ts,tsx,mts,cts}` and any compiled `.test.js`).
 - **Rust** — free in the compiled artifact: `#[cfg(test)]` is stripped and `tests/` isn't built for consumers (add a Cargo `exclude` only to keep them out of the source tarball).
 
 **Checked** — deterministic (inspect the built artifact for test files).

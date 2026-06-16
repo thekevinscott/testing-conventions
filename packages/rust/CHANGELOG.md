@@ -127,6 +127,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a directory, then reuses `scan`, returning offenders relative to the artifact
   root. New dependency: `zip` (read-only). (sdist `.tar.gz`, and the TypeScript /
   Rust archives, are still to come.) (#41, #72)
+- `packaging` now inspects a **TypeScript npm tarball** (#73) — point `packaging
+  --language typescript <PATH>` at a built `.tgz` (from `npm pack`) and it unpacks
+  the gzipped tar and scans for `*.test.*`, so a test file that leaked into the
+  published package fails the check. `inspect` now also accepts `.tgz` / `.tar.gz`
+  (the `.tar.gz` path is reused by the Rust `.crate` in #74 and the Python sdist).
+  New dependencies: `flate2` + `tar` (read-only). (#41, #73)
 - `workflow` module + `workflow` CLI command — guard the reusable workflow against
   CLI subcommand drift (#92). `workflow <PATH>` scans a workflow file (or a directory
   of them) for every `testing-conventions …` invocation and checks each one's

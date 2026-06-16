@@ -13,8 +13,8 @@ Global flags: `--help`, `--version`.
 ### `unit colocated-test`
 
 Check that every source file under a directory has a colocated unit test. `colocated-test` is
-the first rule under the `unit` command group; future rules (e.g. `unit isolation`) and other
-test kinds (`integration`, `e2e`) nest the same way.
+one rule under the `unit` command group; sibling rules (`unit coverage`, `unit isolation`) and
+other test kinds (`integration`, `e2e`) nest the same way.
 
 ```
 testing-conventions unit colocated-test --language <LANG> [--config <CONFIG>] <PATH>
@@ -79,6 +79,39 @@ excluded from the denominator — and compares each of the four metrics against
 floor is met, `1` (naming each metric below its floor on stderr) when any isn't. The tool invokes
 `npx vitest`, so `vitest` and `@vitest/coverage-v8` must be installed under `<PATH>`. Files with a
 `coverage` [exemption](#exemptions) are also excluded from the denominator.
+
+### `unit isolation`
+
+Check that inline unit tests call nothing out of their own module (Rust). A unit test belongs to
+the module it sits in; reaching a real collaborator makes it an integration test wearing a unit's
+name.
+
+```
+testing-conventions unit isolation --language <LANG> <PATH>
+```
+
+| Argument / flag     | Description                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------- |
+| `<PATH>`            | Crate root to scan recursively (its `Cargo.toml` names the external crates).          |
+| `--language <LANG>` | **Required.** `rust` only for now (Python / TypeScript isolation are separate items). |
+
+Parses each `*.rs` file under `<PATH>` with `syn` and walks its inline `#[cfg(test)]` modules,
+reporting each violation to stderr as `path:line: <rule> — <message>` and exiting `1` if any are
+found, `0` otherwise.
+
+**Detector:**
+
+- **`no-out-of-module-call`** — a call out of a unit test's own module: `crate::…` (another
+  first-party module), `super::super::…` (an ancestor), an external crate (named in `Cargo.toml`;
+  `[dev-dependencies]` like `mockall` are test tooling and excluded), or effectful `std`
+  (`fs` / `net` / `process` / `env` / `thread` / `os`, the clock, or real-handle I/O). A single
+  `super::` (the unit under test), `self` / `Self`, a bare unqualified call, and pure `std` —
+  including `std::io::Cursor` and the I/O traits — stay in-module. Inject a trait double
+  (hand-rolled or `mockall`) for a collaborator instead.
+
+Full name-resolution precision — a collaborator reached through an unqualified call, a
+`use … as …` rename, or a macro — is a future `dylint` pass; the `syn` heuristic is the
+deterministic bright-line.
 
 ## Exemptions
 

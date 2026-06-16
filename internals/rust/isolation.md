@@ -159,7 +159,9 @@ support, exactly as #49/#50/#51 shipped before waivers — the marker is additiv
 - **Deps.** `syn = { version = "2", features = ["full", "visit", "parsing"] }` and
   `proc-macro2 = { version = "1", features = ["span-locations"] }` for line numbers.
   `Cargo.toml` parsing reuses the existing `toml` dependency.
-- **`Language::Rust`** joins the shared enum (coordinate with #40).
+- **`--language rust`** parses into a dedicated `isolation::Language` (Rust-only
+  today) rather than extending the file-pairing `colocated_test::Language`, so it
+  doesn't pre-empt #40's place for Rust there; the enums can unify once #40 lands.
 
 ## Precision limits / non-goals
 

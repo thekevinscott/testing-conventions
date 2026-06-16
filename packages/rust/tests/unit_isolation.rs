@@ -119,3 +119,24 @@ fn untyped_red_exits_nonzero() {
 fn untyped_clean_exits_zero() {
     assert_eq!(isolation_exit("untyped_mock/clean"), 0);
 }
+
+// ---- Vitest options-object mock (`{ spy: true }`, #111) — not a factory ----
+
+#[test]
+fn spy_option_mock_reports_no_violations() {
+    let violations = find_unit_violations(fixture("untyped_mock/spy_clean"))
+        .expect("walking a readable tree should succeed");
+    // `vi.mock(spec, { spy: true })` is Vitest's options object, not a factory —
+    // it spies on the real module and can't drift, so it must not be flagged
+    // `untyped-mock` (and the spy-mocked specifiers count as mocked, so they're
+    // not `unmocked-collaborator` either).
+    assert!(
+        violations.is_empty(),
+        "the options-object spy mock must not be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn spy_option_clean_exits_zero() {
+    assert_eq!(isolation_exit("untyped_mock/spy_clean"), 0);
+}

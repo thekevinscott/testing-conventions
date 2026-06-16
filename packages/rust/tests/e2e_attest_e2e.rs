@@ -71,6 +71,23 @@ fn attest_exit(repo: &Path, command: &str) -> i32 {
         .expect("the process should exit with a code")
 }
 
+/// Configure `repo` to require signed commits, but point signing at a program
+/// that does not exist — so any *attempted* signature fails. Honoring the repo's
+/// `commit.gpgsign` then means the attestation commit is attempted and fails
+/// (non-zero exit), rather than silently committed unsigned.
+fn require_unsatisfiable_signing(repo: &Path) {
+    git(repo, &["config", "gpg.format", "ssh"]);
+    git(
+        repo,
+        &["config", "gpg.ssh.program", "/nonexistent/tc-test-signer"],
+    );
+    git(
+        repo,
+        &["config", "user.signingkey", "/nonexistent/tc-test-key.pub"],
+    );
+    git(repo, &["config", "commit.gpgsign", "true"]);
+}
+
 #[test]
 fn attest_exits_zero_and_commits_an_attestation() {
     let repo = TempRepo::new();
@@ -99,4 +116,20 @@ fn attest_exits_zero_even_when_the_command_fails() {
     let repo = TempRepo::new();
     assert_eq!(attest_exit(&repo.0, "exit 1"), 0);
     assert!(repo.0.join(ATTESTATION_PATH).is_file());
+}
+
+#[test]
+fn attest_fails_when_required_signing_cannot_be_satisfied() {
+    // E2E mirror of the integration check: a repo that requires signed commits but
+    // whose signer is unsatisfiable. Honoring `commit.gpgsign` (no forced-off) means
+    // the attestation commit is attempted and fails, so the binary exits non-zero —
+    // rather than silently committing unsigned and exiting 0.
+    let repo = TempRepo::new();
+    require_unsatisfiable_signing(&repo.0);
+
+    assert_ne!(
+        attest_exit(&repo.0, "true"),
+        0,
+        "attest must surface the signing failure instead of forcing signing off"
+    );
 }

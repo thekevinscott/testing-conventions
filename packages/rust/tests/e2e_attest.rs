@@ -69,6 +69,25 @@ fn rev_parse(dir: &Path, rev: &str) -> String {
     String::from_utf8(out.stdout).unwrap().trim().to_string()
 }
 
+/// Configure `repo` to require signed commits, but point signing at a program
+/// that does not exist — so any *attempted* signature fails. This lets a test
+/// prove `attest` honors the repo's `commit.gpgsign` without a working signer
+/// (a real signature isn't what's under test, and isn't portably available
+/// here): honoring the policy means the commit is *attempted* and fails, rather
+/// than silently skipped.
+fn require_unsatisfiable_signing(repo: &Path) {
+    git(repo, &["config", "gpg.format", "ssh"]);
+    git(
+        repo,
+        &["config", "gpg.ssh.program", "/nonexistent/tc-test-signer"],
+    );
+    git(
+        repo,
+        &["config", "user.signingkey", "/nonexistent/tc-test-key.pub"],
+    );
+    git(repo, &["config", "commit.gpgsign", "true"]);
+}
+
 #[test]
 fn attest_names_head_writes_the_file_and_commits_it() {
     let repo = TempRepo::new();
@@ -143,4 +162,24 @@ fn attest_errors_outside_a_git_repo() {
     let result = attest(&dir, "true");
     let _ = std::fs::remove_dir_all(&dir);
     assert!(result.is_err(), "attest outside a git repo should error");
+}
+
+#[test]
+fn attest_honors_repo_commit_signing() {
+    // The nudge targets locked-down repos — exactly the ones whose branch
+    // protection requires *verified* signatures. So `attest` must honor the repo's
+    // `commit.gpgsign` instead of forcing it off: an unsigned attestation commit
+    // can't land there. With signing required but unsatisfiable, honoring the
+    // policy means the commit (and so `attest`) fails loudly; the old forced
+    // `commit.gpgsign=false` instead skips signing and wrongly succeeds.
+    let repo = TempRepo::new();
+    require_unsatisfiable_signing(&repo.0);
+
+    let result = attest(&repo.0, "true");
+
+    assert!(
+        result.is_err(),
+        "attest must honor the repo's commit.gpgsign (attempt the signature) \
+         instead of forcing it off and committing unsigned"
+    );
 }

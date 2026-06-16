@@ -21,19 +21,21 @@ reads one TOML file into it and validates the config itself (the self-guard) —
 unknown keys and malformed TOML are rejected rather than silently accepted.
 Purely additive; nothing consumes the parsed config yet.
 
-Also reshapes the unit-test location/naming rule's CLI (#22). The rule itself
-ships for two languages — `missing_unit_tests(root, language)` walks a directory
-and returns every source file with no colocated test, and the CLI runs it and
-exits non-zero on any orphan (Python #15: `foo.py` → `foo_test.py`, `__init__.py`
-exempt; TypeScript #18: `foo-bar.ts` → `foo-bar.test.ts` across
-`.ts`/`.tsx`/`.mts`/`.cts`, `*.d.ts`/`*.d.mts`/`*.d.cts` ignored). The
-**command surface changes**, though: the previously released `unit-location
-[--lang …]` (v0.0.3 / v0.0.4) becomes `unit location --language
-<python|typescript> <PATH>` — rules now nest under their test kind (`unit` is a
-command group, `location` its first rule) and `--language` is required (the
-`python` default is gone). This is a breaking change for anyone on v0.0.4 or
-earlier. (The rename left the library API untouched; #32 below then changes the
-`missing_unit_tests` and `measure` signatures.)
+Also reshapes the colocated-test rule's CLI (#22) and then renames the rule
+itself (#55). The rule ships for two languages — `missing_unit_tests` walks a
+directory and returns every source file with no colocated test, and the CLI runs
+it and exits non-zero on any orphan (Python #15: `foo.py` → `foo_test.py`;
+TypeScript #18: `foo-bar.ts` → `foo-bar.test.ts` across `.ts`/`.tsx`/`.mts`/`.cts`,
+`*.d.ts`/`*.d.mts`/`*.d.cts` ignored). The **command surface changes**, though: the
+previously released `unit-location [--lang …]` (v0.0.3 / v0.0.4) first became
+`unit location --language <python|typescript> <PATH>` (#22 — rules nest under
+their test kind, `--language` required, the `python` default gone), and is now
+`unit colocated-test …` (#55 — the rule was renamed `location` → `colocated-test`
+so its name says what it checks: that a source file has a colocated,
+matching-named unit test). This is a breaking change for anyone on an earlier CLI.
+(#22 left the library API untouched; #32 below then changes the
+`missing_unit_tests` and `measure` signatures, and #55 renames the `location`
+module to `colocated_test`.)
 
 Also adds the Python coverage rule (#26): `unit coverage --language python
 --config <CONFIG> <PATH>` runs the unit suite under `coverage.py` (branch on,
@@ -58,9 +60,9 @@ shape-based exemption. `__init__.py`, re-export barrels, and launcher shims are
 all subjects now; the only files exempt automatically are empty/comment-only ones
 (no logic to test). For deliberate omissions the tool can't infer, list the file
 in the one config file: a `[[<language>.exempt]]` entry with the `rules` it lifts
-(`location` / `coverage`) and a required `reason`. A `location` exemption keeps
-the file off the orphan list; a `coverage` exemption omits it from the coverage
-denominator. The list is auditable (one place, in the config diff) and enforced:
+(`colocated-test` / `coverage`) and a required `reason`. A `colocated-test`
+exemption keeps the file off the orphan list; a `coverage` exemption omits it from
+the coverage denominator. The list is auditable (one place, in the config diff) and enforced:
 a stale entry — a path that no longer exists — is a hard error, so it can't
 silently rot. New config types `Rule` and `Exemption` plus `resolve_exempt()`;
 `[<language>].coverage` becomes optional (a config can carry exemptions alone);
@@ -69,24 +71,28 @@ and `missing_unit_tests` / `coverage::measure` take the resolved exemptions
 
 ### Required changes
 
-The unit-location CLI was renamed and its language flag made required. Update any
-invocation (CI steps, scripts, `npx`/`pip`/`cargo` wrappers):
+The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
+required. Update any invocation (CI steps, scripts, `npx`/`pip`/`cargo` wrappers)
+to the current `unit colocated-test` form:
 
-| Before (≤ v0.0.4)                      | After                                      |
-| -------------------------------------- | ------------------------------------------ |
-| `unit-location src/`                   | `unit location --language python src/`     |
-| `unit-location --lang typescript src/` | `unit location --language typescript src/` |
+| Before                                                 | After                                            |
+| ------------------------------------------------------ | ------------------------------------------------ |
+| `unit-location src/` (≤ v0.0.4)                        | `unit colocated-test --language python src/`     |
+| `unit-location --lang typescript src/` (≤ v0.0.4)      | `unit colocated-test --language typescript src/` |
+| `unit location --language python src/` (v0.0.5–v0.0.8) | `unit colocated-test --language python src/`     |
 
-- `unit-location` → `unit location` (a `location` subcommand under the new `unit` group).
-- `--lang` → `--language`.
-- `--language` is required: there is no longer a `python` default to fall back on.
+- `unit-location` (flat, ≤ v0.0.4) / `unit location` (nested, v0.0.5–v0.0.8) →
+  `unit colocated-test` (#22, #55).
+- `--lang` → `--language`, which is required: there is no longer a `python` default.
 
-Exemptions (#32) change the library API. Callers of these functions must pass the
-new arguments:
+Exemptions (#32) change the library API, and #55 renames the module these
+colocated-test items live in — `testing_conventions::location` →
+`testing_conventions::colocated_test` (the `Language` enum moves with it). Callers
+must update the import path *and* pass the new arguments:
 
 | Function | Before | After |
 | --- | --- | --- |
-| `location::missing_unit_tests` | `(root, language)` | `(root, language, exempt)` — `exempt: &BTreeSet<String>` of `location`-rule paths |
+| `missing_unit_tests` | `location::…(root, language)` | `colocated_test::…(root, language, exempt)` — `exempt: &BTreeSet<String>` of `colocated-test`-rule paths |
 | `coverage::measure` | `(root, thresholds)` | `(root, thresholds, omit)` — `omit: &[String]` of `coverage`-rule paths |
 
 Build both with `config::resolve_exempt(root, exemptions, rule)`. Passing an empty
@@ -116,9 +122,9 @@ Exemptions (#32) change runtime behavior:
 - `__init__.py` is no longer auto-exempt — a non-empty one without a colocated
   test (and without a config entry) is now reported as an orphan. Empty/comment-
   only files (any language) are non-subjects and never reported.
-- `unit location` and `unit coverage` honor the config `exempt` list: a
-  `location` entry keeps a file off the orphan list; a `coverage` entry omits it
-  from the denominator. A reason-less or stale entry makes the run **error**
+- `unit colocated-test` and `unit coverage` honor the config `exempt` list: a
+  `colocated-test` entry keeps a file off the orphan list; a `coverage` entry omits
+  it from the denominator. A reason-less or stale entry makes the run **error**
   rather than pass.
 - CLI error output now prints the full cause chain (e.g. `error: exempt entry
   \`ghost.py\` matches no file under \`…\`: …`) instead of only the outermost
@@ -135,13 +141,14 @@ exempt-only config (no coverage thresholds) loads, and unknown-key, malformed,
 missing-file, and reason-less-exemption configs are rejected.
 
 ```
-cd packages/rust && cargo test --test unit_location
+cd packages/rust && cargo test --test colocated_test --test colocated_test_e2e
 ```
 
-Expected: the location tests pass — clean fixtures report no orphans, red fixtures
-report their missing twins, an empty `__init__.py` is not an orphan while a
+Expected: the colocated-test tests pass — clean fixtures report no orphans, red
+fixtures report their missing twins, an empty `__init__.py` is not an orphan while a
 content-bearing one is, config exemptions clear the listed files, and a stale
-exempt entry errors.
+exempt entry errors. The renamed `unit colocated-test` subcommand parses while the
+old `unit location` no longer does.
 
 ```
 cd packages/rust && cargo test --test coverage

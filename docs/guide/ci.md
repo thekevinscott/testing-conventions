@@ -47,8 +47,8 @@ Prefer to wire it up by hand? The CLI is a single binary — install it (see
 with the required `--language` flag:
 
 ```yaml
-- run: testing-conventions unit location --language python src/
-- run: testing-conventions unit location --language typescript src/
+- run: testing-conventions unit colocated-test --language python src/
+- run: testing-conventions unit colocated-test --language typescript src/
 - run: testing-conventions unit coverage --language python --config testing-conventions.toml src/
 ```
 

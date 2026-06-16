@@ -2,7 +2,7 @@
 //! command.
 //!
 //! A *lint* here is a deterministic style/mechanism check on test code, as
-//! opposed to the structural `location` / `coverage` rules. This module hosts
+//! opposed to the structural `colocated-test` / `coverage` rules. This module hosts
 //! the mocking mechanism & style lints; more lints will join them under the
 //! same command.
 //!

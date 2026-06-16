@@ -1,0 +1,6 @@
+# cli.py exists and has no test, so it WOULD be exempted here — except the reason
+# is blank, which must be rejected on load before the exemption ever applies.
+[[python.exempt]]
+path = "cli.py"
+rules = ["colocated-test"]
+reason = ""

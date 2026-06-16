@@ -1,7 +1,7 @@
+pub mod colocated_test;
 pub mod config;
 pub mod coverage;
 pub mod lint;
-pub mod location;
 
 use std::path::{Path, PathBuf};
 
@@ -39,13 +39,13 @@ enum Command {
 /// Rules enforced on the unit-test suite (the README's "Unit" taxonomy).
 #[derive(Subcommand, Debug)]
 enum UnitRule {
-    /// Check that every source file has a colocated unit test.
-    Location {
+    /// Check that every source file has a colocated, matching-named unit test.
+    ColocatedTest {
         /// Directory to scan recursively.
         path: PathBuf,
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
-        language: location::Language,
+        language: colocated_test::Language,
         /// testing-conventions config file providing the `exempt` list. Optional:
         /// if the file is absent, no files are exempt.
         #[arg(long, default_value = "testing-conventions.toml")]
@@ -57,7 +57,7 @@ enum UnitRule {
         path: PathBuf,
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
-        language: location::Language,
+        language: colocated_test::Language,
         /// testing-conventions config file providing the coverage thresholds.
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
@@ -74,7 +74,7 @@ enum IntegrationRule {
         path: PathBuf,
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
-        language: location::Language,
+        language: colocated_test::Language,
     },
 }
 
@@ -87,14 +87,14 @@ where
     match cli.command {
         // The config-driven `check` umbrella isn't wired yet; the scaffold
         // proves the wiring while individual rules land under their test-kind
-        // group (e.g. `unit location`).
+        // group (e.g. `unit colocated-test`).
         Some(Command::Check) | None => Ok(0),
         Some(Command::Unit { rule }) => match rule {
-            UnitRule::Location {
+            UnitRule::ColocatedTest {
                 path,
                 language,
                 config,
-            } => run_unit_location(&path, language, &config),
+            } => run_unit_colocated_test(&path, language, &config),
             UnitRule::Coverage {
                 path,
                 language,
@@ -107,18 +107,18 @@ where
     }
 }
 
-/// Run the unit-test location check over `root` for `language`, reporting orphans.
+/// Run the unit-test colocated-test check over `root` for `language`, reporting orphans.
 ///
-/// Loads the `location`-rule exemptions from the config at `config_path` (no
+/// Loads the `colocated-test`-rule exemptions from the config at `config_path` (no
 /// config file → no exemptions). Returns `0` when every source file has its
 /// colocated unit test; otherwise prints each orphan to stderr and returns `1`.
-fn run_unit_location(
+fn run_unit_colocated_test(
     root: &Path,
-    language: location::Language,
+    language: colocated_test::Language,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
-    let exempt = location_exemptions(root, language, config_path)?;
-    let orphans = location::missing_unit_tests(root, language, &exempt)?;
+    let exempt = colocated_test_exemptions(root, language, config_path)?;
+    let orphans = colocated_test::missing_unit_tests(root, language, &exempt)?;
     if orphans.is_empty() {
         return Ok(0);
     }
@@ -133,19 +133,23 @@ fn run_unit_location(
     Ok(1)
 }
 
-/// The `location`-rule exempt paths for `language`, resolved (and validated) from
-/// the config at `config_path`. A missing config file means no exemptions — the
-/// check still runs, just with nothing exempted.
-fn location_exemptions(
+/// The `colocated-test`-rule exempt paths for `language`, resolved (and validated)
+/// from the config at `config_path`. A missing config file means no exemptions —
+/// the check still runs, just with nothing exempted.
+fn colocated_test_exemptions(
     root: &Path,
-    language: location::Language,
+    language: colocated_test::Language,
     config_path: &Path,
 ) -> anyhow::Result<std::collections::BTreeSet<String>> {
     if !config_path.exists() {
         return Ok(std::collections::BTreeSet::new());
     }
     let config = config::load_config(config_path)?;
-    config::resolve_exempt(root, config.exemptions(language), config::Rule::Location)
+    config::resolve_exempt(
+        root,
+        config.exemptions(language),
+        config::Rule::ColocatedTest,
+    )
 }
 
 /// Run the unit-test coverage check over `root` for `language`, enforcing the
@@ -153,12 +157,12 @@ fn location_exemptions(
 /// `1` otherwise.
 fn run_unit_coverage(
     root: &Path,
-    language: location::Language,
+    language: colocated_test::Language,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
     let config = config::load_config(config_path)?;
     let (thresholds, exempt) = match language {
-        location::Language::Python => {
+        colocated_test::Language::Python => {
             let python = config
                 .python
                 .as_ref()
@@ -174,7 +178,7 @@ fn run_unit_coverage(
             let exempt = config::resolve_exempt(root, &python.exempt, config::Rule::Coverage)?;
             (thresholds, exempt)
         }
-        location::Language::TypeScript => anyhow::bail!(
+        colocated_test::Language::TypeScript => anyhow::bail!(
             "`unit coverage` supports `--language python` only for now; \
              TypeScript coverage is a separate item"
         ),
@@ -192,10 +196,10 @@ fn run_unit_coverage(
 /// Run the integration-test lints over `root` for `language`, printing each
 /// violation to stderr as `path:line: rule — message` and returning `1` when any
 /// are found, `0` otherwise.
-fn run_integration_lint(root: &Path, language: location::Language) -> anyhow::Result<i32> {
+fn run_integration_lint(root: &Path, language: colocated_test::Language) -> anyhow::Result<i32> {
     match language {
-        location::Language::Python => {}
-        location::Language::TypeScript => {
+        colocated_test::Language::Python => {}
+        colocated_test::Language::TypeScript => {
             anyhow::bail!("`integration lint` supports `--language python` only for now")
         }
     }

@@ -93,10 +93,13 @@ fn loads_exemptions_with_optional_coverage() {
     assert!(python.coverage.is_none(), "coverage is optional");
     assert_eq!(python.exempt.len(), 1);
     assert_eq!(python.exempt[0].path, "src/cli.py");
-    assert_eq!(python.exempt[0].rules, vec![Rule::Location, Rule::Coverage]);
+    assert_eq!(
+        python.exempt[0].rules,
+        vec![Rule::ColocatedTest, Rule::Coverage]
+    );
     assert_eq!(
         config.typescript.expect("[typescript] table").exempt[0].rules,
-        vec![Rule::Location]
+        vec![Rule::ColocatedTest]
     );
 }
 

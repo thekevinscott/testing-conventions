@@ -84,10 +84,10 @@ pub struct RustCoverage {
 
 /// A rule a file can be exempted from (issue #32).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum Rule {
-    /// The unit-test location/naming check ([`crate::location`]).
-    Location,
+    /// The unit-test colocated-test check ([`crate::colocated_test`]).
+    ColocatedTest,
     /// The unit-test coverage floor ([`crate::coverage`]).
     Coverage,
 }
@@ -104,7 +104,7 @@ pub enum Rule {
 pub struct Exemption {
     /// Path to the exempt file, relative to the scanned root.
     pub path: String,
-    /// Which rules the exemption lifts (`location`, `coverage`).
+    /// Which rules the exemption lifts (`colocated-test`, `coverage`).
     pub rules: Vec<Rule>,
     /// Why the omission is deliberate — required, and never empty.
     pub reason: String,
@@ -131,10 +131,12 @@ pub fn load_config(path: impl AsRef<Path>) -> Result<Config> {
 
 impl Config {
     /// The `exempt` list for `language` (empty when the table is absent).
-    pub fn exemptions(&self, language: crate::location::Language) -> &[Exemption] {
+    pub fn exemptions(&self, language: crate::colocated_test::Language) -> &[Exemption] {
         match language {
-            crate::location::Language::Python => self.python.as_ref().map_or(&[], |c| &c.exempt),
-            crate::location::Language::TypeScript => {
+            crate::colocated_test::Language::Python => {
+                self.python.as_ref().map_or(&[], |c| &c.exempt)
+            }
+            crate::colocated_test::Language::TypeScript => {
                 self.typescript.as_ref().map_or(&[], |c| &c.exempt)
             }
         }
@@ -153,7 +155,7 @@ impl Config {
                 if entry.rules.is_empty() {
                     bail!(
                         "[{table}].exempt entry for `{}` names no rules — set \
-                         `rules = [\"location\"]` and/or `\"coverage\"`",
+                         `rules = [\"colocated-test\"]` and/or `\"coverage\"`",
                         entry.path
                     );
                 }
@@ -225,7 +227,7 @@ mod tests {
     fn an_exemption_with_an_empty_reason_is_rejected() {
         let err = parse(
             "[python]\ncoverage = { branch = true, fail_under = 100 }\n\
-             [[python.exempt]]\npath = \"cli.py\"\nrules = [\"location\"]\nreason = \"  \"\n",
+             [[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\"]\nreason = \"  \"\n",
         )
         .unwrap_err();
         assert!(err.to_string().contains("empty reason"), "got: {err}");
@@ -244,13 +246,13 @@ mod tests {
     fn a_valid_exemption_parses() {
         let config = parse(
             "[python]\ncoverage = { branch = true, fail_under = 100 }\n\
-             [[python.exempt]]\npath = \"cli.py\"\nrules = [\"location\", \"coverage\"]\n\
+             [[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\", \"coverage\"]\n\
              reason = \"thin launcher\"\n",
         )
         .unwrap();
         let exempt = &config.python.unwrap().exempt;
         assert_eq!(exempt.len(), 1);
-        assert_eq!(exempt[0].rules, vec![Rule::Location, Rule::Coverage]);
+        assert_eq!(exempt[0].rules, vec![Rule::ColocatedTest, Rule::Coverage]);
     }
 
     /// A throwaway directory tree, removed on drop.
@@ -291,18 +293,18 @@ mod tests {
     fn resolve_keeps_only_the_requested_rule_and_returns_sorted_paths() {
         let tree = TempTree::new(&["cli.py", "pkg/gen.py", "loc_only.py"]);
         let exemptions = [
-            exemption("cli.py", &[Rule::Location, Rule::Coverage]),
+            exemption("cli.py", &[Rule::ColocatedTest, Rule::Coverage]),
             exemption("pkg/gen.py", &[Rule::Coverage]),
-            exemption("loc_only.py", &[Rule::Location]),
+            exemption("loc_only.py", &[Rule::ColocatedTest]),
         ];
         let coverage = resolve_exempt(&tree.0, &exemptions, Rule::Coverage).unwrap();
         assert_eq!(
             coverage.into_iter().collect::<Vec<_>>(),
             vec!["cli.py".to_string(), "pkg/gen.py".to_string()],
         );
-        let location = resolve_exempt(&tree.0, &exemptions, Rule::Location).unwrap();
+        let colocated_test = resolve_exempt(&tree.0, &exemptions, Rule::ColocatedTest).unwrap();
         assert_eq!(
-            location.into_iter().collect::<Vec<_>>(),
+            colocated_test.into_iter().collect::<Vec<_>>(),
             vec!["cli.py".to_string(), "loc_only.py".to_string()],
         );
     }
@@ -310,8 +312,8 @@ mod tests {
     #[test]
     fn a_stale_exempt_path_is_an_error() {
         let tree = TempTree::new(&["cli.py"]);
-        let exemptions = [exemption("ghost.py", &[Rule::Location])];
-        let err = resolve_exempt(&tree.0, &exemptions, Rule::Location).unwrap_err();
+        let exemptions = [exemption("ghost.py", &[Rule::ColocatedTest])];
+        let err = resolve_exempt(&tree.0, &exemptions, Rule::ColocatedTest).unwrap_err();
         assert!(err.to_string().contains("matches no file"), "got: {err}");
     }
 }

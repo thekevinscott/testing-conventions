@@ -14,7 +14,7 @@ name: Testing Conventions
 # It runs the published `testing-conventions` binary via `npx` (a prebuilt,
 # per-platform npm package — no Rust toolchain, no compile from source), once
 # per rule and requested language as its own matrix job, failing the build on
-# any violation. Today that is the unit-test location/naming check (every
+# any violation. Today that is the unit-test colocated-test check (every
 # language), the unit-test coverage floor (Python only), and the
 # integration-test lint (mocking mechanism & style, Python only); as more rules
 # land they run here too.
@@ -47,8 +47,8 @@ permissions:
   contents: read
 
 jobs:
-  unit-location:
-    name: Unit-test location (${{ matrix.language }})
+  colocated-test:
+    name: Colocated test (${{ matrix.language }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -56,14 +56,14 @@ jobs:
         language: ${{ fromJSON(inputs.languages) }}
     steps:
       - uses: actions/checkout@v6
-      - name: Check unit-test location
+      - name: Check colocated test
         # node/npx ship on ubuntu-latest; `-y` skips the install prompt and
         # `${VERSION:+@...}` pins the version only when one was requested.
         env:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit location --language "$LANGUAGE" "$SCAN_PATH"
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" "$SCAN_PATH"
 
   unit-coverage:
     name: Unit-test coverage (${{ matrix.language }})

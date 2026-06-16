@@ -24,8 +24,9 @@ it's supposed to. This standard recognizes three kinds:
 ## Rules
 
 Each rule states what's enforced, why, and how it varies by language. **Checked**
-notes how it's verified — every rule is a deterministic check, run in CI from the
-config.
+notes how it's verified — most rules are deterministic checks run in CI from the
+config. Where a rule is a structural convention rather than its own gate (the
+integration/e2e folder layout), **Checked** says so.
 
 ### Unit
 
@@ -78,7 +79,11 @@ coverage is measured on.
 - **TypeScript** — `tests/integration/`, files end in `.test.ts`.
 - **Rust** — `tests/` at the crate root; each file compiles as its own crate, so the location is the signal.
 
-**Checked** — deterministic (location).
+**Checked** — the boundary is enforced *behaviorally*, not by a folder gate:
+`unit isolation` requires unit tests to mock every collaborator, `integration lint`
+requires integration tests to run first-party code for real, and `unit coverage`
+measures only the colocated unit suite. The `tests/integration/` folder is a
+convention, not a separately checked rule.
 
 #### External Dependencies
 
@@ -110,7 +115,9 @@ run on demand, not for CI.
 - **TypeScript** — `tests/e2e/`, files end in `.test.ts`.
 - **Rust** — under `tests/`, typically driving the built binary (`CARGO_BIN_EXE_<name>` or `assert_cmd`).
 
-**Checked** — deterministic (location only; e2e is excluded from the CI gate).
+**Checked** — e2e location is a convention, not an enforced gate; e2e is
+deliberately excluded from the CI gate (the nudge is to run it locally, not a
+folder check).
 
 ### Coverage
 

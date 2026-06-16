@@ -1,0 +1,5 @@
+# Declares the dist's own top-level package — `myproject` is first-party. The
+# isolation rule reads this to classify a `patch(...)` target as first-party.
+[project]
+name = "myproject"
+version = "0.0.0"

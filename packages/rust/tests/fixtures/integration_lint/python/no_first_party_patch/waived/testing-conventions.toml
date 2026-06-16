@@ -1,0 +1,6 @@
+# Waiver for the integration-isolation rule (#42): exempt the file from
+# `no-first-party-patch`, with a reason (auditable, reason-required — #32/#102).
+[[python.exempt]]
+path = "charge_test.py"
+rules = ["no-first-party-patch"]
+reason = "legacy integration test; the first-party ledger seam is being extracted separately"

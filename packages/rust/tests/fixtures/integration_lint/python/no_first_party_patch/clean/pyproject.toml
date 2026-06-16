@@ -1,0 +1,5 @@
+# Same first-party package as the red fixture — `myproject`. The clean test below
+# patches only third-party / effectful-stdlib targets, so nothing is flagged.
+[project]
+name = "myproject"
+version = "0.0.0"

@@ -195,6 +195,17 @@ new `config::Rule` variants plus `Rule::id` / `Rule::from_id` and
 `Config::rust_exemptions`; the `--config` flag is optional, so existing
 invocations are unaffected.
 
+Also adds **Python integration isolation** (#42): `integration lint --language
+python <PATH>` now flags `no-first-party-patch` — a `patch(...)` whose string
+target is first-party, e.g. `patch("ourpkg.mod.fn")`, since an integration test
+must run first-party code for real (third-party packages and effectful stdlib stay
+mockable). The first-party top-level package is read from the nearest
+`pyproject.toml` `[project].name` (normalized), so a tree with no declared package
+flags nothing. Behavior-only — `testing_conventions::lint::find_violations` now
+reports the extra rule (no signature change), plus a new waivable `config::Rule`
+variant `no-first-party-patch`; the python/typescript/rust surface is otherwise
+unchanged.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -410,3 +421,13 @@ cd packages/rust && cargo test --test isolation stale_exempt
 Expected: the waiver tests pass (#102) — a `unit/waived` out-of-module call and an
 integration `waived` first-party double, each lifted by a `[[rust.exempt]]` entry,
 exit `0`; a stale exempt entry makes the run error.
+
+```
+cd packages/rust && cargo test --test integration_lint --test integration_lint_e2e first_party_patch
+```
+
+Expected: the Python integration-isolation tests pass (#42) — the red fixture's
+`patch("myproject.ledger.record")` (first-party, declared in `pyproject.toml`) is
+flagged and exits `1`, the clean fixture (mocks only `requests.post` /
+`subprocess.run`) reports nothing and exits `0`, and the `waived` fixture's
+`[[python.exempt]] rules = ["no-first-party-patch"]` lifts it back to `0`.

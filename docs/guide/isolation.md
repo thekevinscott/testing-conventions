@@ -21,15 +21,12 @@ draws it deterministically, with no module resolution:
 
 ## Don't mock first-party code in an integration test
 
-This direction is enforced for TypeScript today by the `no-first-party-mock` lint. Point
-`integration lint` at your integration suite:
+Point `integration lint` at your integration suite. For TypeScript, the `no-first-party-mock`
+lint flags any `vi.mock()` / `vi.doMock()` of a first-party module:
 
 ```sh
 testing-conventions integration lint --language typescript test/integration/
 ```
-
-It parses every `*.test.{ts,tsx,mts,cts}` file and flags any `vi.mock()` / `vi.doMock()` of a
-first-party module:
 
 ```ts
 // ❌ flagged — ../src/ledger is first-party; an integration test must run it for real
@@ -40,8 +37,28 @@ vi.mock('stripe');
 vi.mock('node:fs');
 ```
 
+Python enforces the same direction with `no-first-party-patch`:
+
+```sh
+testing-conventions integration lint --language python tests/integration/
+```
+
+It flags any `patch(...)` whose string target is first-party. The dist's own top-level package
+is read from the nearest `pyproject.toml` `[project].name`:
+
+```python
+# ❌ flagged — `ourpkg` is this dist's package; an integration test must run it for real
+with patch("ourpkg.ledger.record") as mock:
+    ...
+
+# ✅ fine — a third-party package and effectful stdlib
+with patch("requests.post") as mock: ...
+with patch("subprocess.run") as mock: ...
+```
+
 A first-party mock prints to stderr and the command exits non-zero, so CI fails. A non-literal
-target (`vi.mock(name)`) can't be classified deterministically and is left alone.
+target (`vi.mock(name)` / `patch(target)`) can't be classified deterministically and is left
+alone.
 
 ## Mock every collaborator in a unit test
 

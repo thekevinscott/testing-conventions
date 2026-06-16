@@ -27,6 +27,25 @@ name: Testing Conventions
 # otherwise error on an empty measurement (pytest collects nothing; an empty
 # vitest denominator is a failed run).
 #
+# The Packaging rule (#41) is the exception: it inspects the *built distribution*,
+# not the source tree, so it doesn't ride the source matrix. Build your dists in
+# your own job, upload them with actions/upload-artifact, and pass that artifact's
+# name as `packaging_artifact` — the packaging job downloads it and fails if any
+# .whl/.tar.gz (python), .tgz (typescript), or .crate (rust) ships a test file:
+#
+#   jobs:
+#     build:
+#       runs-on: ubuntu-latest
+#       steps:
+#         - run: python -m build            # → dist/*.whl, dist/*.tar.gz
+#         - uses: actions/upload-artifact@v4
+#           with: { name: dist, path: dist/ }
+#     conventions:
+#       needs: build
+#       uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
+#       with:
+#         packaging_artifact: dist
+#
 # No config file is required: every check runs with sane defaults, opting a new
 # library into the full set in one drop-in (#80). The coverage floor falls back
 # to the language's reasonable default — Python: branch on, 85; TypeScript:
@@ -56,6 +75,10 @@ on:
         description: 'Optional config file to refine the checks (coverage thresholds, exemptions). If absent, every check runs with sane defaults.'
         type: string
         default: 'testing-conventions.toml'
+      packaging_artifact:
+        description: 'Name of an uploaded build artifact (actions/upload-artifact) holding the built distributions (.whl/.tar.gz/.tgz/.crate) to check. When set, a packaging job downloads it and fails if any distribution ships a test file. Empty (default) skips the packaging check.'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -205,3 +228,48 @@ jobs:
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" integration lint --language "$LANGUAGE" "$SCAN_PATH"
+
+  packaging:
+    name: Packaging (no test files in the built artifact)
+    # Unlike the checks above, packaging inspects the *built distribution*, not the
+    # source tree — so it doesn't fan out over `detect`'s source matrix. The
+    # consumer's own build job uploads its built dists (actions/upload-artifact) and
+    # passes that artifact's name as `packaging_artifact`; this job downloads it and
+    # checks each file, inferring the language from the extension. Skipped — never
+    # failed — when no `packaging_artifact` is given.
+    if: inputs.packaging_artifact != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the built distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.packaging_artifact }}
+          path: _packaging_artifact
+      - name: Check the built distributions ship no test files
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # nullglob: an unmatched glob expands to nothing (not the literal);
+          # globstar: `**` recurses, so a nested dist is found too.
+          shopt -s nullglob globstar
+          # Language is inferred from the distribution's extension: a wheel/sdist is
+          # python, an `npm pack` tarball is typescript, a Cargo crate is rust.
+          checked=0
+          check () {
+            local lang="$1"; shift
+            for dist in "$@"; do
+              echo "::group::packaging --language $lang $dist"
+              npx -y "testing-conventions${VERSION:+@$VERSION}" packaging "$dist" --language "$lang"
+              echo "::endgroup::"
+              checked=$((checked + 1))
+            done
+          }
+          check python _packaging_artifact/**/*.whl _packaging_artifact/**/*.tar.gz
+          check typescript _packaging_artifact/**/*.tgz
+          check rust _packaging_artifact/**/*.crate
+          if [ "$checked" -eq 0 ]; then
+            echo "::error::packaging_artifact '${{ inputs.packaging_artifact }}' held no recognized built distribution (.whl / .tar.gz / .tgz / .crate)"
+            exit 1
+          fi
+          echo "checked $checked built distribution(s); no test files shipped"

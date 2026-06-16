@@ -21,14 +21,17 @@
 //!   `os.environ[...] = …`, `del os.environ[...]`, or a mutating method
 //!   (`update` / `pop` / `setdefault` / `clear` / `popitem`). Set env via
 //!   `patch.dict(os.environ, {...})` instead.
+//! - **`no-constant-patch`** (#52): patching a module-global UPPER_CASE constant,
+//!   e.g. `patch("pkg.config.CACHE_DIR", …)`. Inject config explicitly. Waivable
+//!   per file via the config `exempt` list.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use rustpython_ast::Visitor;
 use rustpython_parser::ast::{
-    self, Arg, Arguments, Expr, ExprCall, StmtAssign, StmtAsyncFunctionDef, StmtAugAssign,
-    StmtDelete, StmtFunctionDef, WithItem,
+    self, Arg, Arguments, Constant, Expr, ExprCall, StmtAssign, StmtAsyncFunctionDef,
+    StmtAugAssign, StmtDelete, StmtFunctionDef, WithItem,
 };
 use rustpython_parser::text_size::{TextRange, TextSize};
 use rustpython_parser::Parse;
@@ -148,14 +151,20 @@ impl Visitor for LintVisitor<'_> {
     }
 
     fn visit_expr_call(&mut self, node: ExprCall) {
+        let is_patch = is_patch_call(&node);
         // `no-inline-patch` (#50): a patch(...) call outside any fixture is a
         // patch in a test body. Inside a fixture it is the right place.
-        if self.fixture_depth == 0 && is_patch_call(&node) {
+        if is_patch && self.fixture_depth == 0 {
             self.report(
                 node.range,
                 "no-inline-patch",
                 "patch is called inline in a test body; move it into a `pytest.fixture`",
             );
+        }
+        // `no-constant-patch` (#52): patching a module-global UPPER_CASE constant.
+        // Fires regardless of fixture — config constants are usually patched in one.
+        if is_patch && patches_constant(&node) {
+            self.report(node.range, "no-constant-patch", CONSTANT_PATCH_MSG);
         }
         // `no-environ-mutation` (#51): `os.environ.update(...)` and friends.
         if is_environ_mutation_call(&node) {
@@ -238,6 +247,31 @@ fn attr_base_is_patch(expr: &Expr) -> bool {
         Expr::Attribute(attr) => attr.attr.as_str() == "patch",
         _ => false,
     }
+}
+
+/// Message for the `no-constant-patch` lint.
+const CONSTANT_PATCH_MSG: &str = "patches a module-global config constant; inject config explicitly (a consumer that did `from pkg import CONSTANT` snapshots the value at import time and ignores the patch)";
+
+/// `true` when a `patch(...)` call's first string argument names a module-global
+/// UPPER_CASE constant, e.g. `patch("pkg.config.CACHE_DIR", …)`.
+fn patches_constant(call: &ExprCall) -> bool {
+    let Some(Expr::Constant(constant)) = call.args.first() else {
+        return false;
+    };
+    let Constant::Str(target) = &constant.value else {
+        return false;
+    };
+    target.rsplit('.').next().is_some_and(is_upper_constant)
+}
+
+/// `true` for an ALL-CAPS constant name — letters uppercase, digits and
+/// underscores allowed, at least one letter (`CACHE_DIR`, `DEBUG`, `MAX_SIZE`).
+fn is_upper_constant(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+        && name.chars().any(|c| c.is_ascii_uppercase())
 }
 
 /// Message for the `no-environ-mutation` lint.
@@ -352,5 +386,18 @@ mod tests {
         assert!(is_environ_mutator("clear"));
         assert!(!is_environ_mutator("get"));
         assert!(!is_environ_mutator("keys"));
+    }
+
+    #[test]
+    fn recognizes_upper_constants() {
+        assert!(is_upper_constant("CACHE_DIR"));
+        assert!(is_upper_constant("DEBUG"));
+        assert!(is_upper_constant("MAX_2"));
+        assert!(!is_upper_constant("cache_dir"));
+        assert!(!is_upper_constant("CacheDir"));
+        assert!(!is_upper_constant("fetch"));
+        assert!(!is_upper_constant(""));
+        assert!(!is_upper_constant("_"));
+        assert!(!is_upper_constant("123"));
     }
 }

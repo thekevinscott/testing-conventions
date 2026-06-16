@@ -109,13 +109,14 @@ Lint Python test files for mocking mechanism & style. The first rule under the `
 command group; future lints join it under the same command.
 
 ```
-testing-conventions integration lint --language <LANG> <PATH>
+testing-conventions integration lint --language <LANG> [--config <CONFIG>] <PATH>
 ```
 
 | Argument / flag     | Description                                                        |
 | ------------------- | ----------------------------------------------------------------- |
 | `<PATH>`            | Directory to scan recursively for Python test files.              |
 | `--language <LANG>` | **Required.** `python` only for now. Omitting it is a usage error. |
+| `--config <CONFIG>` | Config file supplying the `exempt` list (waivers). Optional (default `testing-conventions.toml`); if absent, nothing is waived. |
 
 Parses each Python test file (`*_test.py`, `test_*.py`, `conftest.py`) with a Rust Python
 parser and walks the AST. Reports each violation to stderr as `path:line: <lint> — <message>`
@@ -132,6 +133,10 @@ and exits `1` if any are found, `0` otherwise.
 - **`no-environ-mutation`** — direct mutation of `os.environ`: `os.environ[...] = …`,
   `del os.environ[...]`, or a mutating method (`update` / `pop` / `setdefault` / `clear` /
   `popitem`). Set env via `patch.dict(os.environ, {...})`; reading `os.environ` is fine.
+- **`no-constant-patch`** — patching a module-global UPPER_CASE constant, e.g.
+  `patch("pkg.config.CACHE_DIR", …)`. Inject the config explicitly instead. **Waivable**
+  per file: add a `[[python.exempt]]` entry with `rules = ["no-constant-patch"]` (and a
+  reason) and pass it via `--config`; a waived file is silent.
 
 ### `check`
 

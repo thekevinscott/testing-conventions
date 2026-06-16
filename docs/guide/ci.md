@@ -98,6 +98,7 @@ with the required `--language` flag:
 - run: testing-conventions unit colocated-test --language typescript src/
 - run: testing-conventions unit coverage --language python --config testing-conventions.toml src/
 - run: testing-conventions unit coverage --language typescript --config testing-conventions.toml src/
+- run: testing-conventions unit co-change --language python --base origin/main src/   # commit-scoped: needs the PR base ref fetched
 - run: testing-conventions integration lint --language python src/   # python only for now
 - run: testing-conventions packaging dist/my_pkg-0.1.0-py3-none-any.whl --language python  # built dist, not src/
 ```

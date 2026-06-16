@@ -160,6 +160,41 @@ the Rust Python parser:
   build test data, and pure test-helper packages beyond the framework allowlist. See the
   [Isolation guide](../guide/isolation).
 
+### `unit co-change`
+
+Commit-scoped: check that a source file changed in a git diff also changed its colocated test. An
+edit or removal that leaves the colocated test untouched lets it silently go stale — this is the
+commit-time complement to [`unit colocated-test`](#unit-colocated-test)'s tree-wide pairing.
+
+```
+testing-conventions unit co-change --language <LANG> --base <REF> [--config <CONFIG>] <PATH>
+```
+
+| Argument / flag     | Description                                                                |
+| ------------------- | -------------------------------------------------------------------------- |
+| `<PATH>`            | Directory to inspect (the repo root, or a subtree); also where git runs.   |
+| `--language <LANG>` | **Required.** `python` or `typescript`. Rust units are inline `#[cfg(test)]` in the same file, so a sibling test can't go stale — `--language rust` is rejected. |
+| `--base <REF>`      | **Required.** Ref to diff against. The check compares `<base>...HEAD` — the changes this branch introduced (what a PR shows) — so in CI you pass the PR's base, e.g. `origin/main`. |
+| `--config <CONFIG>` | Config file supplying the `exempt` list (default `testing-conventions.toml`). Optional — if absent, every changed source must co-change its test. |
+
+For each source file in the `<base>...HEAD` diff:
+
+- **modified** (and still holding code) or **deleted** → its colocated test (`foo.py` →
+  `foo_test.py`, `foo.ts` → `foo.test.ts`) must also be in the diff; otherwise the source is flagged.
+- **added** → not a subject. Brand-new code is the [coverage floor](#unit-coverage)'s concern, not
+  this rule's.
+
+A test file is never a subject (changing a test on its own is fine), an empty/comment-only file
+holds no logic, Python's `conftest.py` is pytest support, and a source with a `co-change`
+[exemption](#exemptions) needn't co-change.
+
+**Exit codes:**
+
+| Exit | Meaning                                                                                        |
+| ---- | --------------------------------------------------------------------------------------------- |
+| `0`  | Every changed source also changed its colocated test. Nothing is printed.                     |
+| `1`  | One or more sources changed without their colocated test, each printed to stderr (`source changed without its colocated test: <path>`), then a count. |
+
 ## Exemptions
 
 Not every source file should need a colocated test or full coverage — a launcher shim, a pure
@@ -189,7 +224,7 @@ reason = "thin launcher; logic in run(), tested in run_test.py"  # required
 | Field | Meaning |
 | ----- | ------- |
 | `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists — a stale entry is a hard error, so the list can't silently rot. |
-| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
+| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
 | `reason` | Why the omission is deliberate. **Required** — an empty reason is rejected on load. |
 
 Because every exemption lives in the one config file, names its rules, and carries a reason,

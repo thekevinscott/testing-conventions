@@ -1,3 +1,4 @@
+pub mod co_change;
 pub mod colocated_test;
 pub mod config;
 pub mod coverage;
@@ -101,6 +102,25 @@ enum UnitRule {
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
+    /// Check that a source file changed in a git diff also changed its colocated
+    /// test (#33). Commit-scoped: a modified or deleted source whose colocated
+    /// test stays unchanged is a stale-test risk.
+    CoChange {
+        /// Directory to inspect (the repo root, or a subtree); also where git runs.
+        path: PathBuf,
+        /// Language convention to enforce (required). Python/TypeScript only —
+        /// Rust units are inline `#[cfg(test)]`, so a sibling test can't go stale.
+        #[arg(long, value_enum)]
+        language: colocated_test::Language,
+        /// Base ref to diff against: the check compares `<base>...HEAD`, the
+        /// changes this branch introduced (what a PR shows). Required.
+        #[arg(long)]
+        base: String,
+        /// testing-conventions config file providing the `exempt` list. Optional:
+        /// if the file is absent, no source is exempt from co-changing.
+        #[arg(long, default_value = "testing-conventions.toml")]
+        config: PathBuf,
+    },
 }
 
 /// Languages the integration-test lints support — its own set (Python,
@@ -177,6 +197,12 @@ where
                 language,
                 config,
             } => run_unit_isolation(&path, language, &config),
+            UnitRule::CoChange {
+                path,
+                language,
+                base,
+                config,
+            } => run_unit_co_change(&path, &base, language, &config),
         },
         Some(Command::Integration { rule }) => match rule {
             IntegrationRule::Lint {
@@ -257,6 +283,61 @@ fn colocated_test_exemptions(
         config.exemptions(language),
         config::Rule::ColocatedTest,
     )
+}
+
+/// Run the commit-scoped `co-change` check (#33) over `root` for `language`,
+/// diffing `<base>...HEAD`. Returns `0` when every changed source file also
+/// changed its colocated test; otherwise prints each stale source to stderr and
+/// returns `1`.
+///
+/// Loads the `co-change`-rule exemptions from the config at `config_path` (no
+/// config file → no exemptions); an exempt source needn't co-change. Rejects
+/// `--language rust`: Rust units are inline `#[cfg(test)]` in the same file, so a
+/// sibling test can't go stale (mirrors how `unit coverage` rejects Rust).
+fn run_unit_co_change(
+    root: &Path,
+    base: &str,
+    language: colocated_test::Language,
+    config_path: &Path,
+) -> anyhow::Result<i32> {
+    if language == colocated_test::Language::Rust {
+        anyhow::bail!(
+            "`unit co-change` supports `--language python` / `typescript`; Rust units \
+             are inline `#[cfg(test)]` in the same file, so a sibling test can't go stale"
+        );
+    }
+    let exempt = co_change_exemptions(root, language, config_path)?;
+    let stale = co_change::stale_sources(root, base, language, &exempt)?;
+    if stale.is_empty() {
+        return Ok(0);
+    }
+    for source in &stale {
+        eprintln!(
+            "source changed without its colocated test: {}",
+            source.display()
+        );
+    }
+    eprintln!(
+        "error: {} source file(s) changed without their colocated test co-changing \
+         (update the test, or add an `exempt` entry with a reason)",
+        stale.len()
+    );
+    Ok(1)
+}
+
+/// The `co-change`-rule exempt paths for `language`, resolved (and validated)
+/// from the config at `config_path`. A missing config file means no exemptions —
+/// every changed source must co-change its test.
+fn co_change_exemptions(
+    root: &Path,
+    language: colocated_test::Language,
+    config_path: &Path,
+) -> anyhow::Result<std::collections::BTreeSet<String>> {
+    if !config_path.exists() {
+        return Ok(std::collections::BTreeSet::new());
+    }
+    let config = config::load_config(config_path)?;
+    config::resolve_exempt(root, config.exemptions(language), config::Rule::CoChange)
 }
 
 /// Run the unit-test coverage check over `root` for `language`, enforcing the

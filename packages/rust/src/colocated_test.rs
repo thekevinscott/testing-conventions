@@ -40,7 +40,7 @@ pub enum Language {
 
 impl Language {
     /// `true` for a file this language's check tracks (source *or* test).
-    fn tracks(self, path: &Path) -> bool {
+    pub(crate) fn tracks(self, path: &Path) -> bool {
         match self {
             Language::Python => has_extension(path, &["py"]),
             Language::TypeScript => {
@@ -54,7 +54,7 @@ impl Language {
     }
 
     /// `true` when `path` is itself a unit test, never a subject.
-    fn is_test(self, path: &Path) -> bool {
+    pub(crate) fn is_test(self, path: &Path) -> bool {
         match self {
             Language::Python => stem_of(path).ends_with("_test"),
             Language::TypeScript => {
@@ -72,7 +72,7 @@ impl Language {
     /// subject either. Python's `conftest.py` (pytest fixtures) is the only such
     /// file: there is no `conftest_test.py`, and it is never a coverage subject.
     /// (#112)
-    fn is_support(self, path: &Path) -> bool {
+    pub(crate) fn is_support(self, path: &Path) -> bool {
         match self {
             Language::Python => file_name_of(path) == "conftest.py",
             Language::TypeScript | Language::Rust => false,
@@ -83,7 +83,7 @@ impl Language {
     /// code — anything beyond blank lines and comments. An empty or comment-only
     /// file (e.g. a bare `__init__.py`) carries no logic, so it is never a
     /// unit-test subject and needs no exemption (issue #32).
-    fn has_code(self, source: &str) -> bool {
+    pub(crate) fn has_code(self, source: &str) -> bool {
         match self {
             Language::Python => python_has_code(source),
             Language::TypeScript => typescript_has_code(source),
@@ -92,7 +92,7 @@ impl Language {
     }
 
     /// The colocated test `source` is expected to have.
-    fn expected_test_path(self, source: &Path) -> PathBuf {
+    pub(crate) fn expected_test_path(self, source: &Path) -> PathBuf {
         match self {
             Language::Python => source.with_file_name(format!("{}_test.py", stem_of(source))),
             Language::TypeScript => {

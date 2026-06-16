@@ -217,12 +217,13 @@ impl Config {
             crate::colocated_test::Language::TypeScript => {
                 self.typescript.as_ref().map_or(&[], |c| &c.exempt)
             }
+            crate::colocated_test::Language::Rust => self.rust_exemptions(),
         }
     }
 
-    /// The `[[rust.exempt]]` list (empty when the table is absent). Separate from
-    /// [`Self::exemptions`] because the file-pairing `colocated_test::Language` has
-    /// no Rust variant; the Rust isolation rules (#44) waive through here.
+    /// The `[[rust.exempt]]` list (empty when the table is absent). The named
+    /// accessor the Rust isolation rules (#44) waive through; equivalent to
+    /// [`Self::exemptions`]`(Language::Rust)`.
     pub fn rust_exemptions(&self) -> &[Exemption] {
         self.rust.as_ref().map_or(&[], |c| &c.exempt)
     }
@@ -366,6 +367,18 @@ mod tests {
         let exempt = &config.python.unwrap().exempt;
         assert_eq!(exempt.len(), 1);
         assert_eq!(exempt[0].rules, vec![Rule::ColocatedTest, Rule::Coverage]);
+    }
+
+    #[test]
+    fn exemptions_reads_the_rust_table() {
+        let config = parse(
+            "[[rust.exempt]]\npath = \"build.rs\"\nrules = [\"no-out-of-module-call\"]\n\
+             reason = \"generated\"\n",
+        )
+        .unwrap();
+        let rust = config.exemptions(crate::colocated_test::Language::Rust);
+        assert_eq!(rust.len(), 1);
+        assert_eq!(rust[0].path, "build.rs");
     }
 
     /// A throwaway directory tree, removed on drop.

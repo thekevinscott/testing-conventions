@@ -28,7 +28,7 @@ use anyhow::{bail, Context, Result};
 pub fn scan(root: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>> {
     let root = root.as_ref();
     let mut offenders = Vec::new();
-    collect_offenders(root, globs, &mut offenders)?;
+    collect_offenders(root, root, globs, &mut offenders)?;
     offenders.sort();
     Ok(offenders)
 }
@@ -37,13 +37,13 @@ pub fn scan(root: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>> {
 /// patterns that must not ship.
 ///
 /// `path` is either a **directory** (an already-unpacked artifact) or a packed
-/// archive this rule understands — a Python wheel (`.whl`, a zip) or a gzipped
-/// tar (`.tgz` / `.tar.gz`, e.g. an `npm pack` tarball) — which is unpacked into a
-/// scratch directory first. Either way the unpacked tree is handed to [`scan`].
-/// Offenders come back as paths **relative to the artifact root** (e.g.
-/// `package/dist/widget.test.js`), so they read the same whether the artifact was
-/// a directory or an archive. Errors if the artifact can't be read, or isn't a
-/// directory or a recognized archive.
+/// archive this rule understands — a Python wheel (`.whl`, a zip) or a gzipped tar
+/// (`.tgz` / `.tar.gz`, e.g. an `npm pack` tarball or Python sdist; a Cargo
+/// `.crate` too) — which is unpacked into a scratch directory first. Either way
+/// the unpacked tree is handed to [`scan`]. Offenders come back as paths
+/// **relative to the artifact root** (e.g. `package/dist/widget.test.js`), so they
+/// read the same whether the artifact was a directory or an archive. Errors if the
+/// artifact can't be read, or isn't a directory or a recognized archive.
 pub fn inspect(path: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>> {
     let path = path.as_ref();
     if path.is_dir() {
@@ -56,7 +56,7 @@ pub fn inspect(path: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>>
     } else {
         bail!(
             "`{}` is not a directory or a recognized built artifact \
-             (expected a directory, a `.whl`, or a `.tgz`)",
+             (expected a directory, a `.whl`, a `.tgz`/`.tar.gz`, or a `.crate`)",
             path.display()
         )
     };
@@ -94,13 +94,14 @@ fn unzip_to_temp(archive: &Path) -> Result<TempDir> {
 }
 
 /// `true` for an artifact this rule unpacks as a gzipped tar: an `npm pack`
-/// tarball (`.tgz`) or a `.tar.gz` (Rust's `cargo package` `.crate` is one, #74).
+/// tarball (`.tgz`), a `.tar.gz` (a Python sdist), or a Cargo `.crate` from
+/// `cargo package` (#74) — all gzipped tarballs.
 fn is_tar_gz_artifact(path: &Path) -> bool {
     let name = path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default();
-    name.ends_with(".tgz") || name.ends_with(".tar.gz")
+    name.ends_with(".tgz") || name.ends_with(".tar.gz") || name.ends_with(".crate")
 }
 
 /// Unpack a gzipped-tar artifact into a fresh scratch directory (removed on drop).
@@ -144,8 +145,14 @@ impl Drop for TempDir {
     }
 }
 
-/// Recursively collect every file under `dir` whose name matches one of `globs`.
-fn collect_offenders(dir: &Path, globs: &[String], out: &mut Vec<PathBuf>) -> Result<()> {
+/// Recursively collect every file under `dir` (within the artifact `root`) that
+/// matches one of `patterns`.
+fn collect_offenders(
+    dir: &Path,
+    root: &Path,
+    patterns: &[String],
+    out: &mut Vec<PathBuf>,
+) -> Result<()> {
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
     for entry in entries {
@@ -153,21 +160,41 @@ fn collect_offenders(dir: &Path, globs: &[String], out: &mut Vec<PathBuf>) -> Re
             .with_context(|| format!("reading an entry under `{}`", dir.display()))?
             .path();
         if path.is_dir() {
-            collect_offenders(&path, globs, out)?;
-        } else if matches_any(&path, globs) {
+            collect_offenders(&path, root, patterns, out)?;
+        } else if matches_any(&path, root, patterns) {
             out.push(path);
         }
     }
     Ok(())
 }
 
-/// `true` when the file name of `path` matches any glob in `globs`.
-fn matches_any(path: &Path, globs: &[String]) -> bool {
+/// `true` when `path` matches any of `patterns`.
+///
+/// A pattern ending in `/` is a **directory** pattern: it matches when `path`
+/// (relative to the artifact `root`) lives under a directory of that name — e.g.
+/// `tests/` flags `…/tests/integration.rs` (Rust's crate-root integration tests,
+/// #74). Every other pattern is a file-name glob (`*` wildcards) matched against
+/// the entry's name (`*_test.py`, `*.test.*`).
+fn matches_any(path: &Path, root: &Path, patterns: &[String]) -> bool {
     let name = path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default();
-    globs.iter().any(|glob| matches_glob(glob, name))
+    patterns
+        .iter()
+        .any(|pattern| match pattern.strip_suffix('/') {
+            Some(dir) => path_under_dir(path, root, dir),
+            None => matches_glob(pattern, name),
+        })
+}
+
+/// `true` when `path` (relative to `root`) has an **ancestor** directory named
+/// `dir` — i.e. the file lives somewhere under a `dir/`.
+fn path_under_dir(path: &Path, root: &Path, dir: &str) -> bool {
+    let relative = path.strip_prefix(root).unwrap_or(path);
+    relative
+        .parent()
+        .is_some_and(|parents| parents.components().any(|c| c.as_os_str() == dir))
 }
 
 /// Match `name` against a file-name `glob` where `*` matches any run of
@@ -278,6 +305,29 @@ mod tests {
         let tree = TempTree::new(&["pkg/widget.py", "pkg/sub/helper_test.py"]);
         let offenders = scan(tree.path(), &["*_test.py".to_string()]).unwrap();
         assert_eq!(offenders, vec![tree.path().join("pkg/sub/helper_test.py")]);
+    }
+
+    #[test]
+    fn a_directory_pattern_flags_files_under_that_dir() {
+        let tree = TempTree::new(&["tests/integration.rs", "src/lib.rs", "src/tests/nested.rs"]);
+        let offenders = scan(tree.path(), &["tests/".to_string()]).unwrap();
+        // Any file with a `tests/` ancestor is flagged (here the crate-root
+        // `tests/` and a nested `src/tests/`); `src/lib.rs` is not.
+        assert_eq!(
+            offenders,
+            vec![
+                tree.path().join("src/tests/nested.rs"),
+                tree.path().join("tests/integration.rs"),
+            ],
+        );
+    }
+
+    #[test]
+    fn recognizes_a_dot_crate_as_a_gzipped_tar() {
+        assert!(is_tar_gz_artifact(Path::new("widget-0.1.0.crate")));
+        assert!(is_tar_gz_artifact(Path::new("pkg.tgz")));
+        assert!(is_tar_gz_artifact(Path::new("pkg.tar.gz")));
+        assert!(!is_tar_gz_artifact(Path::new("pkg.whl")));
     }
 
     #[test]

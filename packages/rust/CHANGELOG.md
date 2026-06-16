@@ -157,6 +157,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   not just a wheel — the `.tar.gz` support added in #73 already applies, and dedicated
   sdist fixtures + integration/e2e tests now lock the case in. Test coverage only; no
   behavior change. (#41, #106)
+- `packaging --language rust` (#74) — the last packaging language. `packaging` now
+  accepts a Cargo `.crate` (from `cargo package`, a gzipped tar) and flags the crate-root
+  **`tests/`** directory: `#[cfg(test)]` units compile out of the consumer artifact for
+  free, so the only thing to keep out of the source tarball is the integration `tests/`
+  (via a Cargo `exclude`). The scanner gains a **directory pattern** (a pattern ending in
+  `/`, like `tests/`, matches files under that directory) alongside the file-name globs.
+  `Language` (`colocated_test::Language`) gains a `Rust` value, so `--language rust` parses;
+  `unit colocated-test` / `unit coverage` reject it (separate items), while `unit isolation`
+  / `integration lint` already support Rust through their own enums. (#41, #74)
 - `workflow` module + `workflow` CLI command — guard the reusable workflow against
   CLI subcommand drift (#92). `workflow <PATH>` scans a workflow file (or a directory
   of them) for every `testing-conventions …` invocation and checks each one's

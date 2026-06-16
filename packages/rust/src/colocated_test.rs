@@ -29,6 +29,12 @@ pub enum Language {
     /// declaration files (`.d.ts`/`.d.mts`/`.d.cts`) are ignored.
     #[value(name = "typescript")]
     TypeScript,
+    /// Rust units are inline `#[cfg(test)]` modules, not separate files, so the
+    /// file-based colocated-test check does not apply (that's the Rust isolation
+    /// rule, #44). The variant exists so the shared `--language` flag accepts
+    /// `rust` for the rules that support it — e.g. `packaging` (#74).
+    #[value(name = "rust")]
+    Rust,
 }
 
 impl Language {
@@ -39,6 +45,11 @@ impl Language {
             Language::TypeScript => {
                 has_extension(path, &["ts", "tsx", "mts", "cts"]) && !is_declaration(path)
             }
+            // No file-based colocated convention (inline `#[cfg(test)]`), so the
+            // walk tracks nothing; `unit colocated-test` guards `--language rust`
+            // upstream, so `is_test` / `has_code` / `expected_test_path` are never
+            // reached for it.
+            Language::Rust => false,
         }
     }
 
@@ -53,6 +64,7 @@ impl Language {
                     || name.ends_with(".test.mts")
                     || name.ends_with(".test.cts")
             }
+            Language::Rust => false,
         }
     }
 
@@ -64,6 +76,7 @@ impl Language {
         match self {
             Language::Python => python_has_code(source),
             Language::TypeScript => typescript_has_code(source),
+            Language::Rust => false,
         }
     }
 
@@ -74,6 +87,8 @@ impl Language {
             Language::TypeScript => {
                 source.with_file_name(format!("{}.test.{}", stem_of(source), extension_of(source)))
             }
+            // Unreachable for Rust (nothing is tracked); a harmless identity.
+            Language::Rust => source.to_path_buf(),
         }
     }
 }
@@ -327,5 +342,18 @@ mod tests {
         assert!(Language::TypeScript.has_code("const s = '// not a comment';\n"));
         // A lone division slash is code, not a comment.
         assert!(Language::TypeScript.has_code("const r = a / b;\n"));
+    }
+
+    #[test]
+    fn rust_has_no_file_based_colocated_convention() {
+        // Rust units are inline `#[cfg(test)]`; the file-based check tracks
+        // nothing and the command guards `--language rust` upstream.
+        assert!(!Language::Rust.tracks(Path::new("lib.rs")));
+        assert!(!Language::Rust.is_test(Path::new("lib_test.rs")));
+        assert!(!Language::Rust.has_code("fn main() {}\n"));
+        assert_eq!(
+            Language::Rust.expected_test_path(Path::new("src/lib.rs")),
+            PathBuf::from("src/lib.rs")
+        );
     }
 }

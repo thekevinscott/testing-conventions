@@ -264,18 +264,23 @@ testing-conventions packaging --language <LANG> <PATH>
 
 | Argument / flag     | Description                                                                       |
 | ------------------- | --------------------------------------------------------------------------------- |
-| `<PATH>`            | The built artifact to inspect: a Python wheel (`.whl`) or sdist (`.tar.gz`), a TypeScript `npm pack` tarball (`.tgz`), or a directory (an already-unpacked artifact, e.g. a `dist/` tree). |
-| `--language <LANG>` | **Required.** `python` or `typescript`.                                           |
+| `<PATH>`            | The built artifact to inspect: a Python wheel (`.whl`) or sdist (`.tar.gz`), a TypeScript `npm pack` tarball (`.tgz`), a Rust `cargo package` crate (`.crate`), or a directory (an already-unpacked artifact, e.g. a `dist/` tree). |
+| `--language <LANG>` | **Required.** `python`, `typescript`, or `rust`.                                  |
 
-Scans the artifact recursively for the language's test-file glob — `python` → `*_test.py`,
-`typescript` → `*.test.*` — and exits `0` when none are present, `1` (printing each offending
-path, relative to the artifact root) when one is. A `.whl` (zip) or a `.tgz` / `.tar.gz`
-(gzipped tar) is unpacked first, then scanned; a directory is scanned in place.
+Scans the artifact recursively for the language's test-file pattern and exits `0` when none
+are present, `1` (printing each offending path, relative to the artifact root) when one is:
 
-**Status:** Python inspects a built wheel and **sdist** (#72, #106), and TypeScript a built
-`npm pack` tarball (#73). Still landing: the Rust `cargo package` tarball (#74, which also adds
-`--language rust`). Until a language's archive is wired, point `<PATH>` at an already-unpacked
-directory.
+- **`python`** → `*_test.py` (in the wheel or sdist).
+- **`typescript`** → `*.test.*` (in the `npm pack` tarball's `dist/`).
+- **`rust`** → the crate-root **`tests/`** directory (in the `.crate`). Inline `#[cfg(test)]`
+  units compile out of the consumer artifact for free; only the integration `tests/` needs a
+  Cargo `exclude`. (Patterns ending in `/` match a directory; the others are file-name globs.)
+
+A `.whl` (zip), or a `.tgz` / `.tar.gz` / `.crate` (gzipped tar), is unpacked first, then
+scanned; a directory is scanned in place.
+
+**Status:** all three languages land: Python wheel + sdist (#72, #106), TypeScript `npm pack`
+tarball (#73), Rust `.crate` (#74). `<PATH>` may also be an already-unpacked directory.
 
 ### workflow
 

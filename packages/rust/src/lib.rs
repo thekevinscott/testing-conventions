@@ -208,6 +208,12 @@ fn run_unit_colocated_test(
     language: colocated_test::Language,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
+    if language == colocated_test::Language::Rust {
+        anyhow::bail!(
+            "`unit colocated-test` checks file-based colocation (Python/TypeScript); \
+             Rust units are inline `#[cfg(test)]` modules — see `unit isolation`"
+        );
+    }
     let exempt = colocated_test_exemptions(root, language, config_path)?;
     let orphans = colocated_test::missing_unit_tests(root, language, &exempt)?;
     if orphans.is_empty() {
@@ -292,6 +298,10 @@ fn run_unit_coverage(
                     .collect();
             coverage::measure_typescript(root, thresholds, &exclude)?
         }
+        colocated_test::Language::Rust => anyhow::bail!(
+            "`unit coverage` supports `--language python` / `typescript`; \
+             Rust coverage (`cargo llvm-cov`) is a separate item"
+        ),
     };
     match outcome {
         coverage::Outcome::Pass => Ok(0),
@@ -433,6 +443,9 @@ fn run_packaging(artifact: &Path, language: colocated_test::Language) -> anyhow:
     let globs = match language {
         colocated_test::Language::Python => vec!["*_test.py".to_string()],
         colocated_test::Language::TypeScript => vec!["*.test.*".to_string()],
+        // `#[cfg(test)]` units compile out for free; the only thing to keep out of
+        // the `.crate` source tarball is the crate-root integration `tests/` dir.
+        colocated_test::Language::Rust => vec!["tests/".to_string()],
     };
     let offenders = packaging::inspect(artifact, &globs)?;
     if offenders.is_empty() {
@@ -522,5 +535,35 @@ mod tests {
             .downcast_ref::<clap::Error>()
             .expect("error should be a clap::Error");
         assert_eq!(clap_err.kind(), clap::error::ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn unit_colocated_test_rejects_rust() {
+        let err = run([
+            "testing-conventions",
+            "unit",
+            "colocated-test",
+            "pkg",
+            "--language",
+            "rust",
+        ])
+        .unwrap_err();
+        assert!(err.to_string().contains("inline"), "got: {err}");
+    }
+
+    #[test]
+    fn unit_coverage_rejects_rust() {
+        // Zero-config: with no config file the default config is used, so this
+        // reaches the language arm (which bails for Rust) without any fixture.
+        let err = run([
+            "testing-conventions",
+            "unit",
+            "coverage",
+            "pkg",
+            "--language",
+            "rust",
+        ])
+        .unwrap_err();
+        assert!(err.to_string().contains("separate item"), "got: {err}");
     }
 }

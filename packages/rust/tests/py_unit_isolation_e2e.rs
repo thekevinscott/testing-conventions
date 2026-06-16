@@ -51,3 +51,25 @@ fn waived_exits_zero() {
         0
     );
 }
+
+// external & effectful-stdlib deps (#121, slice 3)
+#[test]
+fn external_red_exits_nonzero() {
+    assert_eq!(isolation_exit("external/red"), 1);
+}
+
+#[test]
+fn external_clean_exits_zero() {
+    assert_eq!(isolation_exit("external/clean"), 0);
+}
+
+#[test]
+fn external_waived_exits_zero() {
+    assert_eq!(
+        isolation_exit_with_config(
+            "external/waived",
+            "external/waived/testing-conventions.toml"
+        ),
+        0
+    );
+}

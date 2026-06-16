@@ -1,0 +1,5 @@
+# Declares the dist's own top-level package — `myproject` is first-party. External
+# imports (third-party / effectful stdlib) are classified against the stdlib set.
+[project]
+name = "myproject"
+version = "0.0.0"

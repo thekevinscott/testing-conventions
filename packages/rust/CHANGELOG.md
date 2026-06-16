@@ -19,6 +19,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (with `id()` / `from_id()`). A waived file passes; an un-waived violation still fails;
   a reason-less or stale entry still errors. Example:
   `[[python.exempt]] rules = ["no-inline-patch"]`.
+- **Python unit isolation — external deps** (#121, slice 3). `unit isolation
+  --language python` now also flags an imported, un-mocked **external** collaborator:
+  a **third-party** package (any bare import that isn't first-party or stdlib) or an
+  **effectful stdlib** module (a conservative set — network / subprocess / process /
+  randomness / database / low-level OS: `socket`, `subprocess`, `ssl`, `random`,
+  `sqlite3`, …). Pure stdlib (`json`, `dataclasses`, …), the test framework
+  (`pytest` / `_pytest` / `mock`; `unittest` is stdlib), `__future__`, and
+  `TYPE_CHECKING` imports stay exempt. Dual-nature heads (`os`, `pathlib`,
+  `datetime`, `time`, `io`) are excluded from the effectful set — their pure vs.
+  effectful use can't be told at the import head, so the clock / filesystem stay
+  caught by the patch-by-string convention (a documented non-goal). Same
+  `unmocked-collaborator` rule (still waivable via #102), no new `config::Rule`. See
+  [`internals/python/isolation.md`](../../internals/python/isolation.md).
 - **Python unit isolation** — `unmocked-collaborator` (#42, slice 2). `unit isolation
   --language python <PATH>` now flags a colocated unit test (`*_test.py` / `test_*.py`)
   that **imports a first-party collaborator without mocking it** — a unit test must

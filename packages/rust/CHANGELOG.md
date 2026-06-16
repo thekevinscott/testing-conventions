@@ -88,13 +88,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `isolation` module + `unit isolation` CLI — the first deterministic lint on
   *Rust* test code. `unit isolation --language rust <PATH>` parses each `*.rs`
   file under the crate root with `syn` and walks its inline `#[cfg(test)]` modules,
-  exiting non-zero on any violation. Detector **`no-out-of-module-call`** (#44): a
-  call out of a unit test's own module — `crate::…` (another first-party module),
+  exiting non-zero on any violation. Detectors (#44): **`no-out-of-module-call`** —
+  a call out of a unit test's own module — `crate::…` (another first-party module),
   `super::super::…` (an ancestor), an external crate (named in `Cargo.toml`, with
   `[dev-dependencies]` test tooling excluded), or effectful `std`
-  (`fs`/`net`/`process`/`env`/`thread`/`os`, the clock, or real-handle I/O). A
-  single `super::`, `self`/`Self`, a bare unqualified call, and pure `std`
-  (including `std::io::Cursor` and the I/O traits) stay in-module. Library API:
+  (`fs`/`net`/`process`/`env`/`thread`/`os`, the clock, or real-handle I/O); and
+  **`no-out-of-module-import`** — a `use` that pulls a foreign surface into a test
+  module: a glob of anything but `super::*`, or a named import rooted at `crate::`,
+  an external crate, or effectful `std` (closing the gap where a collaborator is
+  imported then called unqualified). A single `super::`, `self`/`Self`, a bare
+  unqualified call, and pure `std` (including `std::io::Cursor` and the I/O traits)
+  stay in-module. Library API:
   `testing_conventions::isolation::{find_violations, Violation, Language}`. (#44)
 - `unit isolation --language typescript <PATH>` — the TypeScript arm of `unit
   isolation` (#43, #76), the unit-direction counterpart to slice #75's

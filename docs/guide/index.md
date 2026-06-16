@@ -67,6 +67,20 @@ metrics below its floor — so CI fails on a coverage regression. Measuring all 
 coverage can read 100% while branches lag, when every line of a function runs but its `else` is
 never taken.
 
+## Keep integration tests honest
+
+An integration test runs first-party code for real and mocks only the outside world — so a
+`vi.mock()` of a first-party (relative) module defeats the point. The `no-first-party-mock`
+lint catches it:
+
+```sh
+testing-conventions integration lint --language typescript test/integration/
+```
+
+Any `vi.mock()` / `vi.doMock()` of a `./`-relative module is printed and the command exits
+non-zero; third-party packages and Node built-ins stay mockable. See [Isolate
+tests](./isolation) for the full first-party/external rule and the unit-suite mirror image.
+
 ## Wire it into CI
 
 `unit colocated-test`'s non-zero exit is all a CI step needs — a failing check fails the job,

@@ -119,8 +119,8 @@ shim, or a non-empty `__init__.py` is exempted this way, not automatically.
 
 ### `integration lint`
 
-Lint Python test files for mocking mechanism & style. The first rule under the `integration`
-command group; future lints join it under the same command.
+Lint integration test files for mocking mechanism & style. The first rule group under the
+`integration` command; future lints join it under the same command.
 
 ```
 testing-conventions integration lint --language <LANG> [--config <CONFIG>] <PATH>
@@ -128,15 +128,15 @@ testing-conventions integration lint --language <LANG> [--config <CONFIG>] <PATH
 
 | Argument / flag     | Description                                                        |
 | ------------------- | ----------------------------------------------------------------- |
-| `<PATH>`            | Directory to scan recursively for Python test files.              |
-| `--language <LANG>` | **Required.** `python` only for now. Omitting it is a usage error. |
+| `<PATH>`            | Directory to scan recursively for test files.                     |
+| `--language <LANG>` | **Required.** `python` or `typescript`. Omitting it is a usage error. |
 | `--config <CONFIG>` | Config file supplying the `exempt` list (waivers). Optional (default `testing-conventions.toml`); if absent, nothing is waived. |
 
-Parses each Python test file (`*_test.py`, `test_*.py`, `conftest.py`) with a Rust Python
-parser and walks the AST. Reports each violation to stderr as `path:line: <lint> — <message>`
-and exits `1` if any are found, `0` otherwise.
+Reports each violation to stderr as `path:line: <lint> — <message>` and exits `1` if any are
+found, `0` otherwise.
 
-**Lints:**
+**Python** — parses each test file (`*_test.py`, `test_*.py`, `conftest.py`) with a Rust Python
+parser and walks the AST:
 
 - **`no-monkeypatch`** — a test or fixture function that declares the `monkeypatch` parameter.
   pytest's `monkeypatch` is banned; patch with `unittest.mock` (`patch` / `patch.object` /
@@ -151,6 +151,15 @@ and exits `1` if any are found, `0` otherwise.
   `patch("pkg.config.CACHE_DIR", …)`. Inject the config explicitly instead. **Waivable**
   per file: add a `[[python.exempt]]` entry with `rules = ["no-constant-patch"]` (and a
   reason) and pass it via `--config`; a waived file is silent.
+
+**TypeScript** — parses each test file (`*.test.{ts,tsx,mts,cts}`) with the `oxc` parser and
+walks the AST:
+
+- **`no-first-party-mock`** — a `vi.mock()` / `vi.doMock()` whose target is a **first-party**
+  module (a relative specifier like `./service` or `../core`). An integration test runs
+  first-party code for real, so only third-party packages (`stripe`) and Node built-ins
+  (`node:fs`, `child_process`) may be mocked. A non-literal target (`vi.mock(name)`) can't be
+  classified deterministically and is left alone. See the [Isolation guide](../guide/isolation).
 
 ### `check`
 

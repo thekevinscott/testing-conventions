@@ -75,6 +75,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   files (sorted, `*` wildcards). The per-language *build* step that produces the
   artifact follows in #72 (Python wheel/sdist), #73 (TypeScript `dist`), and #74
   (Rust crate tarball, which also adds `--language rust`). (#41, #70)
+- `ts` module + `integration lint --language typescript` — the first TypeScript
+  lint, on a new `oxc`-based AST foundation (#43, #75). `integration lint --language
+  typescript <PATH>` parses each `*.test.{ts,tsx,mts,cts}` file with `oxc_parser` and
+  walks it for **`no-first-party-mock`**: an integration test runs first-party code
+  for real, so a `vi.mock()` / `vi.doMock()` whose target is a **first-party** module
+  (a relative specifier) is flagged; third-party packages and Node built-ins may still
+  be mocked. The shared, resolution-free specifier classifier (`ts::classify` →
+  `Origin::{FirstParty, Builtin, ThirdParty}`) is the foundation the unit-isolation
+  slices (#76, #77) build on. Library API:
+  `testing_conventions::ts::{find_integration_violations, classify, Origin}`. (#43, #75)
 
 ### Changed
 

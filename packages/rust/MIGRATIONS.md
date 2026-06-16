@@ -104,6 +104,16 @@ per-language *build* step that produces the artifact lands in #72 / #73 / #74
 (the last also adding `--language rust`). Purely additive — a new command and
 module; no existing signature or behavior changes.
 
+Also adds the first TypeScript lint (#43, #75): `integration lint --language
+typescript <PATH>` extends the (previously Python-only) `integration lint` command
+to TypeScript, parsing each `*.test.{ts,tsx,mts,cts}` file with `oxc` and flagging
+**`no-first-party-mock`** — a `vi.mock()` / `vi.doMock()` of a first-party
+(relative) module in an integration test, which must run first-party code for real
+(third-party packages and Node built-ins may still be mocked). Purely additive: a
+new `testing_conventions::ts` module (`find_integration_violations`, plus the shared
+specifier classifier `classify` → `Origin`) and a new `--language typescript` arm on
+`integration lint`; nothing existing changes.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -168,6 +178,9 @@ Exemptions (#32) change runtime behavior:
   the `[<language>].coverage` table): it enforces the language's default floor
   instead — Python 85 with branch on; TypeScript lines/functions/statements 80,
   branches 75. A `[<language>].coverage` table still overrides it. (#80)
+- `integration lint --language typescript` (#43, #75) previously errored
+  (`supports --language python only for now`); it now parses the TypeScript test
+  files and runs the `no-first-party-mock` lint.
 
 ### Verification
 
@@ -215,6 +228,15 @@ cd packages/rust && cargo test --test integration_lint --test integration_lint_e
 Expected: the lint's integration + e2e tests pass — the clean fixture reports no
 violations and exits `0`, and the red fixture (a test taking `monkeypatch`) is
 flagged and exits `1`.
+
+```
+cd packages/rust && cargo test --test ts_integration_lint --test ts_integration_lint_e2e
+```
+
+Expected: the TypeScript lint's integration + e2e tests pass — the clean fixture
+(mocks only third-party packages and Node built-ins) reports no violations and exits
+`0`, and the red fixture (a first-party `vi.mock` / `vi.doMock`) is flagged and exits
+`1`.
 
 ```
 cd packages/rust && cargo test --test coverage_e2e --test coverage_ts_e2e

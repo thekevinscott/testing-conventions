@@ -3,6 +3,7 @@ pub mod config;
 pub mod coverage;
 pub mod lint;
 pub mod packaging;
+pub mod ts;
 
 use std::path::{Path, PathBuf};
 
@@ -79,9 +80,9 @@ enum UnitRule {
 /// come). The README's "Integration" taxonomy.
 #[derive(Subcommand, Debug)]
 enum IntegrationRule {
-    /// Lint integration test files for mocking mechanism & style (Python).
+    /// Lint integration test files for mocking mechanism & style (Python, TypeScript).
     Lint {
-        /// Directory to scan recursively for Python test files.
+        /// Directory to scan recursively for test files.
         path: PathBuf,
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
@@ -239,14 +240,12 @@ fn run_integration_lint(
     language: colocated_test::Language,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
-    match language {
-        colocated_test::Language::Python => {}
-        colocated_test::Language::TypeScript => {
-            anyhow::bail!("`integration lint` supports `--language python` only for now")
-        }
-    }
     let waived = lint_waivers(root, language, config_path)?;
-    let violations: Vec<lint::Violation> = lint::find_violations(root)?
+    let raw = match language {
+        colocated_test::Language::Python => lint::find_violations(root)?,
+        colocated_test::Language::TypeScript => ts::find_integration_violations(root)?,
+    };
+    let violations: Vec<lint::Violation> = raw
         .into_iter()
         .filter(|v| !is_waived(v, root, &waived))
         .collect();

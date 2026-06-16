@@ -10,14 +10,14 @@ testing-conventions <COMMAND>
 
 Global flags: `--help`, `--version`.
 
-### `unit location`
+### `unit colocated-test`
 
-Check that every source file under a directory has a colocated unit test. `location` is the
-first rule under the `unit` command group; future rules (e.g. `unit isolation`) and other
+Check that every source file under a directory has a colocated unit test. `colocated-test` is
+the first rule under the `unit` command group; future rules (e.g. `unit isolation`) and other
 test kinds (`integration`, `e2e`) nest the same way.
 
 ```
-testing-conventions unit location --language <LANG> [--config <CONFIG>] <PATH>
+testing-conventions unit colocated-test --language <LANG> [--config <CONFIG>] <PATH>
 ```
 
 | Argument / flag     | Description                                                       |
@@ -88,14 +88,14 @@ For a deliberate omission, add a `[[<language>.exempt]]` entry to the config:
 ```toml
 [[python.exempt]]
 path = "mypkg/cli.py"          # relative to the scanned <PATH>
-rules = ["location", "coverage"]  # which checks this lifts
+rules = ["colocated-test", "coverage"]  # which checks this lifts
 reason = "thin launcher; logic in run(), tested in run_test.py"  # required
 ```
 
 | Field | Meaning |
 | ----- | ------- |
 | `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists — a stale entry is a hard error, so the list can't silently rot. |
-| `rules` | Which checks the exemption lifts: `location` (skip the colocated-test requirement) and/or `coverage` (omit from the coverage denominator). |
+| `rules` | Which checks the exemption lifts: `colocated-test` (skip the colocated-test requirement) and/or `coverage` (omit from the coverage denominator). |
 | `reason` | Why the omission is deliberate. **Required** — an empty reason is rejected on load. |
 
 Because every exemption lives in the one config file, names its rules, and carries a reason,
@@ -133,8 +133,8 @@ and exits `1` if any are found, `0` otherwise.
 ### `check`
 
 Reserved for the config-driven umbrella that runs every configured rule. **Not wired yet** —
-it currently exits `0`. Rules ship under their test-kind group (like `unit location`) until
-`check` orchestrates them from the config.
+it currently exits `0`. Rules ship under their test-kind group (like `unit colocated-test`)
+until `check` orchestrates them from the config.
 
 ## Configuration
 
@@ -151,7 +151,7 @@ coverage = { branch = true, fail_under = 100 }
 # A deliberate, reason-required omission (see Exemptions above):
 [[python.exempt]]
 path = "mypkg/cli.py"
-rules = ["location", "coverage"]
+rules = ["colocated-test", "coverage"]
 reason = "thin launcher; logic in run(), tested in run_test.py"
 
 [typescript]

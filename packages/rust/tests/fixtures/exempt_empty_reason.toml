@@ -1,4 +1,4 @@
 [[python.exempt]]
 path = "src/cli.py"
-rules = ["location"]
+rules = ["colocated-test"]
 reason = ""

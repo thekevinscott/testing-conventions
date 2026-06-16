@@ -26,7 +26,7 @@ For a deliberate omission, add a `[[<language>.exempt]]` entry naming the rules 
 # A launcher shim with no unit test:
 [[python.exempt]]
 path = "mypkg/cli.py"
-rules = ["location"]
+rules = ["colocated-test"]
 reason = "thin launcher; logic lives in run(), tested in run_test.py"
 
 # Generated code you don't want in the coverage number:
@@ -38,16 +38,16 @@ reason = "generated protobuf stubs, not hand-authored"
 # A re-export barrel — exempt from the colocated-test rule:
 [[typescript.exempt]]
 path = "src/index.ts"
-rules = ["location"]
+rules = ["colocated-test"]
 reason = "pure re-export barrel; no logic of its own"
 ```
 
 - `path` is relative to the scanned `<PATH>`.
-- `rules` is `location` (skip the colocated-test requirement), `coverage` (omit from the
+- `rules` is `colocated-test` (skip the colocated-test requirement), `coverage` (omit from the
   coverage denominator), or both.
 - `reason` is required — a reason-less entry is rejected when the config loads.
 
-`unit location` reads the list via `--config` (default `testing-conventions.toml`); `unit
+`unit colocated-test` reads the list via `--config` (default `testing-conventions.toml`); `unit
 coverage` already takes `--config` for its thresholds.
 
 ## See also

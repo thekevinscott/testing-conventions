@@ -27,18 +27,18 @@ Confirm it's available (prefix `npx` if you installed it as an npm dev dependenc
 testing-conventions --version
 ```
 
-## Your first check: unit-test location
+## Your first check: colocated tests
 
-The rule shipping today is **unit-test location & naming**: every source file must have a
-colocated unit test named after it. Point the `unit location` command at the directory you
-want to scan, naming the language with the required `--language` flag:
+The rule shipping today is **colocated test**: every source file must have a
+colocated unit test named after it. Point the `unit colocated-test` command at the directory
+you want to scan, naming the language with the required `--language` flag:
 
 ```sh
 # Python: foo.py must have a sibling foo_test.py
-testing-conventions unit location --language python src/
+testing-conventions unit colocated-test --language python src/
 
 # TypeScript: foo-bar.ts must have a sibling foo-bar.test.ts
-testing-conventions unit location --language typescript src/
+testing-conventions unit colocated-test --language typescript src/
 ```
 
 When every source file is paired, the command prints nothing and exits `0`. When a file is

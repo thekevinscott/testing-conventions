@@ -29,7 +29,7 @@ config.
 
 ### Unit
 
-#### Location & Naming
+#### Colocated Test
 
 **Rule** — unit tests are colocated with the code they test, and named after it.
 
@@ -151,7 +151,7 @@ driven**, never a silent ignore:
   automatic exclusion; there is no name- or shape-based magic.
 - **Everything else is explicit.** A launcher shim, a re-export barrel, generated code, or a
   non-empty `__init__.py` is exempted by a `[[<language>.exempt]]` config entry naming the
-  `rules` it lifts (`location` / `coverage`) and a **required** `reason`. The whole exemption
+  `rules` it lifts (`colocated-test` / `coverage`) and a **required** `reason`. The whole exemption
   surface lives in one file (auditable in a single diff), and a stale entry — a path that no
   longer exists — is a hard error, so the list can't quietly rot.
 
@@ -167,7 +167,7 @@ coverage = { branch = true, fail_under = 100 }
 # A deliberate, reason-required omission (see Exemptions above):
 [[python.exempt]]
 path = "mypkg/cli.py"
-rules = ["location", "coverage"]
+rules = ["colocated-test", "coverage"]
 reason = "thin launcher; logic in run(), tested in run_test.py"
 
 [typescript]

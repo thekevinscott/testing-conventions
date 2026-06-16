@@ -1,0 +1,4 @@
+[[typescript.exempt]]
+path = "index.ts"
+rules = ["colocated-test"]
+reason = "pure re-export barrel; no logic of its own to unit-test"

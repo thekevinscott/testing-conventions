@@ -15,16 +15,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `{Python,TypeScript,Rust}Config`, `{Python,TypeScript,Rust}Coverage`, plus
   `Rule` and `Exemption`; `resolve_exempt()` turns the list into the exempt paths
   for a rule, erroring on any stale (missing) path. (#12, #32)
-- `location` module — `missing_unit_tests(root, language, exempt)` walks a
+- `colocated_test` module — `missing_unit_tests(root, language, exempt)` walks a
   directory tree and returns every source file with no colocated unit test
-  (sorted), enforcing the README's "Location & Naming" rule per `Language`:
+  (sorted), enforcing the README's "Colocated Test" rule per `Language`:
   - **Python** (#15) — `foo.py` → `foo_test.py`; `*_test.py` files are tests.
   - **TypeScript** (#18) — `foo-bar.ts` → `foo-bar.test.ts` across `.ts`/`.tsx`/`.mts`/`.cts`; `*.test.{ts,tsx,mts,cts}` are tests, `*.d.ts`/`*.d.mts`/`*.d.cts` are ignored.
   - Empty/comment-only files carry no logic and are never subjects; files listed in `exempt` are deliberate, reason-required omissions. (#32)
-- `unit location --language <python|typescript> [--config <CONFIG>] <PATH>` CLI —
+- `unit colocated-test --language <python|typescript> [--config <CONFIG>] <PATH>` CLI —
   runs the check and exits non-zero, printing each orphan. `--config` (optional,
   default `testing-conventions.toml`) supplies the `exempt` list; an absent file
-  means no exemptions. (#15, #18, #22, #32)
+  means no exemptions. (#15, #18, #22, #32, #55)
 - `coverage` module + `unit coverage` CLI — enforce the Python coverage floor.
   `unit coverage --language python --config <CONFIG> <PATH>` runs the unit suite
   under `coverage.py` (branch on, `*_test.py` plus every `coverage`-exempt path
@@ -48,7 +48,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   automatic name- or shape-based exemption**: `__init__.py`, re-export barrels,
   and launcher shims are all subjects. Only empty/comment-only files (no logic)
   are non-subjects automatically; everything else needs a colocated test or a
-  `[[<language>.exempt]]` entry naming the `rules` it lifts (`location` /
+  `[[<language>.exempt]]` entry naming the `rules` it lifts (`colocated-test` /
   `coverage`) and a required `reason`. A stale exempt path (file gone) is a hard
   error. Library API: `missing_unit_tests` gains an `exempt` argument and
   `coverage::measure` gains an `omit` argument; `[<language>].coverage` is now
@@ -60,6 +60,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the language is a usage error instead of a silently-empty `python` scan. Migrate
   `unit-location --lang typescript src/` → `unit location --language typescript src/`;
   see [MIGRATIONS](./MIGRATIONS.md#unreleased). (#22)
+- **BREAKING** — the unit-test rule was renamed `location` → `colocated-test` so its
+  name states what it checks: that every source file has a colocated, matching-named
+  unit test. The CLI subcommand `unit location` is now `unit colocated-test`; the
+  library module `testing_conventions::location` is now
+  `testing_conventions::colocated_test` (its `missing_unit_tests` / `Language` items
+  are otherwise unchanged); and the config `exempt` rules value `"location"` is now
+  `"colocated-test"` (`rules = ["colocated-test"]`). Migrate
+  `unit location --language python src/` → `unit colocated-test --language python src/`;
+  see [MIGRATIONS](./MIGRATIONS.md#unreleased). (#55)
 
 ### Deprecated
 

@@ -52,6 +52,12 @@ fn waived_exits_zero() {
     );
 }
 
+// #145: a legacy `test_*.py` is source (not scanned), so the tree is clean
+#[test]
+fn legacy_test_prefix_exits_zero() {
+    assert_eq!(isolation_exit("legacy_prefix"), 0);
+}
+
 // external & effectful-stdlib deps (#121, slice 3)
 #[test]
 fn external_red_exits_nonzero() {

@@ -71,8 +71,8 @@ neither — a unit test needn't mock it.
 
 ## Integration detection — `no-first-party-patch` (slice 1)
 
-**Scope.** The files `integration lint` already scans (`*_test.py`, legacy
-`test_*.py`, `conftest.py`), pointed at the integration suite (`tests/integration/`),
+**Scope.** The files `integration lint` already scans (`*_test.py`,
+`conftest.py`), pointed at the integration suite (`tests/integration/`),
 exactly as the TypeScript `integration lint` is pointed at its integration suite.
 
 Flag a **patch of a first-party target**. The clean bright-line signal — the
@@ -107,8 +107,8 @@ deterministic signal the convention *does* give us: a mocked collaborator is
 **patched by string** and, in the canonical form, **not imported** — the unit uses
 it internally. So the rule keys off imports:
 
-- Scan `*_test.py` / `test_*.py` only (not `conftest.py` — that holds fixtures,
-  not units).
+- Scan `*_test.py` only (not `conftest.py` — that holds fixtures, not units; and
+  not a legacy `test_*.py`, which is ordinary source — #145).
 - The **unit under test** is the import whose module's last segment equals the
   test's base name (`widget_test.py` → `widget`; `from pkg.widget import build`,
   `from .widget import build`, and `import pkg.widget` all match). Never flagged.

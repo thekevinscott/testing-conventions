@@ -324,3 +324,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `conftest.py` as a unit-test subject: it holds pytest fixtures (test support), so
   it is never reported as a missing-test orphan, and it is omitted from the
   coverage denominator alongside `*_test.py`. (#112)
+- `integration lint` and `unit isolation` (`--language python`) no longer recognize
+  a legacy `test_*.py` as a test file (#145, follow-up to #112). After #112 a unit
+  test is `*_test.py` and a `test_*.py` is ordinary source, but the two `lint.rs`
+  scans still scanned the legacy prefix — so a `test_*.py` carrying a
+  `no-monkeypatch` / `unmocked-collaborator` violation was flagged even though
+  `colocated-test` / `coverage` treat it as source. The integration lints now scan
+  `*_test.py` + `conftest.py`, and the unit-isolation scan scans `*_test.py`, only.
+  No API or rule-id change. (#145)

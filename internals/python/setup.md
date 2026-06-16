@@ -188,7 +188,7 @@ quote-style = "double"
 
 [tool.pytest.ini_options]
 testpaths = ["myproject", "tests"]
-python_files = ["*_test.py", "test_*.py"]
+python_files = ["*_test.py"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 

@@ -303,6 +303,16 @@ evaluate_ratchet, measure_report, Baseline, PythonBaseline, BASELINE_PATH}`; the
 existing `measure` / `evaluate` are unchanged. The TypeScript / Rust arms and the
 explicit baseline-record step are later slices.
 
+Also corrects the Python test-file recognition in the two `lint.rs` scans (#145,
+follow-up to #112): `integration lint --language python` and `unit isolation
+--language python` no longer treat a legacy `test_*.py` as a test file. After #112
+a unit test is `*_test.py` and a `test_*.py` is ordinary source, but the scans
+still recognized the legacy prefix — so a `test_*.py` carrying a `no-monkeypatch` /
+`unmocked-collaborator` violation was flagged while `colocated-test` / `coverage`
+treated it as source. The integration lints now scan `*_test.py` + `conftest.py`,
+and the unit-isolation scan scans `*_test.py`, only. Behavior-only — no API or
+rule-id change.
+
 Also adds **patch (changed-line) coverage — Python** (#132, parent #46): `unit
 patch-coverage --language python [--base <REF>] [--config <CONFIG>] <PATH>` diffs
 `<base>...HEAD` and requires every line the change adds or modifies to be covered
@@ -404,6 +414,11 @@ Exemptions (#32) change runtime behavior:
   below the recorded `python` baseline exits non-zero — printing `coverage NN.NN%
   regressed below the recorded baseline MM.MM%` — even when the floor is still met.
   Without the file, behavior is unchanged.
+- `integration lint --language python` and `unit isolation --language python` no
+  longer scan a legacy `test_*.py` (#145): it is ordinary source after #112, so a
+  `test_*.py` carrying a `no-monkeypatch` / `unmocked-collaborator` violation is no
+  longer flagged. The integration lints scan `*_test.py` + `conftest.py`, and the
+  unit-isolation scan scans `*_test.py`, only. A `*_test.py` is unaffected.
 
 ### Verification
 

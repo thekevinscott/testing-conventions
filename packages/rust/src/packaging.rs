@@ -37,26 +37,30 @@ pub fn scan(root: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>> {
 /// patterns that must not ship.
 ///
 /// `path` is either a **directory** (an already-unpacked artifact) or a packed
-/// archive this rule understands — currently a Python wheel (`.whl`, a zip),
-/// which is unpacked into a scratch directory first. Either way the unpacked
-/// tree is handed to [`scan`]. Offenders come back as paths **relative to the
-/// artifact root** (e.g. `widget/core_test.py`), so they read the same whether
-/// the artifact was a directory or an archive. Errors if the artifact can't be
-/// read, or isn't a directory or a recognized archive.
+/// archive this rule understands — a Python wheel (`.whl`, a zip) or a gzipped
+/// tar (`.tgz` / `.tar.gz`, e.g. an `npm pack` tarball) — which is unpacked into a
+/// scratch directory first. Either way the unpacked tree is handed to [`scan`].
+/// Offenders come back as paths **relative to the artifact root** (e.g.
+/// `package/dist/widget.test.js`), so they read the same whether the artifact was
+/// a directory or an archive. Errors if the artifact can't be read, or isn't a
+/// directory or a recognized archive.
 pub fn inspect(path: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>> {
     let path = path.as_ref();
     if path.is_dir() {
         return Ok(relative_to(path, scan(path, globs)?));
     }
-    if is_zip_artifact(path) {
-        let unpacked = unzip_to_temp(path)?;
-        return Ok(relative_to(unpacked.path(), scan(unpacked.path(), globs)?));
-    }
-    bail!(
-        "`{}` is not a directory or a recognized built artifact \
-         (expected a directory or a `.whl`)",
-        path.display()
-    )
+    let unpacked = if is_zip_artifact(path) {
+        unzip_to_temp(path)?
+    } else if is_tar_gz_artifact(path) {
+        untar_gz_to_temp(path)?
+    } else {
+        bail!(
+            "`{}` is not a directory or a recognized built artifact \
+             (expected a directory, a `.whl`, or a `.tgz`)",
+            path.display()
+        )
+    };
+    Ok(relative_to(unpacked.path(), scan(unpacked.path(), globs)?))
 }
 
 /// `true` for an artifact this rule unpacks as a zip: a Python wheel (`.whl`) or
@@ -85,6 +89,27 @@ fn unzip_to_temp(archive: &Path) -> Result<TempDir> {
         .with_context(|| format!("reading `{}` as a zip archive", archive.display()))?;
     let dir = TempDir::new()?;
     zip.extract(dir.path())
+        .with_context(|| format!("unpacking `{}`", archive.display()))?;
+    Ok(dir)
+}
+
+/// `true` for an artifact this rule unpacks as a gzipped tar: an `npm pack`
+/// tarball (`.tgz`) or a `.tar.gz` (Rust's `cargo package` `.crate` is one, #74).
+fn is_tar_gz_artifact(path: &Path) -> bool {
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    name.ends_with(".tgz") || name.ends_with(".tar.gz")
+}
+
+/// Unpack a gzipped-tar artifact into a fresh scratch directory (removed on drop).
+fn untar_gz_to_temp(archive: &Path) -> Result<TempDir> {
+    let file = std::fs::File::open(archive)
+        .with_context(|| format!("opening artifact `{}`", archive.display()))?;
+    let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(file));
+    let dir = TempDir::new()?;
+    tar.unpack(dir.path())
         .with_context(|| format!("unpacking `{}`", archive.display()))?;
     Ok(dir)
 }

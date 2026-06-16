@@ -262,17 +262,17 @@ testing-conventions packaging --language <LANG> <PATH>
 
 | Argument / flag     | Description                                                                       |
 | ------------------- | --------------------------------------------------------------------------------- |
-| `<PATH>`            | The built artifact to inspect: a Python wheel (`.whl`), or a directory (an already-unpacked artifact, e.g. a `dist/` tree). |
+| `<PATH>`            | The built artifact to inspect: a Python wheel (`.whl`), a TypeScript `npm pack` tarball (`.tgz`), or a directory (an already-unpacked artifact, e.g. a `dist/` tree). |
 | `--language <LANG>` | **Required.** `python` or `typescript`.                                           |
 
 Scans the artifact recursively for the language's test-file glob — `python` → `*_test.py`,
 `typescript` → `*.test.*` — and exits `0` when none are present, `1` (printing each offending
-path, relative to the artifact root) when one is. A Python `.whl` is unpacked first, then
-scanned; a directory is scanned in place.
+path, relative to the artifact root) when one is. A `.whl` (zip) or a `.tgz` / `.tar.gz`
+(gzipped tar) is unpacked first, then scanned; a directory is scanned in place.
 
-**Status:** Python inspects a built wheel (#72). Still landing per language: the Python sdist
-(`.tar.gz`), the TypeScript `dist` archive (#73), and the Rust `cargo package` tarball (#74,
-which also adds `--language rust`). Until a language's archive is wired, point `<PATH>` at an
+**Status:** Python inspects a built wheel (#72) and TypeScript a built `npm pack` tarball (#73).
+Still landing: the Python sdist (`.tar.gz`) and the Rust `cargo package` tarball (#74, which
+also adds `--language rust`). Until a language's archive is wired, point `<PATH>` at an
 already-unpacked directory.
 
 ### workflow

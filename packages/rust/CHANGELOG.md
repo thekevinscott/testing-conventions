@@ -88,18 +88,45 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `isolation` module + `unit isolation` CLI — the first deterministic lint on
   *Rust* test code. `unit isolation --language rust <PATH>` parses each `*.rs`
   file under the crate root with `syn` and walks its inline `#[cfg(test)]` modules,
-  exiting non-zero on any violation. Detector **`no-out-of-module-call`** (#44): a
-  call out of a unit test's own module — `crate::…` (another first-party module),
+  exiting non-zero on any violation. Detectors (#44): **`no-out-of-module-call`** —
+  a call out of a unit test's own module — `crate::…` (another first-party module),
   `super::super::…` (an ancestor), an external crate (named in `Cargo.toml`, with
   `[dev-dependencies]` test tooling excluded), or effectful `std`
-  (`fs`/`net`/`process`/`env`/`thread`/`os`, the clock, or real-handle I/O). A
-  single `super::`, `self`/`Self`, a bare unqualified call, and pure `std`
-  (including `std::io::Cursor` and the I/O traits) stay in-module. Library API:
+  (`fs`/`net`/`process`/`env`/`thread`/`os`, the clock, or real-handle I/O); and
+  **`no-out-of-module-import`** — a `use` that pulls a foreign surface into a test
+  module: a glob of anything but `super::*`, or a named import rooted at `crate::`,
+  an external crate, or effectful `std` (closing the gap where a collaborator is
+  imported then called unqualified). A single `super::`, `self`/`Self`, a bare
+  unqualified call, and pure `std` (including `std::io::Cursor` and the I/O traits)
+  stay in-module. Library API:
   `testing_conventions::isolation::{find_violations, Violation, Language}`. (#44)
+- `unit isolation --language typescript <PATH>` — the TypeScript arm of `unit
+  isolation` (#43, #76), the unit-direction counterpart to slice #75's
+  `no-first-party-mock`. A unit test must isolate the unit under test, so every
+  runtime import that isn't `vi.mock()` / `vi.doMock()`-ed is flagged
+  (**`unmocked-collaborator`**), except three: the **unit under test**
+  (`widget.test.ts` → `./widget`), **type-only** imports (`import type …`), and the
+  **test runner** (`vitest` / `@vitest/*`). Adds `TypeScript` to `isolation::Language`
+  and reuses slice #75's `oxc` parser. Library API:
+  `testing_conventions::ts::find_unit_violations`. (#43, #76)
+- `unit isolation --language typescript` also enforces **typed** mocks (#43, #77):
+  a `vi.mock(spec, factory)` whose factory has no `vi.importActual<…>()` type anchor
+  is flagged **`untyped-mock`**, since an untyped double can drift from the source.
+  A bare `vi.mock(spec)` (vitest auto-mock, typed from the real module) and a typed
+  factory (`vi.importActual<typeof import(spec)>()`) both pass. With this, #43's
+  TypeScript isolation is complete (#75 / #76 / #77). (#43, #77)
 - `violation` module — the `Violation` type is hoisted here and shared by the
   Python `lint` and Rust `isolation` detectors so the CLI prints every rule the
   same way. `testing_conventions::lint::Violation` remains as a re-export, so the
   prior path still resolves (no break). (#44)
+- `packaging` now inspects a **Python wheel** (#72) — point `packaging --language
+  python <PATH>` at a built `.whl` and it unpacks the archive and scans for
+  `*_test.py`, so a colocated test that leaked into the wheel fails the check.
+  `<PATH>` still accepts an already-unpacked directory too. New library API
+  `packaging::inspect(path, globs)` unpacks an archive (a `.whl`/`.zip`) or reads
+  a directory, then reuses `scan`, returning offenders relative to the artifact
+  root. New dependency: `zip` (read-only). (sdist `.tar.gz`, and the TypeScript /
+  Rust archives, are still to come.) (#41, #72)
 - `workflow` module + `workflow` CLI command — guard the reusable workflow against
   CLI subcommand drift (#92). `workflow <PATH>` scans a workflow file (or a directory
   of them) for every `testing-conventions …` invocation and checks each one's

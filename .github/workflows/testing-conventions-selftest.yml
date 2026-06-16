@@ -39,6 +39,32 @@ jobs:
       path: .github/selftest/clean
       config: .github/selftest/clean/testing-conventions.toml
 
+  absent-language-skipped:
+    name: A requested language with no sources is skipped, not failed
+    # Point the reusable workflow at the all-Python `clean/` suite but request the
+    # zero-config default ["python", "typescript"]. There are no TypeScript sources
+    # here, so the TypeScript jobs must be skipped (#94) and the call passes on the
+    # Python jobs alone. Before #94 the TypeScript coverage job fired and errored on
+    # the empty input (a `pnpm install` with no project, an empty vitest
+    # denominator), failing the whole call.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["python", "typescript"]'
+      path: .github/selftest/clean
+      config: .github/selftest/clean/testing-conventions.toml
+
+  no-source-library-passes:
+    name: A library with no sources for the requested languages passes (jobs skipped)
+    # The dogfooding case (#94): our own packages/python ships a wheel but carries
+    # zero .py, so its coverage job has nothing to measure and errors today. A
+    # library with no sources for any requested language must pass with every
+    # language's jobs skipped — never failed. Mirrored here with a source-free
+    # fixture and the zero-config default.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["python", "typescript"]'
+      path: .github/selftest/no-sources
+
   below-floor:
     name: Below-floor suite trips the coverage gate
     runs-on: ubuntu-latest

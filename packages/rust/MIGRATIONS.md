@@ -103,12 +103,15 @@ must not ship. `packaging::scan(root, globs)` is the deterministic core; the
 per-language *build* step that produces the artifact lands in #72 / #73 / #74
 (the last also adding `--language rust`). Purely additive — a new command and
 module; no existing signature or behavior changes.
-Most recently, adds the Rust `unit isolation` rule (#44) and its `isolation`
+
+Also adds the Rust `unit isolation` rule (#44) and its `isolation`
 module: a deterministic, `syn`-based lint on Rust test code. `unit isolation
 --language rust <PATH>` parses each `*.rs` file under the crate root and flags a
 call out of an inline `#[cfg(test)]` module's own module — `no-out-of-module-call`
 (`crate::…`, `super::super::…`, an external crate from `Cargo.toml`, or effectful
-`std`). Purely additive: a new `unit` subcommand and module
+`std`) — and a foreign `use` import — `no-out-of-module-import` (a glob of anything
+but `super::*`, or a named import rooted at `crate::`, an external crate, or
+effectful `std`). Purely additive: a new `unit` subcommand and module
 (`testing_conventions::isolation::{find_violations, Violation, Language}`). The
 shared `Violation` type moves to a new `violation` module and is re-exported from
 `lint`, so `testing_conventions::lint::Violation` still resolves with **no code
@@ -124,7 +127,29 @@ new `testing_conventions::ts` module (`find_integration_violations`, plus the sh
 specifier classifier `classify` → `Origin`) and a new `--language typescript` arm on
 `integration lint`; nothing existing changes.
 
-Also adds the `workflow` guard (#92): a new `workflow` command and module that keeps the
+Also extends `unit isolation` to TypeScript (#43, #76), the unit-direction
+counterpart: `unit isolation --language typescript <PATH>` walks each
+`*.test.{ts,tsx,mts,cts}` unit test and flags any runtime import that isn't
+`vi.mock()`-ed (`unmocked-collaborator`), except the unit under test, type-only
+imports, and the test runner (`vitest`). Additive — adds a `TypeScript` variant to
+`isolation::Language` and the `testing_conventions::ts::find_unit_violations`
+function; the Rust `unit isolation` behavior from #44 is unchanged.
+
+Extends `packaging` to inspect a **Python wheel** (#72): `packaging --language
+python <PATH>` now accepts a built `.whl` (a zip), unpacks it to a scratch
+directory, and reuses `scan` to flag any `*_test.py` that shipped — `<PATH>` may
+still be an already-unpacked directory. New library API `packaging::inspect(path,
+globs)` (archive-or-directory → offenders relative to the artifact root); the
+`packaging` command now calls it instead of `scan`. Additive — `scan` is
+unchanged and the directory behavior is the same; new dependency `zip`.
+
+Then `unit isolation --language typescript` also enforces **typed** mocks
+(#43, #77): a `vi.mock(spec, factory)` whose factory carries no `vi.importActual<…>()`
+type anchor is flagged `untyped-mock` (a bare `vi.mock(spec)` auto-mock and a typed
+factory both pass). Behavior-only — `find_unit_violations` now reports the extra
+rule; no signature changes. This completes #43's TypeScript isolation (#75/#76/#77).
+
+Finally, adds the `workflow` guard (#92): a new `workflow` command and module that keeps the
 reusable workflow's `@v0` consumption path from stranding. `workflow <PATH>` scans a
 workflow file (or directory) for every `testing-conventions …` invocation and flags any
 whose subcommand chain the binary no longer exposes (`no-unknown-subcommand`) — the failure
@@ -258,6 +283,17 @@ Expected: the TypeScript lint's integration + e2e tests pass — the clean fixtu
 `1`.
 
 ```
+cd packages/rust && cargo test --test unit_isolation --test unit_isolation_e2e
+```
+
+Expected: the TypeScript unit-isolation tests pass — both rules. For
+`unmocked-collaborator`, the clean fixture (every collaborator `vi.mock()`-ed) exits
+`0` and the red fixture (an un-mocked `./formatter` and `lodash`) is flagged. For
+`untyped-mock` (#77), the `untyped_mock` red fixture (a `vi.mock` factory with no
+`vi.importActual<…>` anchor) is flagged while its clean fixture (a typed factory and a
+bare auto-mock) exits `0`.
+
+```
 cd packages/rust && cargo test --test coverage_e2e --test coverage_ts_e2e
 ```
 
@@ -276,6 +312,8 @@ artifact containing a test file (`python_red`'s `widget_test.py`,
 `typescript_red`'s `button.test.ts`) is flagged and the built binary exits `1`,
 while a clean artifact exits `0`. No toolchain required (the scanner reads the
 tree directly).
+
+```
 cd packages/rust && cargo test --test isolation --test isolation_e2e
 ```
 
@@ -283,6 +321,15 @@ Expected: the isolation tests pass — the red fixture's four out-of-module form
 (first-party cross-module, effectful `std`, external crate, ancestor reach) are
 each flagged and the crate exits `1`, while the clean fixture (`super::` + an
 injected trait double + `Cursor`) reports nothing and exits `0`.
+
+```
+cd packages/rust && cargo test --test packaging_wheel --test packaging_wheel_e2e
+```
+
+Expected: the Python wheel suites pass — `red.whl` (which ships
+`widget/core_test.py`) is flagged and the binary exits `1`, while `clean.whl`
+exits `0`. The wheels are generated by the committed `make_wheels.py`. No Python
+toolchain required (the checker unzips the wheel directly).
 
 ```
 cd packages/rust && cargo test --test workflow --test workflow_e2e

@@ -82,9 +82,9 @@ floor is met, `1` (naming each metric below its floor on stderr) when any isn't.
 
 ### `unit isolation`
 
-Check that inline unit tests call nothing out of their own module (Rust). A unit test belongs to
-the module it sits in; reaching a real collaborator makes it an integration test wearing a unit's
-name.
+Check that unit tests isolate the unit under test — everything else is mocked (TypeScript) or
+never called out to (Rust). A unit test that touches a real collaborator is an integration test
+wearing a unit's name.
 
 ```
 testing-conventions unit isolation --language <LANG> <PATH>
@@ -92,14 +92,14 @@ testing-conventions unit isolation --language <LANG> <PATH>
 
 | Argument / flag     | Description                                                                            |
 | ------------------- | ------------------------------------------------------------------------------------- |
-| `<PATH>`            | Crate root to scan recursively (its `Cargo.toml` names the external crates).          |
-| `--language <LANG>` | **Required.** `rust` only for now (Python / TypeScript isolation are separate items). |
+| `<PATH>`            | Directory to scan recursively (for Rust, the crate root, whose `Cargo.toml` names the external crates). |
+| `--language <LANG>` | **Required.** `rust` or `typescript` (Python isolation is a separate item).            |
 
-Parses each `*.rs` file under `<PATH>` with `syn` and walks its inline `#[cfg(test)]` modules,
-reporting each violation to stderr as `path:line: <rule> — <message>` and exiting `1` if any are
+Reports each violation to stderr as `path:line: <rule> — <message>` and exits `1` if any are
 found, `0` otherwise.
 
-**Detector:**
+**Rust** — parses each `*.rs` file under the crate root with `syn` and walks its inline
+`#[cfg(test)]` modules:
 
 - **`no-out-of-module-call`** — a call out of a unit test's own module: `crate::…` (another
   first-party module), `super::super::…` (an ancestor), an external crate (named in `Cargo.toml`;
@@ -108,10 +108,28 @@ found, `0` otherwise.
   `super::` (the unit under test), `self` / `Self`, a bare unqualified call, and pure `std` —
   including `std::io::Cursor` and the I/O traits — stay in-module. Inject a trait double
   (hand-rolled or `mockall`) for a collaborator instead.
+- **`no-out-of-module-import`** — a `use` inside a test module that brings in a foreign surface:
+  a glob of anything but `super::*`, or a named import rooted at `crate::`, an external crate, or
+  effectful `std`. `use super::*` / `use super::Thing` (the unit under test), `self`, and pure
+  `std` (`std::collections::HashMap`, `std::io::Cursor`, …) are in-module. This catches a
+  collaborator that's imported and then called unqualified, which the call check can't see.
 
 Full name-resolution precision — a collaborator reached through an unqualified call, a
 `use … as …` rename, or a macro — is a future `dylint` pass; the `syn` heuristic is the
 deterministic bright-line.
+
+**TypeScript** — parses each `*.test.{ts,tsx,mts,cts}` file with the `oxc` parser:
+
+- **`unmocked-collaborator`** — any runtime import that isn't `vi.mock()` / `vi.doMock()`-ed.
+  Three imports are never collaborators and so are never flagged: the **unit under test** (the
+  colocated source, `widget.test.ts` → `./widget`, imported and run for real), **type-only**
+  imports (`import type …` — erased at compile time), and the **test runner** (`vitest` /
+  `@vitest/*`). This is the unit-suite mirror of [`integration lint`](#integration-lint)'s
+  `no-first-party-mock`; see the [Isolation guide](../guide/isolation).
+- **`untyped-mock`** — a `vi.mock(spec, factory)` whose factory has no `vi.importActual<…>()`
+  type anchor, so the double can drift from the real module. Anchor it with
+  `vi.importActual<typeof import(spec)>()` (the README pattern). A bare `vi.mock(spec)`
+  (vitest auto-mock, typed from the real module) and an already-typed factory both pass.
 
 ## Exemptions
 
@@ -212,16 +230,18 @@ testing-conventions packaging --language <LANG> <PATH>
 
 | Argument / flag     | Description                                                                       |
 | ------------------- | --------------------------------------------------------------------------------- |
-| `<PATH>`            | Root of the built artifact to inspect — an already-unpacked wheel, or a `dist/`.  |
+| `<PATH>`            | The built artifact to inspect: a Python wheel (`.whl`), or a directory (an already-unpacked artifact, e.g. a `dist/` tree). |
 | `--language <LANG>` | **Required.** `python` or `typescript`.                                           |
 
-Scans `<PATH>` recursively for the language's test-file glob — `python` → `*_test.py`,
+Scans the artifact recursively for the language's test-file glob — `python` → `*_test.py`,
 `typescript` → `*.test.*` — and exits `0` when none are present, `1` (printing each offending
-path) when one is.
+path, relative to the artifact root) when one is. A Python `.whl` is unpacked first, then
+scanned; a directory is scanned in place.
 
-**Status (foundation):** the command scans an already-built artifact tree. The per-language
-*build* step that produces that tree — wheel/sdist (Python), `dist` (TypeScript), `cargo
-package` tarball (Rust, which also adds `--language rust`) — is landing per language.
+**Status:** Python inspects a built wheel (#72). Still landing per language: the Python sdist
+(`.tar.gz`), the TypeScript `dist` archive (#73), and the Rust `cargo package` tarball (#74,
+which also adds `--language rust`). Until a language's archive is wired, point `<PATH>` at an
+already-unpacked directory.
 
 ### workflow
 

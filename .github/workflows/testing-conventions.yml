@@ -13,11 +13,19 @@ name: Testing Conventions
 #
 # It runs the published `testing-conventions` binary via `npx` (a prebuilt,
 # per-platform npm package — no Rust toolchain, no compile from source), once
-# per rule and requested language as its own matrix job, failing the build on
-# any violation. Today that is the unit-test colocated-test check (every
-# language), the unit-test coverage floor (Python and TypeScript), and the
-# integration-test lint (mocking mechanism & style, Python only); as more rules
-# land they run here too.
+# per rule and language as its own matrix job, failing the build on any
+# violation. Today that is the unit-test colocated-test check (every language),
+# the unit-test coverage floor (Python and TypeScript), and the integration-test
+# lint (mocking mechanism & style, Python only); as more rules land they run here
+# too.
+#
+# A `detect` pre-step scans `path` for each requested language's sources, and the
+# rule jobs fan out over the languages that are both requested *and* present
+# (#94). A requested language the library has no sources for — e.g. the
+# zero-config default ["python", "typescript"] against a repo with no `.py` — is
+# dropped from the matrix and skipped, not failed: its coverage job would
+# otherwise error on an empty measurement (pytest collects nothing; an empty
+# vitest denominator is a failed run).
 #
 # No config file is required: every check runs with sane defaults, opting a new
 # library into the full set in one drop-in (#80). The coverage floor falls back
@@ -53,13 +61,68 @@ permissions:
   contents: read
 
 jobs:
+  detect:
+    name: Detect requested languages with sources
+    runs-on: ubuntu-latest
+    outputs:
+      # JSON array of the requested languages that actually have sources under
+      # `path` — the matrix the rule jobs below fan out over.
+      languages: ${{ steps.scan.outputs.languages }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: scan
+        name: Scan ${{ inputs.path }} for each requested language's sources
+        env:
+          LANGUAGES: ${{ inputs.languages }}
+          SCAN_PATH: ${{ inputs.path }}
+        run: |
+          set -euo pipefail
+          # The "cheap pre-step" (#94): a language's jobs should fire only when it
+          # was requested *and* `path` actually holds sources for it. colocated-test
+          # and integration-lint pass vacuously on an absent language, but `unit
+          # coverage` has nothing to measure and errors (pytest collects nothing; an
+          # empty vitest denominator is a failed run) — so a requested-but-absent
+          # language is dropped here and skipped, not failed. Detection covers the
+          # languages the workflow's checks support (python, typescript).
+          #
+          # `set -f` so the shell leaves the *.ext globs for `find` to match itself.
+          set -f
+          present=()
+          # $1 = language; $2.. = the find name-predicates for its sources. Adds the
+          # language only when it was requested and a matching source file exists.
+          scan () {
+            local lang="$1"; shift
+            case "$LANGUAGES" in
+              *"\"$lang\""*) ;;   # requested
+              *) return ;;        # not requested — never in the matrix
+            esac
+            if [ -n "$(find "$SCAN_PATH" -type f \( "$@" \) -print -quit 2>/dev/null)" ]; then
+              present+=("$lang")
+            fi
+          }
+          scan python -name '*.py'
+          scan typescript -name '*.ts' -o -name '*.tsx' -o -name '*.mts' -o -name '*.cts'
+          # Emit a compact JSON array (`[]` when nothing matched) for the matrices.
+          json='['
+          for i in "${!present[@]}"; do
+            [ "$i" -gt 0 ] && json+=','
+            json+="\"${present[$i]}\""
+          done
+          json+=']'
+          echo "languages=$json" >> "$GITHUB_OUTPUT"
+          echo "requested $LANGUAGES → present under '$SCAN_PATH': $json"
+
   colocated-test:
     name: Colocated test (${{ matrix.language }})
+    needs: detect
+    # Only the requested languages with sources present (#94); skip the job
+    # entirely when that leaves nothing.
+    if: needs.detect.outputs.languages != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        language: ${{ fromJSON(inputs.languages) }}
+        language: ${{ fromJSON(needs.detect.outputs.languages) }}
     steps:
       - uses: actions/checkout@v6
       - name: Check colocated test
@@ -73,48 +136,46 @@ jobs:
 
   unit-coverage:
     name: Unit-test coverage (${{ matrix.language }})
+    needs: detect
     # `unit coverage` enforces the Python (#26) and TypeScript (#31) floors today
-    # (other languages — e.g. rust — are a separate item). The matrix lists the
-    # supported languages and every step is gated on the language being requested,
-    # so a language the caller didn't ask for is skipped, not failed (matching the
-    # jobs around it). #56 (config-driven `check`) will eventually drive this from
-    # the config file.
-    if: contains(fromJSON(inputs.languages), 'python') || contains(fromJSON(inputs.languages), 'typescript')
+    # (other languages — e.g. rust — are a separate item). The matrix is the
+    # requested languages with sources present (#94), so a requested-but-absent
+    # language is skipped rather than erroring on an empty measurement. #56
+    # (config-driven `check`) will eventually drive this from the config file.
+    if: needs.detect.outputs.languages != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        language: [python, typescript]
+        language: ${{ fromJSON(needs.detect.outputs.languages) }}
     steps:
-      - if: contains(fromJSON(inputs.languages), matrix.language)
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
       # Unlike the static colocated-test / lint checks, `unit coverage` shells out
       # to the language's coverage tool — so its toolchain, and the project's own
       # test deps, must be present. Set up per language.
-      - if: contains(fromJSON(inputs.languages), matrix.language) && matrix.language == 'python'
+      - if: matrix.language == 'python'
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - if: contains(fromJSON(inputs.languages), matrix.language) && matrix.language == 'python'
+      - if: matrix.language == 'python'
         name: Install coverage toolchain (coverage.py + pytest)
         run: python -m pip install --quiet coverage pytest
       # TypeScript shells out to vitest, so install the project's deps (including
       # vitest + @vitest/coverage-v8) with pnpm, the TS convention. A project on a
       # different package manager should drive the CLI directly until #56 makes
       # this config-driven.
-      - if: contains(fromJSON(inputs.languages), matrix.language) && matrix.language == 'typescript'
+      - if: matrix.language == 'typescript'
         uses: pnpm/action-setup@v5
         with:
           version: 10.33.0
-      - if: contains(fromJSON(inputs.languages), matrix.language) && matrix.language == 'typescript'
+      - if: matrix.language == 'typescript'
         uses: actions/setup-node@v6
         with:
           node-version: 24
-      - if: contains(fromJSON(inputs.languages), matrix.language) && matrix.language == 'typescript'
+      - if: matrix.language == 'typescript'
         name: Install project dependencies (pnpm)
         run: pnpm install --frozen-lockfile
-      - if: contains(fromJSON(inputs.languages), matrix.language)
-        name: Check unit-test coverage
+      - name: Check unit-test coverage
         env:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
@@ -124,12 +185,13 @@ jobs:
 
   integration-lint:
     name: Integration lint (${{ matrix.language }})
+    needs: detect
     # `integration lint` (mocking mechanism & style) is Python-only today, so the
-    # matrix lists just `python`; the job is skipped — not failed — for callers
-    # that didn't request python. When the lint gains more languages, add them to
-    # the matrix below. #56 (config-driven `check`) will eventually drive which
-    # rules/languages run here without a workflow edit.
-    if: contains(fromJSON(inputs.languages), 'python')
+    # matrix lists just `python`; it runs only when python is both requested and
+    # present under `path` (#94), and is skipped — not failed — otherwise. When the
+    # lint gains more languages, add them to the matrix below. #56 (config-driven
+    # `check`) will eventually drive which rules/languages run here.
+    if: contains(fromJSON(needs.detect.outputs.languages), 'python')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

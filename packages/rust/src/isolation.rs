@@ -10,13 +10,19 @@
 //! `dylint` pass. The design and its precision limits live in
 //! `internals/rust/isolation.md`.
 //!
-//! Implemented detector:
+//! Implemented detectors:
 //! - **`no-out-of-module-call`** (D1): a call expression `A::…::f(…)` inside a
 //!   `#[cfg(test)]` module whose leading segment `A` reaches out of the module —
 //!   `crate::` (first-party, another module), `super::super::…` (an ancestor),
 //!   an external crate from `Cargo.toml`, or effectful `std`. A single `super::`,
 //!   `self`/`Self`, a bare/unqualified call, and pure `std` (incl. `io::Cursor`)
 //!   stay in-module and are not flagged.
+//! - **`no-out-of-module-import`** (D2): a `use` inside a `#[cfg(test)]` module
+//!   that brings in a foreign surface — a glob of anything but `super::*`, or a
+//!   named import rooted at `crate::`, an external crate, or effectful `std`.
+//!   `use super::*` / `use super::Thing` (the unit under test), `self`, and pure
+//!   `std` (e.g. `collections`, `io::Cursor`) are in-module. Catches a collaborator
+//!   imported then called unqualified, which D1's call check can't see.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -27,16 +33,23 @@ use syn::visit::{self, Visit};
 
 pub use crate::violation::Violation;
 
-/// Rule id reported for an out-of-module call.
-const RULE: &str = "no-out-of-module-call";
+/// Rule id reported for an out-of-module call (D1).
+const RULE_CALL: &str = "no-out-of-module-call";
+/// Rule id reported for an out-of-module `use` import (D2).
+const RULE_IMPORT: &str = "no-out-of-module-import";
 
-/// A language whose unit-isolation convention can be checked. Rust only for now
-/// (Python #42 / TypeScript #43 are separate detectors).
+/// A language whose unit-isolation convention can be checked (Python #42 is a
+/// separate detector). Each detector lives in its own module; this enum is the
+/// shared `unit isolation` language selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Language {
-    /// Inline `#[cfg(test)]` modules in `*.rs` files.
+    /// Inline `#[cfg(test)]` modules in `*.rs` files (`no-out-of-module-call`).
     #[value(name = "rust")]
     Rust,
+    /// `*.test.{ts,tsx,mts,cts}` unit tests (`unmocked-collaborator`, #43 / #76);
+    /// the detector lives in [`crate::ts`].
+    #[value(name = "typescript")]
+    TypeScript,
 }
 
 /// Scan the Rust source files under `root` and return every isolation violation,
@@ -102,7 +115,7 @@ impl<'ast> Visit<'ast> for IsolationVisitor<'_> {
                     self.violations.push(Violation {
                         file: self.file.to_path_buf(),
                         line: node.span().start().line,
-                        rule: RULE,
+                        rule: RULE_CALL,
                         message: format!(
                             "unit test calls `{}` out of its own module ({kind}); \
                              inject a trait double — only `super::` is in-module",
@@ -113,6 +126,28 @@ impl<'ast> Visit<'ast> for IsolationVisitor<'_> {
             }
         }
         visit::visit_expr_call(self, node);
+    }
+
+    fn visit_item_use(&mut self, node: &'ast syn::ItemUse) {
+        if self.test_depth > 0 {
+            let mut imports = Vec::new();
+            flatten_use(&node.tree, &mut Vec::new(), &mut imports);
+            for (segs, is_glob) in &imports {
+                if let Some(kind) = classify_use(segs, *is_glob, self.deps) {
+                    self.violations.push(Violation {
+                        file: self.file.to_path_buf(),
+                        line: node.span().start().line,
+                        rule: RULE_IMPORT,
+                        message: format!(
+                            "unit test imports `{}` out of its own module ({kind}); \
+                             only `super::` (the unit) and pure `std` belong in a unit test",
+                            render_use(segs, *is_glob),
+                        ),
+                    });
+                }
+            }
+        }
+        visit::visit_item_use(self, node);
     }
 }
 
@@ -155,6 +190,74 @@ fn is_effectful_std(segs: &[String]) -> bool {
         }
         _ => false,
     }
+}
+
+/// Flatten a `use` tree into `(path, is_glob)` leaves: `use a::{b, c::*}` yields
+/// `([a, b], false)` and `([a, c], true)`. A rename (`use a::b as c`) is judged by
+/// its source path `[a, b]`.
+fn flatten_use(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<(Vec<String>, bool)>) {
+    match tree {
+        syn::UseTree::Path(path) => {
+            prefix.push(path.ident.to_string());
+            flatten_use(&path.tree, prefix, out);
+            prefix.pop();
+        }
+        syn::UseTree::Name(name) => {
+            let mut full = prefix.clone();
+            full.push(name.ident.to_string());
+            out.push((full, false));
+        }
+        syn::UseTree::Rename(rename) => {
+            let mut full = prefix.clone();
+            full.push(rename.ident.to_string());
+            out.push((full, false));
+        }
+        syn::UseTree::Glob(_) => out.push((prefix.clone(), true)),
+        syn::UseTree::Group(group) => {
+            for item in &group.items {
+                flatten_use(item, prefix, out);
+            }
+        }
+    }
+}
+
+/// Why a `use` import reaches out of the test's own module, or `None` when it
+/// stays in-module. The one legal glob is `super::*`; any other glob is foreign. A
+/// named import is judged by its root like a call — `crate::`, an external crate,
+/// or effectful `std` are out; `super`/`self`, pure `std`, and a local name are in.
+fn classify_use(segs: &[String], is_glob: bool, deps: &BTreeSet<String>) -> Option<&'static str> {
+    match segs.first().map(String::as_str)? {
+        // `super::*` / `super::Thing` are the unit under test; `super::super::…`
+        // reaches past it.
+        "super" => (segs.get(1).map(String::as_str) == Some("super")).then_some("ancestor module"),
+        "self" | "Self" => None,
+        "crate" => Some("first-party module"),
+        "std" if is_effectful_std(segs) => Some("effectful std"),
+        // Pure `std` / `core` / `alloc`: a named import is in-module, but a glob of
+        // anything but `super` is foreign (the issue's bright line).
+        "std" | "core" | "alloc" => is_glob.then_some("glob import"),
+        other => {
+            if deps.contains(other) {
+                Some("external crate")
+            } else {
+                // A local module/type: a named import is in-module; a non-`super`
+                // glob is still foreign.
+                is_glob.then_some("glob import")
+            }
+        }
+    }
+}
+
+/// Render a flattened import for the message: `a::b`, or `a::b::*` for a glob.
+fn render_use(segs: &[String], is_glob: bool) -> String {
+    let mut out = segs.join("::");
+    if is_glob {
+        if !out.is_empty() {
+            out.push_str("::");
+        }
+        out.push('*');
+    }
+    out
 }
 
 /// Render a path back to `a::b::c` for the message (idents only; generic args
@@ -272,7 +375,7 @@ mod tests {
 ";
         let violations = violations_in(src, &["rand"]);
         assert_eq!(violations.len(), 4, "got {violations:?}");
-        assert!(violations.iter().all(|v| v.rule == RULE));
+        assert!(violations.iter().all(|v| v.rule == RULE_CALL));
     }
 
     #[test]
@@ -372,5 +475,74 @@ mod tests {
             &module("#[cfg(feature = \"test\")] mod t {}").attrs
         ));
         assert!(!has_cfg_test(&module("mod t {}").attrs));
+    }
+
+    #[test]
+    fn flags_each_foreign_import() {
+        let src = "\
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::Thing;
+    use crate::other::*;
+    use crate::other::Named;
+    use rand::Rng;
+    use std::fs;
+    use std::collections::HashMap;
+    use std::io::Cursor;
+}
+";
+        // Flagged: the crate glob, the crate named import, the external crate, and
+        // effectful `std::fs` — not `super::*` / `super::Thing` / pure std.
+        let violations = violations_in(src, &["rand"]);
+        assert_eq!(violations.len(), 4, "got {violations:?}");
+        assert!(violations.iter().all(|v| v.rule == RULE_IMPORT));
+    }
+
+    #[test]
+    fn classify_use_roots() {
+        let deps: BTreeSet<String> = ["rand"].iter().map(|s| s.to_string()).collect();
+        let segs = |p: &str| p.split("::").map(str::to_string).collect::<Vec<_>>();
+        // in-module (None)
+        assert_eq!(classify_use(&segs("super"), true, &deps), None); // `use super::*`
+        assert_eq!(classify_use(&segs("super::Thing"), false, &deps), None);
+        assert_eq!(classify_use(&segs("self::helper"), false, &deps), None);
+        assert_eq!(
+            classify_use(&segs("std::collections::HashMap"), false, &deps),
+            None
+        );
+        assert_eq!(classify_use(&segs("std::io::Cursor"), false, &deps), None);
+        // out-of-module
+        assert_eq!(
+            classify_use(&segs("super::super"), true, &deps),
+            Some("ancestor module")
+        );
+        assert_eq!(
+            classify_use(&segs("crate::other"), true, &deps),
+            Some("first-party module")
+        );
+        assert_eq!(
+            classify_use(&segs("crate::other::Named"), false, &deps),
+            Some("first-party module")
+        );
+        assert_eq!(
+            classify_use(&segs("rand::Rng"), false, &deps),
+            Some("external crate")
+        );
+        assert_eq!(
+            classify_use(&segs("std::fs"), false, &deps),
+            Some("effectful std")
+        );
+        // a non-`super` glob is foreign even for pure std
+        assert_eq!(
+            classify_use(&segs("std::collections"), true, &deps),
+            Some("glob import")
+        );
+    }
+
+    #[test]
+    fn imports_outside_test_modules_are_ignored() {
+        let src = "use crate::other::*; fn run() {}";
+        assert!(violations_in(src, &[]).is_empty());
     }
 }

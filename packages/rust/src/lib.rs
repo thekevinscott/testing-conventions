@@ -262,11 +262,10 @@ fn run_unit_coverage(
 /// violation to stderr as `path:line: rule — message` and returning `1` when any
 /// are found, `0` otherwise.
 fn run_unit_isolation(root: &Path, language: isolation::Language) -> anyhow::Result<i32> {
-    match language {
-        // Rust-only for now; #42 / #43 add Python / TypeScript arms here.
-        isolation::Language::Rust => {}
-    }
-    let violations = isolation::find_violations(root)?;
+    let violations = match language {
+        isolation::Language::Rust => isolation::find_violations(root)?,
+        isolation::Language::TypeScript => ts::find_unit_violations(root)?,
+    };
     if violations.is_empty() {
         return Ok(0);
     }
@@ -350,19 +349,20 @@ fn is_waived(
             .is_some_and(|rel| waived.contains(&rel))
 }
 
-/// Run the packaging check: scan the built artifact at `root` for test files
-/// that must not ship (README "Packaging"), per `language`'s test-file globs.
+/// Run the packaging check: inspect the built artifact at `artifact` for test
+/// files that must not ship (README "Packaging"), per `language`'s test-file
+/// globs.
 ///
-/// `root` is the already-unpacked artifact (e.g. an unpacked wheel, or a `dist/`
-/// tree); the per-language slices (#72/#73/#74) prepend the build step that
-/// produces it. Returns `0` when no test file is present, `1` otherwise (after
-/// printing each offending path).
-fn run_packaging(root: &Path, language: colocated_test::Language) -> anyhow::Result<i32> {
+/// `artifact` is either an already-unpacked directory or a packed artifact the
+/// rule unpacks itself — a Python wheel (`.whl`) today; the TypeScript (#73) and
+/// Rust (#74) archives follow. Returns `0` when no test file is present, `1`
+/// otherwise (after printing each offending path, relative to the artifact root).
+fn run_packaging(artifact: &Path, language: colocated_test::Language) -> anyhow::Result<i32> {
     let globs = match language {
         colocated_test::Language::Python => vec!["*_test.py".to_string()],
         colocated_test::Language::TypeScript => vec!["*.test.*".to_string()],
     };
-    let offenders = packaging::scan(root, &globs)?;
+    let offenders = packaging::inspect(artifact, &globs)?;
     if offenders.is_empty() {
         return Ok(0);
     }

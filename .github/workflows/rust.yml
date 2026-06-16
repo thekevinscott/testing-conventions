@@ -31,7 +31,25 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
 
   unit:
-    name: Unit tests + coverage (95%)
+    name: Unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/rust
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/rust
+      # Inline `#[cfg(test)]` unit tests only — the library target. The integration
+      # and e2e suites under `tests/` run in the job below, so a red here points at a
+      # unit test, not at an integration/e2e test. No language toolchain needed: the
+      # inline tests parse in-process and never shell out to coverage.py / vitest.
+      - run: cargo test --lib
+
+  integration:
+    name: Integration + e2e tests + coverage (95%)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,6 +76,9 @@ jobs:
         working-directory: packages/rust/tests/fixtures/unit_coverage/typescript
         run: npm ci
       - uses: taiki-e/install-action@cargo-llvm-cov
+      # `cargo llvm-cov` runs the integration + e2e suites under `tests/` (and the
+      # library tests) under instrumentation, enforcing the 95% line floor over the
+      # whole suite — unit tests alone don't exercise the CLI dispatch in lib.rs.
       - run: cargo llvm-cov --ignore-filename-regex 'main\.rs' --fail-under-lines 95
 
   build:

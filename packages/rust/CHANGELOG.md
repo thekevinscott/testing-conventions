@@ -153,6 +153,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   published package fails the check. `inspect` now also accepts `.tgz` / `.tar.gz`
   (the `.tar.gz` path is reused by the Rust `.crate` in #74 and the Python sdist).
   New dependencies: `flate2` + `tar` (read-only). (#41, #73)
+- `packaging --language python` also inspects a built **sdist** (`name-version.tar.gz`),
+  not just a wheel — the `.tar.gz` support added in #73 already applies, and dedicated
+  sdist fixtures + integration/e2e tests now lock the case in. Test coverage only; no
+  behavior change. (#41, #106)
 - `workflow` module + `workflow` CLI command — guard the reusable workflow against
   CLI subcommand drift (#92). `workflow <PATH>` scans a workflow file (or a directory
   of them) for every `testing-conventions …` invocation and checks each one's

@@ -114,9 +114,9 @@ For **`python`**, runs `coverage.py` (branch on, with `--source` so an untested 
 seen as wholly uncovered) over the unit suite under `<PATH>`, then intersects coverage.py's per-file
 `missing_lines` / `missing_branches` with the lines the diff touched. A changed line is **uncovered**
 when it's a missing line, or the source of a branch the suite never took (line + branch). Exits `0`
-when every changed line is covered, `1` (printing each `changed line not covered by the unit suite:
-<path>:<line>` on stderr, then a count) when any isn't. `coverage` and `pytest` must be installed,
-and `git` must resolve `<REF>`.
+when every changed line is covered, `1` (printing each uncovered line as `<path>:<line>` on stderr,
+then a count) when any isn't. `coverage` and `pytest` must be installed, and `git` must resolve the
+`<REF>`.
 
 A non-executable changed line (comment, blank) has nothing to cover and is never flagged; a file
 with a `coverage` [exemption](#exemptions) is omitted, so its changed lines are lifted — the same

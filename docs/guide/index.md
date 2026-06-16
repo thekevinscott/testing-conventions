@@ -80,6 +80,8 @@ steps:
     run: testing-conventions unit colocated-test --language typescript src/
   - name: Unit-test coverage (Python)
     run: testing-conventions unit coverage --language python --config testing-conventions.toml src/
+  - name: Unit-test coverage (TypeScript)
+    run: testing-conventions unit coverage --language typescript --config testing-conventions.toml src/
 ```
 
 Or skip the boilerplate with the [reusable workflow](./ci) — one job that runs every rule.

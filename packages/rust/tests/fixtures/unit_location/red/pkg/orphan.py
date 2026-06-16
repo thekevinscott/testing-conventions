@@ -1,1 +1,3 @@
-# unit_location red fixture: ORPHAN — no colocated orphan_test.py
+# red fixture nested ORPHAN — no colocated orphan_test.py
+def orphan():
+    return 1

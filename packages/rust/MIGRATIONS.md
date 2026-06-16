@@ -32,8 +32,8 @@ exempt; TypeScript #18: `foo-bar.ts` → `foo-bar.test.ts` across
 <python|typescript> <PATH>` — rules now nest under their test kind (`unit` is a
 command group, `location` its first rule) and `--language` is required (the
 `python` default is gone). This is a breaking change for anyone on v0.0.4 or
-earlier; the library API (`missing_unit_tests`, `Language`, `Config`,
-`load_config`) is unchanged.
+earlier. (The rename left the library API untouched; #32 below then changes the
+`missing_unit_tests` and `measure` signatures.)
 
 Also adds the Python coverage rule (#26): `unit coverage --language python
 --config <CONFIG> <PATH>` runs the unit suite under `coverage.py` (branch on,
@@ -50,6 +50,21 @@ test/fixture that declares pytest's `monkeypatch` parameter. Purely additive: a 
 command group (`integration`) and module (`testing_conventions::lint`); nothing
 existing changes.
 
+Finally, adds exemptions (#32) so the checker can be an honest blocking gate.
+Exemptions are **config-driven and explicit** — there is no automatic name- or
+shape-based exemption. `__init__.py`, re-export barrels, and launcher shims are
+all subjects now; the only files exempt automatically are empty/comment-only ones
+(no logic to test). For deliberate omissions the tool can't infer, list the file
+in the one config file: a `[[<language>.exempt]]` entry with the `rules` it lifts
+(`location` / `coverage`) and a required `reason`. A `location` exemption keeps
+the file off the orphan list; a `coverage` exemption omits it from the coverage
+denominator. The list is auditable (one place, in the config diff) and enforced:
+a stale entry — a path that no longer exists — is a hard error, so it can't
+silently rot. New config types `Rule` and `Exemption` plus `resolve_exempt()`;
+`[<language>].coverage` becomes optional (a config can carry exemptions alone);
+and `missing_unit_tests` / `coverage::measure` take the resolved exemptions
+(signatures below).
+
 ### Required changes
 
 The unit-location CLI was renamed and its language flag made required. Update any
@@ -64,9 +79,23 @@ invocation (CI steps, scripts, `npx`/`pip`/`cargo` wrappers):
 - `--lang` → `--language`.
 - `--language` is required: there is no longer a `python` default to fall back on.
 
-The library API is unchanged — `testing_conventions::config::{Config, load_config}`
-and `testing_conventions::location::{missing_unit_tests, Language}` keep their
-signatures.
+Exemptions (#32) change the library API. Callers of these functions must pass the
+new arguments:
+
+| Function | Before | After |
+| --- | --- | --- |
+| `location::missing_unit_tests` | `(root, language)` | `(root, language, exempt)` — `exempt: &BTreeSet<String>` of `location`-rule paths |
+| `coverage::measure` | `(root, thresholds)` | `(root, thresholds, omit)` — `omit: &[String]` of `coverage`-rule paths |
+
+Build both with `config::resolve_exempt(root, exemptions, rule)`. Passing an empty
+set/slice preserves the prior behavior. `[<language>].coverage` is now an
+`Option`, so `config.python.coverage` becomes `config.python.coverage` of type
+`Option<PythonCoverage>` — match/`?` it before reading the thresholds.
+
+Anyone relying on `__init__.py` being exempt must add it to the config: a
+non-empty `__init__.py` (one with re-exports or code) is now a subject. An
+**empty** `__init__.py` needs nothing — empty/comment-only files are not
+subjects.
 
 ### Deprecations removed
 
@@ -80,22 +109,45 @@ Omitting the language is now a usage error (exit code `2`) instead of defaulting
 for `*.py`, found none, and exited `0` — a silent false green; now the language
 must be stated explicitly.
 
+Exemptions (#32) change runtime behavior:
+
+- `__init__.py` is no longer auto-exempt — a non-empty one without a colocated
+  test (and without a config entry) is now reported as an orphan. Empty/comment-
+  only files (any language) are non-subjects and never reported.
+- `unit location` and `unit coverage` honor the config `exempt` list: a
+  `location` entry keeps a file off the orphan list; a `coverage` entry omits it
+  from the denominator. A reason-less or stale entry makes the run **error**
+  rather than pass.
+- CLI error output now prints the full cause chain (e.g. `error: exempt entry
+  \`ghost.py\` matches no file under \`…\`: …`) instead of only the outermost
+  context. Exit codes are unchanged.
+
 ### Verification
 
 ```
 cd packages/rust && cargo test --test config_loader
 ```
 
-Expected: the loader's integration tests pass — the canonical config loads into
-memory, and unknown-key, malformed, and missing-file configs are rejected.
+Expected: the loader's integration tests pass — the canonical config loads, an
+exempt-only config (no coverage thresholds) loads, and unknown-key, malformed,
+missing-file, and reason-less-exemption configs are rejected.
 
 ```
 cd packages/rust && cargo test --test unit_location
 ```
 
-Expected: the location check's integration tests pass for both languages — each
-clean fixture reports no orphans, each red fixture reports its missing twins, and
-`unit location` exits non-zero on the red fixtures.
+Expected: the location tests pass — clean fixtures report no orphans, red fixtures
+report their missing twins, an empty `__init__.py` is not an orphan while a
+content-bearing one is, config exemptions clear the listed files, and a stale
+exempt entry errors.
+
+```
+cd packages/rust && cargo test --test coverage
+```
+
+Expected: the coverage tests pass — including the `exempt_cov` codebase clearing a
+100 floor once its shim is omitted by a `coverage` exemption. Requires `coverage`
++ `pytest` on `PATH`.
 
 ```
 cd packages/rust && cargo test --test integration_lint --test integration_lint_e2e

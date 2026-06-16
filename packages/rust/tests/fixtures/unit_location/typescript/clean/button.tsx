@@ -1,1 +1,2 @@
-// unit_location typescript clean fixture: tsx source colocated with button.test.tsx
+// clean fixture source, paired with button.test.tsx
+export const Button = () => "button";

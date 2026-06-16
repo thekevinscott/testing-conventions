@@ -140,6 +140,21 @@ shipping test code bloats the artifact and leaks fixtures.
 
 **Checked** — deterministic (inspect the built artifact for test files).
 
+## Exemptions
+
+A blocking gate needs an honest escape hatch for files that genuinely shouldn't be tested —
+otherwise it forces pointless tests or gets disabled. Exemptions are **explicit and config-
+driven**, never a silent ignore:
+
+- **Empty files** are skipped automatically — a file with no code (empty or comment-only, e.g.
+  a bare `__init__.py`) and declaration files (`*.d.ts`) have nothing to test. This is the only
+  automatic exclusion; there is no name- or shape-based magic.
+- **Everything else is explicit.** A launcher shim, a re-export barrel, generated code, or a
+  non-empty `__init__.py` is exempted by a `[[<language>.exempt]]` config entry naming the
+  `rules` it lifts (`location` / `coverage`) and a **required** `reason`. The whole exemption
+  surface lives in one file (auditable in a single diff), and a stale entry — a path that no
+  longer exists — is a hard error, so the list can't quietly rot.
+
 ## Configuration
 
 One file drives every rule (TOML shown; native-language config files are also
@@ -148,6 +163,12 @@ supported):
 ```toml
 [python]
 coverage = { branch = true, fail_under = 100 }
+
+# A deliberate, reason-required omission (see Exemptions above):
+[[python.exempt]]
+path = "mypkg/cli.py"
+rules = ["location", "coverage"]
+reason = "thin launcher; logic in run(), tested in run_test.py"
 
 [typescript]
 coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }

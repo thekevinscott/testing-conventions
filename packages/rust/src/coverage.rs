@@ -1,4 +1,4 @@
-//! Coverage rule (Python — issue #26).
+//! Coverage rule (Python — issue #26; exemptions — issue #32).
 //!
 //! Enforces the README's Coverage rule: a library's unit suite must meet the
 //! configured floor, measured with branch coverage, with test files excluded
@@ -7,6 +7,10 @@
 //! config, [`evaluate`] decides pass/fail. Producing the report (shelling out
 //! to `coverage`) is a thin layer on top, kept separate so the guarantee is
 //! testable without a Python toolchain.
+//!
+//! Files exempted from coverage in config (issue #32) are omitted from the
+//! denominator alongside the test files; the caller resolves them
+//! ([`crate::config::resolve_exempt`]) and passes their paths to [`measure`].
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -14,6 +18,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
+
+/// Always omitted from the coverage denominator: colocated unit tests are the
+/// suite, never a subject of it.
+const TEST_OMIT: &str = "*_test.py";
 
 /// The coverage floor to enforce, from a `[<language>].coverage` table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,11 +90,13 @@ pub fn evaluate(report: &CoverageReport, thresholds: Thresholds) -> Outcome {
 /// Run the unit suite under coverage.py in `root` and check it against
 /// `thresholds`.
 ///
-/// Shells out to `coverage run --branch` (omitting `*_test.py` from the
-/// denominator) then `coverage json`, and evaluates the report. The `coverage`
-/// CLI — with `pytest` importable — must be on `PATH`.
-pub fn measure(root: &Path, thresholds: Thresholds) -> Result<Outcome> {
-    let report = run_coverage(root)?;
+/// Shells out to `coverage run --branch` (omitting `*_test.py` and every path in
+/// `omit` from the denominator) then `coverage json`, and evaluates the report.
+/// `omit` holds the `coverage`-rule exemptions resolved from config, as
+/// `root`-relative paths. The `coverage` CLI — with `pytest` importable — must be
+/// on `PATH`.
+pub fn measure(root: &Path, thresholds: Thresholds, omit: &[String]) -> Result<Outcome> {
+    let report = run_coverage(root, omit)?;
     Ok(evaluate(&report, thresholds))
 }
 
@@ -114,25 +124,18 @@ impl Drop for DataFile {
 }
 
 /// Run coverage.py over the unit suite in `root` and return the parsed report.
-fn run_coverage(root: &Path) -> Result<CoverageReport> {
+fn run_coverage(root: &Path, omit: &[String]) -> Result<CoverageReport> {
     let data = DataFile::new();
+    let omit = build_omit(omit);
 
-    // Branch coverage on; measure the sources in `root` with `*_test.py` omitted
-    // from the denominator. Byte-code and the pytest cache are suppressed so the
-    // scanned tree stays pristine.
+    // Branch coverage on; measure the sources in `root` with the test files —
+    // and any `coverage`-waived files — omitted from the denominator. Byte-code
+    // and the pytest cache are suppressed so the scanned tree stays pristine.
     let run = Command::new("coverage")
         .current_dir(root)
-        .args([
-            "run",
-            "--branch",
-            "--omit=*_test.py",
-            "-m",
-            "pytest",
-            "-q",
-            "-p",
-            "no:cacheprovider",
-            ".",
-        ])
+        .args(["run", "--branch"])
+        .arg(format!("--omit={omit}"))
+        .args(["-m", "pytest", "-q", "-p", "no:cacheprovider", "."])
         .env("COVERAGE_FILE", &data.0)
         .env("PYTHONDONTWRITEBYTECODE", "1")
         .output()
@@ -161,6 +164,18 @@ fn run_coverage(root: &Path) -> Result<CoverageReport> {
     }
 
     parse_report(&String::from_utf8_lossy(&json.stdout))
+}
+
+/// The single comma-joined `--omit` value for the coverage run: always
+/// `*_test.py`, plus every `coverage`-exempt path from config. (coverage.py
+/// takes one `--omit` — repeated flags don't accumulate, so the patterns must be
+/// joined.) An exempt file leaves the denominator with its reason recorded in
+/// config — an auditable omission, not a silent ignore-glob.
+fn build_omit(omit: &[String]) -> String {
+    std::iter::once(TEST_OMIT.to_string())
+        .chain(omit.iter().cloned())
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 #[cfg(test)]
@@ -225,5 +240,17 @@ mod tests {
         let report = parse_report(json).expect("valid coverage.py json");
         assert_eq!(report.totals.percent_covered, 91.5);
         assert_eq!(report.totals.num_branches, 8);
+    }
+
+    #[test]
+    fn omit_is_just_the_test_glob_when_nothing_is_exempt() {
+        assert_eq!(build_omit(&[]), "*_test.py");
+    }
+
+    #[test]
+    fn omit_folds_in_the_exempt_paths_after_the_test_glob() {
+        // The caller passes already-resolved, sorted, `root`-relative paths.
+        let exempt = vec!["pkg/gen.py".to_string(), "shim.py".to_string()];
+        assert_eq!(build_omit(&exempt), "*_test.py,pkg/gen.py,shim.py");
     }
 }

@@ -11,8 +11,8 @@
 use std::path::PathBuf;
 
 use testing_conventions::config::{
-    load_config, Config, PythonConfig, PythonCoverage, RustConfig, RustCoverage, TypeScriptConfig,
-    TypeScriptCoverage,
+    load_config, Config, PythonConfig, PythonCoverage, Rule, RustConfig, RustCoverage,
+    TypeScriptConfig, TypeScriptCoverage,
 };
 
 /// Absolute path to a file under `tests/fixtures/`.
@@ -26,24 +26,27 @@ fn fixture(name: &str) -> PathBuf {
 fn expected_valid() -> Config {
     Config {
         python: Some(PythonConfig {
-            coverage: PythonCoverage {
+            coverage: Some(PythonCoverage {
                 branch: true,
                 fail_under: 100,
-            },
+            }),
+            exempt: vec![],
         }),
         typescript: Some(TypeScriptConfig {
-            coverage: TypeScriptCoverage {
+            coverage: Some(TypeScriptCoverage {
                 lines: 100,
                 branches: 100,
                 functions: 100,
                 statements: 100,
-            },
+            }),
+            exempt: vec![],
         }),
         rust: Some(RustConfig {
-            coverage: RustCoverage {
+            coverage: Some(RustCoverage {
                 regions: 100,
                 lines: 100,
-            },
+            }),
+            exempt: vec![],
         }),
     }
 }
@@ -78,5 +81,40 @@ fn errors_on_a_missing_file() {
     assert!(
         result.is_err(),
         "a missing config file must be an error, got: {result:?}"
+    );
+}
+
+#[test]
+fn loads_exemptions_with_optional_coverage() {
+    // `exempt.toml` declares exemptions but no coverage thresholds — both keys
+    // are optional (issue #32).
+    let config = load_config(fixture("exempt.toml")).expect("an exempt-only config should load");
+    let python = config.python.expect("[python] table present");
+    assert!(python.coverage.is_none(), "coverage is optional");
+    assert_eq!(python.exempt.len(), 1);
+    assert_eq!(python.exempt[0].path, "src/cli.py");
+    assert_eq!(python.exempt[0].rules, vec![Rule::Location, Rule::Coverage]);
+    assert_eq!(
+        config.typescript.expect("[typescript] table").exempt[0].rules,
+        vec![Rule::Location]
+    );
+}
+
+#[test]
+fn rejects_an_exemption_without_a_reason_self_guard() {
+    // The reason is required — a reasonless exemption can never be a silent pass.
+    assert!(
+        load_config(fixture("exempt_no_reason.toml")).is_err(),
+        "an exemption missing its reason must be rejected (self-guard)"
+    );
+}
+
+#[test]
+fn rejects_an_exemption_with_a_blank_reason_self_guard() {
+    // Distinct from a *missing* reason: the `reason` key is present but blank.
+    // The loader's validation step must still reject it on load.
+    assert!(
+        load_config(fixture("exempt_empty_reason.toml")).is_err(),
+        "an exemption with a blank reason must be rejected (self-guard)"
     );
 }

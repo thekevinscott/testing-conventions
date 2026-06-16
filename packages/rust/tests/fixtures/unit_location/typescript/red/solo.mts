@@ -1,1 +1,2 @@
-// unit_location typescript red fixture: ESM (.mts) source with no colocated solo.test.mts
+// red fixture ORPHAN — no colocated solo.test.mts
+export const solo = () => 1;

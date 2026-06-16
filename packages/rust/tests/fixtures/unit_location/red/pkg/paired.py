@@ -1,1 +1,3 @@
-# unit_location red fixture: nested source colocated with paired_test.py (OK)
+# red fixture nested source, paired with paired_test.py
+def paired():
+    return 1

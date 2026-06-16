@@ -1,0 +1,10 @@
+# Exemptions only — no coverage thresholds (both keys are optional).
+[[python.exempt]]
+path = "src/cli.py"
+rules = ["location", "coverage"]
+reason = "thin launcher; logic in run()"
+
+[[typescript.exempt]]
+path = "src/index.ts"
+rules = ["location"]
+reason = "pure re-export barrel"

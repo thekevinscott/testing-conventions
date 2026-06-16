@@ -1,1 +1,3 @@
-# unit_location clean fixture: source colocated with widget_test.py
+# clean fixture source, paired with widget_test.py
+def widget():
+    return "widget"

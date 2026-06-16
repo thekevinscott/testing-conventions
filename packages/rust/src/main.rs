@@ -7,7 +7,10 @@ fn main() -> ExitCode {
             if let Some(clap_err) = err.downcast_ref::<clap::Error>() {
                 clap_err.exit();
             }
-            eprintln!("error: {err}");
+            // `{err:#}` prints the whole anyhow chain on one line ("context:
+            // cause"), so a wrapped failure (e.g. a stale exempt entry, with the
+            // offending config as context) shows both the where and the why.
+            eprintln!("error: {err:#}");
             ExitCode::from(1)
         }
     }

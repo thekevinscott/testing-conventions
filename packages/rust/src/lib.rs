@@ -46,6 +46,10 @@ enum UnitRule {
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
         language: location::Language,
+        /// testing-conventions config file providing the `exempt` list. Optional:
+        /// if the file is absent, no files are exempt.
+        #[arg(long, default_value = "testing-conventions.toml")]
+        config: PathBuf,
     },
     /// Check that the unit suite meets the configured coverage floor.
     Coverage {
@@ -86,7 +90,11 @@ where
         // group (e.g. `unit location`).
         Some(Command::Check) | None => Ok(0),
         Some(Command::Unit { rule }) => match rule {
-            UnitRule::Location { path, language } => run_unit_location(&path, language),
+            UnitRule::Location {
+                path,
+                language,
+                config,
+            } => run_unit_location(&path, language, &config),
             UnitRule::Coverage {
                 path,
                 language,
@@ -101,10 +109,16 @@ where
 
 /// Run the unit-test location check over `root` for `language`, reporting orphans.
 ///
-/// Returns `0` when every source file has its colocated unit test; otherwise
-/// prints each orphan to stderr and returns `1`.
-fn run_unit_location(root: &Path, language: location::Language) -> anyhow::Result<i32> {
-    let orphans = location::missing_unit_tests(root, language)?;
+/// Loads the `location`-rule exemptions from the config at `config_path` (no
+/// config file → no exemptions). Returns `0` when every source file has its
+/// colocated unit test; otherwise prints each orphan to stderr and returns `1`.
+fn run_unit_location(
+    root: &Path,
+    language: location::Language,
+    config_path: &Path,
+) -> anyhow::Result<i32> {
+    let exempt = location_exemptions(root, language, config_path)?;
+    let orphans = location::missing_unit_tests(root, language, &exempt)?;
     if orphans.is_empty() {
         return Ok(0);
     }
@@ -112,10 +126,26 @@ fn run_unit_location(root: &Path, language: location::Language) -> anyhow::Resul
         eprintln!("missing colocated unit test: {}", orphan.display());
     }
     eprintln!(
-        "error: {} source file(s) missing a colocated unit test",
+        "error: {} source file(s) missing a colocated unit test \
+         (add a colocated test, or an `exempt` entry with a reason)",
         orphans.len()
     );
     Ok(1)
+}
+
+/// The `location`-rule exempt paths for `language`, resolved (and validated) from
+/// the config at `config_path`. A missing config file means no exemptions — the
+/// check still runs, just with nothing exempted.
+fn location_exemptions(
+    root: &Path,
+    language: location::Language,
+    config_path: &Path,
+) -> anyhow::Result<std::collections::BTreeSet<String>> {
+    if !config_path.exists() {
+        return Ok(std::collections::BTreeSet::new());
+    }
+    let config = config::load_config(config_path)?;
+    config::resolve_exempt(root, config.exemptions(language), config::Rule::Location)
 }
 
 /// Run the unit-test coverage check over `root` for `language`, enforcing the
@@ -127,22 +157,30 @@ fn run_unit_coverage(
     config_path: &Path,
 ) -> anyhow::Result<i32> {
     let config = config::load_config(config_path)?;
-    let thresholds = match language {
+    let (thresholds, exempt) = match language {
         location::Language::Python => {
             let python = config
                 .python
+                .as_ref()
                 .context("config has no [python] table to read coverage thresholds from")?;
-            coverage::Thresholds {
-                fail_under: python.coverage.fail_under,
-                branch: python.coverage.branch,
-            }
+            let coverage = python
+                .coverage
+                .as_ref()
+                .context("config [python] table has no `coverage` thresholds")?;
+            let thresholds = coverage::Thresholds {
+                fail_under: coverage.fail_under,
+                branch: coverage.branch,
+            };
+            let exempt = config::resolve_exempt(root, &python.exempt, config::Rule::Coverage)?;
+            (thresholds, exempt)
         }
         location::Language::TypeScript => anyhow::bail!(
             "`unit coverage` supports `--language python` only for now; \
              TypeScript coverage is a separate item"
         ),
     };
-    match coverage::measure(root, thresholds)? {
+    let omit: Vec<String> = exempt.into_iter().collect();
+    match coverage::measure(root, thresholds, &omit)? {
         coverage::Outcome::Pass => Ok(0),
         coverage::Outcome::Fail(reason) => {
             eprintln!("error: coverage check failed — {reason}");

@@ -1,4 +1,5 @@
-//! Unit-test location/naming check (Python — issue #15; TypeScript — issue #18).
+//! Unit-test location/naming check (Python — issue #15; TypeScript — issue #18;
+//! exemptions — issue #32).
 //!
 //! Convention (README "Location & Naming"; `internals/*/testing.md`): a source
 //! file is unit-tested by a *colocated* test named after it — `foo.py` →
@@ -6,8 +7,14 @@
 //! [`missing_unit_tests`] walks a tree for a [`Language`] and returns every
 //! source file with no such sibling — an "orphan". Test files are what the
 //! check looks *for*, never subjects.
+//!
+//! Two things are not orphans even without a colocated test (issue #32): a file
+//! that holds no code (empty or comment-only — e.g. a bare `__init__.py`), which
+//! is not a subject at all, and a file listed in the config `exempt` table,
+//! which is a deliberate, reason-required omission. Everything else must be
+//! tested — there is no automatic name- or shape-based exemption.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -15,7 +22,7 @@ use anyhow::{Context, Result};
 /// A language whose unit-test location/naming convention can be checked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Language {
-    /// `foo.py` → colocated `foo_test.py`; `__init__.py` is exempt.
+    /// `foo.py` → colocated `foo_test.py`.
     #[value(name = "python")]
     Python,
     /// `foo-bar.ts` → colocated `foo-bar.test.ts`, across `.ts`/`.tsx`/`.mts`/`.cts`;
@@ -49,11 +56,14 @@ impl Language {
         }
     }
 
-    /// `true` for a file exempt from needing a colocated test.
-    fn is_exempt(self, path: &Path) -> bool {
+    /// `true` when `source` (the file's contents) holds at least one line of
+    /// code — anything beyond blank lines and comments. An empty or comment-only
+    /// file (e.g. a bare `__init__.py`) carries no logic, so it is never a
+    /// unit-test subject and needs no exemption (issue #32).
+    fn has_code(self, source: &str) -> bool {
         match self {
-            Language::Python => file_name_of(path) == "__init__.py",
-            Language::TypeScript => false,
+            Language::Python => python_has_code(source),
+            Language::TypeScript => typescript_has_code(source),
         }
     }
 
@@ -71,12 +81,20 @@ impl Language {
 /// Walk `root` recursively and return every source file (for `language`) that
 /// has no colocated unit test, sorted for deterministic output.
 ///
-/// A file that is itself a test is never treated as a subject; every other
-/// source file must have its colocated test sibling. Returns an error if the
-/// tree under `root` cannot be read.
-pub fn missing_unit_tests(root: impl AsRef<Path>, language: Language) -> Result<Vec<PathBuf>> {
+/// A file that is itself a test is never a subject; an empty/comment-only file
+/// holds no logic and is never a subject; a file whose `root`-relative path is
+/// in `exempt` is a deliberate, reason-required omission. Every other source
+/// file must have its colocated test sibling. `exempt` holds the `location`-rule
+/// paths resolved from config ([`crate::config::resolve_exempt`]). Returns an
+/// error if the tree under `root` cannot be read.
+pub fn missing_unit_tests(
+    root: impl AsRef<Path>,
+    language: Language,
+    exempt: &BTreeSet<String>,
+) -> Result<Vec<PathBuf>> {
+    let root = root.as_ref();
     let mut files = Vec::new();
-    collect_files(root.as_ref(), language, &mut files)?;
+    collect_files(root, language, &mut files)?;
 
     // Every tracked path we found, so a subject's expected twin is a lookup
     // rather than a second pass over the filesystem.
@@ -84,12 +102,28 @@ pub fn missing_unit_tests(root: impl AsRef<Path>, language: Language) -> Result<
 
     let mut orphans: Vec<PathBuf> = Vec::new();
     for source in &files {
-        if language.is_test(source) || language.is_exempt(source) {
+        if language.is_test(source) {
             continue;
         }
-        if !present.contains(language.expected_test_path(source).as_path()) {
-            orphans.push(source.clone());
+        if present.contains(language.expected_test_path(source).as_path()) {
+            continue;
         }
+        // No colocated test. An empty/comment-only file is not a subject; read
+        // only now — for the handful of files that lack a twin — to find out.
+        let contents = std::fs::read_to_string(source)
+            .with_context(|| format!("reading source file `{}`", source.display()))?;
+        if !language.has_code(&contents) {
+            continue;
+        }
+        let relative = source
+            .strip_prefix(root)
+            .unwrap_or(source)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if exempt.contains(&relative) {
+            continue;
+        }
+        orphans.push(source.clone());
     }
     orphans.sort();
     Ok(orphans)
@@ -124,6 +158,44 @@ fn has_extension(path: &Path, extensions: &[&str]) -> bool {
 fn is_declaration(path: &Path) -> bool {
     let name = file_name_of(path);
     name.ends_with(".d.ts") || name.ends_with(".d.mts") || name.ends_with(".d.cts")
+}
+
+/// `true` when any line of Python `source` is neither blank nor a `#` comment. A
+/// module docstring counts as code (it is non-comment content).
+fn python_has_code(source: &str) -> bool {
+    source.lines().any(|line| {
+        let trimmed = line.trim_start();
+        !trimmed.is_empty() && !trimmed.starts_with('#')
+    })
+}
+
+/// `true` when TypeScript `source` holds anything beyond whitespace and comments
+/// (`//` line, `/* … */` block). Any other character — including the start of a
+/// string literal — counts as code.
+fn typescript_has_code(source: &str) -> bool {
+    let mut chars = source.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            c if c.is_whitespace() => {}
+            '/' if chars.peek() == Some(&'/') => {
+                while chars.peek().is_some_and(|&n| n != '\n') {
+                    chars.next();
+                }
+            }
+            '/' if chars.peek() == Some(&'*') => {
+                chars.next();
+                let mut prev = '\0';
+                for n in chars.by_ref() {
+                    if prev == '*' && n == '/' {
+                        break;
+                    }
+                    prev = n;
+                }
+            }
+            _ => return true,
+        }
+    }
+    false
 }
 
 /// The file extension, lossily decoded (empty if there is none).
@@ -168,14 +240,6 @@ mod tests {
     }
 
     #[test]
-    fn python_exempts_the_package_marker() {
-        assert!(Language::Python.is_exempt(Path::new("__init__.py")));
-        assert!(Language::Python.is_exempt(Path::new("pkg/__init__.py")));
-        assert!(!Language::Python.is_exempt(Path::new("conftest.py")));
-        assert!(!Language::Python.is_exempt(Path::new("widget.py")));
-    }
-
-    #[test]
     fn python_expected_test_path_is_the_colocated_twin() {
         assert_eq!(
             Language::Python.expected_test_path(Path::new("pkg/widget.py")),
@@ -212,14 +276,6 @@ mod tests {
     }
 
     #[test]
-    fn typescript_has_no_exemptions() {
-        // Unlike Python's `__init__.py`, nothing in TS is language-mandated;
-        // `index.ts` is a deliberate file and therefore a subject.
-        assert!(!Language::TypeScript.is_exempt(Path::new("index.ts")));
-        assert!(!Language::TypeScript.is_exempt(Path::new("pkg/index.ts")));
-    }
-
-    #[test]
     fn typescript_expected_test_path_keeps_the_extension() {
         assert_eq!(
             Language::TypeScript.expected_test_path(Path::new("pkg/widget.ts")),
@@ -237,5 +293,38 @@ mod tests {
             Language::TypeScript.expected_test_path(Path::new("legacy.cts")),
             PathBuf::from("legacy.test.cts")
         );
+    }
+
+    #[test]
+    fn python_empty_or_comment_only_files_have_no_code() {
+        assert!(!Language::Python.has_code(""));
+        assert!(!Language::Python.has_code("\n   \n"));
+        assert!(!Language::Python.has_code("# just a comment\n   # another\n"));
+    }
+
+    #[test]
+    fn python_real_content_counts_as_code() {
+        assert!(Language::Python.has_code("x = 1\n"));
+        assert!(Language::Python.has_code("# header\nimport os\n"));
+        // A docstring is non-comment content, so it counts.
+        assert!(Language::Python.has_code("\"\"\"Package docstring.\"\"\"\n"));
+    }
+
+    #[test]
+    fn typescript_empty_or_comment_only_files_have_no_code() {
+        assert!(!Language::TypeScript.has_code(""));
+        assert!(!Language::TypeScript.has_code("   \n\t\n"));
+        assert!(!Language::TypeScript.has_code("// a line comment\n"));
+        assert!(!Language::TypeScript.has_code("/* a\n   block\n   comment */\n"));
+    }
+
+    #[test]
+    fn typescript_real_content_counts_as_code() {
+        assert!(Language::TypeScript.has_code("export const x = 1;\n"));
+        assert!(Language::TypeScript.has_code("// note\nexport * from './a';\n"));
+        // A string literal (even one that looks comment-ish) is code.
+        assert!(Language::TypeScript.has_code("const s = '// not a comment';\n"));
+        // A lone division slash is code, not a comment.
+        assert!(Language::TypeScript.has_code("const r = a / b;\n"));
     }
 }

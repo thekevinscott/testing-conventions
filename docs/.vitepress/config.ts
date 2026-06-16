@@ -13,7 +13,6 @@ export default defineConfig({
       { text: 'Getting Started', link: '/getting-started' },
       { text: 'Guides', link: '/guide/' },
       { text: 'Reference', link: '/reference/' },
-      { text: 'Migrations', link: '/migrations' },
     ],
     sidebar: {
       '/': [
@@ -27,6 +26,7 @@ export default defineConfig({
           text: 'How-to Guides',
           items: [
             { text: 'Overview', link: '/guide/' },
+            { text: 'Exempt a file', link: '/guide/exemptions' },
             { text: 'Enforce conventions in CI', link: '/guide/ci' },
           ],
         },
@@ -34,7 +34,6 @@ export default defineConfig({
           text: 'Reference',
           items: [
             { text: 'API', link: '/reference/' },
-            { text: 'Migrations', link: '/migrations' },
           ],
         },
       ],

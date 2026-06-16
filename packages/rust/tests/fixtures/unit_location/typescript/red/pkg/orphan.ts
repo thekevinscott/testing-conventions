@@ -1,1 +1,2 @@
-// unit_location typescript red fixture: nested ORPHAN — no colocated orphan.test.ts
+// red fixture nested ORPHAN — no colocated orphan.test.ts
+export const orphan = () => 1;

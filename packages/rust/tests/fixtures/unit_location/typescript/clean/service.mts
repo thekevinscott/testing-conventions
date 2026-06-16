@@ -1,1 +1,2 @@
-// unit_location typescript clean fixture: ESM (.mts) source colocated with service.test.mts
+// clean fixture source, paired with service.test.mts
+export const service = () => "svc";

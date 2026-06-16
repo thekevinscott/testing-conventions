@@ -35,3 +35,13 @@ fn above_85_exits_nonzero_against_a_100_floor() {
 fn full_exits_zero_against_a_100_floor() {
     assert_eq!(unit_coverage_exit("full", "floor100.toml"), 0);
 }
+
+#[test]
+fn exempt_cov_exits_zero_against_a_100_floor() {
+    // The config exempts shim.py from coverage, so the built binary omits it
+    // from the denominator and clears the 100 floor end-to-end (#32).
+    assert_eq!(
+        unit_coverage_exit("exempt_cov", "floor100_exempt_shim.toml"),
+        0
+    );
+}

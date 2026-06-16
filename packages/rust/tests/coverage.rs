@@ -1,4 +1,4 @@
-//! Integration tests for the Python coverage rule (#26).
+//! Integration tests for the Python coverage rule (#26; exemptions #32).
 //!
 //! These run REAL coverage.py over the fixture codebases via the SDK
 //! (`coverage::measure`) and assert pass/fail. Per the #3 guardrail the
@@ -28,7 +28,7 @@ const FLOOR_100: Thresholds = Thresholds {
 #[test]
 fn below_85_fails_an_85_floor() {
     assert!(matches!(
-        measure(&codebase("below_85"), FLOOR_85).unwrap(),
+        measure(&codebase("below_85"), FLOOR_85, &[]).unwrap(),
         Outcome::Fail(_)
     ));
 }
@@ -36,7 +36,7 @@ fn below_85_fails_an_85_floor() {
 #[test]
 fn above_85_fails_a_100_floor() {
     assert!(matches!(
-        measure(&codebase("above_85"), FLOOR_100).unwrap(),
+        measure(&codebase("above_85"), FLOOR_100, &[]).unwrap(),
         Outcome::Fail(_)
     ));
 }
@@ -44,7 +44,19 @@ fn above_85_fails_a_100_floor() {
 #[test]
 fn full_passes_a_100_floor() {
     assert_eq!(
-        measure(&codebase("full"), FLOOR_100).unwrap(),
+        measure(&codebase("full"), FLOOR_100, &[]).unwrap(),
+        Outcome::Pass
+    );
+}
+
+#[test]
+fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
+    // `exempt_cov` sits at ~58% only because of shim.py; omitting it (the
+    // `coverage`-rule exemption the CLI resolves from config) leaves core.py,
+    // fully covered, to clear 100. The exemption is doing real work — without it
+    // this codebase fails the floor (#32).
+    assert_eq!(
+        measure(&codebase("exempt_cov"), FLOOR_100, &["shim.py".to_string()]).unwrap(),
         Outcome::Pass
     );
 }
@@ -55,7 +67,7 @@ fn a_suite_that_cannot_run_is_an_error_not_a_silent_pass() {
     // report a vacuous pass.
     let empty = std::env::temp_dir().join(format!("tc-empty-{}", std::process::id()));
     std::fs::create_dir_all(&empty).unwrap();
-    let result = measure(&empty, FLOOR_85);
+    let result = measure(&empty, FLOOR_85, &[]);
     let _ = std::fs::remove_dir_all(&empty);
     assert!(result.is_err());
 }

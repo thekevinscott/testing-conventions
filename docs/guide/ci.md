@@ -27,6 +27,10 @@ any violation. No config file is required: every rule runs with sane defaults, s
 opts a new library into the full check set. Add a `testing-conventions.toml` only to tighten a
 floor or declare exemptions.
 
+A requested language the repo has no sources for is **skipped, not run** — the workflow scans
+`path` for each language first — so the zero-config default `["python", "typescript"]` is safe
+to keep on a single-language library: the absent language's jobs simply don't fire.
+
 ### Inputs
 
 | Input       | Default                     | Description                                                |
@@ -36,7 +40,8 @@ floor or declare exemptions.
 | `version`   | latest                      | `testing-conventions` version to install (e.g. `0.1.0`).   |
 | `config`    | `testing-conventions.toml`  | Optional config file to refine the checks (coverage thresholds, exemptions). Absent → every check runs with sane defaults. |
 
-The **coverage** job runs once per requested language. Without a config file it enforces the
+The **coverage** job runs once per requested language that has sources (a language with none is
+skipped, not failed). Without a config file it enforces the
 language's default floor — Python `fail_under = 85` with branch coverage on; TypeScript `lines`
 / `functions` / `statements` 80 and `branches` 75 — and a `[<language>].coverage` table
 overrides it. For `python` it runs your unit suite under `coverage.py` (branch on, `*_test.py`

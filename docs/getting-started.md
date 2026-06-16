@@ -1,14 +1,8 @@
 # Getting Started
 
-`testing-conventions` enforces a library's testing standards as deterministic, bright-line
-checks — the kind an agent (or a hurried human) can't quietly cross while keeping CI green.
-The fastest way to adopt it is the reusable GitHub Actions workflow: drop in one job and
-**every check runs with sane defaults — no config file required.** Reach for a config file
-later, and only to refine.
+`testing-conventions` enforces a library's testing standards in deterministic ways. It's primarily useful for enforcing agent (LLM) behavior.
 
-## The fastest start: one workflow, no config
-
-Add a workflow to your repo that calls the reusable one, pinned to a tag:
+The fastest way to adopt it is the reusable GitHub Actions workflow. Add a workflow to your repo that calls the reusable one:
 
 ```yaml
 # .github/workflows/conventions.yml
@@ -19,29 +13,21 @@ jobs:
   conventions:
     uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
     with:
-      languages: '["python", "typescript"]'   # the languages your library ships
+      languages: '["python", "typescript", "rust"]'   # the languages your library ships
       path: src                                # the directory to scan
 ```
 
-That's the whole install. On every pull request it runs the published binary and **opts your
-library into every check we offer**, each as its own matrix job that fails the build — with the
-offending files in the log — on any violation:
+On every pull request it runs the published binary and **opts your library into every check we offer**, each as its own matrix job that fails the build on any violation.
 
-- **Colocated test** — every source file has a colocated, matching-named unit test (every language).
-- **Unit coverage** — the unit suite meets a coverage floor (Python and TypeScript).
-- **Integration lint** — integration tests use the right mocking mechanism & style (Python).
+### Defaults
 
-No `testing-conventions.toml` is needed. The coverage floor falls back to the language's **sane
-default** — Python `branch = true, fail_under = 85`; TypeScript `lines = 80, branches = 75,
-functions = 80, statements = 80` — so a new library is enforced from day one. (`languages` and
-`path` are the only inputs without a universal default: the checks differ by language, and every
-project lays out its sources differently.)
+- Python: `branch = true, fail_under = 85`
+- TypeScript `lines = 80, branches = 75, functions = 80, statements = 80`
+- Rust
 
 ## Customize with a config file (optional)
 
-When a default isn't right — you want a stricter floor, or a file genuinely shouldn't be tested —
-add a `testing-conventions.toml` at your repo root. One file drives every rule, and the workflow
-picks it up automatically:
+You can customize options with a `testing-conventions.toml` at your repo root:
 
 ```toml
 # Tighten the Python floor past the default 85:

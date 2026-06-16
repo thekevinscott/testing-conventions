@@ -1,6 +1,7 @@
 pub mod colocated_test;
 pub mod config;
 pub mod coverage;
+pub mod e2e;
 pub mod isolation;
 pub mod lint;
 pub mod packaging;
@@ -51,6 +52,11 @@ enum Command {
     Workflow {
         /// Workflow file (or a directory of them) to scan.
         path: PathBuf,
+    },
+    /// End-to-end-test conventions.
+    E2e {
+        #[command(subcommand)]
+        command: E2eCommand,
     },
 }
 
@@ -127,6 +133,17 @@ enum IntegrationRule {
     },
 }
 
+/// E2E attestation commands (#17): record a local e2e run and (later, #68)
+/// verify in CI that the latest code commit is attested.
+#[derive(Subcommand, Debug)]
+enum E2eCommand {
+    /// Run the e2e suite and write a committed attestation naming the current commit.
+    Attest {
+        /// The e2e command to run (e.g. `pnpm run e2e`), executed via the shell.
+        command: String,
+    },
+}
+
 pub fn run<I, T>(args: I) -> anyhow::Result<i32>
 where
     I: IntoIterator<Item = T>,
@@ -160,6 +177,9 @@ where
         },
         Some(Command::Packaging { path, language }) => run_packaging(&path, language),
         Some(Command::Workflow { path }) => run_workflow(&path),
+        Some(Command::E2e { command }) => match command {
+            E2eCommand::Attest { command } => run_e2e_attest(&command),
+        },
     }
 }
 
@@ -427,6 +447,19 @@ fn run_workflow(path: &Path) -> anyhow::Result<i32> {
         violations.len()
     );
     Ok(1)
+}
+
+/// Run `command` as an e2e suite and write a committed attestation naming the
+/// current commit (#67). Force-runs: the attestation is written regardless of
+/// the command's exit code, so this exits `0` once the attestation is recorded.
+fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
+    let repo = std::env::current_dir()?;
+    let attestation = e2e::attest(&repo, command)?;
+    println!(
+        "e2e attestation recorded for commit {} (command exited {})",
+        attestation.commit, attestation.exit_code
+    );
+    Ok(0)
 }
 
 #[cfg(test)]

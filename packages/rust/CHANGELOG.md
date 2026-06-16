@@ -147,6 +147,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `location` → `colocated-test` rename). Library API:
   `testing_conventions::workflow::{invocations, unknown_subcommands, check, Invocation}`,
   plus `testing_conventions::command()` exposing the binary's clap command tree. (#92)
+- `e2e` module + `e2e attest '<command>'` CLI (#17, #67) — run a local e2e suite
+  and record that it ran against the current commit. `attest` runs `<command>` via
+  the shell (streaming its output), writes an `e2e-attestation.json` recording the
+  command, a timestamp, the exit code, and the **commit SHA it was run against**
+  (HEAD), then commits that file on top. It writes regardless of the command's exit
+  code (force a run, not a pass) and exits `0` once recorded. Library API:
+  `testing_conventions::e2e::{attest, Attestation, ATTESTATION_PATH}`. The CI-side
+  `e2e verify` gate is a later slice (#68). (#17, #67)
 
 ### Changed
 

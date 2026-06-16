@@ -1,0 +1,6 @@
+# Waiver for the unit-isolation rule (#42): exempt the file from
+# `unmocked-collaborator`, with a reason (auditable, reason-required — #32/#102).
+[[python.exempt]]
+path = "widget_test.py"
+rules = ["unmocked-collaborator"]
+reason = "legacy unit test reaching a real ledger; the isolation refactor is tracked separately"

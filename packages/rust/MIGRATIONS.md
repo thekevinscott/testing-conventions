@@ -229,6 +229,17 @@ rule (#111): `vi.mock(spec, { spy: true })` — Vitest's options-object form, no
 factory — is no longer flagged `untyped-mock`. No API change; only a factory
 *function* missing a `vi.importActual<…>` anchor is flagged now.
 
+Also adds **Python unit isolation** (#42, slice 2): `unit isolation --language
+python <PATH>` — the unit-direction twin of the above. It flags
+`unmocked-collaborator` on a colocated unit test (`*_test.py` / `test_*.py`) that
+imports a first-party collaborator without mocking it; the unit under test, the
+test framework, pure stdlib, and type-only imports are never collaborators, and an
+import counts as mocked when a `patch("…")` targets a matching last segment.
+Additive: a new `Python` variant on `isolation::Language` (so `unit isolation
+--language python` is now accepted) and `testing_conventions::lint::find_unit_isolation_violations`;
+it emits the existing `unmocked-collaborator` rule, so the #102 waiver applies with
+no new `config::Rule`. Nothing existing changes.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -468,3 +479,13 @@ Expected: the Python integration-isolation tests pass (#42) — the red fixture'
 flagged and exits `1`, the clean fixture (mocks only `requests.post` /
 `subprocess.run`) reports nothing and exits `0`, and the `waived` fixture's
 `[[python.exempt]] rules = ["no-first-party-patch"]` lifts it back to `0`.
+
+```
+cd packages/rust && cargo test --test py_unit_isolation --test py_unit_isolation_e2e
+```
+
+Expected: the Python unit-isolation tests pass (#42, slice 2) — the red fixture
+(imports `from myproject.ledger import record` without mocking it) is flagged and
+exits `1`, the clean fixture (imports only the unit under test, patches the
+collaborator by string) reports nothing and exits `0`, and the `waived` fixture's
+`[[python.exempt]] rules = ["unmocked-collaborator"]` lifts it back to `0`.

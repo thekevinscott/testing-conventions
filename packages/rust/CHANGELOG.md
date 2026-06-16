@@ -7,6 +7,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Python unit isolation** — `unmocked-collaborator` (#42, slice 2). `unit isolation
+  --language python <PATH>` now flags a colocated unit test (`*_test.py` / `test_*.py`)
+  that **imports a first-party collaborator without mocking it** — a unit test must
+  isolate the unit under test. The unit under test (the import whose module's last
+  segment matches the test's base name), the test framework (`pytest` / `unittest`),
+  pure stdlib, `__future__`, and `TYPE_CHECKING`-guarded imports are never
+  collaborators; an import counts as mocked when a `patch("…")` in the file targets a
+  matching last dotted segment (catching the consuming-module patch
+  `patch("pkg.widget.record")`). First-party is the dist's own package, read from the
+  nearest `pyproject.toml` (as in slice 1). Emits the same `unmocked-collaborator`
+  rule as TypeScript, so the #102 waiver covers it: `[[python.exempt]] rules =
+  ["unmocked-collaborator"]`. Library API: `testing_conventions::lint::find_unit_isolation_violations`.
+  Un-mocked third-party / effectful-stdlib imports are a follow-up slice; value-type
+  imports and cross-file (`conftest.py`) mocks are documented non-goals. See
+  [`internals/python/isolation.md`](../../internals/python/isolation.md).
 - **Python integration isolation** — `no-first-party-patch` (#42). `integration lint
   --language python` now flags a `patch(...)` whose string target is **first-party**
   — e.g. `patch("ourpkg.mod.fn")` — because an integration test must run first-party

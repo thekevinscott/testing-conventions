@@ -52,6 +52,10 @@ pub enum Language {
     /// the detector lives in [`crate::ts`].
     #[value(name = "typescript")]
     TypeScript,
+    /// `*_test.py` / `test_*.py` colocated unit tests (`unmocked-collaborator`,
+    /// #42); the detector lives in [`crate::lint`].
+    #[value(name = "python")]
+    Python,
 }
 
 /// Scan the Rust source files under `root` and return every isolation violation,

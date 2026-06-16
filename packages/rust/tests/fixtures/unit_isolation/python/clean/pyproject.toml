@@ -1,0 +1,5 @@
+# Same first-party package as the red fixture — `myproject`. The canonical unit test
+# below imports only the unit under test and mocks its collaborator by string.
+[project]
+name = "myproject"
+version = "0.0.0"

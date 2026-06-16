@@ -31,7 +31,7 @@ use anyhow::{anyhow, Context, Result};
 use rustpython_ast::Visitor;
 use rustpython_parser::ast::{
     self, Arg, Arguments, Constant, Expr, ExprCall, StmtAssign, StmtAsyncFunctionDef,
-    StmtAugAssign, StmtDelete, StmtFunctionDef, WithItem,
+    StmtAugAssign, StmtDelete, StmtFunctionDef, StmtIf, StmtImport, StmtImportFrom, WithItem,
 };
 use rustpython_parser::text_size::{TextRange, TextSize};
 use rustpython_parser::Parse;
@@ -53,7 +53,7 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     // nothing.
     let first_party = first_party_package(root);
     let mut files = Vec::new();
-    collect_python_test_files(root, &mut files)?;
+    collect_python_files(root, &mut files, is_python_test_file)?;
     files.sort();
 
     let mut violations = Vec::new();
@@ -77,6 +77,245 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
 
     violations.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
     Ok(violations)
+}
+
+/// Scan the colocated Python unit tests under `root` and return every
+/// `unmocked-collaborator` violation (#42 slice 2): a first-party collaborator a
+/// unit test imports without mocking it. The Python arm of `unit isolation`
+/// ([`crate::isolation::Language::Python`]).
+///
+/// A *unit test* here is `*_test.py` / `test_*.py` (not `conftest.py`). First-party
+/// is the dist's own package ([`first_party_package`]); a tree with no declared
+/// package has no first-party collaborators and so reports nothing.
+pub fn find_unit_isolation_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
+    let root = root.as_ref();
+    // First-party is the dist's own package; with none declared there are no
+    // first-party collaborators to flag.
+    let Some(first_party) = first_party_package(root) else {
+        return Ok(Vec::new());
+    };
+    let mut files = Vec::new();
+    collect_python_files(root, &mut files, is_python_unit_test_file)?;
+    files.sort();
+
+    let mut violations = Vec::new();
+    for file in &files {
+        let source = std::fs::read_to_string(file)
+            .with_context(|| format!("reading test file `{}`", file.display()))?;
+        let suite = ast::Suite::parse(&source, &file.to_string_lossy())
+            .map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
+        let base = unit_under_test_base(file);
+        let mut visitor = UnitIsolationVisitor {
+            source: &source,
+            first_party: &first_party,
+            base: &base,
+            type_checking_depth: 0,
+            imports: Vec::new(),
+            patch_targets: Vec::new(),
+        };
+        for stmt in suite {
+            visitor.visit_stmt(stmt);
+        }
+        // A first-party import that is neither the unit under test nor mocked by
+        // some `patch(...)` in the file is an un-mocked collaborator.
+        for import in &visitor.imports {
+            if import.is_uut || import.is_mocked(&visitor.patch_targets) {
+                continue;
+            }
+            violations.push(Violation {
+                file: file.to_path_buf(),
+                line: import.line,
+                rule: "unmocked-collaborator",
+                message: format!(
+                    "unit test imports first-party `{}` without mocking it — a unit test \
+                     isolates the unit under test, so mock the collaborator (patch it by \
+                     string in a fixture)",
+                    import.display
+                ),
+            });
+        }
+    }
+
+    violations.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
+    Ok(violations)
+}
+
+/// One first-party import seen in a unit test, with what it takes to decide
+/// whether it's the unit under test or mocked.
+struct ImportRecord {
+    /// The module path to name in the message (`myproject.ledger`, `.ledger`).
+    display: String,
+    line: usize,
+    /// `true` when this import *is* the unit under test (never a collaborator).
+    is_uut: bool,
+    /// For `from X import a, b` — the bound symbols (matched against a patch's last
+    /// dotted segment). Empty for a plain module import.
+    symbols: Vec<String>,
+    /// For `import X.Y` — the module path (a patch reaching into it counts as a mock).
+    module: Option<String>,
+}
+
+impl ImportRecord {
+    /// `true` when some `patch("…")` target mocks this import: a matching last
+    /// segment for a `from`-import symbol, or a patch reaching into a module import.
+    fn is_mocked(&self, patch_targets: &[String]) -> bool {
+        let symbol_mocked = patch_targets.iter().any(|target| {
+            let last = target.rsplit('.').next().unwrap_or(target);
+            self.symbols.iter().any(|symbol| symbol == last)
+        });
+        if symbol_mocked {
+            return true;
+        }
+        match &self.module {
+            Some(module) => {
+                let prefix = format!("{module}.");
+                patch_targets
+                    .iter()
+                    .any(|target| target == module || target.starts_with(&prefix))
+            }
+            None => false,
+        }
+    }
+}
+
+/// Walks one parsed unit test, collecting its first-party imports and every
+/// `patch("…")` string target so [`find_unit_isolation_violations`] can pair them.
+/// Imports guarded by `if TYPE_CHECKING:` are type-only (erased at runtime) and
+/// skipped.
+struct UnitIsolationVisitor<'a> {
+    source: &'a str,
+    first_party: &'a str,
+    base: &'a str,
+    type_checking_depth: usize,
+    imports: Vec<ImportRecord>,
+    patch_targets: Vec<String>,
+}
+
+impl Visitor for UnitIsolationVisitor<'_> {
+    fn visit_stmt_import(&mut self, node: StmtImport) {
+        if self.type_checking_depth == 0 {
+            let line = line_of(self.source, node.range.start());
+            for alias in &node.names {
+                let module = alias.name.as_str();
+                if import_head(module) == self.first_party {
+                    self.imports.push(ImportRecord {
+                        display: module.to_string(),
+                        line,
+                        is_uut: last_segment(module) == self.base,
+                        symbols: Vec::new(),
+                        module: Some(module.to_string()),
+                    });
+                }
+            }
+        }
+        self.generic_visit_stmt_import(node);
+    }
+
+    fn visit_stmt_import_from(&mut self, node: StmtImportFrom) {
+        if self.type_checking_depth == 0 {
+            let level = relative_level(&node);
+            let module = node.module.as_ref().map(|m| m.as_str());
+            let is_first_party =
+                level > 0 || module.is_some_and(|m| import_head(m) == self.first_party);
+            if is_first_party {
+                let line = line_of(self.source, node.range.start());
+                let dots = ".".repeat(level);
+                match module {
+                    // `from <module> import a, b` — the bound symbols are collaborators.
+                    Some(module) => self.imports.push(ImportRecord {
+                        display: format!("{dots}{module}"),
+                        line,
+                        is_uut: last_segment(module) == self.base,
+                        symbols: node.names.iter().map(|a| a.name.to_string()).collect(),
+                        module: None,
+                    }),
+                    // `from . import sub` — each name is a submodule.
+                    None => {
+                        for alias in &node.names {
+                            let name = alias.name.as_str();
+                            self.imports.push(ImportRecord {
+                                display: format!("{dots}{name}"),
+                                line,
+                                is_uut: name == self.base,
+                                symbols: vec![name.to_string()],
+                                module: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        self.generic_visit_stmt_import_from(node);
+    }
+
+    fn visit_expr_call(&mut self, node: ExprCall) {
+        if is_patch_call(&node) {
+            if let Some(target) = patch_string_target(&node) {
+                self.patch_targets.push(target.to_string());
+            }
+        }
+        self.generic_visit_expr_call(node);
+    }
+
+    fn visit_stmt_if(&mut self, node: StmtIf) {
+        // Imports under `if TYPE_CHECKING:` are type-only — skip the body (the
+        // runtime `else` is still walked). Other `if`s recurse normally.
+        if is_type_checking(node.test.as_ref()) {
+            self.type_checking_depth += 1;
+            for stmt in node.body {
+                self.visit_stmt(stmt);
+            }
+            self.type_checking_depth -= 1;
+            for stmt in node.orelse {
+                self.visit_stmt(stmt);
+            }
+        } else {
+            self.generic_visit_stmt_if(node);
+        }
+    }
+}
+
+/// The leading dotted segment of a module path (`myproject.db` → `myproject`).
+fn import_head(module: &str) -> &str {
+    module.split('.').next().unwrap_or(module)
+}
+
+/// The trailing dotted segment of a module path (`myproject.db` → `db`).
+fn last_segment(module: &str) -> &str {
+    module.rsplit('.').next().unwrap_or(module)
+}
+
+/// The number of leading dots on a `from`-import (`from ..pkg import x` → 2; an
+/// absolute import → 0).
+fn relative_level(node: &StmtImportFrom) -> usize {
+    node.level.map_or(0, |level| level.to_usize())
+}
+
+/// `true` for `TYPE_CHECKING` / `typing.TYPE_CHECKING` — the guard whose body holds
+/// type-only imports.
+fn is_type_checking(test: &Expr) -> bool {
+    match test {
+        Expr::Name(name) => name.id.as_str() == "TYPE_CHECKING",
+        Expr::Attribute(attr) => attr.attr.as_str() == "TYPE_CHECKING",
+        _ => false,
+    }
+}
+
+/// The unit-under-test base name for a test file: `widget_test.py` → `widget`,
+/// legacy `test_widget.py` → `widget`.
+fn unit_under_test_base(file: &Path) -> String {
+    let name = file
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    let stem = name.strip_suffix(".py").unwrap_or(name);
+    if let Some(base) = stem.strip_suffix("_test") {
+        base.to_string()
+    } else if let Some(base) = stem.strip_prefix("test_") {
+        base.to_string()
+    } else {
+        stem.to_string()
+    }
 }
 
 /// Walks one parsed test file, collecting lint violations. Tracks how deep we
@@ -391,8 +630,12 @@ fn normalize_dist_name(name: &str) -> String {
     name.trim().to_ascii_lowercase().replace(['-', '.'], "_")
 }
 
-/// Recursively collect every Python test file under `dir` into `out`.
-fn collect_python_test_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+/// Recursively collect every Python file under `dir` matching `is_match` into `out`.
+fn collect_python_files(
+    dir: &Path,
+    out: &mut Vec<PathBuf>,
+    is_match: fn(&Path) -> bool,
+) -> Result<()> {
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
     for entry in entries {
@@ -400,16 +643,16 @@ fn collect_python_test_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
             .with_context(|| format!("reading an entry under `{}`", dir.display()))?
             .path();
         if path.is_dir() {
-            collect_python_test_files(&path, out)?;
-        } else if is_python_test_file(&path) {
+            collect_python_files(&path, out, is_match)?;
+        } else if is_match(&path) {
             out.push(path);
         }
     }
     Ok(())
 }
 
-/// `true` for a file the lints scan: `*_test.py`, legacy `test_*.py`, or
-/// `conftest.py`.
+/// `true` for a file the integration lints scan: `*_test.py`, legacy `test_*.py`,
+/// or `conftest.py` (where fixtures live).
 fn is_python_test_file(path: &Path) -> bool {
     let name = path
         .file_name()
@@ -418,6 +661,17 @@ fn is_python_test_file(path: &Path) -> bool {
     name == "conftest.py"
         || name.ends_with("_test.py")
         || (name.starts_with("test_") && name.ends_with(".py"))
+}
+
+/// `true` for a colocated *unit* test the isolation rule scans: `*_test.py` or
+/// legacy `test_*.py`, but **not** `conftest.py` (fixtures, not a unit).
+fn is_python_unit_test_file(path: &Path) -> bool {
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    name != "conftest.py"
+        && (name.ends_with("_test.py") || (name.starts_with("test_") && name.ends_with(".py")))
 }
 
 #[cfg(test)]
@@ -441,7 +695,11 @@ mod tests {
         }
 
         fn write(&self, name: &str, contents: &str) {
-            std::fs::write(self.0.join(name), contents).unwrap();
+            let path = self.0.join(name);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).unwrap();
+            }
+            std::fs::write(path, contents).unwrap();
         }
     }
 
@@ -520,6 +778,194 @@ mod tests {
         // No pyproject.toml anywhere up the (temp) tree → nothing first-party.
         let tree = TempDir::new();
         assert_eq!(first_party_package(&tree.0), None);
+    }
+
+    /// Run the unit-isolation visitor over `source` and return the flagged
+    /// (un-mocked, non-UUT first-party) import displays.
+    fn unmocked(base: &str, first_party: &str, source: &str) -> Vec<String> {
+        let suite = ast::Suite::parse(source, "t.py").expect("snippet should parse");
+        let mut visitor = UnitIsolationVisitor {
+            source,
+            first_party,
+            base,
+            type_checking_depth: 0,
+            imports: Vec::new(),
+            patch_targets: Vec::new(),
+        };
+        for stmt in suite {
+            visitor.visit_stmt(stmt);
+        }
+        visitor
+            .imports
+            .iter()
+            .filter(|i| !i.is_uut && !i.is_mocked(&visitor.patch_targets))
+            .map(|i| i.display.clone())
+            .collect()
+    }
+
+    #[test]
+    fn import_head_and_last_segment() {
+        assert_eq!(import_head("myproject.db.conn"), "myproject");
+        assert_eq!(import_head("requests"), "requests");
+        assert_eq!(last_segment("myproject.db.conn"), "conn");
+        assert_eq!(last_segment("widget"), "widget");
+    }
+
+    #[test]
+    fn unit_under_test_base_strips_test_affixes() {
+        assert_eq!(
+            unit_under_test_base(Path::new("pkg/widget_test.py")),
+            "widget"
+        );
+        assert_eq!(unit_under_test_base(Path::new("test_widget.py")), "widget");
+        // A name without a test affix falls back to its stem.
+        assert_eq!(unit_under_test_base(Path::new("plain.py")), "plain");
+    }
+
+    #[test]
+    fn recognizes_python_unit_test_files() {
+        assert!(is_python_unit_test_file(Path::new("widget_test.py")));
+        assert!(is_python_unit_test_file(Path::new("test_widget.py")));
+        // conftest holds fixtures, not a unit — excluded from unit isolation.
+        assert!(!is_python_unit_test_file(Path::new("conftest.py")));
+        assert!(!is_python_unit_test_file(Path::new("widget.py")));
+    }
+
+    #[test]
+    fn is_mocked_matches_symbol_last_segment_and_module_prefix() {
+        let symbol = ImportRecord {
+            display: "myproject.ledger".into(),
+            line: 1,
+            is_uut: false,
+            symbols: vec!["record".into()],
+            module: None,
+        };
+        // The consuming-module patch and the source patch both mock it.
+        assert!(symbol.is_mocked(&["myproject.widget.record".into()]));
+        assert!(symbol.is_mocked(&["myproject.ledger.record".into()]));
+        assert!(!symbol.is_mocked(&["myproject.widget.other".into()]));
+
+        let module = ImportRecord {
+            display: "myproject.db".into(),
+            line: 1,
+            is_uut: false,
+            symbols: Vec::new(),
+            module: Some("myproject.db".into()),
+        };
+        assert!(module.is_mocked(&["myproject.db.conn".into()])); // reaches into it
+        assert!(module.is_mocked(&["myproject.db".into()])); // the module itself
+        assert!(!module.is_mocked(&["myproject.dbx.y".into()])); // a different module
+    }
+
+    #[test]
+    fn visitor_flags_first_party_collaborators_only() {
+        // UUT and third-party are left alone; the first-party collaborator is flagged.
+        let found = unmocked(
+            "widget",
+            "myproject",
+            "from myproject.widget import build\n\
+             from myproject.ledger import record\n\
+             import requests\n",
+        );
+        assert_eq!(found, vec!["myproject.ledger".to_string()]);
+    }
+
+    #[test]
+    fn visitor_clears_a_mocked_collaborator() {
+        // The imported `record` is patched (consuming-module name) → not flagged.
+        let found = unmocked(
+            "widget",
+            "myproject",
+            "from myproject.ledger import record\npatch(\"myproject.widget.record\")\n",
+        );
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    #[test]
+    fn visitor_handles_module_and_relative_imports() {
+        // A first-party module import, not the UUT, un-mocked → flagged.
+        assert_eq!(
+            unmocked("widget", "myproject", "import myproject.db\n"),
+            vec!["myproject.db".to_string()]
+        );
+        // `import myproject.db` reached by a patch → mocked.
+        assert!(unmocked(
+            "widget",
+            "myproject",
+            "import myproject.db\npatch(\"myproject.db.connect\")\n"
+        )
+        .is_empty());
+        // Relative imports are first-party; `from . import widget` is the UUT.
+        assert_eq!(
+            unmocked("widget", "myproject", "from .ledger import record\n"),
+            vec![".ledger".to_string()]
+        );
+        assert_eq!(
+            unmocked(
+                "widget",
+                "myproject",
+                "from . import ledger\nfrom . import widget\n"
+            ),
+            vec![".ledger".to_string()]
+        );
+    }
+
+    #[test]
+    fn visitor_skips_type_checking_imports() {
+        // A first-party import guarded by TYPE_CHECKING is type-only — not a runtime
+        // collaborator; the runtime `else` import is still seen.
+        let found = unmocked(
+            "widget",
+            "myproject",
+            "if TYPE_CHECKING:\n    from myproject.models import Widget\nelse:\n    from myproject.ledger import record\n",
+        );
+        assert_eq!(found, vec!["myproject.ledger".to_string()]);
+    }
+
+    #[test]
+    fn visitor_type_checking_variants_and_plain_if() {
+        // `typing.TYPE_CHECKING` (attribute form) guards type-only imports — both
+        // the `from`-import and the plain module import are skipped.
+        assert!(unmocked(
+            "widget",
+            "myproject",
+            "if typing.TYPE_CHECKING:\n    from myproject.models import W\n    import myproject.db\n"
+        )
+        .is_empty());
+        // A plain `if` (not TYPE_CHECKING) is walked normally — its first-party
+        // import is still a collaborator.
+        assert_eq!(
+            unmocked(
+                "widget",
+                "myproject",
+                "if ready == 1:\n    from myproject.ledger import record\n"
+            ),
+            vec!["myproject.ledger".to_string()]
+        );
+    }
+
+    #[test]
+    fn find_unit_isolation_without_pyproject_reports_nothing() {
+        // No declared package → no first-party collaborators (the early return).
+        let tree = TempDir::new();
+        tree.write("widget_test.py", "from myproject.ledger import record\n");
+        tree.write(".git", "");
+        assert!(find_unit_isolation_violations(&tree.0)
+            .expect("a readable tree should succeed")
+            .is_empty());
+    }
+
+    #[test]
+    fn find_unit_isolation_walks_subdirs_and_flags() {
+        let tree = TempDir::new();
+        tree.write("pyproject.toml", "[project]\nname = \"myproject\"\n");
+        // A nested unit test — exercises the directory recursion.
+        tree.write("pkg/thing_test.py", "from myproject.ledger import record\n");
+        let found =
+            find_unit_isolation_violations(&tree.0).expect("a readable tree should succeed");
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert_eq!(found[0].rule, "unmocked-collaborator");
+        assert!(found[0].message.contains("myproject.ledger"));
     }
 
     #[test]

@@ -1,0 +1,5 @@
+# Declares the dist's own top-level package — `myproject` is first-party. The unit
+# isolation rule reads this to classify an imported collaborator as first-party.
+[project]
+name = "myproject"
+version = "0.0.0"

@@ -31,3 +31,17 @@ fn red_exits_nonzero() {
 fn clean_exits_zero() {
     assert_eq!(lint_exit("clean"), 0);
 }
+
+// waivers (#102)
+#[test]
+fn waived_exits_zero() {
+    let code = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["integration", "lint", "--language", "rust", "--config"])
+        .arg(fixture("waived/testing-conventions.toml"))
+        .arg(fixture("waived"))
+        .status()
+        .expect("the built binary should run")
+        .code()
+        .expect("the process should exit with a code");
+    assert_eq!(code, 0);
+}

@@ -1,0 +1,6 @@
+# A stale exempt entry: `src/ghost.rs` doesn't exist under the scanned root. The
+# checker must error (the auditable counterpart to a silent ignore-glob), not pass.
+[[rust.exempt]]
+path = "src/ghost.rs"
+rules = ["no-out-of-module-call"]
+reason = "points at a file that no longer exists"

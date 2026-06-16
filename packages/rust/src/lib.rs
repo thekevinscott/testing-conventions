@@ -89,13 +89,17 @@ enum UnitRule {
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
-    /// Check that inline unit tests call nothing out of their own module (Rust).
+    /// Check that unit tests isolate the unit under test (Rust, TypeScript).
     Isolation {
-        /// Crate root to scan recursively (its `Cargo.toml` names external crates).
+        /// Crate root / source dir to scan recursively.
         path: PathBuf,
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
         language: isolation::Language,
+        /// testing-conventions config file providing the `exempt` list (waivers).
+        /// Optional: if the file is absent, nothing is waived.
+        #[arg(long, default_value = "testing-conventions.toml")]
+        config: PathBuf,
     },
 }
 
@@ -166,7 +170,11 @@ where
                 language,
                 config,
             } => run_unit_coverage(&path, language, &config),
-            UnitRule::Isolation { path, language } => run_unit_isolation(&path, language),
+            UnitRule::Isolation {
+                path,
+                language,
+                config,
+            } => run_unit_isolation(&path, language, &config),
         },
         Some(Command::Integration { rule }) => match rule {
             IntegrationRule::Lint {
@@ -297,7 +305,14 @@ fn run_unit_coverage(
 /// Run the unit-isolation check over `root` for `language`, printing each
 /// violation to stderr as `path:line: rule — message` and returning `1` when any
 /// are found, `0` otherwise.
-fn run_unit_isolation(root: &Path, language: isolation::Language) -> anyhow::Result<i32> {
+fn run_unit_isolation(
+    root: &Path,
+    language: isolation::Language,
+    config_path: &Path,
+) -> anyhow::Result<i32> {
+    // Skeleton: `--config` is wired but not yet honored; the waiver filter lands
+    // in the green step.
+    let _ = config_path;
     let violations = match language {
         isolation::Language::Rust => isolation::find_violations(root)?,
         isolation::Language::TypeScript => ts::find_unit_violations(root)?,

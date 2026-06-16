@@ -1,10 +1,8 @@
-//! E2E tests for the commit-scoped `co-change` check (#33): drive the built CLI
-//! binary as a real subprocess against throwaway git repos and assert the exit
-//! code (and, for the red case, the named offender). Complements the in-process
-//! integration tests in `co_change.rs`.
-//!
-//! Starts red against the stub in `src/co_change.rs` and goes green once
-//! detection is implemented.
+//! E2E tests for the commit-scoped `co-change` check (#33), folded into
+//! `unit colocated-test --base` (#161): drive the built CLI binary as a real
+//! subprocess against throwaway git repos and assert the exit code (and, for the
+//! red case, the named offender). Complements the in-process integration tests in
+//! `co_change.rs`.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -74,14 +72,17 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// Exit code + stderr of `unit co-change <repo> --language <lang> --base <base>
-/// [--config <repo>/<config>]`, run as a real subprocess against the built binary.
+/// Exit code + stderr of `unit colocated-test <repo> --language <lang> --base
+/// <base> [--config <repo>/<config>]`, run as a real subprocess against the built
+/// binary. Since #161 the commit-scoped co-change check rides on `--base`.
 fn co_change(repo: &TempRepo, language: &str, base: &str, config: Option<&str>) -> (i32, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
-    cmd.arg("unit")
-        .arg("co-change")
-        .arg(&repo.0)
-        .args(["--language", language, "--base", base]);
+    cmd.arg("unit").arg("colocated-test").arg(&repo.0).args([
+        "--language",
+        language,
+        "--base",
+        base,
+    ]);
     if let Some(name) = config {
         cmd.arg("--config").arg(repo.0.join(name));
     }
@@ -164,12 +165,16 @@ fn a_co_change_exemption_lifts_the_stale_source() {
          reason = \"thin launcher; no logic to retest on each edit\"\n",
     );
     repo.write("cli.py", "def main():\n    return 0\n");
+    repo.write(
+        "cli_test.py",
+        "from cli import main\n\n\ndef test_main():\n    assert main() == 0\n",
+    );
     repo.commit("base");
     let base = repo.head();
     repo.write("cli.py", "def main():\n    return 1\n");
-    repo.commit("edit the launcher, no test");
+    repo.commit("edit the launcher, leave its test");
 
-    // Stale with no config, lifted once the exemption is supplied.
+    // Stale with no config (presence satisfied), lifted once the exemption is supplied.
     assert_eq!(co_change(&repo, "python", &base, None).0, 1);
     assert_eq!(
         co_change(&repo, "python", &base, Some("testing-conventions.toml")).0,
@@ -188,4 +193,32 @@ fn rust_is_rejected() {
     let (code, stderr) = co_change(&repo, "rust", &base, None);
     assert_eq!(code, 1, "`--language rust` is rejected; stderr: {stderr}");
     assert!(stderr.contains("inline"), "got: {stderr}");
+}
+
+#[test]
+fn base_still_enforces_tree_wide_presence() {
+    // #161: `--base` adds co-change *on top of* presence. An orphan source with no
+    // colocated test is flagged even when the diff itself co-changes cleanly.
+    let repo = TempRepo::new("base-presence");
+    repo.write("widget.py", WIDGET_PY);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.write("orphan.py", "def orphan():\n    return 9\n");
+    repo.commit("base");
+    let base = repo.head();
+    repo.write("widget.py", "def widget():\n    return 2\n");
+    repo.write(
+        "widget_test.py",
+        "from widget import widget\n\n\ndef test_widget():\n    assert widget() == 2\n",
+    );
+    repo.commit("edit widget and its test together");
+
+    let (code, stderr) = co_change(&repo, "python", &base, None);
+    assert_eq!(
+        code, 1,
+        "an orphan source must fail presence; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("orphan.py"),
+        "stderr should name the orphan; got: {stderr}"
+    );
 }

@@ -1,0 +1,39 @@
+name: Dogfood
+
+# testing-conventions enforcing its own colocated-test convention on its own
+# packages (issue #30), via the published CLI — the docs' "roll your own" path.
+#
+#   - Node (TypeScript): packages/node/src. `bin.ts` has a colocated bin.test.ts
+#     (run in node.yml), so it passes the rule with no waiver.
+#   - Python: packages/python. No `.py` sources yet, so it's green by vacuity —
+#     wiring it now enforces the rule the day a source lands.
+#
+# Why the CLI and not the reusable workflow: that workflow bundles a mandatory
+# coverage job for every requested language (#31, #80), and Python has no source
+# for coverage to measure — so it can't pass there. colocated-test is the rule
+# #30 asks for (coverage is deferred, #26). Rust uses inline `#[cfg(test)]`, out
+# of scope for the file-based rule.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/node/**'
+      - 'packages/python/**'
+      - '.github/workflows/dogfood.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  colocated-test:
+    name: Colocated test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # node/npx ship on ubuntu-latest; `-y` skips the install prompt.
+      - name: Node (TypeScript) — packages/node/src
+        run: npx -y testing-conventions unit colocated-test --language typescript packages/node/src
+      - name: Python — packages/python
+        run: npx -y testing-conventions unit colocated-test --language python packages/python

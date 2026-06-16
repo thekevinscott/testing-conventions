@@ -42,6 +42,14 @@ supporting `testing_conventions::coverage` module (`measure`, `evaluate`,
 `parse_report`, and the `Thresholds` / `CoverageReport` / `Outcome` types). Purely
 additive — a new subcommand and module; nothing existing changes.
 
+Also adds the `integration lint` command and its `lint` module (#48, #49): a
+deterministic, AST-based lint on Python test files. `integration lint --language
+python <PATH>` parses each test file (`*_test.py`, `test_*.py`, `conftest.py`) with
+`rustpython_parser` and flags the first mocking-mechanism lint — `no-monkeypatch`, a
+test/fixture that declares pytest's `monkeypatch` parameter. Purely additive: a new
+command group (`integration`) and module (`testing_conventions::lint`); nothing
+existing changes.
+
 Finally, adds exemptions (#32) so the checker can be an honest blocking gate.
 Exemptions are **config-driven and explicit** — there is no automatic name- or
 shape-based exemption. `__init__.py`, re-export barrels, and launcher shims are
@@ -140,3 +148,11 @@ cd packages/rust && cargo test --test coverage
 Expected: the coverage tests pass — including the `exempt_cov` codebase clearing a
 100 floor once its shim is omitted by a `coverage` exemption. Requires `coverage`
 + `pytest` on `PATH`.
+
+```
+cd packages/rust && cargo test --test integration_lint --test integration_lint_e2e
+```
+
+Expected: the lint's integration + e2e tests pass — the clean fixture reports no
+violations and exits `0`, and the red fixture (a test taking `monkeypatch`) is
+flagged and exits `1`.

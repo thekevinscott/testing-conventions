@@ -1,5 +1,6 @@
 pub mod config;
 pub mod coverage;
+pub mod lint;
 pub mod location;
 
 use std::path::{Path, PathBuf};
@@ -27,6 +28,11 @@ enum Command {
     Unit {
         #[command(subcommand)]
         rule: UnitRule,
+    },
+    /// Integration-test conventions.
+    Integration {
+        #[command(subcommand)]
+        rule: IntegrationRule,
     },
 }
 
@@ -58,6 +64,20 @@ enum UnitRule {
     },
 }
 
+/// Lints enforced on integration tests (mocking mechanism & style, and more to
+/// come). The README's "Integration" taxonomy.
+#[derive(Subcommand, Debug)]
+enum IntegrationRule {
+    /// Lint integration test files for mocking mechanism & style (Python).
+    Lint {
+        /// Directory to scan recursively for Python test files.
+        path: PathBuf,
+        /// Language convention to enforce (required).
+        #[arg(long, value_enum)]
+        language: location::Language,
+    },
+}
+
 pub fn run<I, T>(args: I) -> anyhow::Result<i32>
 where
     I: IntoIterator<Item = T>,
@@ -80,6 +100,9 @@ where
                 language,
                 config,
             } => run_unit_coverage(&path, language, &config),
+        },
+        Some(Command::Integration { rule }) => match rule {
+            IntegrationRule::Lint { path, language } => run_integration_lint(&path, language),
         },
     }
 }
@@ -164,6 +187,33 @@ fn run_unit_coverage(
             Ok(1)
         }
     }
+}
+
+/// Run the integration-test lints over `root` for `language`, printing each
+/// violation to stderr as `path:line: rule — message` and returning `1` when any
+/// are found, `0` otherwise.
+fn run_integration_lint(root: &Path, language: location::Language) -> anyhow::Result<i32> {
+    match language {
+        location::Language::Python => {}
+        location::Language::TypeScript => {
+            anyhow::bail!("`integration lint` supports `--language python` only for now")
+        }
+    }
+    let violations = lint::find_violations(root)?;
+    if violations.is_empty() {
+        return Ok(0);
+    }
+    for v in &violations {
+        eprintln!(
+            "{}:{}: {} — {}",
+            v.file.display(),
+            v.line,
+            v.rule,
+            v.message
+        );
+    }
+    eprintln!("error: {} lint violation(s)", violations.len());
+    Ok(1)
 }
 
 #[cfg(test)]

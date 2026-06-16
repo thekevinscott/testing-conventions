@@ -32,6 +32,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `[python].coverage` `fail_under` / `branch` and exits non-zero if below. Library
   API: `coverage::{measure, evaluate, parse_report, Thresholds, CoverageReport,
   Outcome}`. (#26, #32)
+- `lint` module + `integration lint` CLI — the first deterministic *lint* on test
+  code. `integration lint --language python <PATH>` parses each Python test file
+  (`*_test.py`, `test_*.py`, `conftest.py`) with `rustpython_parser` and walks the
+  AST, exiting non-zero on any violation. First lint:
+  **`no-monkeypatch`** (#49) — a test/fixture that declares the `monkeypatch`
+  parameter (patch with `unittest.mock` wrapped in a `pytest.fixture` instead).
+  Library API: `testing_conventions::lint::{find_violations, Violation}`. (#48, #49)
 
 ### Changed
 

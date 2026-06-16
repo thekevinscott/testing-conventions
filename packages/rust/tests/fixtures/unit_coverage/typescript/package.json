@@ -1,0 +1,10 @@
+{
+  "name": "tc-unit-coverage-fixtures",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Real TypeScript codebases for the `unit coverage` rule's integration/e2e tests (#31). Each subdirectory is a small library whose colocated vitest suite is run under v8 coverage; the suites are wired to land at known coverage levels so the thresholds in the sibling *.toml configs cleanly pass or fail. Installed once here (shared node_modules); the CLI runs vitest from each codebase dir, resolving this install via Node's parent lookup.",
+  "devDependencies": {
+    "vitest": "3.2.6",
+    "@vitest/coverage-v8": "3.2.6"
+  }
+}

@@ -32,6 +32,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `[python].coverage` `fail_under` / `branch` and exits non-zero if below. Library
   API: `coverage::{measure, evaluate, parse_report, Thresholds, CoverageReport,
   Outcome}`. (#26, #32)
+- `unit coverage --language typescript` — the TypeScript twin (#31). Runs the unit
+  suite under `vitest` v8 coverage (json-summary reporter), excludes `*.test.*`,
+  declaration files, and every `coverage`-exempt path from the denominator, and
+  enforces the four `[typescript].coverage` thresholds (`lines` / `branches` /
+  `functions` / `statements`) independently — exiting non-zero, and naming every
+  metric below its floor, if any falls short. `npx vitest` runs the project-local
+  toolchain, so `vitest` and `@vitest/coverage-v8` must be installed under the
+  scanned path. New library API: `coverage::{measure_typescript,
+  evaluate_typescript, parse_vitest_report, TypeScriptThresholds, VitestReport,
+  VitestTotals, VitestMetric}`, sharing the existing `Outcome`. (#31)
 - `lint` module + `integration lint` CLI — the first deterministic *lint* on test
   code. `integration lint --language python <PATH>` parses each Python test file
   (`*_test.py`, `test_*.py`, `conftest.py`) with `rustpython_parser` and walks the

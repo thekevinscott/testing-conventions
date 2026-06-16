@@ -1,0 +1,7 @@
+[typescript]
+coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
+
+[[typescript.exempt]]
+path = "shim.ts"
+rules = ["coverage"]
+reason = "thin launcher shim; its branches are exercised by the e2e suite, not units"

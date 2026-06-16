@@ -1,0 +1,10 @@
+# `above` fixture for the Rust coverage rule (#37): a crate whose every source
+# region and line is exercised by its colocated inline `#[cfg(test)]` tests, so
+# `cargo llvm-cov` reports 100% regions and 100% lines — it clears a 100 floor.
+# `[workspace]` isolates the fixture from the parent cargo workspace.
+[package]
+name = "cov_rust_above"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

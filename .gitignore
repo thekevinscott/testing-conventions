@@ -25,3 +25,6 @@ build/
 docs/.vitepress/cache
 docs/.vitepress/dist
 docs/node_modules/
+
+# cargo-llvm-cov regenerates these for the unit-coverage Rust fixture crates
+packages/rust/tests/fixtures/unit_coverage/rust/*/Cargo.lock

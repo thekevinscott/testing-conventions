@@ -1,0 +1,2 @@
+[rust]
+coverage = { regions = 100, lines = 100 }

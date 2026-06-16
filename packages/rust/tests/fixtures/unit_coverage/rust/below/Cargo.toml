@@ -1,0 +1,11 @@
+# `below` fixture for the Rust coverage rule (#37): the unit's inline test
+# exercises only one arm of a branch, so the other arm's region and line are
+# never executed — `cargo llvm-cov` reports under 100% on both metrics, so it
+# fails a 100 floor (but clears a lower one). `[workspace]` isolates the fixture
+# from the parent cargo workspace.
+[package]
+name = "cov_rust_below"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

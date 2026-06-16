@@ -313,6 +313,22 @@ treated it as source. The integration lints now scan `*_test.py` + `conftest.py`
 and the unit-isolation scan scans `*_test.py`, only. Behavior-only — no API or
 rule-id change.
 
+Also adds **patch (changed-line) coverage — Python** (#132, parent #46): `unit
+patch-coverage --language python [--base <REF>] [--config <CONFIG>] <PATH>` diffs
+`<base>...HEAD` and requires every line the change adds or modifies to be covered
+by the unit suite — failing when a changed, executable line is a coverage.py
+missing line or the source of a branch never taken (line + branch). The diff
+machinery (`git diff --unified=0 <base>...HEAD`) is established here for the
+forthcoming TS / Rust twins; `--base` defaults to `origin/main`. It reuses the
+floor's `coverage` exemption (#32) — an exempt file's changed lines are lifted —
+but, unlike `co-change` (#33), an *added* file's new lines are subjects (measured
+via coverage.py `--source`). Purely additive: a new `unit` subcommand and the
+`testing_conventions::patch_coverage` module (`check`, `changed_lines`,
+`uncovered_changed_lines`, `Uncovered`); `coverage` gains `FileCoverage` /
+`measure_patch_report` and a `files` map on `CoverageReport` (an additive,
+`#[serde(default)]` field — `measure` / `evaluate` and the floor are unchanged).
+`--language typescript` / `rust` are rejected as separate items.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -618,3 +634,14 @@ Expected: the non-regression ratchet tests pass (#131) — `ratchet_regressed`
 (~86%, clears the 85 floor) regresses below its committed 100% baseline and exits
 `1`, while `ratchet_clean` (100% meeting a 100% baseline) exits `0`. Requires
 `coverage` + `pytest` on `PATH`.
+
+```
+cd packages/rust && cargo test --test patch_coverage --test patch_coverage_e2e
+```
+
+Expected: the patch-coverage tests pass (#132) — in a throwaway git repo, a change
+that adds an uncovered line or branch (or a brand-new untested file) is flagged and
+the binary exits `1`, while rewording a covered line, or touching only a comment,
+exits `0`; a `coverage` exemption lifts an uncovered file; an unresolvable `--base`
+errors; and `--language typescript` / `rust` are rejected. Requires `coverage` +
+`pytest` + `git` on `PATH`.

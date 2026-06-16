@@ -6,6 +6,7 @@ pub mod e2e;
 pub mod isolation;
 pub mod lint;
 pub mod packaging;
+pub mod patch_coverage;
 pub mod ts;
 pub mod violation;
 pub mod workflow;
@@ -87,6 +88,27 @@ enum UnitRule {
         /// `exempt` list. Optional: if the file — or its `[<language>].coverage`
         /// table — is absent, the language's sane default floor is used and
         /// nothing is exempt.
+        #[arg(long, default_value = "testing-conventions.toml")]
+        config: PathBuf,
+    },
+    /// Check that every line a git diff touches is covered by the unit suite
+    /// (patch / changed-line coverage, #132). Diff-scoped complement to the
+    /// whole-suite `unit coverage` floor: only the `<base>...HEAD` changed lines
+    /// must be covered.
+    PatchCoverage {
+        /// Directory whose unit suite is run and measured; also where git runs.
+        path: PathBuf,
+        /// Language convention to enforce (required). Python only for now — the
+        /// TypeScript and Rust twins are separate items.
+        #[arg(long, value_enum)]
+        language: colocated_test::Language,
+        /// Base ref to diff against: the check compares `<base>...HEAD`, the
+        /// changes this branch introduced (what a PR shows). Defaults to
+        /// `origin/main`; override for a different base or an explicit range.
+        #[arg(long, default_value = "origin/main")]
+        base: String,
+        /// testing-conventions config file supplying the coverage `exempt` list.
+        /// Optional: if the file is absent, nothing is exempt.
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
@@ -192,6 +214,12 @@ where
                 language,
                 config,
             } => run_unit_coverage(&path, language, &config),
+            UnitRule::PatchCoverage {
+                path,
+                language,
+                base,
+                config,
+            } => run_unit_patch_coverage(&path, &base, language, &config),
             UnitRule::Isolation {
                 path,
                 language,
@@ -430,6 +458,68 @@ fn run_unit_coverage(
             Ok(1)
         }
     }
+}
+
+/// Run the patch (changed-line) coverage check over `root` for `language`,
+/// diffing `<base>...HEAD` and requiring every changed line to be covered by the
+/// unit suite (#132). Returns `0` when every changed line is covered; otherwise
+/// prints each uncovered line to stderr and returns `1`.
+///
+/// Python only this slice — the TypeScript and Rust twins are later items under
+/// #46 (mirroring how `unit coverage` is staged). The `coverage`-rule exemptions
+/// from the config at `config_path` lift a file's changed lines (a missing config
+/// file → nothing exempt), reusing the floor's exemption surface (#32).
+fn run_unit_patch_coverage(
+    root: &Path,
+    base: &str,
+    language: colocated_test::Language,
+    config_path: &Path,
+) -> anyhow::Result<i32> {
+    match language {
+        colocated_test::Language::Python => {}
+        colocated_test::Language::TypeScript => anyhow::bail!(
+            "`unit patch-coverage` supports `--language python`; \
+             the TypeScript twin is a separate item"
+        ),
+        colocated_test::Language::Rust => anyhow::bail!(
+            "`unit patch-coverage` supports `--language python`; \
+             the Rust twin (`cargo llvm-cov`) is a separate item"
+        ),
+    }
+    let omit = patch_coverage_exemptions(root, config_path)?;
+    let uncovered = patch_coverage::check(root, base, &omit)?;
+    if uncovered.is_empty() {
+        return Ok(0);
+    }
+    for u in &uncovered {
+        eprintln!(
+            "changed line not covered by the unit suite: {}:{}",
+            u.file, u.line
+        );
+    }
+    eprintln!(
+        "error: {} changed line(s) not covered by the unit suite \
+         (add a unit test, or a `coverage` exempt entry with a reason)",
+        uncovered.len()
+    );
+    Ok(1)
+}
+
+/// The `coverage`-rule exempt paths resolved from the config at `config_path`
+/// (Python `[python].exempt`), as `root`-relative `--omit` patterns. A missing
+/// config file means nothing is exempt. Mirrors `run_unit_coverage`'s Python arm,
+/// so a file waived from the floor is waived from patch coverage too.
+fn patch_coverage_exemptions(root: &Path, config_path: &Path) -> anyhow::Result<Vec<String>> {
+    if !config_path.exists() {
+        return Ok(Vec::new());
+    }
+    let config = config::load_config(config_path)?;
+    let python = config.python.unwrap_or_default();
+    Ok(
+        config::resolve_exempt(root, &python.exempt, config::Rule::Coverage)?
+            .into_iter()
+            .collect(),
+    )
 }
 
 /// Run the unit-isolation check over `root` for `language`, printing each

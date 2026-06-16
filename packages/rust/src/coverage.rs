@@ -20,6 +20,7 @@
 //! ([`crate::config::resolve_exempt`]) and passes their paths to [`measure`] /
 //! [`measure_typescript`].
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -45,11 +46,40 @@ pub struct Thresholds {
     pub branch: bool,
 }
 
-/// A coverage.py JSON report (`coverage json`), pared to the totals the check
-/// needs. Unmodeled fields (per-file data, metadata) are ignored.
+/// A coverage.py JSON report (`coverage json`), pared to what the checks need:
+/// the `totals` (the floor and ratchet) and the per-file `files` block (patch
+/// coverage, #132). Unmodeled fields (metadata, per-function/class data) are
+/// ignored.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CoverageReport {
     pub totals: Totals,
+    /// Per-file line/branch detail, keyed by the path coverage.py reports
+    /// (relative to the measured root). Additive: `#[serde(default)]`, so a report
+    /// parsed for the floor alone (the inline tests) needs no `files`.
+    #[serde(default)]
+    pub files: BTreeMap<String, FileCoverage>,
+}
+
+/// Per-file coverage detail from a coverage.py report (one `files` entry) — what
+/// patch coverage (#132) reads to decide whether a changed line is covered.
+/// Unmodeled fields (the summary, per-function/class data) are ignored.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct FileCoverage {
+    /// Executable lines the suite ran.
+    #[serde(default)]
+    pub executed_lines: Vec<u64>,
+    /// Executable lines the suite never ran — an uncovered changed line is one of
+    /// these.
+    #[serde(default)]
+    pub missing_lines: Vec<u64>,
+    /// Lines excluded from coverage (e.g. `# pragma: no cover`); never a miss.
+    #[serde(default)]
+    pub excluded_lines: Vec<u64>,
+    /// `[source_line, dest_line]` pairs for branches the suite never took; `dest`
+    /// may be negative (a function / loop exit). Only the source line matters to
+    /// patch coverage. Empty when branch coverage was off.
+    #[serde(default)]
+    pub missing_branches: Vec<Vec<i64>>,
 }
 
 /// The `totals` block of a coverage.py report.
@@ -180,7 +210,17 @@ pub fn measure(root: &Path, thresholds: Thresholds, omit: &[String]) -> Result<O
 /// report — the totals the floor ([`evaluate`]) and the ratchet
 /// ([`evaluate_ratchet`]) both read. `omit` is as in [`measure`].
 pub fn measure_report(root: &Path, omit: &[String]) -> Result<CoverageReport> {
-    run_coverage(root, omit)
+    run_coverage(root, omit, false)
+}
+
+/// Run the Python unit suite under coverage.py in `root` with **every** source
+/// under `root` measured (`coverage run --source=.`) and return the parsed report
+/// — so an untested source shows in the `files` block as wholly uncovered rather
+/// than vanishing. The per-file detail is what patch coverage (#132) reads; `omit`
+/// is as in [`measure`] (an exempt file stays out of the run, so its changed
+/// lines are lifted).
+pub fn measure_patch_report(root: &Path, omit: &[String]) -> Result<CoverageReport> {
+    run_coverage(root, omit, true)
 }
 
 /// A coverage.py data file under the temp dir — unique per call (so checks
@@ -207,17 +247,27 @@ impl Drop for DataFile {
 }
 
 /// Run coverage.py over the unit suite in `root` and return the parsed report.
-fn run_coverage(root: &Path, omit: &[String]) -> Result<CoverageReport> {
+///
+/// `include_all_sources` adds `--source=.` so coverage measures every source
+/// under `root` — even one no test imports, which then appears in the `files`
+/// block as wholly uncovered. The floor passes `false` (measuring only imported
+/// files, so its total is unchanged); patch coverage passes `true`.
+fn run_coverage(root: &Path, omit: &[String], include_all_sources: bool) -> Result<CoverageReport> {
     let data = DataFile::new();
     let omit = build_omit(omit);
 
     // Branch coverage on; measure the sources in `root` with the test files —
     // and any `coverage`-waived files — omitted from the denominator. Byte-code
     // and the pytest cache are suppressed so the scanned tree stays pristine.
-    let run = Command::new("coverage")
+    let mut command = Command::new("coverage");
+    command
         .current_dir(root)
         .args(["run", "--branch"])
-        .arg(format!("--omit={omit}"))
+        .arg(format!("--omit={omit}"));
+    if include_all_sources {
+        command.arg("--source=.");
+    }
+    let run = command
         .args(["-m", "pytest", "-q", "-p", "no:cacheprovider", "."])
         .env("COVERAGE_FILE", &data.0)
         .env("PYTHONDONTWRITEBYTECODE", "1")
@@ -515,6 +565,7 @@ mod tests {
                 percent_covered,
                 num_branches,
             },
+            files: BTreeMap::new(),
         }
     }
 
@@ -567,6 +618,38 @@ mod tests {
         let report = parse_report(json).expect("valid coverage.py json");
         assert_eq!(report.totals.percent_covered, 91.5);
         assert_eq!(report.totals.num_branches, 8);
+    }
+
+    #[test]
+    fn parses_the_per_file_block_for_patch_coverage() {
+        // A realistic `coverage json` shape: a `files` map carrying the per-file
+        // missing lines and `[src, dst]` branch pairs patch coverage (#132) reads.
+        let json = r#"{
+            "files": {
+                "widget.py": {
+                    "executed_lines": [1, 2, 3, 4, 6],
+                    "summary": {"percent_covered": 85.0},
+                    "missing_lines": [5],
+                    "excluded_lines": [],
+                    "missing_branches": [[4, 5]]
+                }
+            },
+            "totals": {"percent_covered": 85.0, "num_branches": 4}
+        }"#;
+        let report = parse_report(json).expect("valid coverage.py json with files");
+        let widget = report.files.get("widget.py").expect("widget.py is present");
+        assert_eq!(widget.missing_lines, vec![5]);
+        assert_eq!(widget.missing_branches, vec![vec![4, 5]]);
+        // The floor still reads totals from the same report.
+        assert_eq!(report.totals.percent_covered, 85.0);
+    }
+
+    #[test]
+    fn a_report_without_a_files_block_parses_with_an_empty_map() {
+        // The floor/ratchet path parses totals only; `files` defaults to empty.
+        let report = parse_report(r#"{"totals":{"percent_covered":100.0,"num_branches":2}}"#)
+            .expect("valid coverage.py json");
+        assert!(report.files.is_empty());
     }
 
     #[test]

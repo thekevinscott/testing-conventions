@@ -29,8 +29,10 @@ launcher shim — get an explicit, reason-required exemption in config; see
 
 ## Check unit-test coverage
 
-Coverage floors are enforced on the **unit suite only**, with branch coverage on and test
-files excluded from the denominator. Put the floor in your config and run `unit coverage`:
+Coverage floors are enforced on the **unit suite only**, with test files excluded from the
+denominator. Put the floors in your config and run `unit coverage`.
+
+**Python** — one total floor, branch coverage on, measured by `coverage.py`:
 
 ```toml
 # testing-conventions.toml
@@ -43,8 +45,25 @@ testing-conventions unit coverage --language python --config testing-conventions
 ```
 
 It runs the suite under `coverage.py`, compares the total to `fail_under`, and exits non-zero
-on a shortfall — so CI fails on a coverage regression. (`python`, `coverage`, and `pytest`
-must be installed; Python is the only language wired today.)
+on a shortfall. (`python`, `coverage`, and `pytest` must be installed.)
+
+**TypeScript** — four independent floors, measured by `vitest` v8 coverage:
+
+```toml
+# testing-conventions.toml
+[typescript]
+coverage = { lines = 90, branches = 80, functions = 90, statements = 90 }
+```
+
+```sh
+testing-conventions unit coverage --language typescript --config testing-conventions.toml src/
+```
+
+It runs the suite under `vitest` (via `npx`, so `vitest` and `@vitest/coverage-v8` must be
+installed), excludes `*.test.*` and declaration files, and exits non-zero naming any of the four
+metrics below its floor — so CI fails on a coverage regression. Measuring all four matters: line
+coverage can read 100% while branches lag, when every line of a function runs but its `else` is
+never taken.
 
 ## Wire it into CI
 
@@ -61,6 +80,8 @@ steps:
     run: testing-conventions unit colocated-test --language typescript src/
   - name: Unit-test coverage (Python)
     run: testing-conventions unit coverage --language python --config testing-conventions.toml src/
+  - name: Unit-test coverage (TypeScript)
+    run: testing-conventions unit coverage --language typescript --config testing-conventions.toml src/
 ```
 
 Or skip the boilerplate with the [reusable workflow](./ci) — one job that runs every rule.

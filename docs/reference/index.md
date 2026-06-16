@@ -57,7 +57,7 @@ testing-conventions unit coverage --language <LANG> --config <CONFIG> <PATH>
 | Argument / flag     | Description                                                                |
 | ------------------- | -------------------------------------------------------------------------- |
 | `<PATH>`            | Directory whose unit suite is run and measured.                            |
-| `--language <LANG>` | **Required.** `python` only for now (TypeScript / Rust coverage are separate items). |
+| `--language <LANG>` | **Required.** `python` or `typescript` (Rust coverage is a separate item). |
 | `--config <CONFIG>` | Config file providing the thresholds (default `testing-conventions.toml`). |
 
 For **`python`**, runs `coverage.py` with branch coverage on — measuring the sources under
@@ -65,6 +65,14 @@ For **`python`**, runs `coverage.py` with branch coverage on — measuring the s
 `[python].coverage` (`fail_under`, `branch`). Exits `0` when the floor is met, `1` (with the
 actual vs. required percent on stderr) when it isn't. `coverage` and `pytest` must be installed.
 Files with a `coverage` [exemption](#exemptions) are also excluded from the denominator.
+
+For **`typescript`**, runs `vitest` with v8 coverage (the json-summary reporter) — measuring the
+`.ts` / `.tsx` / `.mts` / `.cts` sources under `<PATH>` with `*.test.*` and declaration files
+excluded from the denominator — and compares each of the four metrics against
+`[typescript].coverage` (`lines`, `branches`, `functions`, `statements`). Exits `0` when every
+floor is met, `1` (naming each metric below its floor on stderr) when any isn't. The tool invokes
+`npx vitest`, so `vitest` and `@vitest/coverage-v8` must be installed under `<PATH>`. Files with a
+`coverage` [exemption](#exemptions) are also excluded from the denominator.
 
 ## Exemptions
 

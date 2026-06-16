@@ -44,6 +44,17 @@ supporting `testing_conventions::coverage` module (`measure`, `evaluate`,
 `parse_report`, and the `Thresholds` / `CoverageReport` / `Outcome` types). Purely
 additive — a new subcommand and module; nothing existing changes.
 
+Also adds TypeScript coverage (#31), the twin of #26: `unit coverage --language
+typescript --config <CONFIG> <PATH>` runs the unit suite under `vitest` v8
+coverage and enforces the four `[typescript].coverage` thresholds (`lines` /
+`branches` / `functions` / `statements`), excluding `*.test.*` and declaration
+files — and any `coverage`-exempt path — from the denominator. vitest reports four
+independent metrics rather than Python's single total, so it adds its own
+`coverage::{measure_typescript, evaluate_typescript, parse_vitest_report}` plus
+the `TypeScriptThresholds` / `VitestReport` / `VitestTotals` / `VitestMetric`
+types, sharing the existing `Outcome`. Purely additive — `--language typescript`
+previously errored as unimplemented; nothing existing changes.
+
 Also adds the `integration lint` command and its `lint` module (#48, #49): a
 deterministic, AST-based lint on Python test files. `integration lint --language
 python <PATH>` parses each test file (`*_test.py`, `test_*.py`, `conftest.py`) with
@@ -160,6 +171,17 @@ cd packages/rust && cargo test --test coverage
 Expected: the coverage tests pass — including the `exempt_cov` codebase clearing a
 100 floor once its shim is omitted by a `coverage` exemption. Requires `coverage`
 + `pytest` on `PATH`.
+
+```
+cd packages/rust && cargo test --test coverage_ts --test coverage_ts_e2e
+```
+
+Expected: the TypeScript coverage tests pass — `full` clears a 100 floor on all
+four metrics, `above` fails 100 but clears the mid floor, `below` (100% lines but
+~66% branches) fails the mid floor on branches, and `exempt_cov` clears 100 once
+its shim is omitted by a `coverage` exemption. Requires Node with `vitest` +
+`@vitest/coverage-v8` installed (run `npm ci` in
+`tests/fixtures/unit_coverage/typescript`).
 
 ```
 cd packages/rust && cargo test --test integration_lint --test integration_lint_e2e

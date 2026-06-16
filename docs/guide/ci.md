@@ -32,13 +32,16 @@ any violation.
 | `languages` | `["python", "typescript"]`  | JSON array of languages to check (`python`, `typescript`). |
 | `path`      | `src`                       | Directory scanned recursively for sources.                 |
 | `version`   | latest                      | `testing-conventions` version to install (e.g. `0.1.0`).   |
-| `config`    | `testing-conventions.toml`  | Config file with the coverage thresholds (`[python].coverage`). |
+| `config`    | `testing-conventions.toml`  | Config file with the coverage thresholds (`[<language>].coverage`). |
 
-The Python **coverage** job runs when `python` is among `languages`: it runs your unit suite
+The **coverage** job runs once per requested language. For `python` it runs your unit suite
 under `coverage.py` (branch on, `*_test.py` excluded) and fails if the total is below the
-`[python].coverage` floor in your `config`. It installs `coverage` + `pytest`, so it fits
-suites with no third-party runtime imports; a project that needs its own dependencies should
-drive the CLI directly (below) until #56 makes this config-driven.
+`[python].coverage` floor, installing `coverage` + `pytest`. For `typescript` it runs the suite
+under `vitest` v8 coverage and fails below any of the four `[typescript].coverage` thresholds
+(`lines` / `branches` / `functions` / `statements`), installing your project's deps with `pnpm`
+so `vitest` + `@vitest/coverage-v8` are present. A project on a different toolchain — a non-`pnpm`
+package manager, or Python sources that need third-party runtime deps installed — should drive
+the CLI directly (below) until #56 makes this config-driven.
 
 ## Roll your own
 
@@ -50,6 +53,7 @@ with the required `--language` flag:
 - run: testing-conventions unit colocated-test --language python src/
 - run: testing-conventions unit colocated-test --language typescript src/
 - run: testing-conventions unit coverage --language python --config testing-conventions.toml src/
+- run: testing-conventions unit coverage --language typescript --config testing-conventions.toml src/
 ```
 
 Either way, the non-zero exit on a violation is what fails the build.

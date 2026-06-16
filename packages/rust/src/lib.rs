@@ -169,7 +169,7 @@ fn run_unit_coverage(
     config_path: &Path,
 ) -> anyhow::Result<i32> {
     let config = config::load_config(config_path)?;
-    let (thresholds, exempt) = match language {
+    let outcome = match language {
         colocated_test::Language::Python => {
             let python = config
                 .python
@@ -183,16 +183,35 @@ fn run_unit_coverage(
                 fail_under: coverage.fail_under,
                 branch: coverage.branch,
             };
-            let exempt = config::resolve_exempt(root, &python.exempt, config::Rule::Coverage)?;
-            (thresholds, exempt)
+            let omit: Vec<String> =
+                config::resolve_exempt(root, &python.exempt, config::Rule::Coverage)?
+                    .into_iter()
+                    .collect();
+            coverage::measure(root, thresholds, &omit)?
         }
-        colocated_test::Language::TypeScript => anyhow::bail!(
-            "`unit coverage` supports `--language python` only for now; \
-             TypeScript coverage is a separate item"
-        ),
+        colocated_test::Language::TypeScript => {
+            let typescript = config
+                .typescript
+                .as_ref()
+                .context("config has no [typescript] table to read coverage thresholds from")?;
+            let coverage = typescript
+                .coverage
+                .as_ref()
+                .context("config [typescript] table has no `coverage` thresholds")?;
+            let thresholds = coverage::TypeScriptThresholds {
+                lines: coverage.lines,
+                branches: coverage.branches,
+                functions: coverage.functions,
+                statements: coverage.statements,
+            };
+            let exclude: Vec<String> =
+                config::resolve_exempt(root, &typescript.exempt, config::Rule::Coverage)?
+                    .into_iter()
+                    .collect();
+            coverage::measure_typescript(root, thresholds, &exclude)?
+        }
     };
-    let omit: Vec<String> = exempt.into_iter().collect();
-    match coverage::measure(root, thresholds, &omit)? {
+    match outcome {
         coverage::Outcome::Pass => Ok(0),
         coverage::Outcome::Fail(reason) => {
             eprintln!("error: coverage check failed — {reason}");

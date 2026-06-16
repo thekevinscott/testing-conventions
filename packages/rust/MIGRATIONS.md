@@ -272,6 +272,37 @@ randomness / database / low-level OS), classifying import heads against an embed
 `find_unit_isolation_violations` reports the extra findings; no signature or rule-id
 change, so the #102 waiver still applies.
 
+Also makes the remaining Python integration lints **waivable** (#123):
+`no-monkeypatch` (#49), `no-inline-patch` (#50), and `no-environ-mutation` (#51)
+join `no-constant-patch` in the reason-required `[[python.exempt]]` escape hatch
+(#32/#102) — they were the only blocking findings without one, because their ids
+weren't `config::Rule` variants (so `apply_waivers` skipped them and the loader
+rejected `rules = ["no-monkeypatch"]` outright). Additive: new `config::Rule`
+variants `NoMonkeypatch` / `NoInlinePatch` / `NoEnvironMutation` (with `id()` /
+`from_id()`); the lint behavior and every other surface are unchanged.
+
+Also adds the commit-scoped `co-change` check (#33): `unit co-change --language
+<python|typescript> --base <REF> <PATH>` diffs `<base>...HEAD` and flags any source file that
+was **modified** (and still holds code) or **deleted** without its colocated test (`foo.py` →
+`foo_test.py`, `foo.ts` → `foo.test.ts`) changing in the same diff — catching edits and removals
+that leave the test stale. **Added** files aren't subjects (new code is the coverage floor's
+job), a test file / empty file / `conftest.py` is never a subject, and a `co-change` exemption
+lifts a source. Purely additive: a new `unit` subcommand, the `testing_conventions::co_change`
+module (`stale_sources`), and a waivable `config::Rule::CoChange` (`co-change`); nothing existing
+changes. `--language rust` is rejected (inline `#[cfg(test)]` units have no sibling test to go
+stale).
+
+Finally, adds the **coverage non-regression ratchet — Python** (#131, parent #46):
+`unit coverage --language python` now also fails on a regression. A committed
+`coverage-baseline.json` beside the measured tree records the last total per
+language (`{ "python": { "percent_covered": 100.0 } }`), and a run whose Python
+total drops below the recorded baseline fails even when it still clears the
+configured floor. Purely additive — an absent baseline file means no ratchet
+(floor-only, unchanged). New library API `coverage::{read_baseline,
+evaluate_ratchet, measure_report, Baseline, PythonBaseline, BASELINE_PATH}`; the
+existing `measure` / `evaluate` are unchanged. The TypeScript / Rust arms and the
+explicit baseline-record step are later slices.
+
 ### Required changes
 
 The colocated-test CLI was renamed (twice, pre-1.0) and its language flag made
@@ -347,6 +378,16 @@ Exemptions (#32) change runtime behavior:
   missing-test orphan, and `unit coverage --language python` omits `conftest.py`
   from the denominator (alongside `*_test.py`). conftest.py is pytest support,
   never a subject. (#112)
+- A `[[python.exempt]]` entry naming `no-monkeypatch`, `no-inline-patch`, or
+  `no-environ-mutation` is now accepted and waives that lint for the file. Previously
+  the loader **rejected** those ids as an unknown `rules` variant (and even parsed,
+  `integration lint` could never have waived them). A reason-less or stale entry still
+  errors. (#123)
+- `unit coverage --language python` now also enforces a **non-regression ratchet**
+  (#131): with a `coverage-baseline.json` beside `<PATH>`, a run whose total drops
+  below the recorded `python` baseline exits non-zero — printing `coverage NN.NN%
+  regressed below the recorded baseline MM.MM%` — even when the floor is still met.
+  Without the file, behavior is unchanged.
 
 ### Verification
 
@@ -394,6 +435,15 @@ cd packages/rust && cargo test --test e2e_attest --test e2e_attest_e2e
 Expected: the `e2e attest` tests pass — in a throwaway git repo, `attest` names
 HEAD, writes `e2e-attestation.json`, and commits it on top, exiting `0` even when
 the wrapped command fails (force a run, not a pass). Requires `git`.
+
+```
+cd packages/rust && cargo test --test integration_lint --test integration_lint_e2e
+```
+
+Expected: the integration-lint tests pass — including the `monkeypatch`, `inline_patch`,
+and `environ` `waived` fixtures, each identical to its red fixture but cleared to exit `0`
+by a reason-required `[[python.exempt]]` entry, alongside the existing `constant_patch`
+and `no_first_party_patch` waivers. (#123)
 
 ```
 cd packages/rust && cargo test --test integration_lint --test integration_lint_e2e
@@ -534,3 +584,22 @@ Expected: the external-deps tests pass (#121, slice 3) — the `external/red` fi
 (imports un-mocked `requests` + `subprocess`) is flagged and exits `1`, the
 `external/clean` fixture (mocks them by string, uses only pure `json`) reports
 nothing and exits `0`, and `external/waived` lifts both back to `0`.
+
+```
+cd packages/rust && cargo test --test co_change --test co_change_e2e
+```
+
+Expected: the commit-scoped co-change tests pass (#33) — in a throwaway git repo,
+editing or deleting a source without touching its colocated test is flagged and the
+binary exits `1`; changing both, changing only a test, adding a brand-new source, or
+touching an empty/`conftest.py` file exits `0`; a `co-change` exemption lifts a stale
+source; and `--language rust` is rejected. Requires `git`.
+
+```
+cd packages/rust && cargo test --test coverage_ratchet --test coverage_ratchet_e2e
+```
+
+Expected: the non-regression ratchet tests pass (#131) — `ratchet_regressed`
+(~86%, clears the 85 floor) regresses below its committed 100% baseline and exits
+`1`, while `ratchet_clean` (100% meeting a 100% baseline) exits `0`. Requires
+`coverage` + `pytest` on `PATH`.

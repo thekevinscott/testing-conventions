@@ -46,6 +46,18 @@ fn monkeypatch_clean_exits_zero() {
     assert_eq!(lint_exit("monkeypatch/clean"), 0);
 }
 
+#[test]
+fn monkeypatch_waived_exits_zero() {
+    // Same monkeypatch use as the red fixture, but the file is waived in the config (#123).
+    assert_eq!(
+        lint_exit_with_config(
+            "monkeypatch/waived",
+            "monkeypatch/waived/testing-conventions.toml"
+        ),
+        0
+    );
+}
+
 // R2: patches must live in fixtures, not inline (#50)
 #[test]
 fn inline_patch_red_exits_nonzero() {
@@ -57,6 +69,18 @@ fn inline_patch_clean_exits_zero() {
     assert_eq!(lint_exit("inline_patch/clean"), 0);
 }
 
+#[test]
+fn inline_patch_waived_exits_zero() {
+    // Same inline `with patch(...)` as the red fixture, but the file is waived (#123).
+    assert_eq!(
+        lint_exit_with_config(
+            "inline_patch/waived",
+            "inline_patch/waived/testing-conventions.toml"
+        ),
+        0
+    );
+}
+
 // R3: env via patch.dict(os.environ, …) (#51)
 #[test]
 fn environ_red_exits_nonzero() {
@@ -66,6 +90,15 @@ fn environ_red_exits_nonzero() {
 #[test]
 fn environ_clean_exits_zero() {
     assert_eq!(lint_exit("environ/clean"), 0);
+}
+
+#[test]
+fn environ_waived_exits_zero() {
+    // Same os.environ mutation as the red fixture, but the file is waived (#123).
+    assert_eq!(
+        lint_exit_with_config("environ/waived", "environ/waived/testing-conventions.toml"),
+        0
+    );
 }
 
 // R4: don't patch module-global config constants (#52, waivable)

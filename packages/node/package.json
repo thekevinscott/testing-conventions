@@ -15,6 +15,7 @@
     "build": "tsx scripts/build.ts",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:e2e": "cargo build --release --manifest-path ../rust/Cargo.toml --bin testing-conventions && vitest run --config vitest.e2e.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run build"
   },

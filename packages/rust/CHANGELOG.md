@@ -7,6 +7,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Commit-scoped `co-change`** (#33). New `unit co-change --language <python|typescript>
+  --base <REF> [--config <CONFIG>] <PATH>` command: a diff-scoped check that a source file
+  **modified** (and still holding code) or **deleted** between `<base>...HEAD` also changed its
+  colocated test (the #15/#18 pairing — `foo.py` → `foo_test.py`, `foo.ts` → `foo.test.ts`), so
+  an edit or removal can't leave the test silently stale. **Added** source files are not subjects
+  (brand-new code is the coverage floor's job); a test file, an empty/comment-only file, and
+  Python's `conftest.py` are never subjects; and a source with a `co-change` exemption needn't
+  co-change. `<base>...HEAD` is the changes this branch introduced (what a PR shows), so CI passes
+  the PR base (e.g. `--base origin/main`). `--language rust` is rejected — Rust units are inline
+  `#[cfg(test)]` in the same file, so a sibling test can't go stale (mirrors how `unit coverage`
+  rejects Rust). Runs `git diff` in `<PATH>`, prints each stale source to stderr, and exits
+  non-zero. New library API `testing_conventions::co_change::stale_sources(repo, base, language,
+  exempt)` and a new waivable `config::Rule` variant `co-change` (`[[<language>.exempt]] rules =
+  ["co-change"]`, reusing #32). (#33)
+- **Waivers for the remaining Python integration lints** (#123). The reason-required
+  `[[python.exempt]]` escape hatch (#32/#102) now covers the last three lints that
+  lacked it — `no-monkeypatch` (#49), `no-inline-patch` (#50), and
+  `no-environ-mutation` (#51) — so they waive like their sibling `no-constant-patch`
+  (#52) and every other rule. Previously their ids weren't `config::Rule` variants, so
+  `apply_waivers` could never waive them and the loader rejected
+  `rules = ["no-monkeypatch"]` outright. Decision per #3: the waiver is reason-required,
+  single-file, auditable, and stale-checked, so an honest hatch doesn't weaken the gate.
+  New `config::Rule` variants `NoMonkeypatch` / `NoInlinePatch` / `NoEnvironMutation`
+  (with `id()` / `from_id()`). A waived file passes; an un-waived violation still fails;
+  a reason-less or stale entry still errors. Example:
+  `[[python.exempt]] rules = ["no-inline-patch"]`.
+- **Coverage non-regression ratchet — Python** (#131, parent #46). `unit coverage
+  --language python` now also fails on a **regression**: a committed
+  `coverage-baseline.json` beside the measured tree records the last total per
+  language, and a run whose Python total drops below the recorded baseline fails
+  even when it still clears the configured floor. A missing baseline file means no
+  ratchet — floor-only, backward compatible / zero-config. The baseline is the
+  committed-file design from #46 (parallel to `e2e-attestation.json`): auditable in
+  one diff, deterministic, no CI-provider state. New library API:
+  `coverage::{read_baseline, evaluate_ratchet, measure_report, Baseline,
+  PythonBaseline, BASELINE_PATH}`; the existing `measure` / `evaluate` are unchanged.
+  The TypeScript (#133) and Rust (#134) arms, and the explicit baseline-record step,
+  are later slices.
 - **Python unit isolation — external deps** (#121, slice 3). `unit isolation
   --language python` now also flags an imported, un-mocked **external** collaborator:
   a **third-party** package (any bare import that isn't first-party or stdlib) or an

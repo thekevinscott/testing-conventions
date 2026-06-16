@@ -90,6 +90,9 @@ pub enum Rule {
     ColocatedTest,
     /// The unit-test coverage floor ([`crate::coverage`]).
     Coverage,
+    /// The `no-constant-patch` lint ([`crate::lint`], issue #52) — the one
+    /// waivable mocking lint.
+    NoConstantPatch,
 }
 
 /// One auditable per-file exemption — a `[[<language>.exempt]]` entry.

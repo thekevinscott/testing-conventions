@@ -49,10 +49,13 @@ deterministic, AST-based lint on Python test files. `integration lint --language
 python <PATH>` parses each test file (`*_test.py`, `test_*.py`, `conftest.py`) with
 `rustpython_parser` and flags the mocking-mechanism lints — `no-monkeypatch` (a
 test/fixture that declares pytest's `monkeypatch` parameter), `no-inline-patch` (a
-`patch(...)` call in a test body, which belongs in a `pytest.fixture`), and
-`no-environ-mutation` (direct `os.environ` mutation; set env via `patch.dict`). Purely
-additive: a new command group (`integration`) and module
-(`testing_conventions::lint`); nothing existing changes.
+`patch(...)` call in a test body, which belongs in a `pytest.fixture`),
+`no-environ-mutation` (direct `os.environ` mutation; set env via `patch.dict`), and
+`no-constant-patch` (patching a module-global UPPER_CASE constant), which is waivable
+per file via a `--config` `exempt` entry (`rules = ["no-constant-patch"]`, reusing #32).
+Purely additive: a new command group (`integration`), a `--config` flag on `integration
+lint`, the `config::Rule::NoConstantPatch` value, and the `testing_conventions::lint`
+module; nothing existing changes.
 
 Finally, adds exemptions (#32) so the checker can be an honest blocking gate.
 Exemptions are **config-driven and explicit** — there is no automatic name- or

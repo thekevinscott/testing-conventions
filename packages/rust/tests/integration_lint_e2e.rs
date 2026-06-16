@@ -23,6 +23,18 @@ fn lint_exit(codebase: &str) -> i32 {
         .expect("the process should exit with a code")
 }
 
+/// Exit code of the built binary with `--config`.
+fn lint_exit_with_config(codebase: &str, config: &str) -> i32 {
+    Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["integration", "lint", "--language", "python", "--config"])
+        .arg(fixture(config))
+        .arg(fixture(codebase))
+        .status()
+        .expect("the built binary should run")
+        .code()
+        .expect("the process should exit with a code")
+}
+
 // R1: forbid `monkeypatch` (#49)
 #[test]
 fn monkeypatch_red_exits_nonzero() {
@@ -54,4 +66,21 @@ fn environ_red_exits_nonzero() {
 #[test]
 fn environ_clean_exits_zero() {
     assert_eq!(lint_exit("environ/clean"), 0);
+}
+
+// R4: don't patch module-global config constants (#52, waivable)
+#[test]
+fn constant_patch_red_exits_nonzero() {
+    assert_eq!(lint_exit("constant_patch/red"), 1);
+}
+
+#[test]
+fn constant_patch_waived_exits_zero() {
+    assert_eq!(
+        lint_exit_with_config(
+            "constant_patch/waived",
+            "constant_patch/waived/testing-conventions.toml"
+        ),
+        0
+    );
 }

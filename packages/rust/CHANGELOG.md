@@ -38,11 +38,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   AST, exiting non-zero on any violation. Lints:
   **`no-monkeypatch`** (#49) — a test/fixture that declares the `monkeypatch`
   parameter; **`no-inline-patch`** (#50) — a `patch(...)` / `patch.object(...)` /
-  `patch.dict(...)` call in a test body (`with patch(...)` or a bare call); and
+  `patch.dict(...)` call in a test body (`with patch(...)` or a bare call);
   **`no-environ-mutation`** (#51) — direct `os.environ` mutation (`os.environ[...] = …`,
-  `del`, or `update`/`pop`/`setdefault`/`clear`/`popitem`), which belongs in
-  `patch.dict(os.environ, …)`. Library API:
-  `testing_conventions::lint::{find_violations, Violation}`. (#48, #49, #50, #51)
+  `del`, or `update`/`pop`/`setdefault`/`clear`/`popitem`); and
+  **`no-constant-patch`** (#52) — patching a module-global UPPER_CASE constant
+  (`patch("pkg.config.CACHE_DIR", …)`), waivable per file via a `--config` `exempt`
+  entry (`rules = ["no-constant-patch"]`, reusing #32). Library API:
+  `testing_conventions::lint::{find_violations, Violation}`. (#48, #49, #50, #51, #52)
 
 ### Changed
 

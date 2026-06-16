@@ -106,7 +106,7 @@ testing-conventions unit patch-coverage --language <LANG> [--base <REF>] [--conf
 | Argument / flag     | Description                                                                |
 | ------------------- | -------------------------------------------------------------------------- |
 | `<PATH>`            | Directory whose unit suite is run and measured; also where git runs.       |
-| `--language <LANG>` | **Required.** `python` (the TypeScript and Rust twins are separate items). |
+| `--language <LANG>` | **Required.** `python` or `typescript` (the Rust twin is a separate item). |
 | `--base <REF>`      | Ref to diff against: the check compares `<base>...HEAD` (the changes this branch introduced, what a PR shows). Defaults to `origin/main`; override for a different base or an explicit range. |
 | `--config <CONFIG>` | Config file supplying the coverage `exempt` list (default `testing-conventions.toml`). Optional; if absent, nothing is exempt. |
 
@@ -124,6 +124,15 @@ waiver the floor honors. Unlike [`unit co-change`](#unit-co-change), an **added*
 *are* subjects (brand-new code must be covered too). The two are complementary: co-change enforces
 that a changed source and its colocated *test* move together, patch coverage enforces that the
 changed *lines* are exercised; one can pass while the other fails.
+
+For **`typescript`**, the twin of the above: runs `npx vitest` with the `json` (Istanbul) reporter
+and `--coverage.all` (so an untested changed file is seen as wholly uncovered) over the unit suite
+under `<PATH>`, then intersects the changed `.ts` / `.tsx` / `.mts` / `.cts` lines with vitest's
+per-file v8 coverage. A changed line is **uncovered** when it carries a statement the suite never
+executed, or the source of a branch a path of which the suite never took (line + branch). `vitest`
+and `@vitest/coverage-v8` must be installed under `<PATH>`, and `git` must resolve the `<REF>`. The
+same rules apply as for Python: comments and blanks aren't subjects, a `coverage`-exempt file's
+changed lines are lifted, and an added file's new lines *are* subjects.
 
 ### `unit isolation`
 

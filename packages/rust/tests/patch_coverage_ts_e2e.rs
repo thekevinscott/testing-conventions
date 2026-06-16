@@ -1,15 +1,23 @@
-//! E2E tests for patch (changed-line) coverage (Python — #132): drive the built
-//! CLI binary as a real subprocess against throwaway git repos and assert the
-//! exit code (and, for a red case, the named offender). Complements the
-//! in-process integration tests in `patch_coverage.rs`. Requires `coverage` +
-//! `pytest` + `git` on PATH.
+//! E2E tests for patch (changed-line) coverage (TypeScript — #135): drive the
+//! built CLI binary as a real subprocess against throwaway git repos and assert
+//! the exit code (and, for a red case, the named offender). Complements the
+//! in-process integration tests in `patch_coverage_ts.rs`. Requires `git` + a Node
+//! toolchain with vitest installed; the repo symlinks the fixtures' `node_modules`
+//! so `npx vitest` resolves.
 //!
-//! Starts red against the stub in `src/patch_coverage.rs` (detection reports
-//! nothing) and goes green once the diff + coverage detection is implemented.
+//! Starts red against the stub in `src/patch_coverage.rs` (`check_typescript`
+//! reports nothing) and goes green once the diff + vitest detection is implemented.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+/// The fixtures' installed vitest toolchain — symlinked into each throwaway repo
+/// so `npx vitest` resolves it via Node's parent lookup without a per-test install.
+fn fixtures_node_modules() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/unit_coverage/typescript/node_modules")
+}
 
 /// A throwaway git repo, removed on drop. A test writes a baseline, `commit`s it,
 /// captures `head()` as the `base`, then mutates and commits the "after".
@@ -19,12 +27,14 @@ impl TempRepo {
     fn new(slug: &str) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let root = std::env::temp_dir().join(format!(
-            "tc-patch-cov-e2e-{}-{}-{}",
+            "tc-patch-cov-ts-e2e-{}-{}-{}",
             slug,
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed),
         ));
         std::fs::create_dir_all(&root).unwrap();
+        std::os::unix::fs::symlink(fixtures_node_modules(), root.join("node_modules"))
+            .expect("symlinking the fixtures' node_modules should succeed");
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
@@ -71,18 +81,13 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// Exit code + stderr of `unit patch-coverage <repo> --language <lang> --base
+/// Exit code + stderr of `unit patch-coverage <repo> --language typescript --base
 /// <base> [--config <repo>/<config>]`, run as a real subprocess.
-fn patch_coverage(
-    repo: &TempRepo,
-    language: &str,
-    base: &str,
-    config: Option<&str>,
-) -> (i32, String) {
+fn patch_coverage(repo: &TempRepo, base: &str, config: Option<&str>) -> (i32, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
     cmd.arg("unit").arg("patch-coverage").arg(&repo.0).args([
         "--language",
-        language,
+        "typescript",
         "--base",
         base,
     ]);
@@ -99,43 +104,46 @@ fn patch_coverage(
     )
 }
 
-const WIDGET_PY: &str = r#"def widget(n):
-    if n > 0:
-        return "pos"
-    return "neg"
+const WIDGET_TS: &str = r#"export function widget(n: number): string {
+  if (n > 0) return 'pos';
+  return 'neg';
+}
 "#;
-const WIDGET_TEST_PY: &str = r#"from widget import widget
+const WIDGET_TEST_TS: &str = r#"import { expect, test } from 'vitest';
 
+import { widget } from './widget';
 
-def test_widget():
-    assert widget(1) == "pos"
-    assert widget(-1) == "neg"
+test('widget', () => {
+  expect(widget(1)).toBe('pos');
+  expect(widget(-1)).toBe('neg');
+});
 "#;
-const WIDGET_PY_UNCOVERED: &str = r#"def widget(n):
-    if n > 0:
-        return "pos"
-    if n == 42:
-        return "answer"
-    return "neg"
+const WIDGET_TS_UNCOVERED: &str = r#"export function widget(n: number): string {
+  if (n > 0) return 'pos';
+  if (n === 42) {
+    return 'answer';
+  }
+  return 'neg';
+}
 "#;
 
 #[test]
 fn uncovered_changed_line_exits_nonzero_and_names_it() {
     let repo = TempRepo::new("red");
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
+    repo.write("widget.ts", WIDGET_TS);
+    repo.write("widget.test.ts", WIDGET_TEST_TS);
     repo.commit("base");
     let base = repo.head();
-    repo.write("widget.py", WIDGET_PY_UNCOVERED);
+    repo.write("widget.ts", WIDGET_TS_UNCOVERED);
     repo.commit("add an untested branch");
 
-    let (code, stderr) = patch_coverage(&repo, "python", &base, None);
+    let (code, stderr) = patch_coverage(&repo, &base, None);
     assert_eq!(
         code, 1,
         "an uncovered changed line must exit non-zero; stderr: {stderr}"
     );
     assert!(
-        stderr.contains("widget.py"),
+        stderr.contains("widget.ts"),
         "stderr should name the uncovered file; got: {stderr}"
     );
 }
@@ -143,51 +151,56 @@ fn uncovered_changed_line_exits_nonzero_and_names_it() {
 #[test]
 fn covered_change_exits_zero() {
     let repo = TempRepo::new("clean");
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
+    repo.write("widget.ts", WIDGET_TS);
+    repo.write("widget.test.ts", WIDGET_TEST_TS);
     repo.commit("base");
     let base = repo.head();
     repo.write(
-        "widget.py",
-        r#"def widget(n):
-    if n > 0:
-        return "positive"
-    return "neg"
+        "widget.ts",
+        r#"export function widget(n: number): string {
+  if (n > 0) return 'positive';
+  return 'neg';
+}
 "#,
     );
     repo.write(
-        "widget_test.py",
-        r#"from widget import widget
+        "widget.test.ts",
+        r#"import { expect, test } from 'vitest';
 
+import { widget } from './widget';
 
-def test_widget():
-    assert widget(1) == "positive"
-    assert widget(-1) == "neg"
+test('widget', () => {
+  expect(widget(1)).toBe('positive');
+  expect(widget(-1)).toBe('neg');
+});
 "#,
     );
     repo.commit("reword a covered line and update its test");
 
-    let (code, stderr) = patch_coverage(&repo, "python", &base, None);
+    let (code, stderr) = patch_coverage(&repo, &base, None);
     assert_eq!(code, 0, "a fully covered change passes; stderr: {stderr}");
 }
 
 #[test]
 fn added_untested_file_exits_nonzero() {
     let repo = TempRepo::new("added");
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
+    repo.write("widget.ts", WIDGET_TS);
+    repo.write("widget.test.ts", WIDGET_TEST_TS);
     repo.commit("base");
     let base = repo.head();
-    repo.write("lonely.py", "def lonely():\n    return 41\n");
+    repo.write(
+        "lonely.ts",
+        "export function lonely(): number {\n  return 41;\n}\n",
+    );
     repo.commit("add a brand-new untested source");
 
-    let (code, stderr) = patch_coverage(&repo, "python", &base, None);
+    let (code, stderr) = patch_coverage(&repo, &base, None);
     assert_eq!(
         code, 1,
         "an added file's uncovered lines must exit non-zero; stderr: {stderr}"
     );
     assert!(
-        stderr.contains("lonely.py"),
+        stderr.contains("lonely.ts"),
         "stderr should name the added file; got: {stderr}"
     );
 }
@@ -197,34 +210,27 @@ fn a_coverage_exemption_lifts_the_uncovered_change() {
     let repo = TempRepo::new("exempt");
     repo.write(
         "testing-conventions.toml",
-        "[[python.exempt]]\npath = \"shim.py\"\nrules = [\"coverage\"]\n\
+        "[[typescript.exempt]]\npath = \"shim.ts\"\nrules = [\"coverage\"]\n\
          reason = \"thin launcher; logic lives in tested modules\"\n",
     );
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
-    repo.write("shim.py", "def shim():\n    return 0\n");
+    repo.write("widget.ts", WIDGET_TS);
+    repo.write("widget.test.ts", WIDGET_TEST_TS);
+    repo.write(
+        "shim.ts",
+        "export function shim(): number {\n  return 0;\n}\n",
+    );
     repo.commit("base");
     let base = repo.head();
-    repo.write("shim.py", "def shim():\n    return 1\n");
+    repo.write(
+        "shim.ts",
+        "export function shim(): number {\n  return 1;\n}\n",
+    );
     repo.commit("edit the untested launcher");
 
     // Flagged with no config, lifted once the `coverage` exemption is supplied.
-    assert_eq!(patch_coverage(&repo, "python", &base, None).0, 1);
+    assert_eq!(patch_coverage(&repo, &base, None).0, 1);
     assert_eq!(
-        patch_coverage(&repo, "python", &base, Some("testing-conventions.toml")).0,
+        patch_coverage(&repo, &base, Some("testing-conventions.toml")).0,
         0
     );
-}
-
-#[test]
-fn rust_is_rejected() {
-    // Rust patch coverage (`cargo llvm-cov`) is a separate item.
-    let repo = TempRepo::new("rust");
-    repo.write("lib.rs", "pub fn f() {}\n");
-    repo.commit("base");
-    let base = repo.head();
-
-    let (code, stderr) = patch_coverage(&repo, "rust", &base, None);
-    assert_eq!(code, 1, "`--language rust` is rejected; stderr: {stderr}");
-    assert!(stderr.contains("separate item"), "got: {stderr}");
 }

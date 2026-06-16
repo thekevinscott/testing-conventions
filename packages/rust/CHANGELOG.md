@@ -7,6 +7,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Patch (changed-line) coverage — TypeScript** (#135, parent #46). `unit patch-coverage
+  --language typescript [--base <REF>] [--config <CONFIG>] <PATH>`: the TypeScript twin of the
+  Python patch-coverage core (#132), built on the TypeScript coverage rule (#31). Reuses the same
+  `<base>...HEAD` diff machinery — scoped to `.ts` / `.tsx` / `.mts` / `.cts` sources — and maps the
+  changed lines against vitest's per-file v8 coverage: a changed line is *uncovered* when it carries
+  a statement the suite never executed, or the source of a branch a path of which the suite never
+  took (line + branch), exactly mirroring the Python arm's missing-line / missing-branch test. Runs
+  `npx vitest` with the `json` reporter and `--coverage.all` (so an untested changed file is seen as
+  wholly uncovered); `vitest` and `@vitest/coverage-v8` must be installed under `<PATH>`. A file with
+  a `[typescript].coverage` exemption (reusing #32) is excluded from the run, so its changed lines
+  are lifted. Prints each uncovered line to stderr as `<path>:<line>` and exits non-zero. New library
+  API `testing_conventions::patch_coverage::{check_typescript, uncovered_changed_lines_ts}` and
+  `coverage::measure_patch_typescript`. `--language rust` (`cargo llvm-cov`) remains a separate item.
+  (#135)
 - **Patch (changed-line) coverage — Python** (#132, parent #46). New `unit patch-coverage
   --language python [--base <REF>] [--config <CONFIG>] <PATH>` command: a diff-scoped coverage
   check that every line `<base>...HEAD` adds or modifies is covered by the unit suite. Where

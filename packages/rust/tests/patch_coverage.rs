@@ -397,15 +397,3 @@ fn patch_coverage_rejects_rust() {
     let err = run_patch_coverage(&repo, "rust", &base, None).unwrap_err();
     assert!(err.to_string().contains("separate item"), "got: {err}");
 }
-
-#[test]
-fn patch_coverage_rejects_typescript() {
-    // The TypeScript twin is a later slice.
-    let repo = TempRepo::new("ts-reject");
-    repo.write("widget.ts", "export const f = () => 1;\n");
-    repo.commit("base");
-    let base = repo.head();
-
-    let err = run_patch_coverage(&repo, "typescript", &base, None).unwrap_err();
-    assert!(err.to_string().contains("separate item"), "got: {err}");
-}

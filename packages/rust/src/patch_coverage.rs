@@ -63,6 +63,23 @@ pub fn check(root: &Path, base: &str, omit: &[String]) -> Result<Vec<Uncovered>>
     Ok(uncovered_changed_lines(&changed, &files))
 }
 
+/// Every line added or modified in `root`'s `<base>...HEAD` diff that the
+/// TypeScript unit suite (vitest) doesn't cover, sorted for deterministic output.
+/// `exclude` is the `coverage`-rule exemptions (as in
+/// [`crate::coverage::measure_typescript`]) — an excluded file is left out of the
+/// run, so its changed lines are lifted.
+///
+/// The TypeScript twin of [`check`] (#135): reuses the same `<base>...HEAD` diff
+/// machinery ([`changed_lines`]), scoped to `.ts` / `.tsx` / `.mts` / `.cts`
+/// sources, and maps the changed lines against vitest's per-file coverage.
+pub fn check_typescript(_root: &Path, _base: &str, _exclude: &[String]) -> Result<Vec<Uncovered>> {
+    // Stub (#135): the `unit patch-coverage --language typescript` command surface
+    // and the `coverage`-exemption plumbing are wired; the diff + vitest detection
+    // lands once the red integration tests are witnessed failing on CI (and the
+    // e2e tests fail locally).
+    Ok(Vec::new())
+}
+
 /// The new-side lines each file gained in `repo`'s `<base>...HEAD` diff, keyed by
 /// `repo`-relative path. The diff machinery shared by the TS / Rust twins.
 ///

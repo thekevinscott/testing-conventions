@@ -15,11 +15,10 @@ Every rule is a CLI command that fails CI on a violation, and links to its refer
 
 **Unit**
 
-- [`unit colocated-test`](https://thekevinscott.github.io/testing-conventions/reference/#unit-colocated-test) — every source file has a colocated, matching-named unit test (Python, TypeScript, Rust).
+- [`unit colocated-test`](https://thekevinscott.github.io/testing-conventions/reference/#unit-colocated-test) — every source file has a colocated, matching-named unit test (Python, TypeScript, Rust); with `--base`, a source changed in the diff must also change its colocated test (co-change; Python, TypeScript; [#33](https://github.com/thekevinscott/testing-conventions/issues/33)).
 - [`unit coverage`](https://thekevinscott.github.io/testing-conventions/reference/#unit-coverage) — enforce a coverage floor on the unit suite (Python, TypeScript; Rust in flight, [#37](https://github.com/thekevinscott/testing-conventions/issues/37)).
 - [`unit patch-coverage`](https://thekevinscott.github.io/testing-conventions/reference/#unit-patch-coverage) — require every line a change touches to be covered by the unit suite (Python, TypeScript; Rust planned, [#136](https://github.com/thekevinscott/testing-conventions/issues/136)).
 - [`unit isolation`](https://thekevinscott.github.io/testing-conventions/reference/#unit-isolation) — a unit test mocks every collaborator: no out-of-module calls or imports (Rust); no un-mocked first-party or external collaborators (Python, TypeScript); typed mocks (TypeScript).
-- [`unit co-change`](https://thekevinscott.github.io/testing-conventions/reference/#unit-co-change) — a changed source file requires its colocated test to change in the same range (Python, TypeScript; [#33](https://github.com/thekevinscott/testing-conventions/issues/33)).
 
 **Integration**
 
@@ -101,7 +100,7 @@ coverage floor's job, so this targets edits and removals.
 - **TypeScript:** a modified or deleted `foo.ts` requires `foo.test.ts` in the same diff.
 - **Rust:** not applicable. Units are an inline `#[cfg(test)]` module in the same file, so the test moves with the source.
 
-**Checked:** commit-scoped and deterministic. `unit co-change --base <ref>` diffs `<ref>...HEAD` and flags any changed source whose colocated test didn't change. Added files and exempt sources are excused.
+**Checked:** commit-scoped and deterministic. `unit colocated-test --base <ref>` diffs `<ref>...HEAD` and flags any changed source whose colocated test didn't change — an opt-in, additive scope of the colocated-test command (tree-wide presence still runs). Added files and exempt sources are excused.
 
 ### Integration
 

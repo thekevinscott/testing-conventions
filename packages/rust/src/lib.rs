@@ -65,13 +65,24 @@ enum Command {
 /// Rules enforced on the unit-test suite (the README's "Unit" taxonomy).
 #[derive(Subcommand, Debug)]
 enum UnitRule {
-    /// Check that every source file has a colocated, matching-named unit test.
+    /// Check that every source file has a colocated, matching-named unit test
+    /// (tree-wide presence). With `--base`, additionally run the commit-scoped
+    /// `co-change` check over `<base>...HEAD` (#33): a modified or deleted source
+    /// whose colocated test is not in the diff fails. Presence always runs;
+    /// `--base` *adds* the diff-scoped check.
     ColocatedTest {
         /// Directory to scan recursively.
         path: PathBuf,
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
         language: colocated_test::Language,
+        /// Opt-in commit-scoped co-change check (#33): diff `<base>...HEAD` and
+        /// also flag a modified or deleted source whose colocated test didn't
+        /// co-change. Absent means presence-only — there is no default. Python /
+        /// TypeScript only: `--base --language rust` is rejected (inline
+        /// `#[cfg(test)]` units have no sibling test to go stale).
+        #[arg(long)]
+        base: Option<String>,
         /// testing-conventions config file providing the `exempt` list. Optional:
         /// if the file is absent, no files are exempt.
         #[arg(long, default_value = "testing-conventions.toml")]
@@ -121,25 +132,6 @@ enum UnitRule {
         language: isolation::Language,
         /// testing-conventions config file providing the `exempt` list (waivers).
         /// Optional: if the file is absent, nothing is waived.
-        #[arg(long, default_value = "testing-conventions.toml")]
-        config: PathBuf,
-    },
-    /// Check that a source file changed in a git diff also changed its colocated
-    /// test (#33). Commit-scoped: a modified or deleted source whose colocated
-    /// test stays unchanged is a stale-test risk.
-    CoChange {
-        /// Directory to inspect (the repo root, or a subtree); also where git runs.
-        path: PathBuf,
-        /// Language convention to enforce (required). Python/TypeScript only —
-        /// Rust units are inline `#[cfg(test)]`, so a sibling test can't go stale.
-        #[arg(long, value_enum)]
-        language: colocated_test::Language,
-        /// Base ref to diff against: the check compares `<base>...HEAD`, the
-        /// changes this branch introduced (what a PR shows). Required.
-        #[arg(long)]
-        base: String,
-        /// testing-conventions config file providing the `exempt` list. Optional:
-        /// if the file is absent, no source is exempt from co-changing.
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
@@ -207,8 +199,9 @@ where
             UnitRule::ColocatedTest {
                 path,
                 language,
+                base,
                 config,
-            } => run_unit_colocated_test(&path, language, &config),
+            } => run_unit_colocated_test(&path, language, base.as_deref(), &config),
             UnitRule::Coverage {
                 path,
                 language,
@@ -225,12 +218,6 @@ where
                 language,
                 config,
             } => run_unit_isolation(&path, language, &config),
-            UnitRule::CoChange {
-                path,
-                language,
-                base,
-                config,
-            } => run_unit_co_change(&path, &base, language, &config),
         },
         Some(Command::Integration { rule }) => match rule {
             IntegrationRule::Lint {
@@ -255,16 +242,54 @@ pub fn command() -> clap::Command {
     Cli::command()
 }
 
-/// Run the unit-test colocated-test check over `root` for `language`, reporting orphans.
+/// Run the unit colocated-test check over `root` for `language`. Always runs the
+/// tree-wide **presence** check (every source file has its colocated test; Rust:
+/// an inline `#[cfg(test)]` module). When `base` is `Some`, *additionally* runs the
+/// commit-scoped **co-change** check (#33) over `<base>...HEAD` — a modified or
+/// deleted source whose colocated test didn't co-change — and the run fails if
+/// either check does. Returns `0` only when both pass.
 ///
-/// Loads the `colocated-test`-rule exemptions from the config at `config_path` (no
-/// config file → no exemptions). Returns `0` when every source file has its
-/// colocated unit test; otherwise prints each orphan to stderr and returns `1`.
+/// Presence loads the `colocated-test`-rule exemptions and co-change the
+/// `co-change`-rule exemptions from the config at `config_path` (no config file →
+/// no exemptions). `--base` rejects `--language rust`: Rust units are inline
+/// `#[cfg(test)]` in the same file, so a sibling test can't go stale (presence,
+/// without `--base`, still supports Rust).
 fn run_unit_colocated_test(
     root: &Path,
     language: colocated_test::Language,
+    base: Option<&str>,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
+    // `--base` carries the co-change check, which rejects Rust the same way the
+    // standalone `unit co-change` did — before any work, so the message matches.
+    if base.is_some() && language == colocated_test::Language::Rust {
+        anyhow::bail!(
+            "`unit colocated-test --base` supports `--language python` / `typescript`; Rust \
+             units are inline `#[cfg(test)]` in the same file, so a sibling test can't go stale"
+        );
+    }
+    let presence_clean = report_colocated_presence(root, language, config_path)?;
+    let co_change_clean = match base {
+        Some(base) => report_co_change(root, base, language, config_path)?,
+        None => true,
+    };
+    Ok(if presence_clean && co_change_clean {
+        0
+    } else {
+        1
+    })
+}
+
+/// The tree-wide colocated-test **presence** check: every source file under `root`
+/// has its colocated unit test (Rust: an inline `#[cfg(test)]` module). Prints each
+/// orphan to stderr and returns `Ok(false)` when any are found, `Ok(true)` when the
+/// tree is clean. The `colocated-test`-rule exemptions from the config at
+/// `config_path` lift a file (no config file → nothing exempt).
+fn report_colocated_presence(
+    root: &Path,
+    language: colocated_test::Language,
+    config_path: &Path,
+) -> anyhow::Result<bool> {
     let exempt = colocated_test_exemptions(root, language, config_path)?;
     let orphans = match language {
         // Rust units are inline `#[cfg(test)]` modules, so "colocated" means a test
@@ -273,7 +298,7 @@ fn run_unit_colocated_test(
         _ => colocated_test::missing_unit_tests(root, language, &exempt)?,
     };
     if orphans.is_empty() {
-        return Ok(0);
+        return Ok(true);
     }
     let (label, summary) = match language {
         colocated_test::Language::Rust => (
@@ -291,7 +316,7 @@ fn run_unit_colocated_test(
         eprintln!("{label}: {}", orphan.display());
     }
     eprintln!("error: {} {summary}", orphans.len());
-    Ok(1)
+    Ok(false)
 }
 
 /// The `colocated-test`-rule exempt paths for `language`, resolved (and validated)
@@ -313,31 +338,25 @@ fn colocated_test_exemptions(
     )
 }
 
-/// Run the commit-scoped `co-change` check (#33) over `root` for `language`,
-/// diffing `<base>...HEAD`. Returns `0` when every changed source file also
-/// changed its colocated test; otherwise prints each stale source to stderr and
-/// returns `1`.
+/// The commit-scoped **co-change** check (#33) over `root`, diffing `<base>...HEAD`:
+/// every modified or deleted source whose colocated test didn't co-change. Prints
+/// each stale source to stderr and returns `Ok(false)` when any are found,
+/// `Ok(true)` when clean.
 ///
 /// Loads the `co-change`-rule exemptions from the config at `config_path` (no
-/// config file → no exemptions); an exempt source needn't co-change. Rejects
-/// `--language rust`: Rust units are inline `#[cfg(test)]` in the same file, so a
-/// sibling test can't go stale (mirrors how `unit coverage` rejects Rust).
-fn run_unit_co_change(
+/// config file → no exemptions); an exempt source needn't co-change. The caller
+/// rejects `--language rust` before this runs: Rust units are inline `#[cfg(test)]`
+/// in the same file, so a sibling test can't go stale.
+fn report_co_change(
     root: &Path,
     base: &str,
     language: colocated_test::Language,
     config_path: &Path,
-) -> anyhow::Result<i32> {
-    if language == colocated_test::Language::Rust {
-        anyhow::bail!(
-            "`unit co-change` supports `--language python` / `typescript`; Rust units \
-             are inline `#[cfg(test)]` in the same file, so a sibling test can't go stale"
-        );
-    }
+) -> anyhow::Result<bool> {
     let exempt = co_change_exemptions(root, language, config_path)?;
     let stale = co_change::stale_sources(root, base, language, &exempt)?;
     if stale.is_empty() {
-        return Ok(0);
+        return Ok(true);
     }
     for source in &stale {
         eprintln!(
@@ -350,7 +369,7 @@ fn run_unit_co_change(
          (update the test, or add an `exempt` entry with a reason)",
         stale.len()
     );
-    Ok(1)
+    Ok(false)
 }
 
 /// The `co-change`-rule exempt paths for `language`, resolved (and validated)

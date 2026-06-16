@@ -33,27 +33,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   cover, and a file with a `coverage` exemption (reusing #32) is omitted — so its changed lines are
   lifted, the same waiver the floor honors. **Added** files differ from the co-change rule (#33):
   their new lines *are* subjects (measured via coverage.py `--source`, so an untested new file is
-  wholly uncovered). Complementary to `unit co-change` — co-change enforces that a changed source
-  and its colocated test move together; patch coverage enforces that the changed lines are
-  exercised. Prints each uncovered line to stderr as `<path>:<line>` and exits non-zero. New
+  wholly uncovered). Complementary to `unit colocated-test --base` — co-change enforces that a
+  changed source and its colocated test move together; patch coverage enforces that the changed
+  lines are exercised. Prints each uncovered line to stderr as `<path>:<line>` and exits non-zero. New
   library API `testing_conventions::patch_coverage::{check, changed_lines, uncovered_changed_lines,
   Uncovered}` and `coverage::{FileCoverage, measure_patch_report}` (plus `CoverageReport` gains a
   `files` map); reuses the `coverage` `config::Rule`. Python only this slice — `--language
   typescript` / `rust` are rejected as separate items. (#132)
-- **Commit-scoped `co-change`** (#33). New `unit co-change --language <python|typescript>
-  --base <REF> [--config <CONFIG>] <PATH>` command: a diff-scoped check that a source file
-  **modified** (and still holding code) or **deleted** between `<base>...HEAD` also changed its
-  colocated test (the #15/#18 pairing — `foo.py` → `foo_test.py`, `foo.ts` → `foo.test.ts`), so
-  an edit or removal can't leave the test silently stale. **Added** source files are not subjects
-  (brand-new code is the coverage floor's job); a test file, an empty/comment-only file, and
-  Python's `conftest.py` are never subjects; and a source with a `co-change` exemption needn't
-  co-change. `<base>...HEAD` is the changes this branch introduced (what a PR shows), so CI passes
-  the PR base (e.g. `--base origin/main`). `--language rust` is rejected — Rust units are inline
-  `#[cfg(test)]` in the same file, so a sibling test can't go stale (mirrors how `unit coverage`
-  rejects Rust). Runs `git diff` in `<PATH>`, prints each stale source to stderr, and exits
-  non-zero. New library API `testing_conventions::co_change::stale_sources(repo, base, language,
-  exempt)` and a new waivable `config::Rule` variant `co-change` (`[[<language>.exempt]] rules =
-  ["co-change"]`, reusing #32). (#33)
+- **Commit-scoped `co-change` — `unit colocated-test --base`** (#33, #161). With `--base`,
+  `unit colocated-test --language <python|typescript> --base <REF> [--config <CONFIG>] <PATH>`
+  adds a diff-scoped check that a source file **modified** (and still holding code) or **deleted**
+  between `<base>...HEAD` also changed its colocated test (the #15/#18 pairing — `foo.py` →
+  `foo_test.py`, `foo.ts` → `foo.test.ts`), so an edit or removal can't leave the test silently
+  stale. It is **additive and opt-in**: `--base` runs co-change *on top of* the tree-wide presence
+  check (an orphan source still fails) and has no default, so absent means presence-only. **Added**
+  source files are not subjects (brand-new code is the coverage floor's job); a test file, an
+  empty/comment-only file, and Python's `conftest.py` are never subjects; and a source with a
+  `co-change` exemption needn't co-change. `<base>...HEAD` is the changes this branch introduced
+  (what a PR shows), so CI passes the PR base (e.g. `--base origin/main`). `--base --language rust`
+  is rejected — Rust units are inline `#[cfg(test)]` in the same file, so a sibling test can't go
+  stale (presence without `--base` still supports Rust). New library API
+  `testing_conventions::co_change::stale_sources(repo, base, language, exempt)` and a waivable
+  `config::Rule` variant `co-change` (`[[<language>.exempt]] rules = ["co-change"]`, reusing #32).
+  (#33, #161)
 - **Waivers for the remaining Python integration lints** (#123). The reason-required
   `[[python.exempt]]` escape hatch (#32/#102) now covers the last three lints that
   lacked it — `no-monkeypatch` (#49), `no-inline-patch` (#50), and

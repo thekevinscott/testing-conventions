@@ -745,9 +745,13 @@ fn run_llvm_cov(root: &Path, ignore: &[String]) -> Result<LlvmCovReport> {
         command.arg("--ignore-filename-regex").arg(regex);
     }
     // Nested-run hygiene: when this check itself runs under `cargo llvm-cov` (the
-    // package's own coverage job), the outer run exports its coverage flags and
-    // profile path into our environment. Strip them so the inner run instruments
-    // the scanned crate cleanly instead of inheriting the outer run's state.
+    // package's own coverage job), the outer run exports its instrumentation state
+    // into our environment — the coverage flags and profile path, and (because
+    // cargo-llvm-cov drives instrumentation through a rustc wrapper) a
+    // `RUSTC_WRAPPER` pointing back at `cargo-llvm-cov`. Inherited, that wrapper
+    // makes the inner run re-enter cargo-llvm-cov on every rustc invocation and
+    // never finish — it hangs compiling the scanned crate until the runner is
+    // OOM-killed. Strip the lot so the inner run instruments from a clean slate.
     for var in [
         "RUSTFLAGS",
         "CARGO_ENCODED_RUSTFLAGS",
@@ -757,6 +761,12 @@ fn run_llvm_cov(root: &Path, ignore: &[String]) -> Result<LlvmCovReport> {
         "CARGO_LLVM_COV",
         "CARGO_LLVM_COV_SHOW_ENV",
         "CARGO_LLVM_COV_TARGET_DIR",
+        "CARGO_LLVM_COV_BUILD_DIR",
+        "RUSTC_WRAPPER",
+        "RUSTC_WORKSPACE_WRAPPER",
+        "__CARGO_LLVM_COV_RUSTC_WRAPPER",
+        "__CARGO_LLVM_COV_RUSTC_WRAPPER_RUSTFLAGS",
+        "__CARGO_LLVM_COV_RUSTC_WRAPPER_CRATE_NAMES",
     ] {
         command.env_remove(var);
     }

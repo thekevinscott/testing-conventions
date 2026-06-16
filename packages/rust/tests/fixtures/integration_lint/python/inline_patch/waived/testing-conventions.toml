@@ -1,0 +1,6 @@
+# Waiver for R2 (#50): exempt the file from `no-inline-patch`, with a reason
+# (auditable, reason-required — #32/#102).
+[[python.exempt]]
+path = "inline_with_patch_test.py"
+rules = ["no-inline-patch"]
+reason = "legacy test; the patch-into-fixture refactor is tracked separately"

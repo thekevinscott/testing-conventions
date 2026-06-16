@@ -23,19 +23,19 @@ testing-conventions unit colocated-test --language <LANG> [--config <CONFIG>] <P
 | Argument / flag     | Description                                                       |
 | ------------------- | ----------------------------------------------------------------- |
 | `<PATH>`            | Directory to scan recursively.                                    |
-| `--language <LANG>` | **Required.** Convention to enforce: `python`, `typescript`, or `rust`. No default — omitting it is a usage error, never a silent `python` run. |
-| `--config <CONFIG>` | Config file supplying the `exempt` list (default `testing-conventions.toml`). Optional — if the file is absent, nothing is exempt. |
+| `--language <LANG>` | **Required.** Convention to enforce: `python`, `typescript`, or `rust`. No default. Omitting it is a usage error, never a silent `python` run. |
+| `--config <CONFIG>` | Config file supplying the `exempt` list (default `testing-conventions.toml`). Optional; if the file is absent, nothing is exempt. |
 
 **What counts, by language:**
 
-- **`python`** — a source `*.py` needs a colocated `*_test.py`. `*_test.py` files are the tests
+- **`python`**: a source `*.py` needs a colocated `*_test.py`. `*_test.py` files are the tests
   themselves. Note `__init__.py` is **not** auto-exempt: an empty one is skipped (see below),
   but a non-empty one needs a test or an [exemption](#exemptions).
-- **`typescript`** — a source `*.ts` / `*.tsx` / `*.mts` / `*.cts` needs a colocated
+- **`typescript`**: a source `*.ts` / `*.tsx` / `*.mts` / `*.cts` needs a colocated
   `*.test.*` of the matching extension (`foo.mts` → `foo.test.mts`). `*.test.*` files are the
   tests; declaration files (`*.d.ts` / `*.d.mts` / `*.d.cts`) carry no runtime code and are
   ignored.
-- **`rust`** — units are inline `#[cfg(test)]` modules, not sibling files, so the check is
+- **`rust`**: units are inline `#[cfg(test)]` modules, not sibling files, so the check is
   *presence*: a `src` file that defines a function with a body but has no inline `#[cfg(test)]`
   module is an orphan. Module-declaration files (a `lib.rs`/`mod.rs` of only `mod`/`use`) and
   type-only files (no `fn`) aren't subjects; integration crates under `tests/` (and `benches/` /
@@ -63,30 +63,30 @@ testing-conventions unit coverage --language <LANG> [--config <CONFIG>] <PATH>
 | ------------------- | -------------------------------------------------------------------------- |
 | `<PATH>`            | Directory whose unit suite is run and measured.                            |
 | `--language <LANG>` | **Required.** `python` or `typescript` (Rust coverage is a separate item). |
-| `--config <CONFIG>` | Config file providing the thresholds and `exempt` list (default `testing-conventions.toml`). Optional — if the file, or its `[<language>].coverage` table, is absent, the language's default floor is used and nothing is exempt. |
+| `--config <CONFIG>` | Config file providing the thresholds and `exempt` list (default `testing-conventions.toml`). Optional; if the file, or its `[<language>].coverage` table, is absent, the language's default floor is used and nothing is exempt. |
 
-With no `[<language>].coverage` table — or no config file at all — the check uses the language's
+With no `[<language>].coverage` table (or no config file at all), the check uses the language's
 **default floor**, the reasonable one from the internals style guides: Python
 `branch = true, fail_under = 85`; TypeScript `lines = 80, branches = 75, functions = 80,
-statements = 80`. A config table overrides it. This is what lets the [reusable workflow](../guide/ci)
+statements = 80`. A config table overrides it. This lets the [reusable workflow](../guide/ci)
 opt a new library into coverage with no config file.
 
-For **`python`**, runs `coverage.py` with branch coverage on — measuring the sources under
-`<PATH>` with `*_test.py` excluded from the denominator — and compares the total against
+For **`python`**, runs `coverage.py` with branch coverage on (measuring the sources under
+`<PATH>` with `*_test.py` excluded from the denominator) and compares the total against
 `[python].coverage` (`fail_under`, `branch`). Exits `0` when the floor is met, `1` (with the
 actual vs. required percent on stderr) when it isn't. `coverage` and `pytest` must be installed.
 Files with a `coverage` [exemption](#exemptions) are also excluded from the denominator.
 
 **Non-regression ratchet (`python`).** When a `coverage-baseline.json` sits beside `<PATH>`, the
-check also fails if the measured total drops below the recorded `python` baseline — a regression —
+check also fails if the measured total drops below the recorded `python` baseline (a regression),
 even when the floor is still met (`coverage NN.NN% regressed below the recorded baseline MM.MM%`).
 The file is keyed by language (`{ "python": { "percent_covered": 100.0 } }`); a missing file means
 floor-only, so it stays backward compatible. (TypeScript and Rust, and the baseline-record step,
 are forthcoming.)
 
-For **`typescript`**, runs `vitest` with v8 coverage (the json-summary reporter) — measuring the
+For **`typescript`**, runs `vitest` with v8 coverage (the json-summary reporter), measuring the
 `.ts` / `.tsx` / `.mts` / `.cts` sources under `<PATH>` with `*.test.*` and declaration files
-excluded from the denominator — and compares each of the four metrics against
+excluded from the denominator, and compares each of the four metrics against
 `[typescript].coverage` (`lines`, `branches`, `functions`, `statements`). Exits `0` when every
 floor is met, `1` (naming each metric below its floor on stderr) when any isn't. The tool invokes
 `npx vitest`, so `vitest` and `@vitest/coverage-v8` must be installed under `<PATH>`. Files with a
@@ -96,7 +96,7 @@ floor is met, `1` (naming each metric below its floor on stderr) when any isn't.
 
 Diff-scoped coverage: require every line a change touches to be covered by the unit suite. Where
 [`unit coverage`](#unit-coverage) measures the whole suite against a floor, this measures only the
-lines `<base>...HEAD` added or modified — the changed-line guarantee the README's Coverage rule
+lines `<base>...HEAD` added or modified: the changed-line guarantee the README's Coverage rule
 calls for.
 
 ```
@@ -107,8 +107,8 @@ testing-conventions unit patch-coverage --language <LANG> [--base <REF>] [--conf
 | ------------------- | -------------------------------------------------------------------------- |
 | `<PATH>`            | Directory whose unit suite is run and measured; also where git runs.       |
 | `--language <LANG>` | **Required.** `python` (the TypeScript and Rust twins are separate items). |
-| `--base <REF>`      | Ref to diff against: the check compares `<base>...HEAD` — the changes this branch introduced (what a PR shows). Defaults to `origin/main`; override for a different base or an explicit range. |
-| `--config <CONFIG>` | Config file supplying the coverage `exempt` list (default `testing-conventions.toml`). Optional — if absent, nothing is exempt. |
+| `--base <REF>`      | Ref to diff against: the check compares `<base>...HEAD` (the changes this branch introduced, what a PR shows). Defaults to `origin/main`; override for a different base or an explicit range. |
+| `--config <CONFIG>` | Config file supplying the coverage `exempt` list (default `testing-conventions.toml`). Optional; if absent, nothing is exempt. |
 
 For **`python`**, runs `coverage.py` (branch on, with `--source` so an untested changed file is
 seen as wholly uncovered) over the unit suite under `<PATH>`, then intersects coverage.py's per-file
@@ -119,17 +119,17 @@ then a count) when any isn't. `coverage` and `pytest` must be installed, and `gi
 `<REF>`.
 
 A non-executable changed line (comment, blank) has nothing to cover and is never flagged; a file
-with a `coverage` [exemption](#exemptions) is omitted, so its changed lines are lifted — the same
+with a `coverage` [exemption](#exemptions) is omitted, so its changed lines are lifted, the same
 waiver the floor honors. Unlike [`unit co-change`](#unit-co-change), an **added** file's new lines
 *are* subjects (brand-new code must be covered too). The two are complementary: co-change enforces
 that a changed source and its colocated *test* move together, patch coverage enforces that the
-changed *lines* are exercised — one can pass while the other fails.
+changed *lines* are exercised; one can pass while the other fails.
 
 ### `unit isolation`
 
-Check that unit tests isolate the unit under test — collaborators are mocked (Python, TypeScript)
-or never called out to (Rust). A unit test that touches a real collaborator is an integration test
-wearing a unit's name.
+Check that unit tests isolate the unit under test: collaborators are mocked (Python, TypeScript)
+or never called out to (Rust). A unit test that touches a real collaborator behaves like an
+integration test.
 
 ```
 testing-conventions unit isolation --language <LANG> [--config <CONFIG>] <PATH>
@@ -145,57 +145,57 @@ Reports each violation to stderr as `path:line: <rule> — <message>` and exits 
 found, `0` otherwise. Any rule below is **waivable** per file via a reason-required
 [`exempt`](#exemptions) entry (`rules = ["no-out-of-module-call"]`, etc.).
 
-**Rust** — parses each `*.rs` file under the crate root with `syn` and walks its inline
+**Rust**: parses each `*.rs` file under the crate root with `syn` and walks its inline
 `#[cfg(test)]` modules:
 
-- **`no-out-of-module-call`** — a call out of a unit test's own module: `crate::…` (another
+- **`no-out-of-module-call`**: a call out of a unit test's own module: `crate::…` (another
   first-party module), `super::super::…` (an ancestor), an external crate (named in `Cargo.toml`;
   `[dev-dependencies]` like `mockall` are test tooling and excluded), or effectful `std`
   (`fs` / `net` / `process` / `env` / `thread` / `os`, the clock, or real-handle I/O). A single
-  `super::` (the unit under test), `self` / `Self`, a bare unqualified call, and pure `std` —
-  including `std::io::Cursor` and the I/O traits — stay in-module. Inject a trait double
+  `super::` (the unit under test), `self` / `Self`, a bare unqualified call, and pure `std`
+  (including `std::io::Cursor` and the I/O traits) stay in-module. Inject a trait double
   (hand-rolled or `mockall`) for a collaborator instead.
-- **`no-out-of-module-import`** — a `use` inside a test module that brings in a foreign surface:
+- **`no-out-of-module-import`**: a `use` inside a test module that brings in a foreign surface:
   a glob of anything but `super::*`, or a named import rooted at `crate::`, an external crate, or
   effectful `std`. `use super::*` / `use super::Thing` (the unit under test), `self`, and pure
-  `std` (`std::collections::HashMap`, `std::io::Cursor`, …) are in-module. This catches a
+  `std` (`std::collections::HashMap`, `std::io::Cursor`) are in-module. This catches a
   collaborator that's imported and then called unqualified, which the call check can't see.
 
-Full name-resolution precision — a collaborator reached through an unqualified call, a
-`use … as …` rename, or a macro — is a future `dylint` pass; the `syn` heuristic is the
-deterministic bright-line.
+Full name-resolution precision (a collaborator reached through an unqualified call, a
+`use ... as ...` rename, or a macro) is a future `dylint` pass; the `syn` heuristic is the
+deterministic check.
 
-**TypeScript** — parses each `*.test.{ts,tsx,mts,cts}` file with the `oxc` parser:
+**TypeScript**: parses each `*.test.{ts,tsx,mts,cts}` file with the `oxc` parser:
 
-- **`unmocked-collaborator`** — any runtime import that isn't `vi.mock()` / `vi.doMock()`-ed.
+- **`unmocked-collaborator`**: any runtime import that isn't `vi.mock()` / `vi.doMock()`-ed.
   Three imports are never collaborators and so are never flagged: the **unit under test** (the
   colocated source, `widget.test.ts` → `./widget`, imported and run for real), **type-only**
-  imports (`import type …` — erased at compile time), and the **test runner** (`vitest` /
+  imports (`import type ...`, erased at compile time), and the **test runner** (`vitest` /
   `@vitest/*`). This is the unit-suite mirror of [`integration lint`](#integration-lint)'s
   `no-first-party-mock`; see the [Isolation guide](../guide/isolation).
-- **`untyped-mock`** — a `vi.mock(spec, factory)` whose factory has no `vi.importActual<…>()`
+- **`untyped-mock`**: a `vi.mock(spec, factory)` whose factory has no `vi.importActual<...>()`
   type anchor, so the double can drift from the real module. Anchor it with
   `vi.importActual<typeof import(spec)>()` (the README pattern). A bare `vi.mock(spec)`
   (vitest auto-mock, typed from the real module) and an already-typed factory both pass.
 
-**Python** — parses each colocated unit test (`*_test.py`, not `conftest.py`) with
+**Python**: parses each colocated unit test (`*_test.py`, not `conftest.py`) with
 the Rust Python parser:
 
-- **`unmocked-collaborator`** — an imported collaborator that the test doesn't mock. Two kinds are
+- **`unmocked-collaborator`**: an imported collaborator that the test doesn't mock. Two kinds are
   checked: **first-party** (the dist's own package, read from the nearest `pyproject.toml`
   `[project].name`, as in [`integration lint`](#integration-lint)'s `no-first-party-patch`, or a
-  relative import) and **external** — a **third-party** package (any bare import that's neither
+  relative import) and **external**: a **third-party** package (any bare import that's neither
   first-party nor stdlib) or an **effectful-stdlib** module (a conservative network / subprocess /
   process / randomness / database / low-level-OS set: `socket`, `subprocess`, `ssl`, `random`,
-  `sqlite3`, …). Never collaborators: the **unit under test** (the import whose module's last segment
-  matches the test's base name — `widget_test.py` ↔ `myproject.widget`), the **test framework**
+  `sqlite3`). Never collaborators: the **unit under test** (the import whose module's last segment
+  matches the test's base name, `widget_test.py` ↔ `myproject.widget`), the **test framework**
   (`pytest` / `_pytest` / `mock`; `unittest` / `unittest.mock` are stdlib), **pure stdlib**
-  (`json`, `dataclasses`, …), `__future__`, and `TYPE_CHECKING`-guarded (type-only) imports. An
-  import counts as **mocked** when a `patch("…")` in the file targets a matching last segment —
+  (`json`, `dataclasses`), `__future__`, and `TYPE_CHECKING`-guarded (type-only) imports. An
+  import counts as **mocked** when a `patch("...")` in the file targets a matching last segment:
   `patch("myproject.widget.record")` mocks an imported `record` (the convention patches the name in
   the consuming module). The canonical unit test imports only the unit under test and patches
   collaborators by string, so it has no collaborator imports to flag. Documented non-goals (waive
-  them): dual-nature stdlib heads used purely (`os`, `pathlib`, `datetime`, `time`, `io` — the clock
+  them): dual-nature stdlib heads used purely (`os`, `pathlib`, `datetime`, `time`, `io`; the clock
   / filesystem are caught by the patch convention, not at import), a *value/type* import used to
   build test data, and pure test-helper packages beyond the framework allowlist. See the
   [Isolation guide](../guide/isolation).
@@ -203,7 +203,7 @@ the Rust Python parser:
 ### `unit co-change`
 
 Commit-scoped: check that a source file changed in a git diff also changed its colocated test. An
-edit or removal that leaves the colocated test untouched lets it silently go stale — this is the
+edit or removal that leaves the colocated test untouched lets it silently go stale; this is the
 commit-time complement to [`unit colocated-test`](#unit-colocated-test)'s tree-wide pairing.
 
 ```
@@ -213,9 +213,9 @@ testing-conventions unit co-change --language <LANG> --base <REF> [--config <CON
 | Argument / flag     | Description                                                                |
 | ------------------- | -------------------------------------------------------------------------- |
 | `<PATH>`            | Directory to inspect (the repo root, or a subtree); also where git runs.   |
-| `--language <LANG>` | **Required.** `python` or `typescript`. Rust units are inline `#[cfg(test)]` in the same file, so a sibling test can't go stale — `--language rust` is rejected. |
-| `--base <REF>`      | **Required.** Ref to diff against. The check compares `<base>...HEAD` — the changes this branch introduced (what a PR shows) — so in CI you pass the PR's base, e.g. `origin/main`. |
-| `--config <CONFIG>` | Config file supplying the `exempt` list (default `testing-conventions.toml`). Optional — if absent, every changed source must co-change its test. |
+| `--language <LANG>` | **Required.** `python` or `typescript`. Rust units are inline `#[cfg(test)]` in the same file, so a sibling test can't go stale, and `--language rust` is rejected. |
+| `--base <REF>`      | **Required.** Ref to diff against. The check compares `<base>...HEAD` (the changes this branch introduced, what a PR shows), so in CI you pass the PR's base, e.g. `origin/main`. |
+| `--config <CONFIG>` | Config file supplying the `exempt` list (default `testing-conventions.toml`). Optional; if absent, every changed source must co-change its test. |
 
 For each source file in the `<base>...HEAD` diff:
 
@@ -237,17 +237,17 @@ holds no logic, Python's `conftest.py` is pytest support, and a source with a `c
 
 ## Exemptions
 
-Not every source file should need a colocated test or full coverage — a launcher shim, a pure
-re-export barrel, generated code. So the checker can be a *blocking* gate without forcing
+Not every source file should need a colocated test or full coverage: a launcher shim, a pure
+re-export barrel, generated code. So that the checker can be a *blocking* gate without forcing
 pointless tests, files are exempted **explicitly, in the config**. There is no automatic name-
-or shape-based exemption — the only files skipped automatically are those with no logic at all.
+or shape-based exemption; the only files skipped automatically are those with no logic at all.
 
 ### Empty files (automatic)
 
-A file with no code — empty, or only whitespace and comments — has nothing to test and is never
+A file with no code (empty, or only whitespace and comments) has nothing to test and is never
 a subject. This is the only automatic exclusion, and it's why a bare `__init__.py` needs no
 configuration. (A declaration file `*.d.ts` is likewise never tracked: it carries no runtime
-code.) The moment a file gains a statement — a re-export, a constant, a function — it becomes a
+code.) The moment a file gains a statement (a re-export, a constant, a function), it becomes a
 subject and needs a colocated test or an entry below.
 
 ### The `exempt` list (explicit, reason-required)
@@ -263,14 +263,14 @@ reason = "thin launcher; logic in run(), tested in run_test.py"  # required
 
 | Field | Meaning |
 | ----- | ------- |
-| `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists — a stale entry is a hard error, so the list can't silently rot. |
+| `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
 | `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
-| `reason` | Why the omission is deliberate. **Required** — an empty reason is rejected on load. |
+| `reason` | Why the omission is deliberate. **Required**: an empty reason is rejected on load. |
 
 Because every exemption lives in the one config file, names its rules, and carries a reason,
-the project's entire exemption surface is auditable in a single diff — the opposite of a prose
-omit-list or a scattered set of ignore comments. A re-export barrel (`index.ts`), a launcher
-shim, or a non-empty `__init__.py` is exempted this way, not automatically.
+the project's entire exemption surface is auditable in a single diff, unlike a prose omit-list
+or a scattered set of ignore comments. A re-export barrel (`index.ts`), a launcher shim, or a
+non-empty `__init__.py` is exempted this way, not automatically.
 
 ### `integration lint`
 
@@ -290,26 +290,26 @@ testing-conventions integration lint --language <LANG> [--config <CONFIG>] <PATH
 Reports each violation to stderr as `path:line: <lint> — <message>` and exits `1` if any are
 found, `0` otherwise.
 
-**Python** — parses each test file (`*_test.py`, `conftest.py`) with a Rust Python
+**Python**: parses each test file (`*_test.py`, `conftest.py`) with a Rust Python
 parser and walks the AST:
 
-- **`no-monkeypatch`** — a test or fixture function that declares the `monkeypatch` parameter.
+- **`no-monkeypatch`**: a test or fixture function that declares the `monkeypatch` parameter.
   pytest's `monkeypatch` is banned; patch with `unittest.mock` (`patch` / `patch.object` /
   `patch.dict`) wrapped in a `pytest.fixture` instead. **Waivable** per file via
   `rules = ["no-monkeypatch"]` (reason required).
-- **`no-inline-patch`** — a `patch(...)` / `patch.object(...)` / `patch.dict(...)` call in a
+- **`no-inline-patch`**: a `patch(...)` / `patch.object(...)` / `patch.dict(...)` call in a
   test body, whether the `with patch(...)` form or a bare call. Move the patch into a
   `pytest.fixture`; a patch inside a fixture is allowed. **Waivable** via
   `rules = ["no-inline-patch"]`.
-- **`no-environ-mutation`** — direct mutation of `os.environ`: `os.environ[...] = …`,
+- **`no-environ-mutation`**: direct mutation of `os.environ`: `os.environ[...] = …`,
   `del os.environ[...]`, or a mutating method (`update` / `pop` / `setdefault` / `clear` /
   `popitem`). Set env via `patch.dict(os.environ, {...})`; reading `os.environ` is fine.
   **Waivable** via `rules = ["no-environ-mutation"]`.
-- **`no-constant-patch`** — patching a module-global UPPER_CASE constant, e.g.
+- **`no-constant-patch`**: patching a module-global UPPER_CASE constant, e.g.
   `patch("pkg.config.CACHE_DIR", …)`. Inject the config explicitly instead. **Waivable**
   per file: add a `[[python.exempt]]` entry with `rules = ["no-constant-patch"]` (and a
   reason) and pass it via `--config`; a waived file is silent.
-- **`no-first-party-patch`** — a `patch(...)` whose string target is **first-party**, e.g.
+- **`no-first-party-patch`**: a `patch(...)` whose string target is **first-party**, e.g.
   `patch("ourpkg.mod.fn")`. An integration test runs first-party code for real, so only
   third-party packages (`requests.get`) and effectful stdlib (`subprocess.run`,
   `builtins.open`) may be patched. The dist's own top-level package is read from the nearest
@@ -318,18 +318,18 @@ parser and walks the AST:
   **Waivable** via `rules = ["no-first-party-patch"]`. See the
   [Isolation guide](../guide/isolation).
 
-**TypeScript** — parses each test file (`*.test.{ts,tsx,mts,cts}`) with the `oxc` parser and
+**TypeScript**: parses each test file (`*.test.{ts,tsx,mts,cts}`) with the `oxc` parser and
 walks the AST:
 
-- **`no-first-party-mock`** — a `vi.mock()` / `vi.doMock()` whose target is a **first-party**
+- **`no-first-party-mock`**: a `vi.mock()` / `vi.doMock()` whose target is a **first-party**
   module (a relative specifier like `./service` or `../core`). An integration test runs
   first-party code for real, so only third-party packages (`stripe`) and Node built-ins
   (`node:fs`, `child_process`) may be mocked. A non-literal target (`vi.mock(name)`) can't be
   classified deterministically and is left alone. See the [Isolation guide](../guide/isolation).
 
-**Rust** — parses each `*.rs` file in a `tests/` directory (the integration crates) with `syn`:
+**Rust**: parses each `*.rs` file in a `tests/` directory (the integration crates) with `syn`:
 
-- **`no-first-party-double`** — a `#[double]` (mockall_double) import of a **first-party** item:
+- **`no-first-party-double`**: a `#[double]` (mockall_double) import of a **first-party** item:
   the crate under test (its `Cargo.toml` `[package].name`) or a `path` dependency. An
   integration test runs first-party code for real, so only external crates and `std` may be
   doubled. `crate::` here is the integration-test crate itself (not the library under test), so
@@ -338,7 +338,7 @@ walks the AST:
 
 ### `e2e attest`
 
-Run the e2e suite locally and record that it ran against the current commit — the *write* half
+Run the e2e suite locally and record that it ran against the current commit: the *write* half
 of the e2e attestation nudge. The first command under the `e2e` group; the CI-side `e2e verify`
 gate follows.
 
@@ -352,12 +352,12 @@ testing-conventions e2e attest '<command>'
 
 Run from the repository root. `attest` resolves the current commit (`HEAD`), runs `<command>`
 capturing its exit code, writes `e2e-attestation.json` recording the command, a timestamp, the
-exit code, and the commit SHA it was run against, and commits that file on top — the attestation
+exit code, and the commit SHA it was run against, and commits that file on top. The attestation
 names the code commit beneath it, since a commit can't name its own SHA.
 
-It writes **regardless of the command's exit code** — the point is to force a *run*, not a
-*pass* — and exits `0` once the attestation is recorded and committed. The companion `e2e verify`
-(a CI gate confirming the latest code commit is attested) is not shipped yet.
+It writes **regardless of the command's exit code** (forcing a *run*, not a *pass*) and exits
+`0` once the attestation is recorded and committed. The companion `e2e verify` (a CI gate
+confirming the latest code commit is attested) is not shipped yet.
 
 ### `e2e verify`
 
@@ -368,20 +368,20 @@ code, **without ever running e2e**. Pairs with [`e2e attest`](#e2e-attest).
 testing-conventions e2e verify
 ```
 
-Run from the repository root. `verify` reads `e2e-attestation.json` and passes (exit `0`) iff its
-recorded SHA equals the **latest code commit** — the newest commit that changed any path other
-than the attestation file itself. Otherwise it exits non-zero with an actionable message naming
-the fix, e.g. *"e2e attestation out of date … run `testing-conventions e2e attest '<your e2e
-command>'`"*. It never inspects the recorded exit code or output — presence + freshness only.
+Run from the repository root. `verify` reads `e2e-attestation.json` and passes (exit `0`) only
+when its recorded SHA equals the **latest code commit**: the newest commit that changed any path
+other than the attestation file itself. Otherwise it exits non-zero with an actionable message
+naming the fix, e.g. *"e2e attestation out of date … run `testing-conventions e2e attest '<your
+e2e command>'`"*. It never inspects the recorded exit code or output; presence and freshness only.
 
 Push new code without re-attesting and the recorded SHA no longer names the latest code commit, so
 `verify` fails until you re-run `attest`. That staleness is the nudge.
 
 ### `check`
 
-Reserved for the config-driven umbrella that runs every configured rule. **Not wired yet** —
-it currently exits `0`. Rules ship under their test-kind group (like `unit colocated-test`)
-until `check` orchestrates them from the config.
+Reserved for the config-driven umbrella that runs every configured rule. **Not wired yet**: it
+currently exits `0`. Rules ship under their test-kind group (like `unit colocated-test`) until
+`check` orchestrates them from the config.
 
 ### `packaging`
 
@@ -416,7 +416,7 @@ tarball (#73), Rust `.crate` (#74). `<PATH>` may also be an already-unpacked dir
 ### workflow
 
 Guard a CI workflow against CLI subcommand drift. The reusable workflow's documented
-consumption path is `…/testing-conventions.yml@v0`: the workflow file is frozen at the tag
+consumption path is `.../testing-conventions.yml@v0`: the workflow file is frozen at the tag
 while a consumer's `npx` pulls the latest published binary, so a renamed or removed
 subcommand strands every `@v0` consumer (as it did at 0.0.7, broken by the
 `location` → `colocated-test` rename). This check fails the build the moment a workflow
@@ -430,8 +430,8 @@ testing-conventions workflow <PATH>
 | --------------- | ---------------------------------------------------------------------------- |
 | `<PATH>`        | A workflow file, or a directory scanned recursively for `*.yml` / `*.yaml`.  |
 
-Finds every `testing-conventions …` invocation in the workflow's shell — the bare
-`npx -y testing-conventions` / on-`PATH` command word, version pin and all — and checks each
+Finds every `testing-conventions ...` invocation in the workflow's shell (the bare
+`npx -y testing-conventions` / on-`PATH` command word, version pin and all) and checks each
 one's subcommand chain against the binary's own command tree (the source of truth). Reports
 each offending invocation to stderr as `path:line: no-unknown-subcommand — <message>` and
 exits `1` if any are found, `0` otherwise.
@@ -441,7 +441,7 @@ exits `1` if any are found, `0` otherwise.
 The standard is config-driven: one TOML file is the single source of truth for every rule's
 thresholds and exemptions. The schema is validated by the loader (unknown keys, malformed TOML,
 and reason-less `exempt` entries are rejected). Each `[python]` / `[typescript]` / `[rust]`
-table is optional, and within it both `coverage` and `exempt` are optional — a repo can
+table is optional, and within it both `coverage` and `exempt` are optional: a repo can
 configure just coverage, just exemptions, or both.
 
 ```toml

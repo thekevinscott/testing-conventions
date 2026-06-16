@@ -1,12 +1,12 @@
 # Guides
 
-Task-oriented recipes for putting `testing-conventions` to work. Each assumes the CLI is
-installed — see [Getting Started](../getting-started).
+Task-oriented recipes for `testing-conventions`. Each assumes the CLI is installed (see
+[Getting Started](../getting-started)).
 
 ## Enforce colocated unit tests
 
-**The rule:** unit tests are colocated with the code they test and named after it, so the
-unit/integration boundary is structural (by location, not a tag or marker) and an orphaned
+**The rule:** unit tests are colocated with the code they test and named after it. This makes
+the unit/integration boundary structural (by location, not a tag or marker), and an orphaned
 test can't hide. The expected twin varies by language:
 
 | Language   | Source                              | Expected unit test     | Not a subject                          |
@@ -22,19 +22,19 @@ testing-conventions unit colocated-test --language typescript src/   # TypeScrip
 ```
 
 Every source file without its colocated test is printed to stderr and the command exits
-non-zero. (Rust needs no separate check here: inline `#[cfg(test)]` modules make colocation
-and 1:1 naming automatic.) Files that genuinely shouldn't be tested — re-export barrels, a
-launcher shim — get an explicit, reason-required exemption in config; see
+non-zero. (Rust needs no separate check: inline `#[cfg(test)]` modules make colocation and 1:1
+naming automatic.) Files that genuinely shouldn't be tested, such as re-export barrels or a
+launcher shim, get an explicit, reason-required exemption in config; see
 [Exempt a file](./exemptions).
 
 ## Check unit-test coverage
 
 Coverage floors are enforced on the **unit suite only**, with test files excluded from the
-denominator. Put the floors in your config and run `unit coverage` — or skip the config entirely
-and `unit coverage` enforces the language's sane default floor (Python `fail_under = 85` with
-branch on; TypeScript `lines`/`functions`/`statements` 80, `branches` 75).
+denominator. Put the floors in your config and run `unit coverage`. Skip the config and `unit
+coverage` uses the language's default floor (Python `fail_under = 85` with branch on; TypeScript
+`lines`/`functions`/`statements` 80, `branches` 75).
 
-**Python** — one total floor, branch coverage on, measured by `coverage.py`:
+**Python:** one total floor, branch coverage on, measured by `coverage.py`:
 
 ```toml
 # testing-conventions.toml
@@ -49,7 +49,7 @@ testing-conventions unit coverage --language python --config testing-conventions
 It runs the suite under `coverage.py`, compares the total to `fail_under`, and exits non-zero
 on a shortfall. (`python`, `coverage`, and `pytest` must be installed.)
 
-**TypeScript** — four independent floors, measured by `vitest` v8 coverage:
+**TypeScript:** four independent floors, measured by `vitest` v8 coverage:
 
 ```toml
 # testing-conventions.toml
@@ -63,15 +63,15 @@ testing-conventions unit coverage --language typescript --config testing-convent
 
 It runs the suite under `vitest` (via `npx`, so `vitest` and `@vitest/coverage-v8` must be
 installed), excludes `*.test.*` and declaration files, and exits non-zero naming any of the four
-metrics below its floor — so CI fails on a coverage regression. Measuring all four matters: line
+metrics below its floor, so CI fails on a coverage regression. Measuring all four matters: line
 coverage can read 100% while branches lag, when every line of a function runs but its `else` is
 never taken.
 
 ## Keep integration tests honest
 
-An integration test runs first-party code for real and mocks only the outside world — so a
-`vi.mock()` of a first-party (relative) module defeats the point. The `no-first-party-mock`
-lint catches it:
+An integration test runs first-party code for real and mocks only the outside world. A
+`vi.mock()` of a first-party (relative) module breaks that, and the `no-first-party-mock` lint
+catches it:
 
 ```sh
 testing-conventions integration lint --language typescript test/integration/
@@ -79,11 +79,11 @@ testing-conventions integration lint --language typescript test/integration/
 
 Any `vi.mock()` / `vi.doMock()` of a `./`-relative module is printed and the command exits
 non-zero; third-party packages and Node built-ins stay mockable. See [Isolate
-tests](./isolation) for the full first-party/external rule and the unit-suite mirror image.
+tests](./isolation) for the full first-party/external rule and the unit-suite counterpart.
 
 ## Wire it into CI
 
-`unit colocated-test`'s non-zero exit is all a CI step needs — a failing check fails the job,
+`unit colocated-test`'s non-zero exit is all a CI step needs: a failing check fails the job,
 with the offending files named in the log:
 
 ```yaml
@@ -100,8 +100,8 @@ steps:
     run: testing-conventions unit coverage --language typescript --config testing-conventions.toml src/
 ```
 
-Or skip the boilerplate with the [reusable workflow](./ci) — one job that runs every rule.
+Or skip the boilerplate with the [reusable workflow](./ci): one job that runs every rule.
 
 ## See also
 
-- [Reference](../reference/) — the full CLI surface and config schema.
+- [Reference](../reference/): the full CLI surface and config schema.

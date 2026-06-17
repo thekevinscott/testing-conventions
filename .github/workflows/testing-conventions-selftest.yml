@@ -35,6 +35,9 @@ name: Testing Conventions (self-test)
 # but unreleased, deferred to #146.
 #   isolation-wired  asserts the reusable workflow actually invokes `unit lint`
 #                    — the red→green signal for the wiring itself.
+#   isolation-python-wired  runs the workflow's real `detect` script against the clean
+#                    Python fixture and asserts it routes Python into the lint matrix
+#                    (`isolation_languages`) — the red→green signal for wiring Python (#146).
 #   isolation-clean  calls the reusable workflow against a clean Rust crate, proving
 #                    `detect` recognizes a crate and fans the lint job over it.
 #   isolation-red    drives the published `unit lint` on a violating crate and
@@ -202,6 +205,43 @@ jobs:
             exit 1
           fi
           echo "reusable workflow invokes \`unit lint\`"
+
+  isolation-python-wired:
+    name: detect routes Python into the unit-lint matrix
+    # The red→green signal for #146: the published binary ships Python `unit lint` now,
+    # but the reusable workflow's `detect` step still has to *route* Python into the lint
+    # matrix (`isolation_languages`) or the @v0 path enforces it for no one. Rather than
+    # restate the detection (a copy could drift from the shipped logic), pull the real
+    # `detect` script out of the workflow and run it against the clean Python fixture —
+    # the same inputs the `clean` job drives the workflow with. Red until #146 wires it
+    # (`isolation_languages=[]`); green after (`["python"]`).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install the YAML reader used to extract the detect step
+        run: python -m pip install --quiet pyyaml
+      - name: detect must emit python in isolation_languages for a Python tree
+        run: |
+          set -euo pipefail
+          # Extract the actual `run:` script from the reusable workflow's detect job, so
+          # the test exercises the shipped detection itself, not a copy of it.
+          python -c 'import yaml; wf = yaml.safe_load(open(".github/workflows/testing-conventions.yml")); print(next(s for s in wf["jobs"]["detect"]["steps"] if s.get("id") == "scan")["run"])' > "$RUNNER_TEMP/detect.sh"
+          out="$RUNNER_TEMP/detect.out"
+          # Drive it with the `clean` job's inputs: Python requested, the all-Python clean
+          # fixture as the source tree. The detect script writes its sets to GITHUB_OUTPUT.
+          LANGUAGES='["python"]' SCAN_PATH='.github/selftest/clean' GITHUB_OUTPUT="$out" bash "$RUNNER_TEMP/detect.sh"
+          iso="$(grep '^isolation_languages=' "$out" | cut -d= -f2-)"
+          echo "detect emitted isolation_languages=$iso"
+          case "$iso" in
+            *'"python"'*)
+              echo "Python is wired into the unit-lint matrix" ;;
+            *)
+              echo "::error::detect did not route Python into isolation_languages (got: $iso) — Python \`unit lint\` is not enforced on the @v0 path (#146)"
+              exit 1 ;;
+          esac
 
   isolation-clean:
     name: A clean crate passes the unit-lint job

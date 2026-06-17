@@ -420,3 +420,50 @@ jobs:
       path: .github/selftest/diff-clean
       config: .github/selftest/diff-clean/testing-conventions.toml
       base: origin/main
+
+  # ---- Wire the reusable workflow to the tested detect action (#185/#186 go live) ----
+  # The detection logic is tested in .github/actions/detect (pytest, #189); these assert
+  # the @v0 workflow is actually wired to that engine and gates the default-on jobs on its
+  # outputs — the same static-wiring style as coverage-rust-wired / e2e-verify-wired above.
+
+  wiring-detect-action:
+    name: The reusable workflow detects via the detect action (#185)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: testing-conventions.yml must use the detect action
+        run: |
+          set -euo pipefail
+          if ! grep -qE 'uses:[[:space:]]*[^[:space:]]*actions/detect@' .github/workflows/testing-conventions.yml; then
+            echo "::error::the reusable workflow doesn't use the detect action — detection still runs as inline bash, off the tested engine (#185)"
+            exit 1
+          fi
+          echo "reusable workflow detects via the detect action"
+
+  wiring-packaging-default-on:
+    name: The reusable workflow runs packaging by default (#186)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: packaging must gate on detect's packaging_dist output
+        run: |
+          set -euo pipefail
+          if ! grep -q 'packaging_dist' .github/workflows/testing-conventions.yml; then
+            echo "::error::the packaging job doesn't gate on detect's \`packaging_dist\` — packaging isn't default-on (#186)"
+            exit 1
+          fi
+          echo "packaging is default-on (gates on packaging_dist)"
+
+  wiring-e2e-default-on:
+    name: The reusable workflow runs e2e verify by default (#186)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: e2e-verify must gate on detect's e2e_attestation output
+        run: |
+          set -euo pipefail
+          if ! grep -q 'e2e_attestation' .github/workflows/testing-conventions.yml; then
+            echo "::error::the e2e-verify job doesn't gate on detect's \`e2e_attestation\` — e2e verify isn't default-on (#186)"
+            exit 1
+          fi
+          echo "e2e verify is default-on (gates on e2e_attestation)"

@@ -120,9 +120,10 @@ jobs:
       integration_lint_languages: ${{ steps.scan.outputs.integration_lint_languages }}
       # `unit lint` (#125): python/typescript + rust, also kept off the coverage matrix.
       isolation_languages: ${{ steps.scan.outputs.isolation_languages }}
-      # `unit coverage` (#37/#171): present python/typescript plus rust when a crate
-      # is present — the matrix the whole-tree and changed-line coverage jobs fan
-      # out over. Kept as its own set so a future coverage-less language can diverge.
+      # `unit coverage` (#37/#171): present python/typescript, plus rust when a crate
+      # is present *and* a `[rust].coverage` floor is configured — the matrix the
+      # whole-tree and changed-line coverage jobs fan out over. Kept as its own set
+      # so a future coverage-less language can diverge.
       coverage_languages: ${{ steps.scan.outputs.coverage_languages }}
     steps:
       - uses: actions/checkout@v6
@@ -131,6 +132,7 @@ jobs:
         env:
           LANGUAGES: ${{ inputs.languages }}
           SCAN_PATH: ${{ inputs.path }}
+          CONFIG: ${{ inputs.config }}
         run: |
           set -euo pipefail
           # The "cheap pre-step" (#94): a language's jobs should fire only when it
@@ -155,6 +157,19 @@ jobs:
           present_under () {
             [ -n "$(find "$SCAN_PATH" -type f \( "$@" \) -print -quit 2>/dev/null)" ]
           }
+          # Rust coverage floor configured? — the config declares a `[rust].coverage`
+          # table (key form, or a `[rust.coverage]` table). Rust has no zero-config
+          # default floor (#37), so without one the rust coverage arm is *skipped*
+          # (like an absent language, #94), not errored.
+          rust_coverage_configured () {
+            [ -f "$CONFIG" ] || return 1
+            awk '
+              /^\[/                                       { in_rust = ($0 ~ /^\[rust\]/) }
+              /^\[rust\.coverage\]/                       { found = 1; exit }
+              in_rust && /^[[:space:]]*coverage[[:space:]]*=/ { found = 1; exit }
+              END { exit(found ? 0 : 1) }
+            ' "$CONFIG"
+          }
           present=()
           scan () {  # $1 = language; $2.. = the find name-predicates for its sources
             local lang="$1"; shift
@@ -175,9 +190,13 @@ jobs:
           # The integration-lint matrix is `present` plus rust (#126).
           lint=("${present[@]}")
           if [ "$rust_crate" -eq 1 ]; then lint+=("rust"); fi
-          # `unit coverage` (#171): present python/typescript plus rust.
+          # `unit coverage` (#171): present python/typescript, plus rust only when a
+          # `[rust].coverage` floor is configured (rust has no zero-config default,
+          # #37) — otherwise the rust crate skips coverage instead of erroring.
           coverage=("${present[@]}")
-          if [ "$rust_crate" -eq 1 ]; then coverage+=("rust"); fi
+          if [ "$rust_crate" -eq 1 ] && rust_coverage_configured; then
+            coverage+=("rust")
+          fi
           # `unit lint` runs for every present source language the published binary
           # ships — Python (#42), TypeScript (#43/#76/#77) — plus rust (a crate, #44).
           # Its set is `present` (python/typescript) plus rust when a crate is present,
@@ -288,10 +307,10 @@ jobs:
     needs: detect
     # `unit coverage` enforces the Python (#26), TypeScript (#31), and Rust (#37)
     # floors. The matrix is `coverage_languages` — the requested languages with
-    # sources present (#94), plus rust when a crate is here (#171) — so a
-    # requested-but-absent language is skipped rather than erroring on an empty
-    # measurement. #56 (config-driven `check`) will eventually drive this from the
-    # config file.
+    # sources present (#94), plus rust when a crate is here and a `[rust].coverage`
+    # floor is configured (#171/#37) — so a requested-but-absent language (or a rust
+    # crate with no floor) is skipped rather than erroring. #56 (config-driven
+    # `check`) will eventually drive this from the config file.
     if: needs.detect.outputs.coverage_languages != '[]'
     runs-on: ubuntu-latest
     strategy:

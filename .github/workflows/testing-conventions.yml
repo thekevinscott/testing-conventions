@@ -25,26 +25,28 @@ name: Testing Conventions
 #
 # Two diff-scoped variants run as their own `*-changed` jobs on `pull_request`
 # only (they need `fetch-depth: 0` and a base ref): `unit colocated-test --base`
-# (co-change, #161) and `unit coverage --base` (changed-line coverage, #162). And
-# an opt-in `e2e verify` job (#68) checks the committed e2e attestation; it's off
-# by default (`run_e2e`).
+# (co-change, #161) and `unit coverage --base` (changed-line coverage, #162). An
+# `e2e verify` job (#68) checks the committed e2e attestation; it's default-on,
+# verify-if-present — it runs whenever an `e2e-attestation.json` is committed, and
+# `run_e2e` forces it on (#186).
 #
-# A `detect` pre-step scans `path` for each requested language's sources, and the
-# rule jobs fan out over the languages that are both requested *and* present
-# (#94). A requested language the library has no sources for — e.g. the
-# zero-config default ["python", "typescript"] against a repo with no `.py` — is
-# dropped from the matrix and skipped, not failed: its coverage job would
-# otherwise error on an empty measurement (pytest collects nothing; an empty
-# vitest denominator is a failed run). `detect` additionally recognizes a crate
-# (`Cargo.toml` / `*.rs`) and emits separate `integration_lint_languages`,
-# `isolation_languages`, and `coverage_languages` sets that add Rust for the jobs
-# that support it.
+# The `detect` job runs the repo-only detect action (`.github/actions/detect`, tested
+# by pytest, #189): it scans `path` and auto-detects every supported language *present*
+# (#185), and the rule jobs fan out over those. `languages` is an optional restrictor
+# (empty default ⇒ auto-detect all; a JSON array ⇒ only those named), so the zero-input
+# drop-in covers Python, TypeScript, and Rust alike. A language with no sources under
+# `path` is dropped from the matrix and skipped, not failed (#94). The action also
+# recognizes a crate (`Cargo.toml` / `*.rs`) and emits separate
+# `integration_lint_languages`, `isolation_languages`, and `coverage_languages` sets
+# that add Rust, plus `packaging_dist` / `e2e_attestation` flags the packaging and
+# e2e-verify jobs gate on (#186).
 #
 # The Packaging rule (#41) is the exception: it inspects the *built distribution*,
-# not the source tree, so it doesn't ride the source matrix. Build your dists in
-# your own job, upload them with actions/upload-artifact, and pass that artifact's
-# name as `packaging_artifact` — the packaging job downloads it and fails if any
-# .whl/.tar.gz (python), .tgz (typescript), or .crate (rust) ships a test file:
+# not the source tree, so it doesn't ride the source matrix. It's default-on,
+# locate-or-skip (#186): it runs over a conventional dist/ found in the checkout, or
+# over a named `packaging_artifact` you upload with actions/upload-artifact, and fails
+# if any .whl/.tar.gz (python), .tgz (typescript), or .crate (rust) ships a test file
+# (skipped, never failed, when neither a dist/ nor an artifact exists):
 #
 #   jobs:
 #     build:
@@ -67,17 +69,17 @@ name: Testing Conventions
 # `[rust].coverage` table). Add a config file only to tighten a floor or declare
 # exemptions.
 #
-# `languages` is a JSON array so the matrix can fan out over it directly
-# (reusable-workflow inputs can't be native lists). Once the config-driven
-# `check` umbrella is wired this will read the config file itself.
+# `languages` is a JSON array (when set) so the matrix can fan out over it directly
+# (reusable-workflow inputs can't be native lists); empty — the default — means
+# auto-detect every supported language present under `path` (#185).
 
 on:
   workflow_call:
     inputs:
       languages:
-        description: 'JSON array of languages to check, e.g. ["python", "typescript"].'
+        description: 'Optional JSON array restricting which languages to check, e.g. ["python"]. Empty (the default) auto-detects every supported language present under `path` (#185).'
         type: string
-        default: '["python", "typescript"]'
+        default: ''
       path:
         description: 'Directory scanned recursively for sources.'
         type: string
@@ -95,11 +97,11 @@ on:
         type: string
         default: 'origin/main'
       run_e2e:
-        description: 'Opt in to the `e2e verify` job (the #68 freshness gate): fail if the committed `e2e-attestation.json` does not name the latest code commit. Off by default — it needs a committed attestation and full git history.'
+        description: 'Force the `e2e verify` job (#68 freshness gate) on. It is already default-on when a committed `e2e-attestation.json` is present (#186); set this to run it regardless. Needs the attestation and full git history.'
         type: boolean
         default: false
       packaging_artifact:
-        description: 'Name of an uploaded build artifact (actions/upload-artifact) holding the built distributions (.whl/.tar.gz/.tgz/.crate) to check. When set, a packaging job downloads it and fails if any distribution ships a test file. Empty (default) skips the packaging check.'
+        description: 'Name of an uploaded build artifact (actions/upload-artifact) holding the built distributions (.whl/.tar.gz/.tgz/.crate) to check. When set, the packaging job downloads and inspects it. When empty (default), packaging still runs over a conventional dist/ found in the checkout, and is skipped only when no dist/ exists either (#186).'
         type: string
         default: ''
 
@@ -125,105 +127,22 @@ jobs:
       # whole-tree and changed-line coverage jobs fan out over. Kept as its own set
       # so a future coverage-less language can diverge.
       coverage_languages: ${{ steps.scan.outputs.coverage_languages }}
+      # Whether a built distribution is discoverable in the checkout, and whether a
+      # committed e2e-attestation.json is present (#186) — the packaging and e2e-verify
+      # jobs gate on these so they run by default and skip (never fail) when absent.
+      packaging_dist: ${{ steps.scan.outputs.packaging_dist }}
+      e2e_attestation: ${{ steps.scan.outputs.e2e_attestation }}
     steps:
       - uses: actions/checkout@v6
       - id: scan
-        name: Scan ${{ inputs.path }} for each requested language's sources
-        env:
-          LANGUAGES: ${{ inputs.languages }}
-          SCAN_PATH: ${{ inputs.path }}
-          CONFIG: ${{ inputs.config }}
-        run: |
-          set -euo pipefail
-          # The "cheap pre-step" (#94): a language's jobs should fire only when it
-          # was requested *and* `path` actually holds sources for it. colocated-test
-          # and integration-lint pass vacuously on an absent language, but `unit
-          # coverage` has nothing to measure and errors (pytest collects nothing; an
-          # empty vitest denominator is a failed run) — so a requested-but-absent
-          # language is dropped here and skipped, not failed.
-          #
-          # Four sets come out: `languages` (python/typescript) drives colocated-test
-          # and its co-change `*-changed` job; `coverage_languages` (#171) adds rust
-          # for the coverage jobs; `integration_lint_languages` (#126) and
-          # `isolation_languages` (#125) add rust for those static checks.
-          #
-          # `set -f` so the shell leaves the *.ext globs for `find` to match itself.
-          set -f
-          # Requested? — the language name appears in the JSON `languages` input.
-          requested () {
-            case "$LANGUAGES" in *"\"$1\""*) return 0 ;; *) return 1 ;; esac
-          }
-          # Present? — a file matching the given `find` name-predicates exists.
-          present_under () {
-            [ -n "$(find "$SCAN_PATH" -type f \( "$@" \) -print -quit 2>/dev/null)" ]
-          }
-          # Rust coverage floor configured? — the config declares a `[rust].coverage`
-          # table (key form, or a `[rust.coverage]` table). Rust has no zero-config
-          # default floor (#37), so without one the rust coverage arm is *skipped*
-          # (like an absent language, #94), not errored.
-          rust_coverage_configured () {
-            [ -f "$CONFIG" ] || return 1
-            awk '
-              /^\[/                                       { in_rust = ($0 ~ /^\[rust\]/) }
-              /^\[rust\.coverage\]/                       { found = 1; exit }
-              in_rust && /^[[:space:]]*coverage[[:space:]]*=/ { found = 1; exit }
-              END { exit(found ? 0 : 1) }
-            ' "$CONFIG"
-          }
-          present=()
-          scan () {  # $1 = language; $2.. = the find name-predicates for its sources
-            local lang="$1"; shift
-            if requested "$lang" && present_under "$@"; then
-              present+=("$lang")
-            fi
-          }
-          # colocated-test fans out over python/typescript.
-          scan python -name '*.py'
-          scan typescript -name '*.ts' -o -name '*.tsx' -o -name '*.mts' -o -name '*.cts'
-          # Rust is detected once (a Cargo.toml or any *.rs marks a crate) and added
-          # to every set that supports it: integration-lint (#126), unit-lint (#125),
-          # and now unit-coverage (#37/#171).
-          rust_crate=0
-          if requested rust && present_under -name 'Cargo.toml' -o -name '*.rs'; then
-            rust_crate=1
-          fi
-          # The integration-lint matrix is `present` plus rust (#126).
-          lint=("${present[@]}")
-          if [ "$rust_crate" -eq 1 ]; then lint+=("rust"); fi
-          # `unit coverage` (#171): present python/typescript, plus rust only when a
-          # `[rust].coverage` floor is configured (rust has no zero-config default,
-          # #37) — otherwise the rust crate skips coverage instead of erroring.
-          coverage=("${present[@]}")
-          if [ "$rust_crate" -eq 1 ] && rust_coverage_configured; then
-            coverage+=("rust")
-          fi
-          # `unit lint` runs for every present source language the published binary
-          # ships — Python (#42), TypeScript (#43/#76/#77) — plus rust (a crate, #44).
-          # Its set is `present` (python/typescript) plus rust when a crate is present,
-          # the same shape as the integration-lint set, so rust never enters the coverage
-          # matrix. Python isolation shipped to npm, so it's wired here now (#146).
-          isolation=("${present[@]}")
-          if [ "$rust_crate" -eq 1 ]; then isolation+=("rust"); fi
-          # Emit each as a compact JSON array (`[]` when nothing matched).
-          to_json () {
-            local json='[' first=1 x
-            for x in "$@"; do
-              [ "$first" -eq 1 ] && first=0 || json+=','
-              json+="\"$x\""
-            done
-            printf '%s]' "$json"
-          }
-          languages_json="$(to_json "${present[@]}")"
-          lint_json="$(to_json "${lint[@]}")"
-          coverage_json="$(to_json "${coverage[@]}")"
-          isolation_json="$(to_json "${isolation[@]}")"
-          {
-            echo "languages=$languages_json"
-            echo "integration_lint_languages=$lint_json"
-            echo "coverage_languages=$coverage_json"
-            echo "isolation_languages=$isolation_json"
-          } >> "$GITHUB_OUTPUT"
-          echo "requested $LANGUAGES under '$SCAN_PATH' → colocated $languages_json, coverage $coverage_json, integration-lint $lint_json, isolation $isolation_json"
+        # Detection lives in the repo-only composite action (.github/actions/detect),
+        # tested by pytest (#189). The reusable workflow uses it at the same @v0 the
+        # consumer pins, so GitHub fetches the action's files without a checkout hack.
+        uses: thekevinscott/testing-conventions/.github/actions/detect@v0
+        with:
+          languages: ${{ inputs.languages }}
+          path: ${{ inputs.path }}
+          config: ${{ inputs.config }}
 
   colocated-test:
     name: Colocated test (${{ matrix.language }})
@@ -447,11 +366,13 @@ jobs:
 
   e2e-verify:
     name: E2E attestation freshness (e2e verify)
-    # Opt-in #68 gate: verify the committed `e2e-attestation.json` names the latest
-    # code commit, failing (with a re-attest nudge) when the code has moved on. Off
-    # by default — it needs a committed attestation and full history, so it can't be
-    # default-on. Never runs the e2e suite itself.
-    if: ${{ inputs.run_e2e }}
+    needs: detect
+    # Default-on, verify-if-present (#186): run the #68 freshness gate whenever a
+    # committed `e2e-attestation.json` is present (detected by the detect action) —
+    # verify it names the latest code commit, failing (with a re-attest nudge) when the
+    # code has moved on. A repo with no attestation is skipped, never failed; `run_e2e`
+    # forces the job on. Never runs the e2e suite itself.
+    if: ${{ inputs.run_e2e || needs.detect.outputs.e2e_attestation == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -466,28 +387,37 @@ jobs:
 
   packaging:
     name: Packaging (no test files in the built artifact)
-    # Unlike the checks above, packaging inspects the *built distribution*, not the
-    # source tree — so it doesn't fan out over `detect`'s source matrix. The
-    # consumer's own build job uploads its built dists (actions/upload-artifact) and
-    # passes that artifact's name as `packaging_artifact`; this job downloads it and
-    # checks each file, inferring the language from the extension. Skipped — never
-    # failed — when no `packaging_artifact` is given.
-    if: inputs.packaging_artifact != ''
+    needs: detect
+    # Default-on, locate-or-skip (#186): packaging inspects the *built distribution*, not
+    # the source tree, so it doesn't ride the source matrix — but it runs by default. It
+    # runs when an explicit `packaging_artifact` was uploaded OR the detect action found a
+    # conventional dist/ in the checkout, and is skipped — never failed — when neither
+    # exists. Each distribution's language is inferred from its extension.
+    if: ${{ inputs.packaging_artifact != '' || needs.detect.outputs.packaging_dist == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Download the built distributions
+      # Acquire the distributions one of two ways: a named upload artifact, or the
+      # committed dist/ in the consumer checkout (#186).
+      - name: Download the uploaded distributions
+        if: inputs.packaging_artifact != ''
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.packaging_artifact }}
           path: _packaging_artifact
+      - name: Check out the repository to inspect its dist/
+        if: inputs.packaging_artifact == ''
+        uses: actions/checkout@v6
       - name: Check the built distributions ship no test files
         env:
           VERSION: ${{ inputs.version }}
+          PACKAGING_ARTIFACT: ${{ inputs.packaging_artifact }}
         run: |
           set -euo pipefail
           # nullglob: an unmatched glob expands to nothing (not the literal);
           # globstar: `**` recurses, so a nested dist is found too.
           shopt -s nullglob globstar
+          # The downloaded artifact when one was named, else the located dist/.
+          if [ -n "$PACKAGING_ARTIFACT" ]; then dist_root=_packaging_artifact; else dist_root=dist; fi
           # Language is inferred from the distribution's extension: a wheel/sdist is
           # python, an `npm pack` tarball is typescript, a Cargo crate is rust.
           checked=0
@@ -500,11 +430,11 @@ jobs:
               checked=$((checked + 1))
             done
           }
-          check python _packaging_artifact/**/*.whl _packaging_artifact/**/*.tar.gz
-          check typescript _packaging_artifact/**/*.tgz
-          check rust _packaging_artifact/**/*.crate
+          check python "$dist_root"/**/*.whl "$dist_root"/**/*.tar.gz
+          check typescript "$dist_root"/**/*.tgz
+          check rust "$dist_root"/**/*.crate
           if [ "$checked" -eq 0 ]; then
-            echo "::error::packaging_artifact '${{ inputs.packaging_artifact }}' held no recognized built distribution (.whl / .tar.gz / .tgz / .crate)"
+            echo "::error::no recognized built distribution (.whl / .tar.gz / .tgz / .crate) found in '$dist_root'"
             exit 1
           fi
           echo "checked $checked built distribution(s); no test files shipped"

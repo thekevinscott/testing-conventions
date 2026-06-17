@@ -1,8 +1,11 @@
 # Getting Started
 
-`testing-conventions` enforces a library's testing standards in deterministic ways. It's primarily useful for enforcing agent (LLM) behavior.
+`testing-conventions` enforces a library's testing standards deterministically in CI. It's
+primarily useful for enforcing agent (LLM) behavior.
 
-The fastest way to adopt it is the reusable GitHub Actions workflow. Add a workflow to your repo that calls the reusable one:
+## The drop-in
+
+Add one file to your repo — no inputs, no config:
 
 ```yaml
 # .github/workflows/conventions.yml
@@ -12,22 +15,37 @@ on: [pull_request]
 jobs:
   conventions:
     uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
-    with:
-      languages: '["python", "typescript", "rust"]'   # the languages your library ships
-      path: src                                # the directory to scan
 ```
 
-On every pull request it runs the published binary and **opts your library into every check we offer**, each as its own matrix job that fails the build on any violation.
+On every pull request it **auto-detects the languages present** (Python, TypeScript, and
+Rust), scans `src`, and runs every rule with sensible defaults — each as its own job that
+fails the build on a violation. That's the whole setup: this one file opts a new library
+into the full check set.
 
-### Defaults
+The one thing Rust needs before its coverage floor is enforced is a `[rust].coverage`
+table — it has no default floor. Every other rule runs with no config. See
+[Defaults](./reference/defaults) for every default the workflow applies and why.
 
-- Python: `branch = true, fail_under = 85`
-- TypeScript `lines = 80, branches = 75, functions = 80, statements = 80`
-- Rust
+## Going further
 
-## Customize with a config file (optional)
+Everything below is optional — the drop-in above already works.
 
-You can customize options with a `testing-conventions.toml` at your repo root:
+### Restrict or redirect the scan
+
+`languages` is an optional restrictor and `path` defaults to `src`:
+
+```yaml
+    with:
+      languages: '["python", "typescript"]'   # restrict to these (default: auto-detect every present language)
+      path: packages/core/src                  # scan a different directory
+```
+
+A language with no sources under `path` is skipped, never failed, so the auto-detect
+default is safe on any library.
+
+### Customize with a config file
+
+Tighten a floor or declare an exemption in a `testing-conventions.toml` at your repo root:
 
 ```toml
 # Tighten the Python floor past the default 85:
@@ -39,14 +57,11 @@ coverage = { branch = true, fail_under = 95 }
 path = "mypkg/cli.py"
 rules = ["colocated-test", "coverage"]
 reason = "thin launcher; logic in run(), tested in run_test.py"
-
-[typescript]
-coverage = { lines = 90, branches = 85, functions = 90, statements = 90 }
 ```
 
-Anything you omit keeps its default, so a config can be as small as a single tightened floor or
-one exemption. See [Configuration](./reference/#configuration) for every key and
-[Exempt a file](./guide/exemptions) for the exemption rules.
+Anything you omit keeps its default. See [Configuration](./reference/#configuration) for
+every key, [Defaults](./reference/defaults) for the baseline, and [Exempt a
+file](./guide/exemptions) for the exemption rules.
 
 ## Install the CLI
 
@@ -70,8 +85,9 @@ Confirm it's available (prefix `npx` if you installed it as an npm dev dependenc
 testing-conventions --version
 ```
 
-Then call any rule directly, naming the language with the required `--language` flag. For example,
-the **colocated test** rule checks that every source file has a colocated unit test named after it:
+Then call any rule directly, naming the language with the required `--language` flag. For
+example, the **colocated test** rule checks that every source file has a colocated unit
+test named after it:
 
 ```sh
 # Python: foo.py must have a sibling foo_test.py
@@ -90,10 +106,11 @@ missing colocated unit test: src/pkg/orphan.ts
 error: 2 source file(s) missing a colocated unit test
 ```
 
-The non-zero exit fails CI, so an orphaned or missing test is caught. `unit coverage` runs the
-same way, and its `--config` is optional too: omit it and the default floor above applies.
+The non-zero exit fails CI, so an orphaned or missing test is caught. `unit coverage` runs
+the same way, and its `--config` is optional too: omit it and the default floor applies.
 
 ## Next steps
 
 - [Guides](./guide/): task-oriented recipes (enforce a rule, wire it into CI, exempt a file).
 - [Reference](./reference/): every subcommand, flag, exit code, and config key.
+- [Defaults](./reference/defaults): every default value, and why.

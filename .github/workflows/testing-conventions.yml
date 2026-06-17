@@ -17,8 +17,7 @@ name: Testing Conventions
 # failing the build on any violation. The shipped rule jobs are:
 #
 #   - unit colocated-test  — every source file has a colocated unit test (all langs)
-#   - unit lint            — the unit-suite isolation lint (TypeScript + Rust; Python
-#                            is merged but unreleased, deferred to #146)
+#   - unit lint            — the unit-suite isolation lint (Python, TypeScript, Rust)
 #   - unit coverage        — the unit coverage floor (Python, TypeScript, and Rust
 #                            via cargo-llvm-cov, #37)
 #   - integration lint     — the integration mocking lints (Python, TypeScript, Rust)
@@ -119,8 +118,7 @@ jobs:
       # The same set plus rust — the matrix the integration-lint job fans out over
       # (#126).
       integration_lint_languages: ${{ steps.scan.outputs.integration_lint_languages }}
-      # `unit lint` (#125): TypeScript + rust. (Python is merged but unreleased,
-      # deferred to #146.)
+      # `unit lint` (#125): python/typescript + rust, also kept off the coverage matrix.
       isolation_languages: ${{ steps.scan.outputs.isolation_languages }}
       # `unit coverage` (#37/#171): present python/typescript plus rust when a crate
       # is present — the matrix the whole-tree and changed-line coverage jobs fan
@@ -180,15 +178,12 @@ jobs:
           # `unit coverage` (#171): present python/typescript plus rust.
           coverage=("${present[@]}")
           if [ "$rust_crate" -eq 1 ]; then coverage+=("rust"); fi
-          # `unit lint` (#125) runs for TypeScript and Rust — the languages the
-          # published binary ships. Python isolation is merged (#42) but unreleased,
-          # so it's deferred to #146 until a release ships it (wiring it now would
-          # fail `npx` latest, which rejects `--language python`). TypeScript rides
-          # the scan above; rust reuses the crate check.
-          isolation=()
-          for lang in "${present[@]}"; do
-            if [ "$lang" = "typescript" ]; then isolation+=("$lang"); fi
-          done
+          # `unit lint` runs for every present source language the published binary
+          # ships — Python (#42), TypeScript (#43/#76/#77) — plus rust (a crate, #44).
+          # Its set is `present` (python/typescript) plus rust when a crate is present,
+          # the same shape as the integration-lint set, so rust never enters the coverage
+          # matrix. Python isolation shipped to npm, so it's wired here now (#146).
+          isolation=("${present[@]}")
           if [ "$rust_crate" -eq 1 ]; then isolation+=("rust"); fi
           # Emit each as a compact JSON array (`[]` when nothing matched).
           to_json () {
@@ -265,8 +260,7 @@ jobs:
     needs: detect
     # `unit lint` is a static AST check (no language toolchain), like
     # colocated-test — a cheap matrix job, not a toolchain-heavy one like coverage.
-    # It enforces the rule for TypeScript (#43/#76/#77) and Rust (#44); Python (#42)
-    # is merged but unreleased, so it's deferred to #146 until a release ships it.
+    # It enforces the rule for Python (#42), TypeScript (#43/#76/#77), and Rust (#44).
     # The matrix is `isolation_languages` — the requested-and-present set, which
     # (unlike `languages`) includes rust — so a requested-but-absent language is
     # skipped, not failed. #56 (config-driven `check`) will later drive which

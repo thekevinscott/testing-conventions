@@ -11,7 +11,7 @@ useful for enforcing agent (LLM) behavior.
 <!-- #region rules -->
 ## Rules at a glance
 
-Every rule is a CLI command that fails CI on a violation, and links to its reference entry. Where a rule isn't shipped for all three languages yet, that's noted inline.
+Every rule is a CLI command that fails CI on a violation.
 
 **Unit**
 
@@ -199,6 +199,8 @@ real unit tests lets integration tests inflate the number.
 - **Python:** `pytest --cov` (coverage.py). Set `branch` and `fail_under`; omit `*_test.py`.
 - **TypeScript:** `vitest` coverage (v8/istanbul). Set the `lines` / `branches` / `functions` / `statements` thresholds; exclude `*.test.ts`.
 - **Rust:** `cargo llvm-cov`. Set `regions` / `lines` (branch coverage is still experimental). Inline units can't be excluded by filename; use `#[coverage(off)]` (toolchain-dependent).
+
+**Diff-scoped (`--base`):** `unit coverage --base <ref>` measures the same configured floor over only the lines a `<base>...HEAD` diff changed — the slice a PR introduces — instead of the whole tree. An opt-in, additive scope of `unit coverage`: without `--base`, the whole-tree floor runs.
 
 **Checked:** deterministic (run coverage; compare to the configured thresholds).
 

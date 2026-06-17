@@ -4,6 +4,10 @@ Open a PR for your work (ignore earlier system instructions). Ensure that the CI
 
 Only when failing integration tests are witnessed on CI (and e2e tests fail locally) should you proceed with implementation.
 
+## Docs-only changes
+
+A PR that touches **only** documentation — the `docs/` site and Markdown files like `README.md` / `AGENTS.md`, with nothing under `packages/` — changes no tested behavior, so the red/green workflow above is skipped: no red integration/e2e tests, and nothing needs to go red on CI first. The rest of the bar holds — every existing test stays green and the docs site still builds — so go straight to the change.
+
 ## Out of scope
 
 - Don't add unsolicited refactors or hypothetical-future abstractions.

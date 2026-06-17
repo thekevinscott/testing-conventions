@@ -1,0 +1,4 @@
+# The crate is only partially covered (one branch arm is untested), so it fails
+# this 100 floor — the build-failing behavior the coverage rule promises.
+[rust]
+coverage = { regions = 100, lines = 100 }

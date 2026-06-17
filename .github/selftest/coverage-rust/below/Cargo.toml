@@ -1,0 +1,12 @@
+# Below-floor fixture crate for the reusable workflow's Rust `unit coverage` arm
+# (#171): the inline test exercises only one arm of a branch, so the other arm's
+# region and line never run — `cargo llvm-cov` reports under 100% on both metrics
+# and the crate fails a 100 floor. Driven directly (a failing `uses:` call would
+# fail the whole run) to assert the non-zero exit that fails a consumer's build.
+# `[workspace]` isolates the fixture from the parent cargo workspace.
+[package]
+name = "cov_rust_selftest_below"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

@@ -1,0 +1,4 @@
+# Rust has no zero-config default coverage floor yet (#37), so the crate opts
+# into one explicitly. `add` is fully covered, so it clears the 100 floor.
+[rust]
+coverage = { regions = 100, lines = 100 }

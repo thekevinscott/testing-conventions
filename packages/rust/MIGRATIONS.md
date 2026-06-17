@@ -358,6 +358,20 @@ and `uncovered_changed_lines_ts`, and `coverage` gains `measure_patch_typescript
 the Python arm and the existing API are unchanged. `--language rust` is still
 rejected as a separate item.
 
+Also adds **patch (changed-line) coverage — Rust** (#136, parent #46): `unit
+patch-coverage --language rust [--base <REF>] [--config <CONFIG>] <PATH>`, the Rust
+twin of #132 built on the Rust coverage rule (#37). It reuses the same
+`<base>...HEAD` diff machinery — scoped to `.rs` sources — and maps the changed
+lines against `cargo llvm-cov`'s per-line coverage, flagging a changed line
+llvm-cov records no execution for (an LCOV `DA:<line>,0`). It runs `cargo llvm-cov
+--lcov` with the floor's nested-run hygiene (an out-of-tree target dir, the outer
+coverage env stripped) and honors the `[rust].coverage` exemption (#32) via
+`--ignore-filename-regex`. Purely additive: `patch_coverage` gains `check_rust` and
+`coverage` gains `measure_patch_rust` (the cargo-llvm-cov invocation is shared with
+the floor via `run_cargo_llvm_cov`); the Python / TypeScript arms and the existing
+API are unchanged. With Rust landed, `unit patch-coverage` covers all three
+languages.
+
 ### Required changes
 
 `unit isolation` is now `unit lint` (#160), mirroring `integration lint`. Update any
@@ -692,6 +706,17 @@ comment, exits `0`; a `[typescript].coverage` exemption lifts an uncovered file;
 an unresolvable `--base` errors. Requires `git` + a Node toolchain with `vitest` and
 `@vitest/coverage-v8` installed (`npm ci` under
 `packages/rust/tests/fixtures/unit_coverage/typescript`).
+
+```
+cd packages/rust && cargo test --test patch_coverage_rust --test patch_coverage_rust_e2e
+```
+
+Expected: the Rust patch-coverage tests pass (#136) — in a throwaway cargo crate (a
+git repo), a change that adds an arm whose body the suite never runs (or a brand-new
+untested module) is flagged and the binary exits `1`, while rewording a covered line,
+or touching only a comment, exits `0`; a `[rust].coverage` exemption lifts an
+uncovered file; and an unresolvable `--base` errors. Requires `git` + `cargo-llvm-cov`
+on `PATH`.
 
 ```
 cd packages/rust && cargo test --test coverage_rust --test coverage_rust_e2e

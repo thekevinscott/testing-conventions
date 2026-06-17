@@ -385,15 +385,3 @@ fn patch_coverage_requires_language() {
         clap::error::ErrorKind::MissingRequiredArgument
     );
 }
-
-#[test]
-fn patch_coverage_rejects_rust() {
-    // Rust patch coverage (`cargo llvm-cov`) is a separate item.
-    let repo = TempRepo::new("rust-reject");
-    repo.write("lib.rs", "pub fn f() {}\n");
-    repo.commit("base");
-    let base = repo.head();
-
-    let err = run_patch_coverage(&repo, "rust", &base, None).unwrap_err();
-    assert!(err.to_string().contains("separate item"), "got: {err}");
-}

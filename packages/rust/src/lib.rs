@@ -109,8 +109,8 @@ enum UnitRule {
     PatchCoverage {
         /// Directory whose unit suite is run and measured; also where git runs.
         path: PathBuf,
-        /// Language convention to enforce (required). Python and TypeScript — the
-        /// Rust twin (`cargo llvm-cov`) is a separate item.
+        /// Language convention to enforce (required). Python (coverage.py),
+        /// TypeScript (vitest), or Rust (`cargo llvm-cov`).
         #[arg(long, value_enum)]
         language: colocated_test::Language,
         /// Base ref to diff against: the check compares `<base>...HEAD`, the
@@ -472,15 +472,15 @@ fn run_unit_coverage(
 
 /// Run the patch (changed-line) coverage check over `root` for `language`,
 /// diffing `<base>...HEAD` and requiring every changed line to be covered by the
-/// unit suite (Python #132, TypeScript #135). Returns `0` when every changed line
-/// is covered; otherwise prints each uncovered line to stderr and returns `1`.
+/// unit suite (Python #132, TypeScript #135, Rust #136). Returns `0` when every
+/// changed line is covered; otherwise prints each uncovered line to stderr and
+/// returns `1`.
 ///
-/// Python runs coverage.py and TypeScript runs vitest; both reuse the same
-/// `<base>...HEAD` diff machinery. The Rust twin (`cargo llvm-cov`) is a later
-/// item under #46 (mirroring how `unit coverage` is staged). The `coverage`-rule
-/// exemptions from the config at `config_path` lift a file's changed lines (a
-/// missing config file → nothing exempt), reusing the floor's exemption surface
-/// (#32).
+/// Python runs coverage.py, TypeScript runs vitest, and Rust runs `cargo
+/// llvm-cov`; all three reuse the same `<base>...HEAD` diff machinery. The
+/// `coverage`-rule exemptions from the config at `config_path` lift a file's
+/// changed lines (a missing config file → nothing exempt), reusing the floor's
+/// exemption surface (#32).
 fn run_unit_patch_coverage(
     root: &Path,
     base: &str,
@@ -493,10 +493,7 @@ fn run_unit_patch_coverage(
         colocated_test::Language::TypeScript => {
             patch_coverage::check_typescript(root, base, &exempt)?
         }
-        colocated_test::Language::Rust => anyhow::bail!(
-            "`unit patch-coverage` supports `--language python` / `typescript`; \
-             the Rust twin (`cargo llvm-cov`) is a separate item"
-        ),
+        colocated_test::Language::Rust => patch_coverage::check_rust(root, base, &exempt)?,
     };
     if uncovered.is_empty() {
         return Ok(0);

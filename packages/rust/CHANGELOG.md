@@ -21,6 +21,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Patch (changed-line) coverage — Rust** (#136, parent #46). `unit patch-coverage --language rust
+  [--base <REF>] [--config <CONFIG>] <PATH>`: the Rust twin of the patch-coverage core (#132), built
+  on the Rust coverage rule (#37). Reuses the same `<base>...HEAD` diff machinery — scoped to `.rs`
+  sources — and maps the changed lines against `cargo llvm-cov`'s per-line coverage: a changed line
+  is *uncovered* when llvm-cov records no execution for it (an LCOV `DA:<line>,0` record). Runs
+  `cargo llvm-cov --lcov` with the floor's nested-run hygiene (an out-of-tree target dir and the
+  outer coverage env stripped), so it works under the package's own `cargo llvm-cov` job;
+  `cargo-llvm-cov` must be installed. A file with a `[rust].coverage` exemption (reusing #32) is
+  dropped from the run via `--ignore-filename-regex`, so its changed lines are lifted. As with the
+  Rust floor, inline `#[cfg(test)]` code is measured alongside the source (it can't be excluded by
+  filename on a stable toolchain). Prints each uncovered line to stderr as `<path>:<line>` and exits
+  non-zero. New library API `testing_conventions::patch_coverage::check_rust` and
+  `coverage::measure_patch_rust`; the vitest invocation is shared with the floor via
+  `run_cargo_llvm_cov`. With Rust landed, `unit patch-coverage` now covers all three languages.
+  (#136)
 - **Patch (changed-line) coverage — TypeScript** (#135, parent #46). `unit patch-coverage
   --language typescript [--base <REF>] [--config <CONFIG>] <PATH>`: the TypeScript twin of the
   Python patch-coverage core (#132), built on the TypeScript coverage rule (#31). Reuses the same

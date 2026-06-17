@@ -1,25 +1,27 @@
-//! E2E tests for patch (changed-line) coverage (Python — #132): drive the built
-//! CLI binary as a real subprocess against throwaway git repos and assert the
-//! exit code (and, for a red case, the named offender). Complements the
-//! in-process integration tests in `patch_coverage.rs`. Requires `coverage` +
-//! `pytest` + `git` on PATH.
+//! E2E tests for patch (changed-line) coverage (Rust — #136): drive the built CLI
+//! binary as a real subprocess against throwaway cargo crates and assert the exit
+//! code (and, for a red case, the named offender). Complements the in-process
+//! integration tests in `patch_coverage_rust.rs`. Requires `git` and
+//! `cargo-llvm-cov` on PATH.
 //!
-//! Starts red against the stub in `src/patch_coverage.rs` (detection reports
-//! nothing) and goes green once the diff + coverage detection is implemented.
+//! Starts red against the stub in `src/patch_coverage.rs` (`check_rust` reports
+//! nothing) and goes green once the diff + `cargo llvm-cov` detection is
+//! implemented.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// A throwaway git repo, removed on drop. A test writes a baseline, `commit`s it,
-/// captures `head()` as the `base`, then mutates and commits the "after".
+/// A throwaway cargo crate in a git repo, removed on drop. `new` lays down the
+/// `Cargo.toml`; a test writes a baseline, `commit`s it, captures `head()` as the
+/// `base`, then mutates and commits the "after".
 struct TempRepo(PathBuf);
 
 impl TempRepo {
     fn new(slug: &str) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let root = std::env::temp_dir().join(format!(
-            "tc-patch-cov-e2e-{}-{}-{}",
+            "tc-patch-cov-rust-e2e-{}-{}-{}",
             slug,
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed),
@@ -28,7 +30,9 @@ impl TempRepo {
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
-        TempRepo(root)
+        let repo = TempRepo(root);
+        repo.write("Cargo.toml", CARGO_TOML);
+        repo
     }
 
     fn write(&self, rel: &str, contents: &str) {
@@ -71,21 +75,14 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// Exit code + stderr of `unit patch-coverage <repo> --language <lang> --base
-/// <base> [--config <repo>/<config>]`, run as a real subprocess.
-fn patch_coverage(
-    repo: &TempRepo,
-    language: &str,
-    base: &str,
-    config: Option<&str>,
-) -> (i32, String) {
+/// Exit code + stderr of `unit patch-coverage <repo> --language rust --base <base>
+/// [--config <repo>/<config>]`, run as a real subprocess.
+fn patch_coverage(repo: &TempRepo, base: &str, config: Option<&str>) -> (i32, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
-    cmd.arg("unit").arg("patch-coverage").arg(&repo.0).args([
-        "--language",
-        language,
-        "--base",
-        base,
-    ]);
+    cmd.arg("unit")
+        .arg("patch-coverage")
+        .arg(&repo.0)
+        .args(["--language", "rust", "--base", base]);
     if let Some(name) = config {
         cmd.arg("--config").arg(repo.0.join(name));
     }
@@ -99,43 +96,85 @@ fn patch_coverage(
     )
 }
 
-const WIDGET_PY: &str = r#"def widget(n):
-    if n > 0:
-        return "pos"
-    return "neg"
-"#;
-const WIDGET_TEST_PY: &str = r#"from widget import widget
+const CARGO_TOML: &str =
+    "[package]\nname = \"tc_patch_rust\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n";
 
+const WIDGET_RS: &str = r#"pub fn widget(n: i64) -> &'static str {
+    if n > 0 {
+        "pos"
+    } else {
+        "neg"
+    }
+}
 
-def test_widget():
-    assert widget(1) == "pos"
-    assert widget(-1) == "neg"
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn covers_both_arms() {
+        assert_eq!(widget(1), "pos");
+        assert_eq!(widget(-1), "neg");
+    }
+}
 "#;
-const WIDGET_PY_UNCOVERED: &str = r#"def widget(n):
-    if n > 0:
-        return "pos"
-    if n == 42:
-        return "answer"
-    return "neg"
+const WIDGET_RS_UNCOVERED: &str = r#"pub fn widget(n: i64) -> &'static str {
+    if n > 0 {
+        "pos"
+    } else if n == -42 {
+        "answer"
+    } else {
+        "neg"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn covers_both_arms() {
+        assert_eq!(widget(1), "pos");
+        assert_eq!(widget(-1), "neg");
+    }
+}
+"#;
+const WIDGET_RS_COVERED_EDIT: &str = r#"pub fn widget(n: i64) -> &'static str {
+    if n > 0 {
+        "positive"
+    } else {
+        "neg"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn covers_both_arms() {
+        assert_eq!(widget(1), "positive");
+        assert_eq!(widget(-1), "neg");
+    }
+}
 "#;
 
 #[test]
 fn uncovered_changed_line_exits_nonzero_and_names_it() {
     let repo = TempRepo::new("red");
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
+    repo.write("src/lib.rs", WIDGET_RS);
     repo.commit("base");
     let base = repo.head();
-    repo.write("widget.py", WIDGET_PY_UNCOVERED);
-    repo.commit("add an untested branch");
+    repo.write("src/lib.rs", WIDGET_RS_UNCOVERED);
+    repo.commit("add an untested arm");
 
-    let (code, stderr) = patch_coverage(&repo, "python", &base, None);
+    let (code, stderr) = patch_coverage(&repo, &base, None);
     assert_eq!(
         code, 1,
         "an uncovered changed line must exit non-zero; stderr: {stderr}"
     );
     assert!(
-        stderr.contains("widget.py"),
+        stderr.contains("src/lib.rs"),
         "stderr should name the uncovered file; got: {stderr}"
     );
 }
@@ -143,51 +182,33 @@ fn uncovered_changed_line_exits_nonzero_and_names_it() {
 #[test]
 fn covered_change_exits_zero() {
     let repo = TempRepo::new("clean");
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
+    repo.write("src/lib.rs", WIDGET_RS);
     repo.commit("base");
     let base = repo.head();
-    repo.write(
-        "widget.py",
-        r#"def widget(n):
-    if n > 0:
-        return "positive"
-    return "neg"
-"#,
-    );
-    repo.write(
-        "widget_test.py",
-        r#"from widget import widget
-
-
-def test_widget():
-    assert widget(1) == "positive"
-    assert widget(-1) == "neg"
-"#,
-    );
+    repo.write("src/lib.rs", WIDGET_RS_COVERED_EDIT);
     repo.commit("reword a covered line and update its test");
 
-    let (code, stderr) = patch_coverage(&repo, "python", &base, None);
+    let (code, stderr) = patch_coverage(&repo, &base, None);
     assert_eq!(code, 0, "a fully covered change passes; stderr: {stderr}");
 }
 
 #[test]
 fn added_untested_file_exits_nonzero() {
     let repo = TempRepo::new("added");
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
+    repo.write("src/lib.rs", WIDGET_RS);
     repo.commit("base");
     let base = repo.head();
-    repo.write("lonely.py", "def lonely():\n    return 41\n");
-    repo.commit("add a brand-new untested source");
+    repo.write("src/lib.rs", &format!("{WIDGET_RS}pub mod extra;\n"));
+    repo.write("src/extra.rs", "pub fn extra() -> i64 {\n    41\n}\n");
+    repo.commit("add a brand-new untested module");
 
-    let (code, stderr) = patch_coverage(&repo, "python", &base, None);
+    let (code, stderr) = patch_coverage(&repo, &base, None);
     assert_eq!(
         code, 1,
         "an added file's uncovered lines must exit non-zero; stderr: {stderr}"
     );
     assert!(
-        stderr.contains("lonely.py"),
+        stderr.contains("src/extra.rs"),
         "stderr should name the added file; got: {stderr}"
     );
 }
@@ -197,21 +218,20 @@ fn a_coverage_exemption_lifts_the_uncovered_change() {
     let repo = TempRepo::new("exempt");
     repo.write(
         "testing-conventions.toml",
-        "[[python.exempt]]\npath = \"shim.py\"\nrules = [\"coverage\"]\n\
+        "[[rust.exempt]]\npath = \"src/shim.rs\"\nrules = [\"coverage\"]\n\
          reason = \"thin launcher; logic lives in tested modules\"\n",
     );
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
-    repo.write("shim.py", "def shim():\n    return 0\n");
+    repo.write("src/lib.rs", &format!("{WIDGET_RS}pub mod shim;\n"));
+    repo.write("src/shim.rs", "pub fn shim() -> i64 {\n    0\n}\n");
     repo.commit("base");
     let base = repo.head();
-    repo.write("shim.py", "def shim():\n    return 1\n");
+    repo.write("src/shim.rs", "pub fn shim() -> i64 {\n    1\n}\n");
     repo.commit("edit the untested launcher");
 
     // Flagged with no config, lifted once the `coverage` exemption is supplied.
-    assert_eq!(patch_coverage(&repo, "python", &base, None).0, 1);
+    assert_eq!(patch_coverage(&repo, &base, None).0, 1);
     assert_eq!(
-        patch_coverage(&repo, "python", &base, Some("testing-conventions.toml")).0,
+        patch_coverage(&repo, &base, Some("testing-conventions.toml")).0,
         0
     );
 }

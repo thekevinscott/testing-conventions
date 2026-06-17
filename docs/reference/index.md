@@ -130,7 +130,7 @@ testing-conventions unit patch-coverage --language <LANG> [--base <REF>] [--conf
 | Argument / flag     | Description                                                                |
 | ------------------- | -------------------------------------------------------------------------- |
 | `<PATH>`            | Directory whose unit suite is run and measured; also where git runs.       |
-| `--language <LANG>` | **Required.** `python` or `typescript` (the Rust twin is a separate item). |
+| `--language <LANG>` | **Required.** `python` (coverage.py), `typescript` (vitest), or `rust` (`cargo llvm-cov`). |
 | `--base <REF>`      | Ref to diff against: the check compares `<base>...HEAD` (the changes this branch introduced, what a PR shows). Defaults to `origin/main`; override for a different base or an explicit range. |
 | `--config <CONFIG>` | Config file supplying the coverage `exempt` list (default `testing-conventions.toml`). Optional; if absent, nothing is exempt. |
 
@@ -157,6 +157,15 @@ executed, or the source of a branch a path of which the suite never took (line +
 and `@vitest/coverage-v8` must be installed under `<PATH>`, and `git` must resolve the `<REF>`. The
 same rules apply as for Python: comments and blanks aren't subjects, a `coverage`-exempt file's
 changed lines are lifted, and an added file's new lines *are* subjects.
+
+For **`rust`**, the twin built on the Rust coverage rule (#37): runs `cargo llvm-cov --lcov` over
+the crate at `<PATH>`, then intersects the changed `.rs` lines with its per-line coverage. A changed
+line is **uncovered** when llvm-cov records no execution for it (a `DA:<line>,0` record).
+`cargo-llvm-cov` must be installed, and `git` must resolve the `<REF>`. The same rules apply:
+comments and blanks aren't subjects, a `coverage`-exempt file's changed lines are lifted (via
+`--ignore-filename-regex`), and an added file's new lines *are* subjects. As with the Rust floor,
+inline `#[cfg(test)]` code is measured alongside the source — on a stable toolchain it can't be
+excluded by filename.
 
 ### `unit lint`
 

@@ -11,7 +11,7 @@ useful for enforcing agent (LLM) behavior.
 <!-- #region rules -->
 ## Rules at a glance
 
-Every rule is a CLI command that fails CI on a violation, and links to its reference entry. Where a rule isn't shipped for all three languages yet, that's noted inline.
+Every rule is a CLI command that fails CI on a violation.
 
 **Unit**
 

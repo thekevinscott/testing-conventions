@@ -1,17 +1,18 @@
-//! Integration tests for the commit-scoped `co-change` check (#33).
+//! Integration tests for the commit-scoped `co-change` check (#33), folded into
+//! `unit colocated-test --base` (#161).
 //!
 //! When a source file is **modified** (e.g. a function removed) or **deleted** in
 //! a `<base>...HEAD` diff, its colocated test (the #15/#18 pairing — `foo.py` →
 //! `foo_test.py`, `foo.ts` → `foo.test.ts`) must change in the same diff;
-//! `stale_sources` returns the sources whose test went stale, and the
-//! `unit co-change` subcommand turns a non-empty result into a non-zero exit.
-//! *Added* source files are not subjects (new code is the coverage floor's job),
-//! a test file is never a subject, an empty/comment-only file holds no logic, and
-//! a `co-change`-exempt source needn't co-change.
+//! `stale_sources` returns the sources whose test went stale, and
+//! `unit colocated-test --base` turns a non-empty result into a non-zero exit on
+//! top of the tree-wide presence check. *Added* source files are not subjects
+//! (new code is the coverage floor's job), a test file is never a subject, an
+//! empty/comment-only file holds no logic, and a `co-change`-exempt source needn't
+//! co-change.
 //!
 //! Each test builds a throwaway git repo (per the #3 guardrail: red cases — a
-//! changed source with no test change — and clean cases). These start red against
-//! the stub in `src/co_change.rs` and go green once detection is implemented.
+//! changed source with no test change — and clean cases).
 
 use std::collections::BTreeSet;
 use std::ffi::OsString;
@@ -102,8 +103,10 @@ fn stale(repo: &TempRepo, base: &str, language: Language) -> Vec<String> {
         .collect()
 }
 
-/// Result of `unit co-change <repo> --language <lang> --base <base> [--config
-/// <repo>/<config>]`, run in-process.
+/// Result of `unit colocated-test <repo> --language <lang> --base <base> [--config
+/// <repo>/<config>]`, run in-process. Since #161 the commit-scoped co-change check
+/// rides on `colocated-test`'s opt-in `--base` flag (presence + co-change), so
+/// these cases drive that command.
 fn run_co_change(
     repo: &TempRepo,
     language: &str,
@@ -113,7 +116,7 @@ fn run_co_change(
     let mut argv: Vec<OsString> = vec![
         "testing-conventions".into(),
         "unit".into(),
-        "co-change".into(),
+        "colocated-test".into(),
         repo.0.clone().into_os_string(),
         "--language".into(),
         language.into(),
@@ -127,13 +130,18 @@ fn run_co_change(
     run(argv)
 }
 
-/// Raw CLI invocation (after the program name), so a clap usage error can be
-/// asserted rather than unwrapped away.
-fn run_cli(args: &[&str]) -> anyhow::Result<i32> {
-    let argv: Vec<OsString> = std::iter::once(OsString::from("testing-conventions"))
-        .chain(args.iter().copied().map(OsString::from))
-        .collect();
-    run(argv)
+/// Result of `unit colocated-test <repo> --language <lang>` with **no** `--base`:
+/// the presence-only scope. `--base` is opt-in (#161), so this ignores a
+/// stale-but-present source that the `--base` form flags.
+fn run_colocated_presence(repo: &TempRepo, language: &str) -> anyhow::Result<i32> {
+    run([
+        OsString::from("testing-conventions"),
+        "unit".into(),
+        "colocated-test".into(),
+        repo.0.clone().into_os_string(),
+        "--language".into(),
+        language.into(),
+    ])
 }
 
 const WIDGET_PY: &str = "def widget():\n    return 1\n";
@@ -327,6 +335,8 @@ fn python_subcommand_exits_zero_when_every_change_co_changes() {
 
 #[test]
 fn python_a_co_change_exemption_lifts_a_stale_source() {
+    // cli.py has its colocated test (so presence is satisfied), but a change edits
+    // cli.py and leaves cli_test.py — stale under `--base`, unless waived.
     let repo = TempRepo::new("py-exempt");
     repo.write(
         "testing-conventions.toml",
@@ -334,11 +344,15 @@ fn python_a_co_change_exemption_lifts_a_stale_source() {
          reason = \"thin launcher; no logic to retest on each edit\"\n",
     );
     repo.write("cli.py", "def main():\n    return 0\n");
+    repo.write(
+        "cli_test.py",
+        "from cli import main\n\n\ndef test_main():\n    assert main() == 0\n",
+    );
     repo.commit("base");
     let base = repo.head();
 
     repo.write("cli.py", "def main():\n    return 1\n");
-    repo.commit("edit the launcher, no test");
+    repo.commit("edit the launcher, leave its test");
 
     // Stale with no config…
     assert_eq!(run_co_change(&repo, "python", &base, None).unwrap(), 1);
@@ -424,35 +438,10 @@ fn an_unknown_base_ref_is_an_error() {
 }
 
 #[test]
-fn co_change_requires_language() {
-    let err = run_cli(&["unit", "co-change", "/tmp", "--base", "HEAD"])
-        .expect_err("--language is required");
-    let clap_err = err
-        .downcast_ref::<clap::Error>()
-        .expect("a missing required flag should surface as a clap::Error");
-    assert_eq!(
-        clap_err.kind(),
-        clap::error::ErrorKind::MissingRequiredArgument
-    );
-}
-
-#[test]
-fn co_change_requires_base() {
-    let err = run_cli(&["unit", "co-change", "/tmp", "--language", "python"])
-        .expect_err("--base is required");
-    let clap_err = err
-        .downcast_ref::<clap::Error>()
-        .expect("a missing required flag should surface as a clap::Error");
-    assert_eq!(
-        clap_err.kind(),
-        clap::error::ErrorKind::MissingRequiredArgument
-    );
-}
-
-#[test]
 fn co_change_rejects_rust() {
     // Rust units are inline `#[cfg(test)]` in the same file, so a sibling test
-    // can't go stale — the command rejects `--language rust`.
+    // can't go stale — `--base --language rust` is rejected (presence without
+    // `--base` still supports Rust).
     let repo = TempRepo::new("rust-reject");
     repo.write("lib.rs", "pub fn f() {}\n");
     repo.commit("base");
@@ -460,4 +449,48 @@ fn co_change_rejects_rust() {
 
     let err = run_co_change(&repo, "rust", &base, None).unwrap_err();
     assert!(err.to_string().contains("inline"), "got: {err}");
+}
+
+// ---- `--base` folds co-change into colocated-test (#161) -----------------
+
+#[test]
+fn base_adds_co_change_on_top_of_presence() {
+    // The defining merge: with every source paired on disk, editing a source and
+    // leaving its test is stale under `--base` (the co-change scope) — yet clean
+    // without it, since presence alone sees both files still present.
+    let repo = TempRepo::new("base-additive");
+    repo.write("widget.py", WIDGET_PY);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+    repo.write("widget.py", "def widget():\n    return 2\n");
+    repo.commit("edit the source only");
+
+    // Stale under `--base`…
+    assert_eq!(run_co_change(&repo, "python", &base, None).unwrap(), 1);
+    // …but presence-only (no `--base`) passes: the test still exists on disk.
+    assert_eq!(run_colocated_presence(&repo, "python").unwrap(), 0);
+}
+
+#[test]
+fn base_still_enforces_tree_wide_presence() {
+    // `--base` *adds* co-change; it doesn't drop presence. An orphan source (no
+    // colocated test at all) is flagged even when the diff co-changes cleanly —
+    // you can't slip an orphan past `--base` by leaving it untouched.
+    let repo = TempRepo::new("base-presence");
+    repo.write("widget.py", WIDGET_PY);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.write("orphan.py", "def orphan():\n    return 9\n");
+    repo.commit("base");
+    let base = repo.head();
+    // A co-change-clean edit: the source and its test move together.
+    repo.write("widget.py", "def widget():\n    return 2\n");
+    repo.write(
+        "widget_test.py",
+        "from widget import widget\n\n\ndef test_widget():\n    assert widget() == 2\n",
+    );
+    repo.commit("edit widget and its test together");
+
+    // Co-change is clean, but presence still flags the untouched orphan.
+    assert_eq!(run_co_change(&repo, "python", &base, None).unwrap(), 1);
 }

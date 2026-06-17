@@ -280,3 +280,23 @@ fn the_old_unit_location_subcommand_is_renamed() {
         .expect("an unknown subcommand should surface as a clap::Error");
     assert_eq!(clap_err.kind(), clap::error::ErrorKind::InvalidSubcommand);
 }
+
+#[test]
+fn the_unit_co_change_subcommand_is_folded_into_base() {
+    // #161: `unit co-change` was folded into `unit colocated-test --base`, so the
+    // standalone subcommand no longer parses.
+    let err = run_cli(&[
+        "unit",
+        "co-change",
+        "src",
+        "--language",
+        "python",
+        "--base",
+        "HEAD",
+    ])
+    .expect_err("`unit co-change` was folded into `unit colocated-test --base`");
+    let clap_err = err
+        .downcast_ref::<clap::Error>()
+        .expect("an unknown subcommand should surface as a clap::Error");
+    assert_eq!(clap_err.kind(), clap::error::ErrorKind::InvalidSubcommand);
+}

@@ -105,7 +105,7 @@ rule as its own step, naming the language with the required `--language` flag:
 - run: testing-conventions unit lint --language rust --config testing-conventions.toml .   # a crate root
 - run: testing-conventions unit coverage --language python --config testing-conventions.toml src/
 - run: testing-conventions unit coverage --language typescript --config testing-conventions.toml src/
-- run: testing-conventions unit co-change --language python --base origin/main src/   # commit-scoped: needs the PR base ref fetched
+- run: testing-conventions unit colocated-test --language python --base origin/main src/   # commit-scoped co-change: needs the PR base ref fetched
 - run: testing-conventions integration lint --language python --config testing-conventions.toml src/
 - run: testing-conventions integration lint --language typescript --config testing-conventions.toml src/
 - run: testing-conventions integration lint --language rust --config testing-conventions.toml .   # crate root (scans tests/)

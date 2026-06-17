@@ -954,6 +954,141 @@ fn uncovered_lcov_lines(lcov: &str) -> BTreeMap<String, BTreeSet<u64>> {
     out
 }
 
+/// Per-file region detail from a `cargo llvm-cov --json` export — the per-region
+/// counts the diff-scoped floor (#162) needs, where [`uncovered_lcov_lines`] keeps
+/// only the bare uncovered-line set from the `--lcov` report. LCOV carries no
+/// per-region data, so the floor's regions metric reads the full LLVM export
+/// instead; each entry carries one `(start_line, end_line, covered)` tuple per code
+/// region, so the pure [`crate::patch_coverage::evaluate_patch_rust`] can restrict
+/// both the regions and lines metrics to the changed lines.
+#[derive(Debug, Clone, Default)]
+pub struct RustPatchCoverage {
+    /// One per code region (a `kind == 0` region of the LLVM export):
+    /// `(start_line, end_line, covered)` — `covered` is the region's
+    /// `executionCount > 0`. A region counts toward the diff when any line it spans
+    /// is a changed line.
+    pub regions: Vec<(u64, u64, bool)>,
+}
+
+/// A full `cargo llvm-cov --json` export (LLVM's `llvm.coverage.json.export`),
+/// modeling the per-function region detail the diff-scoped floor needs — separate
+/// from [`LlvmCovReport`], which keeps only the `totals` the whole-tree floor
+/// reads. A single run produces one `data` entry; unmodeled fields (`totals`,
+/// `type`, `version`) are ignored.
+#[derive(Debug, Clone, Deserialize)]
+struct LlvmCovExport {
+    data: Vec<LlvmCovExportData>,
+}
+
+/// One export entry — its per-function `functions` block carries the regions (the
+/// `--summary-only` runs that feed [`LlvmCovReport`] omit it), and its `files` block
+/// names the measured files. `--ignore-filename-regex` drops an exempt file from
+/// `files` but *not* from `functions` (the regions array is unfiltered), so the
+/// `files` list is the allowlist [`llvm_cov_patch_detail`] restricts the regions to.
+#[derive(Debug, Clone, Deserialize)]
+struct LlvmCovExportData {
+    files: Vec<LlvmCovExportFile>,
+    functions: Vec<LlvmCovFunction>,
+}
+
+/// One measured file in the export's `files` block — only its `filename` (the
+/// absolute path) is needed, to build the not-ignored allowlist. The per-file
+/// `segments` / `summary` detail is ignored (the regions come from `functions`).
+#[derive(Debug, Clone, Deserialize)]
+struct LlvmCovExportFile {
+    filename: String,
+}
+
+/// One function's coverage in the export: the source files it spans (`filenames`,
+/// indexed by a region's `fileID`) and its regions. Each region is a flat array
+/// `[lineStart, colStart, lineEnd, colEnd, executionCount, fileID, expandedFileID,
+/// kind]`; the fields are read positionally in [`llvm_cov_patch_detail`].
+#[derive(Debug, Clone, Deserialize)]
+struct LlvmCovFunction {
+    filenames: Vec<String>,
+    regions: Vec<Vec<i64>>,
+}
+
+/// Run the Rust unit suite under `cargo llvm-cov` in `root` and return the per-file
+/// region detail — keyed by the absolute path llvm-cov reports, the caller re-keying
+/// to `root`-relative to match the diff. The counts-carrying twin of
+/// [`measure_patch_rust`] for the diff-scoped floor (#162): where that reduces the
+/// `--lcov` report to a bare uncovered-line set, this reads the full `--json` export
+/// (LCOV has no per-region data) for the per-region `(line, covered)` detail the
+/// floor's regions metric needs. `ignore` is the `coverage`-rule exemptions, dropped
+/// from the run so an exempt file's changed lines are lifted. `cargo-llvm-cov` must
+/// be installed.
+pub fn measure_patch_rust_detail(
+    root: &Path,
+    ignore: &[String],
+) -> Result<BTreeMap<String, RustPatchCoverage>> {
+    llvm_cov_patch_detail(&run_cargo_llvm_cov(root, ignore, &["--json"])?)
+}
+
+/// Pure: per-file [`RustPatchCoverage`] from a `cargo llvm-cov --json` export.
+/// Keyed by the path llvm-cov reports (absolute). Walks every function's regions;
+/// for each region:
+///   - **skips** any region whose file is not in the export's `files` allowlist —
+///     `--ignore-filename-regex` drops an exempt file from `files` (and the totals)
+///     but leaves it in the unfiltered `functions` regions, so honoring the
+///     exemption means intersecting with `files`. A run with nothing exempt lists
+///     every measured file, so this is a no-op there.
+///   - **skips** any region whose `kind` (index 7) is not `0` — only `kind == 0`
+///     code regions count toward coverage (gap / expansion / skipped / branch
+///     regions carry no line-coverage signal). The kept count (with nothing
+///     ignored) matches the `totals.regions.count` a `--summary-only` run reports.
+///   - reads `start_line = region[0]`, `end_line = region[2]`,
+///     `covered = region[4] > 0`, and the file `filenames[region[5]]` (the
+///     `fileID`), pushing `(start_line, end_line, covered)` under that file.
+///
+/// A region array with fewer than 8 elements (malformed — never seen from
+/// llvm-cov) is skipped rather than panicking on an index, as is one whose `fileID`
+/// is out of range for its `filenames`.
+fn llvm_cov_patch_detail(json: &str) -> Result<BTreeMap<String, RustPatchCoverage>> {
+    let export: LlvmCovExport =
+        serde_json::from_str(json).context("parsing cargo llvm-cov JSON export")?;
+    let mut out: BTreeMap<String, RustPatchCoverage> = BTreeMap::new();
+    for data in &export.data {
+        // The `files` block honors `--ignore-filename-regex`; the `functions` regions
+        // do not, so restrict to the measured (not-ignored) files.
+        let measured: BTreeSet<&str> = data.files.iter().map(|f| f.filename.as_str()).collect();
+        for function in &data.functions {
+            for region in &function.regions {
+                // A code region carries eight fields; anything shorter is malformed
+                // (never emitted by llvm-cov) and skipped rather than indexed.
+                if region.len() < 8 {
+                    continue;
+                }
+                // Only `kind == 0` (a code region) contributes to line coverage;
+                // gap (1) / expansion (2) / skipped / branch regions are ignored.
+                if region[7] != 0 {
+                    continue;
+                }
+                let file_id = region[5];
+                let Ok(file_id) = usize::try_from(file_id) else {
+                    continue;
+                };
+                let Some(file) = function.filenames.get(file_id) else {
+                    continue;
+                };
+                // Skip a file the run ignored (absent from `files`) so a `coverage`
+                // exemption drops its regions, lifting its changed lines.
+                if !measured.contains(file.as_str()) {
+                    continue;
+                }
+                let start = region[0].max(0) as u64;
+                let end = region[2].max(0) as u64;
+                let covered = region[4] > 0;
+                out.entry(file.clone())
+                    .or_default()
+                    .regions
+                    .push((start, end, covered));
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// The single `--ignore-filename-regex` value for the run, or `None` when nothing
 /// is exempt. `cargo llvm-cov` takes one regex, so the `coverage`-exempt paths are
 /// each regex-escaped (matched literally, not as a pattern) and joined with `|`. An
@@ -1476,6 +1611,142 @@ mod tests {
         let report = parse_llvm_cov_report(json).expect("valid llvm-cov json");
         assert_eq!(report.data[0].totals.regions.percent, 75.0);
         assert_eq!(report.data[0].totals.lines.count, 20);
+    }
+
+    // --- Rust diff-scoped region detail (`cargo llvm-cov --json`) — issue #162 ---
+
+    #[test]
+    fn llvm_cov_patch_detail_reads_code_regions_per_file() {
+        // A realistic full `--json` export: one function spanning two regions on
+        // `/abs/grade.rs` — line 6 covered (execCount 1), line 10 the uncovered
+        // `else` arm (execCount 0). Both are `kind == 0` code regions, indexed back
+        // to `filenames[0]`.
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/grade.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/grade.rs"],
+                    "regions": [
+                        [6, 5, 6, 26, 1, 0, 0, 0],
+                        [10, 9, 10, 17, 0, 0, 0, 0]
+                    ]
+                }],
+                "totals": {}
+            }],
+            "type": "llvm.coverage.json.export",
+            "version": "3.0.1"
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert_eq!(
+            out["/abs/grade.rs"].regions,
+            vec![(6, 6, true), (10, 10, false)]
+        );
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_skips_non_code_regions() {
+        // Only `kind == 0` counts: a gap region (kind 1) and an expansion region
+        // (kind 2) on the same function are ignored, leaving just the one code region.
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/a.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/a.rs"],
+                    "regions": [
+                        [1, 1, 1, 10, 2, 0, 0, 0],
+                        [2, 1, 2, 10, 0, 0, 0, 1],
+                        [3, 1, 3, 10, 0, 0, 0, 2]
+                    ]
+                }]
+            }]
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert_eq!(out["/abs/a.rs"].regions, vec![(1, 1, true)]);
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_groups_regions_by_filename_id() {
+        // A region's `fileID` (index 5) selects its file from the function's
+        // `filenames`; two regions under the same function land in different files.
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/a.rs"}, {"filename": "/abs/b.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/a.rs", "/abs/b.rs"],
+                    "regions": [
+                        [1, 1, 1, 5, 1, 0, 0, 0],
+                        [9, 1, 9, 5, 0, 1, 1, 0]
+                    ]
+                }]
+            }]
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert_eq!(out["/abs/a.rs"].regions, vec![(1, 1, true)]);
+        assert_eq!(out["/abs/b.rs"].regions, vec![(9, 9, false)]);
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_skips_a_malformed_short_region() {
+        // A region array shorter than the eight fields (never seen from llvm-cov) is
+        // skipped rather than panicking on an index; the well-formed one survives.
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/a.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/a.rs"],
+                    "regions": [
+                        [4, 1, 4],
+                        [5, 1, 5, 9, 1, 0, 0, 0]
+                    ]
+                }]
+            }]
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert_eq!(out["/abs/a.rs"].regions, vec![(5, 5, true)]);
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_spans_a_multiline_region() {
+        // A region spanning lines 3–5 keeps both endpoints, so a changed line
+        // anywhere in 3..=5 can count it.
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/a.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/a.rs"],
+                    "regions": [[3, 5, 5, 6, 0, 0, 0, 0]]
+                }]
+            }]
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert_eq!(out["/abs/a.rs"].regions, vec![(3, 5, false)]);
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_drops_a_file_absent_from_the_files_allowlist() {
+        // `--ignore-filename-regex` drops an exempt file from `files` but leaves its
+        // regions in `functions`; restricting to the `files` allowlist lifts them, so
+        // the ignored file contributes nothing while the kept file still does.
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/kept.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/kept.rs", "/abs/ignored.rs"],
+                    "regions": [
+                        [1, 1, 1, 9, 1, 0, 0, 0],
+                        [2, 1, 2, 9, 0, 1, 0, 0]
+                    ]
+                }]
+            }]
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert_eq!(out["/abs/kept.rs"].regions, vec![(1, 1, true)]);
+        assert!(!out.contains_key("/abs/ignored.rs"));
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_malformed_json_is_an_error() {
+        assert!(llvm_cov_patch_detail("{ not json").is_err());
     }
 
     #[test]

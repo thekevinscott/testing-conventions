@@ -386,17 +386,118 @@ fn evaluate_patch_typescript(
 }
 
 /// Diff-scoped Rust coverage floor (#162): the `cargo llvm-cov` regions/lines
-/// metrics measured over the `<base>...HEAD` changed `.rs` lines. `ignore` is the
-/// `coverage`-rule exemptions, as in [`check_rust`]. **Stub — opens red.**
+/// metrics measured over the `<base>...HEAD` changed `.rs` lines instead of the
+/// whole tree. `ignore` is the `coverage`-rule exemptions, as in [`check_rust`] —
+/// an exempt file is dropped from the run, so its changed lines drop out of the
+/// ratios.
+///
+/// Scopes to `.rs` sources and returns early — with no coverage run — when the diff
+/// touches none, so a PR that changes only docs or other languages doesn't pay for a
+/// measurement (and is vacuously covered). Requires `cargo-llvm-cov` + git; an
+/// unresolvable `base` surfaces as an error rather than a silent pass.
 pub fn measure_rust(
     root: &Path,
     base: &str,
     thresholds: RustThresholds,
     ignore: &[String],
 ) -> Result<Outcome> {
-    changed_lines(root, base)?;
-    let _ = (thresholds, ignore);
-    Ok(Outcome::Pass)
+    let mut changed = changed_lines(root, base)?;
+    changed.retain(|path, _| path.ends_with(".rs"));
+    if changed.is_empty() {
+        return Ok(Outcome::Pass);
+    }
+    let detail = relative_keys(coverage::measure_patch_rust_detail(root, ignore)?, root);
+    Ok(evaluate_patch_rust(&changed, &detail, thresholds))
+}
+
+/// Pure: the two `cargo llvm-cov` floors (regions, lines) measured over the changed
+/// lines. Each metric's ratio is restricted to the lines the diff touched, so the
+/// same numbers `unit coverage` enforces whole-tree are judged on the diff:
+///   - **regions**: a code region counts when any line in its `start..=end` is a
+///     changed line; covered when its flag is set.
+///   - **lines**: a changed line counts when ≥1 region covers it (`start <= line <=
+///     end`); covered when ≥1 covering region has its flag set.
+///
+/// A changed file absent from `detail` (a test-only file or a `coverage`-exempt file
+/// dropped from the run) has nothing to cover and is skipped. Each metric's percent
+/// is `100 * covered / total`, or `100` when its denominator is empty — a
+/// diff-scoped empty denominator is **vacuously satisfied**, not the "measured no
+/// code" failure the whole-tree [`coverage::evaluate_rust`] returns (a diff may
+/// legitimately touch no measured region). The fail message lists every metric below
+/// its floor, matching [`coverage::evaluate_rust`]'s. No small-diff carve-out: a tiny
+/// diff below the floor fails like any other (#162).
+fn evaluate_patch_rust(
+    changed: &BTreeMap<String, BTreeSet<u64>>,
+    detail: &BTreeMap<String, coverage::RustPatchCoverage>,
+    thresholds: RustThresholds,
+) -> Outcome {
+    let (mut r_cov, mut r_tot) = (0u64, 0u64);
+    let (mut l_cov, mut l_tot) = (0u64, 0u64);
+
+    for (file, lines) in changed {
+        let Some(cov) = detail.get(file) else {
+            continue;
+        };
+
+        // Regions: count one whenever any line it spans was changed.
+        for &(start, end, covered) in &cov.regions {
+            if (start..=end).any(|line| lines.contains(&line)) {
+                r_tot += 1;
+                if covered {
+                    r_cov += 1;
+                }
+            }
+        }
+
+        // Lines: a changed line covered by ≥1 region counts; covered when ≥1 region
+        // covering it has its flag set.
+        for &line in lines {
+            let mut measured = false;
+            let mut covered_here = false;
+            for &(start, end, covered) in &cov.regions {
+                if start <= line && line <= end {
+                    measured = true;
+                    covered_here |= covered;
+                }
+            }
+            if measured {
+                l_tot += 1;
+                if covered_here {
+                    l_cov += 1;
+                }
+            }
+        }
+    }
+
+    // An empty denominator is vacuously full (100%) — a diff may touch no measured
+    // region, which is satisfied, not the whole-tree "measured no code" failure.
+    let pct = |covered: u64, total: u64| {
+        if total == 0 {
+            100.0
+        } else {
+            100.0 * covered as f64 / total as f64
+        }
+    };
+    let checks = [
+        ("regions", pct(r_cov, r_tot), thresholds.regions),
+        ("lines", pct(l_cov, l_tot), thresholds.lines),
+    ];
+    let mut shortfalls = Vec::new();
+    for (name, actual, required) in checks {
+        // A hair of tolerance so a percent that rounds to the floor isn't failed by
+        // float noise (matches the whole-tree `coverage::evaluate_rust`).
+        if actual + 1e-9 < f64::from(required) {
+            shortfalls.push(format!("{name} {actual:.2}% < {required}%"));
+        }
+    }
+    if shortfalls.is_empty() {
+        Outcome::Pass
+    } else {
+        Outcome::Fail(format!(
+            "coverage below thresholds: {}",
+            shortfalls.join(", ")
+        ))
+    }
 }
 
 /// The new-side lines each file gained in `repo`'s `<base>...HEAD` diff, keyed by
@@ -1058,6 +1159,174 @@ mod tests {
         assert!(
             matches!(&out, Outcome::Fail(m)
                 if m.contains("statements 0.00% < 80%") && !m.contains("lines")),
+            "got: {out:?}"
+        );
+    }
+
+    // ---- evaluate_patch_rust (diff-scoped Rust floor, #162) -----------------
+
+    use coverage::RustPatchCoverage;
+
+    fn rust_detail(entries: &[(&str, RustPatchCoverage)]) -> BTreeMap<String, RustPatchCoverage> {
+        entries
+            .iter()
+            .map(|(path, cov)| (path.to_string(), cov.clone()))
+            .collect()
+    }
+
+    const RUST_FLOOR_80: RustThresholds = RustThresholds {
+        regions: 80,
+        lines: 80,
+    };
+
+    #[test]
+    fn rust_patch_a_fully_covered_diff_passes() {
+        // Two single-line code regions on lines 1-2, both covered → regions and lines
+        // both 100%.
+        let detail = rust_detail(&[(
+            "w.rs",
+            RustPatchCoverage {
+                regions: vec![(1, 1, true), (2, 2, true)],
+            },
+        )]);
+        assert_eq!(
+            evaluate_patch_rust(&changed(&[("w.rs", &[1, 2])]), &detail, RUST_FLOOR_80),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn rust_patch_below_floor_fails_and_names_the_metrics() {
+        // Four single-line regions on lines 1-4; three covered, one not → regions (and
+        // lines) 75% < 80, both named.
+        let detail = rust_detail(&[(
+            "w.rs",
+            RustPatchCoverage {
+                regions: vec![(1, 1, true), (2, 2, true), (3, 3, true), (4, 4, false)],
+            },
+        )]);
+        let out = evaluate_patch_rust(&changed(&[("w.rs", &[1, 2, 3, 4])]), &detail, RUST_FLOOR_80);
+        assert!(
+            matches!(&out, Outcome::Fail(m)
+                if m.contains("regions 75.00% < 80%")
+                    && m.contains("lines 75.00% < 80%")),
+            "got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn rust_patch_the_same_diff_clears_a_lower_floor() {
+        // The #162 behavior: the 75% diff passes a 70 floor despite the uncovered region.
+        let detail = rust_detail(&[(
+            "w.rs",
+            RustPatchCoverage {
+                regions: vec![(1, 1, true), (2, 2, true), (3, 3, true), (4, 4, false)],
+            },
+        )]);
+        let floor_70 = RustThresholds {
+            regions: 70,
+            lines: 70,
+        };
+        assert_eq!(
+            evaluate_patch_rust(&changed(&[("w.rs", &[1, 2, 3, 4])]), &detail, floor_70),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn rust_patch_an_uncovered_region_on_a_changed_line_fails_both_metrics() {
+        // A single uncovered region on changed line 5 → regions 0% and lines 0%, both
+        // below the floor.
+        let detail = rust_detail(&[(
+            "w.rs",
+            RustPatchCoverage {
+                regions: vec![(5, 5, false)],
+            },
+        )]);
+        let out = evaluate_patch_rust(&changed(&[("w.rs", &[5])]), &detail, RUST_FLOOR_80);
+        assert!(
+            matches!(&out, Outcome::Fail(m)
+                if m.contains("regions 0.00% < 80%") && m.contains("lines 0.00% < 80%")),
+            "got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn rust_patch_a_changed_file_absent_from_coverage_is_skipped() {
+        // A test-only file (never measured) contributes nothing; with no other changed
+        // measured line the diff is vacuously covered.
+        let detail = rust_detail(&[(
+            "w.rs",
+            RustPatchCoverage {
+                regions: vec![(1, 1, true)],
+            },
+        )]);
+        assert_eq!(
+            evaluate_patch_rust(&changed(&[("other.rs", &[1, 2])]), &detail, RUST_FLOOR_80),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn rust_patch_a_comment_only_diff_passes() {
+        // The changed lines (9-10) carry no region (a comment or blank) → both
+        // denominators empty → vacuously covered.
+        let detail = rust_detail(&[(
+            "w.rs",
+            RustPatchCoverage {
+                regions: vec![(1, 1, true), (2, 2, true)],
+            },
+        )]);
+        assert_eq!(
+            evaluate_patch_rust(&changed(&[("w.rs", &[9, 10])]), &detail, RUST_FLOOR_80),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn rust_patch_an_empty_diff_passes() {
+        // No changed lines at all → vacuously covered at any floor.
+        assert_eq!(
+            evaluate_patch_rust(&changed(&[]), &BTreeMap::new(), RUST_FLOOR_80),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn rust_patch_a_multiline_region_counts_when_any_of_its_lines_changed() {
+        // A region spanning lines 3-5 that never ran; only line 4 is in the diff → it
+        // still counts for both metrics (the region spans line 4, so line 4 is a
+        // measured-but-uncovered line) → regions 0% and lines 0% < 80.
+        let detail = rust_detail(&[(
+            "w.rs",
+            RustPatchCoverage {
+                regions: vec![(3, 5, false)],
+            },
+        )]);
+        let out = evaluate_patch_rust(&changed(&[("w.rs", &[4])]), &detail, RUST_FLOOR_80);
+        assert!(
+            matches!(&out, Outcome::Fail(m)
+                if m.contains("regions 0.00% < 80%") && m.contains("lines 0.00% < 80%")),
+            "got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn rust_patch_a_line_covered_by_any_region_is_covered() {
+        // Two overlapping regions span changed line 4 — one uncovered, one covered.
+        // For the lines metric the line is covered (≥1 covering region's flag is set);
+        // for regions, one of the two counts as covered → regions 50% (< 80, fails) but
+        // lines 100% (≥ 80, not named).
+        let detail = rust_detail(&[(
+            "w.rs",
+            RustPatchCoverage {
+                regions: vec![(4, 4, false), (4, 6, true)],
+            },
+        )]);
+        let out = evaluate_patch_rust(&changed(&[("w.rs", &[4])]), &detail, RUST_FLOOR_80);
+        assert!(
+            matches!(&out, Outcome::Fail(m)
+                if m.contains("regions 50.00% < 80%") && !m.contains("lines")),
             "got: {out:?}"
         );
     }

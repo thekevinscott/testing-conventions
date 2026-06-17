@@ -1,24 +1,33 @@
 name: Testing Conventions
 
-# Reusable workflow: enforce a library's testing conventions in CI.
+# Reusable, consumer-facing workflow: enforce a library's testing conventions in
+# CI. Drop a single short file into your repo and opt into the full rule set with
+# our defaults — no config required.
 #
-# Call it from a consumer repo, pinned to a tag:
-#
+#   # .github/workflows/conventions.yml
+#   name: Conventions
+#   on: [pull_request]
 #   jobs:
 #     conventions:
 #       uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
-#       with:
-#         languages: '["python", "typescript"]'
-#         path: src
 #
-# It runs the published `testing-conventions` binary via `npx` (a prebuilt,
-# per-platform npm package — no Rust toolchain, no compile from source), once
-# per rule and language as its own matrix job, failing the build on any
-# violation. Today that is the unit-test colocated-test check (every language),
-# the unit-test isolation check (Python, TypeScript, and Rust), the unit-test
-# coverage floor (Python and TypeScript), and the integration-test lint (mocking
-# mechanism & style, Python, TypeScript, and Rust); as more rules land they run
-# here too.
+# The principle is **one consumer-facing rule command → one job**, fanned out per
+# language. It runs the published `testing-conventions` binary via `npx` (a
+# prebuilt, per-platform npm package — no Rust toolchain, no compile from source),
+# failing the build on any violation. The shipped rule jobs are:
+#
+#   - unit colocated-test  — every source file has a colocated unit test (all langs)
+#   - unit lint            — the unit-suite isolation lint (Python, TypeScript, Rust)
+#   - unit coverage        — the unit coverage floor (Python, TypeScript, and Rust
+#                            via cargo-llvm-cov, #37)
+#   - integration lint     — the integration mocking lints (Python, TypeScript, Rust)
+#   - packaging            — no test files in the built distribution
+#
+# Two diff-scoped variants run as their own `*-changed` jobs on `pull_request`
+# only (they need `fetch-depth: 0` and a base ref): `unit colocated-test --base`
+# (co-change, #161) and `unit coverage --base` (changed-line coverage, #162). And
+# an opt-in `e2e verify` job (#68) checks the committed e2e attestation; it's off
+# by default (`run_e2e`).
 #
 # A `detect` pre-step scans `path` for each requested language's sources, and the
 # rule jobs fan out over the languages that are both requested *and* present
@@ -26,11 +35,10 @@ name: Testing Conventions
 # zero-config default ["python", "typescript"] against a repo with no `.py` — is
 # dropped from the matrix and skipped, not failed: its coverage job would
 # otherwise error on an empty measurement (pytest collects nothing; an empty
-# vitest denominator is a failed run). Both `integration lint` (#126) and `unit
-# isolation` (#125) also cover Rust, so `detect` additionally recognizes a crate
-# (`Cargo.toml` / `*.rs`) and emits separate `integration_lint_languages` /
-# `isolation_languages` sets for those jobs — keeping Rust out of the coverage
-# matrix, which has no Rust toolchain.
+# vitest denominator is a failed run). `detect` additionally recognizes a crate
+# (`Cargo.toml` / `*.rs`) and emits separate `integration_lint_languages`,
+# `isolation_languages`, and `coverage_languages` sets that add Rust for the jobs
+# that support it.
 #
 # The Packaging rule (#41) is the exception: it inspects the *built distribution*,
 # not the source tree, so it doesn't ride the source matrix. Build your dists in
@@ -55,7 +63,9 @@ name: Testing Conventions
 # library into the full set in one drop-in (#80). The coverage floor falls back
 # to the language's reasonable default — Python: branch on, 85; TypeScript:
 # lines/functions/statements 80, branches 75 — when no `testing-conventions.toml`
-# is present. Add a config file only to tighten a floor or declare exemptions.
+# is present (Rust has no default floor yet, so a Rust crate must declare a
+# `[rust].coverage` table). Add a config file only to tighten a floor or declare
+# exemptions.
 #
 # `languages` is a JSON array so the matrix can fan out over it directly
 # (reusable-workflow inputs can't be native lists). Once the config-driven
@@ -80,6 +90,14 @@ on:
         description: 'Optional config file to refine the checks (coverage thresholds, exemptions). If absent, every check runs with sane defaults.'
         type: string
         default: 'testing-conventions.toml'
+      base:
+        description: 'Base ref for the diff-scoped `--base` jobs, diffed as `<base>...HEAD`. Used by the `*-changed` jobs, which run on `pull_request` only and check out full history.'
+        type: string
+        default: 'origin/main'
+      run_e2e:
+        description: 'Opt in to the `e2e verify` job (the #68 freshness gate): fail if the committed `e2e-attestation.json` does not name the latest code commit. Off by default — it needs a committed attestation and full git history.'
+        type: boolean
+        default: false
       packaging_artifact:
         description: 'Name of an uploaded build artifact (actions/upload-artifact) holding the built distributions (.whl/.tar.gz/.tgz/.crate) to check. When set, a packaging job downloads it and fails if any distribution ships a test file. Empty (default) skips the packaging check.'
         type: string
@@ -93,15 +111,20 @@ jobs:
     name: Detect requested languages with sources
     runs-on: ubuntu-latest
     outputs:
-      # JSON array of the requested languages with sources under `path` — the matrix
-      # the colocated-test and unit-coverage jobs fan out over (python, typescript).
+      # JSON array of the requested python/typescript languages with sources under
+      # `path` — the matrix the colocated-test job (and the co-change `*-changed`
+      # job) fans out over.
       languages: ${{ steps.scan.outputs.languages }}
       # The same set plus rust — the matrix the integration-lint job fans out over
-      # (#126). Kept separate from `languages` so the coverage matrix is unchanged:
-      # `unit coverage` has no rust arm and would error on it.
+      # (#126).
       integration_lint_languages: ${{ steps.scan.outputs.integration_lint_languages }}
       # `unit lint` (#125): python/typescript + rust, also kept off the coverage matrix.
       isolation_languages: ${{ steps.scan.outputs.isolation_languages }}
+      # `unit coverage` (#37/#171): present python/typescript, plus rust when a crate
+      # is present *and* a `[rust].coverage` floor is configured — the matrix the
+      # whole-tree and changed-line coverage jobs fan out over. Kept as its own set
+      # so a future coverage-less language can diverge.
+      coverage_languages: ${{ steps.scan.outputs.coverage_languages }}
     steps:
       - uses: actions/checkout@v6
       - id: scan
@@ -109,6 +132,7 @@ jobs:
         env:
           LANGUAGES: ${{ inputs.languages }}
           SCAN_PATH: ${{ inputs.path }}
+          CONFIG: ${{ inputs.config }}
         run: |
           set -euo pipefail
           # The "cheap pre-step" (#94): a language's jobs should fire only when it
@@ -118,10 +142,10 @@ jobs:
           # empty vitest denominator is a failed run) — so a requested-but-absent
           # language is dropped here and skipped, not failed.
           #
-          # Three sets come out: `languages` (python/typescript) drives colocated-test
-          # and coverage; `integration_lint_languages` (#126) and `isolation_languages`
-          # (#125) add rust for those static checks — so rust never reaches the
-          # coverage matrix, which has no rust toolchain.
+          # Four sets come out: `languages` (python/typescript) drives colocated-test
+          # and its co-change `*-changed` job; `coverage_languages` (#171) adds rust
+          # for the coverage jobs; `integration_lint_languages` (#126) and
+          # `isolation_languages` (#125) add rust for those static checks.
           #
           # `set -f` so the shell leaves the *.ext globs for `find` to match itself.
           set -f
@@ -133,6 +157,19 @@ jobs:
           present_under () {
             [ -n "$(find "$SCAN_PATH" -type f \( "$@" \) -print -quit 2>/dev/null)" ]
           }
+          # Rust coverage floor configured? — the config declares a `[rust].coverage`
+          # table (key form, or a `[rust.coverage]` table). Rust has no zero-config
+          # default floor (#37), so without one the rust coverage arm is *skipped*
+          # (like an absent language, #94), not errored.
+          rust_coverage_configured () {
+            [ -f "$CONFIG" ] || return 1
+            awk '
+              /^\[/                                       { in_rust = ($0 ~ /^\[rust\]/) }
+              /^\[rust\.coverage\]/                       { found = 1; exit }
+              in_rust && /^[[:space:]]*coverage[[:space:]]*=/ { found = 1; exit }
+              END { exit(found ? 0 : 1) }
+            ' "$CONFIG"
+          }
           present=()
           scan () {  # $1 = language; $2.. = the find name-predicates for its sources
             local lang="$1"; shift
@@ -140,17 +177,25 @@ jobs:
               present+=("$lang")
             fi
           }
-          # colocated-test + unit-coverage fan out over python/typescript.
+          # colocated-test fans out over python/typescript.
           scan python -name '*.py'
           scan typescript -name '*.ts' -o -name '*.tsx' -o -name '*.mts' -o -name '*.cts'
-          # The integration-lint matrix is `present` plus rust (#126), which only that
-          # check supports — a Cargo.toml or any *.rs marks a crate. Built on `present`
-          # so rust never enters the coverage matrix.
-          lint=("${present[@]}")
+          # Rust is detected once (a Cargo.toml or any *.rs marks a crate) and added
+          # to every set that supports it: integration-lint (#126), unit-lint (#125),
+          # and now unit-coverage (#37/#171).
           rust_crate=0
           if requested rust && present_under -name 'Cargo.toml' -o -name '*.rs'; then
             rust_crate=1
-            lint+=("rust")
+          fi
+          # The integration-lint matrix is `present` plus rust (#126).
+          lint=("${present[@]}")
+          if [ "$rust_crate" -eq 1 ]; then lint+=("rust"); fi
+          # `unit coverage` (#171): present python/typescript, plus rust only when a
+          # `[rust].coverage` floor is configured (rust has no zero-config default,
+          # #37) — otherwise the rust crate skips coverage instead of erroring.
+          coverage=("${present[@]}")
+          if [ "$rust_crate" -eq 1 ] && rust_coverage_configured; then
+            coverage+=("rust")
           fi
           # `unit lint` runs for every present source language the published binary
           # ships — Python (#42), TypeScript (#43/#76/#77) — plus rust (a crate, #44).
@@ -170,13 +215,15 @@ jobs:
           }
           languages_json="$(to_json "${present[@]}")"
           lint_json="$(to_json "${lint[@]}")"
+          coverage_json="$(to_json "${coverage[@]}")"
           isolation_json="$(to_json "${isolation[@]}")"
           {
             echo "languages=$languages_json"
             echo "integration_lint_languages=$lint_json"
+            echo "coverage_languages=$coverage_json"
             echo "isolation_languages=$isolation_json"
           } >> "$GITHUB_OUTPUT"
-          echo "requested $LANGUAGES under '$SCAN_PATH' → coverage/colocated $languages_json, integration-lint $lint_json, isolation $isolation_json"
+          echo "requested $LANGUAGES under '$SCAN_PATH' → colocated $languages_json, coverage $coverage_json, integration-lint $lint_json, isolation $isolation_json"
 
   colocated-test:
     name: Colocated test (${{ matrix.language }})
@@ -199,6 +246,33 @@ jobs:
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" "$SCAN_PATH"
+
+  colocated-test-changed:
+    name: Colocated test — co-change (${{ matrix.language }})
+    needs: detect
+    # Diff-scoped co-change (#161): on a PR, a modified or deleted source whose
+    # colocated test didn't co-change fails. Rust is excluded by the rule (inline
+    # `#[cfg(test)]` units can't go stale), so this rides the python/typescript
+    # `languages` set. PR-only — it needs a base ref and full history.
+    if: ${{ github.event_name == 'pull_request' && needs.detect.outputs.languages != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.detect.outputs.languages) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Co-change diffs `<base>...HEAD`, so the base ref must be reachable.
+          fetch-depth: 0
+      - name: Check co-change vs ${{ inputs.base }}
+        env:
+          LANGUAGE: ${{ matrix.language }}
+          SCAN_PATH: ${{ inputs.path }}
+          VERSION: ${{ inputs.version }}
+          CONFIG: ${{ inputs.config }}
+          BASE: ${{ inputs.base }}
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
 
   unit-lint:
     name: Unit lint (${{ matrix.language }})
@@ -231,17 +305,18 @@ jobs:
   unit-coverage:
     name: Unit-test coverage (${{ matrix.language }})
     needs: detect
-    # `unit coverage` enforces the Python (#26) and TypeScript (#31) floors today
-    # (other languages — e.g. rust — are a separate item). The matrix is the
-    # requested languages with sources present (#94), so a requested-but-absent
-    # language is skipped rather than erroring on an empty measurement. #56
-    # (config-driven `check`) will eventually drive this from the config file.
-    if: needs.detect.outputs.languages != '[]'
+    # `unit coverage` enforces the Python (#26), TypeScript (#31), and Rust (#37)
+    # floors. The matrix is `coverage_languages` — the requested languages with
+    # sources present (#94), plus rust when a crate is here and a `[rust].coverage`
+    # floor is configured (#171/#37) — so a requested-but-absent language (or a rust
+    # crate with no floor) is skipped rather than erroring. #56 (config-driven
+    # `check`) will eventually drive this from the config file.
+    if: needs.detect.outputs.coverage_languages != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        language: ${{ fromJSON(needs.detect.outputs.languages) }}
+        language: ${{ fromJSON(needs.detect.outputs.coverage_languages) }}
     steps:
       - uses: actions/checkout@v6
       # Unlike the static colocated-test / lint checks, `unit coverage` shells out
@@ -269,6 +344,17 @@ jobs:
       - if: matrix.language == 'typescript'
         name: Install project dependencies (pnpm)
         run: pnpm install --frozen-lockfile
+      # Rust shells out to cargo-llvm-cov (#37/#171): a stable toolchain with the
+      # llvm-tools component, plus cargo-llvm-cov itself.
+      - if: matrix.language == 'rust'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - if: matrix.language == 'rust'
+        name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
       - name: Check unit-test coverage
         env:
           LANGUAGE: ${{ matrix.language }}
@@ -277,14 +363,69 @@ jobs:
           CONFIG: ${{ inputs.config }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit coverage --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
+  coverage-changed:
+    name: Unit-test coverage — changed lines (${{ matrix.language }})
+    needs: detect
+    # Diff-scoped changed-line coverage (#162): on a PR, the configured floor is
+    # measured over only the `<base>...HEAD` changed lines, so a changed line below
+    # the floor fails no matter how small the diff. Mirrors the whole-tree
+    # unit-coverage job's per-language toolchain setup; PR-only (needs the base ref).
+    if: ${{ github.event_name == 'pull_request' && needs.detect.outputs.coverage_languages != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.detect.outputs.coverage_languages) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Changed-line coverage diffs `<base>...HEAD`, so the base ref must be
+          # reachable.
+          fetch-depth: 0
+      - if: matrix.language == 'python'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - if: matrix.language == 'python'
+        name: Install coverage toolchain (coverage.py + pytest)
+        run: python -m pip install --quiet coverage pytest
+      - if: matrix.language == 'typescript'
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.0
+      - if: matrix.language == 'typescript'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - if: matrix.language == 'typescript'
+        name: Install project dependencies (pnpm)
+        run: pnpm install --frozen-lockfile
+      - if: matrix.language == 'rust'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - if: matrix.language == 'rust'
+        name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Check changed-line coverage vs ${{ inputs.base }}
+        env:
+          LANGUAGE: ${{ matrix.language }}
+          SCAN_PATH: ${{ inputs.path }}
+          VERSION: ${{ inputs.version }}
+          CONFIG: ${{ inputs.config }}
+          BASE: ${{ inputs.base }}
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit coverage --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
+
   integration-lint:
     name: Integration lint (${{ matrix.language }})
     needs: detect
     # `integration lint` (mocking mechanism & style) ships for Python (#58),
     # TypeScript (#43/#75), and Rust (#44), so the matrix fans out over every
     # requested language with sources present — the `integration_lint_languages` set,
-    # which adds rust on top of the coverage/colocated languages (#126). Skipped —
-    # not failed — when that set is empty. #56 (config-driven `check`) will eventually
+    # which adds rust on top of the colocated languages (#126). Skipped — not
+    # failed — when that set is empty. #56 (config-driven `check`) will eventually
     # drive which rules/languages run here.
     if: needs.detect.outputs.integration_lint_languages != '[]'
     runs-on: ubuntu-latest
@@ -303,6 +444,25 @@ jobs:
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ inputs.config }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" integration lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+
+  e2e-verify:
+    name: E2E attestation freshness (e2e verify)
+    # Opt-in #68 gate: verify the committed `e2e-attestation.json` names the latest
+    # code commit, failing (with a re-attest nudge) when the code has moved on. Off
+    # by default — it needs a committed attestation and full history, so it can't be
+    # default-on. Never runs the e2e suite itself.
+    if: ${{ inputs.run_e2e }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # `e2e verify` finds the latest code commit via `git log`, so it needs
+          # full history — a shallow clone would miss it.
+          fetch-depth: 0
+      - name: Verify the e2e attestation is current
+        env:
+          VERSION: ${{ inputs.version }}
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" e2e verify
 
   packaging:
     name: Packaging (no test files in the built artifact)

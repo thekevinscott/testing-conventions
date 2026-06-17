@@ -305,3 +305,118 @@ jobs:
             exit 1
           fi
           echo "red wheel correctly tripped the packaging check"
+
+  # ---- Epic #170: realign the workflow with the CLI surface (one rule = one job) ----
+
+  coverage-rust-wired:
+    name: The reusable workflow fans unit coverage over Rust
+    # Red→green wiring signal for #171: the unit-coverage job's matrix must include
+    # rust (via `detect`'s `coverage_languages` set), or the shipped Rust coverage
+    # arm (#37, cargo-llvm-cov regions/lines floor) isn't enforced on the @v0 path.
+    # A static grep, so it tracks the workflow file regardless of what the published
+    # binary ships.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: testing-conventions.yml must fan unit-coverage over rust
+        run: |
+          set -euo pipefail
+          if ! grep -q 'coverage_languages' .github/workflows/testing-conventions.yml; then
+            echo "::error::the reusable workflow's unit-coverage job does not fan out over rust (no \`coverage_languages\` matrix) — the shipped Rust coverage arm (#37) is not enforced on the @v0 path (#171)"
+            exit 1
+          fi
+          echo "reusable workflow fans unit-coverage over rust"
+
+  coverage-rust-clean:
+    name: A clean Rust crate passes the reusable workflow's coverage arm
+    # The clean path for #171: a fully-covered crate driven through the reusable
+    # workflow under ["rust"]. `detect` recognizes the crate and fans the
+    # unit-coverage job over rust, which clears the 100 floor — alongside the
+    # unit-lint and integration-lint rust jobs, which the well-isolated,
+    # `tests/`-free crate also passes. Source-matrix python/typescript jobs skip.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["rust"]'
+      path: .github/selftest/coverage-rust/clean
+      config: .github/selftest/coverage-rust/clean/testing-conventions.toml
+
+  coverage-rust-red:
+    name: A below-floor Rust crate trips the coverage arm
+    # The fail path for #171: a `uses:` call that fails would fail the whole run, so
+    # drive the published `unit coverage --language rust` directly — the exact
+    # invocation the workflow's rust coverage arm runs — on a sub-floor crate and
+    # assert the non-zero exit that fails a consumer's build.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: A sub-floor crate must fail `unit coverage --language rust`
+        run: |
+          if npx -y testing-conventions unit coverage \
+            --language rust \
+            --config .github/selftest/coverage-rust/below/testing-conventions.toml \
+            .github/selftest/coverage-rust/below; then
+            echo "::error::expected the below-floor crate to fail the rust coverage gate, but it passed"
+            exit 1
+          fi
+          echo "below-floor crate correctly tripped the rust coverage gate"
+
+  diff-scoped-wired:
+    name: The reusable workflow runs the diff-scoped --base checks
+    # Red→green wiring signal for #172: the workflow must invoke the commit-scoped
+    # co-change (`unit colocated-test --base`, #161) and changed-line coverage
+    # (`unit coverage --base`, #162) checks, or neither diff-scoped rule runs in CI.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: testing-conventions.yml must run the --base checks
+        run: |
+          set -euo pipefail
+          missing=0
+          grep -qE 'colocated-test .*--base' .github/workflows/testing-conventions.yml || missing=1
+          grep -qE 'unit coverage .*--base' .github/workflows/testing-conventions.yml || missing=1
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::the reusable workflow does not run the diff-scoped \`--base\` checks (co-change #161 / changed-line coverage #162) — they never run in CI (#172)"
+            exit 1
+          fi
+          echo "reusable workflow runs the diff-scoped --base checks"
+
+  e2e-verify-wired:
+    name: The reusable workflow offers an opt-in e2e verify job
+    # Red→green wiring signal for #173: the workflow must offer the e2e freshness
+    # gate (#68) behind an opt-in `run_e2e` input, or consumers can't enforce it on
+    # the @v0 path. A static grep for the input and the command; the rule's runtime
+    # behavior is covered by the Rust e2e test (`e2e_verify_e2e.rs`).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: testing-conventions.yml must wire opt-in `e2e verify`
+        run: |
+          set -euo pipefail
+          missing=0
+          grep -q 'run_e2e' .github/workflows/testing-conventions.yml || missing=1
+          grep -qE 'e2e verify' .github/workflows/testing-conventions.yml || missing=1
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::the reusable workflow does not offer an opt-in \`e2e verify\` job (input \`run_e2e\` + \`e2e verify\`) — the #68 freshness gate isn't on the @v0 path (#173)"
+            exit 1
+          fi
+          echo "reusable workflow offers opt-in e2e verify"
+
+  diff-scoped-runs:
+    name: A clean PR passes the diff-scoped --base jobs
+    # The runtime half of #172: call the reusable workflow with the new `base` input
+    # over a fixture added in this PR, so `<base>...HEAD` carries real changed lines.
+    # On a PR the `*-changed` jobs run — co-change excuses the added file but
+    # requires its colocated test to exist, and the added lines clear the coverage
+    # floor — so the whole call passes.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["python"]'
+      path: .github/selftest/diff-clean
+      config: .github/selftest/diff-clean/testing-conventions.toml
+      base: origin/main

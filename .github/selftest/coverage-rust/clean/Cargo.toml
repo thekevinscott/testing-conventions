@@ -1,0 +1,12 @@
+# Clean fixture crate for the reusable workflow's Rust `unit coverage` arm (#171):
+# `add` is fully exercised by its colocated inline `#[cfg(test)]` test, so
+# `cargo llvm-cov` reports 100% regions and 100% lines and the crate clears the
+# 100 floor. Driven through the reusable workflow under `["rust"]`, it proves
+# `detect` fans the coverage job over `rust` and the arm passes. `[workspace]`
+# isolates the fixture from the parent cargo workspace.
+[package]
+name = "cov_rust_selftest_clean"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

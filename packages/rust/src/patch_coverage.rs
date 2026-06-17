@@ -144,18 +144,98 @@ pub fn check_rust(root: &Path, base: &str, exclude: &[String]) -> Result<Vec<Unc
 
 /// Diff-scoped Python coverage floor (#162): measure `thresholds` over the
 /// `<base>...HEAD` changed `.py` lines instead of the whole tree. `omit` is the
-/// `coverage`-rule exemptions, as in [`check`]. **Stub — opens red.**
+/// `coverage`-rule exemptions, as in [`crate::coverage::measure`] — an exempt file
+/// is omitted from the run, so its changed lines drop out of the ratio.
+///
+/// Scopes to `.py` sources and returns early — with no coverage run — when the diff
+/// touches none, so a PR that changes only docs or other languages doesn't pay for a
+/// measurement (and is vacuously covered). Requires coverage.py + pytest + git; an
+/// unresolvable `base` surfaces as an error rather than a silent pass.
 pub fn measure(
     root: &Path,
     base: &str,
     thresholds: Thresholds,
     omit: &[String],
 ) -> Result<Outcome> {
-    // The diff still resolves (an unresolvable base errors), but the ratio is not
-    // yet computed — reports Pass regardless until the implementation lands.
-    changed_lines(root, base)?;
-    let _ = (thresholds, omit);
-    Ok(Outcome::Pass)
+    let mut changed = changed_lines(root, base)?;
+    changed.retain(|path, _| path.ends_with(".py"));
+    if changed.is_empty() {
+        return Ok(Outcome::Pass);
+    }
+    let report = coverage::measure_patch_report(root, omit)?;
+    let files = relative_keys(report.files, root);
+    Ok(evaluate_patch(&changed, &files, thresholds))
+}
+
+/// Pure: the configured floor measured over the changed lines. Reproduces
+/// coverage.py's `percent_covered` — (executed lines + taken branch arcs) ÷
+/// (executable lines + all branch arcs) — restricted to the lines the diff touched,
+/// so the same number `unit coverage` enforces whole-tree is judged on the diff.
+///
+/// A changed line absent from `files` (a comment or blank, a test file, or a
+/// `coverage`-exempt file omitted from the run) has nothing to cover and is skipped;
+/// when nothing executable changed, the diff is vacuously covered (`Pass`). With
+/// `branch`, a branch arc counts toward the ratio when its source line is in the diff
+/// — taken arcs as covered, untaken as missed — exactly as the whole-tree total folds
+/// branches in. No small-diff carve-out: a tiny diff below the floor fails like any
+/// other (#162).
+fn evaluate_patch(
+    changed: &BTreeMap<String, BTreeSet<u64>>,
+    files: &BTreeMap<String, FileCoverage>,
+    thresholds: Thresholds,
+) -> Outcome {
+    let mut covered: u64 = 0;
+    let mut total: u64 = 0;
+    for (file, lines) in changed {
+        let Some(cov) = files.get(file) else {
+            continue;
+        };
+        let executed: BTreeSet<u64> = cov.executed_lines.iter().copied().collect();
+        let missing: BTreeSet<u64> = cov.missing_lines.iter().copied().collect();
+        for &line in lines {
+            if executed.contains(&line) {
+                covered += 1;
+                total += 1;
+            } else if missing.contains(&line) {
+                total += 1;
+            }
+        }
+        if thresholds.branch {
+            for arc in &cov.executed_branches {
+                if arc_source_in(arc, lines) {
+                    covered += 1;
+                    total += 1;
+                }
+            }
+            for arc in &cov.missing_branches {
+                if arc_source_in(arc, lines) {
+                    total += 1;
+                }
+            }
+        }
+    }
+    if total == 0 {
+        return Outcome::Pass;
+    }
+    let actual = 100.0 * covered as f64 / total as f64;
+    // A hair of tolerance so a percent that rounds to the floor isn't failed by float
+    // noise (matches the whole-tree `coverage::evaluate`).
+    if actual + 1e-9 >= f64::from(thresholds.fail_under) {
+        Outcome::Pass
+    } else {
+        Outcome::Fail(format!(
+            "changed-line coverage {actual:.2}% is below the required {}%",
+            thresholds.fail_under
+        ))
+    }
+}
+
+/// Whether a branch arc's source line (the first of its `[src, dst]` pair; `dst` may
+/// be a negative exit, which is irrelevant) falls in `lines`.
+fn arc_source_in(arc: &[i64], lines: &BTreeSet<u64>) -> bool {
+    arc.first()
+        .and_then(|&src| u64::try_from(src).ok())
+        .is_some_and(|src| lines.contains(&src))
 }
 
 /// Diff-scoped TypeScript coverage floor (#162): the four vitest metrics measured
@@ -378,6 +458,7 @@ mod tests {
             missing_lines: missing_lines.to_vec(),
             excluded_lines: Vec::new(),
             missing_branches: missing_branches.iter().map(|b| b.to_vec()).collect(),
+            executed_branches: Vec::new(),
         }
     }
 
@@ -552,6 +633,109 @@ mod tests {
                     line: 2
                 },
             ]
+        );
+    }
+
+    // ---- evaluate_patch (diff-scoped floor, #162) ---------------------------
+
+    fn cov(
+        executed: &[u64],
+        missing: &[u64],
+        executed_branches: &[[i64; 2]],
+        missing_branches: &[[i64; 2]],
+    ) -> FileCoverage {
+        FileCoverage {
+            executed_lines: executed.to_vec(),
+            missing_lines: missing.to_vec(),
+            excluded_lines: Vec::new(),
+            executed_branches: executed_branches.iter().map(|b| b.to_vec()).collect(),
+            missing_branches: missing_branches.iter().map(|b| b.to_vec()).collect(),
+        }
+    }
+
+    const FLOOR_85: Thresholds = Thresholds {
+        fail_under: 85,
+        branch: true,
+    };
+
+    #[test]
+    fn patch_a_fully_covered_diff_passes() {
+        let files = BTreeMap::from([("w.py".to_string(), cov(&[1, 2, 3], &[], &[], &[]))]);
+        assert_eq!(
+            evaluate_patch(&changed(&[("w.py", &[1, 2, 3])]), &files, FLOOR_85),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn patch_below_floor_fails_and_names_the_percent() {
+        // 3 of 4 changed executable lines covered → 75% < 85.
+        let files = BTreeMap::from([("w.py".to_string(), cov(&[1, 2, 3], &[4], &[], &[]))]);
+        let out = evaluate_patch(&changed(&[("w.py", &[1, 2, 3, 4])]), &files, FLOOR_85);
+        assert!(
+            matches!(&out, Outcome::Fail(m) if m.contains("75.00%")),
+            "got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn patch_the_same_diff_clears_a_lower_floor() {
+        // The #162 behavior: 75% passes a 70 floor despite the uncovered line.
+        let files = BTreeMap::from([("w.py".to_string(), cov(&[1, 2, 3], &[4], &[], &[]))]);
+        let floor_70 = Thresholds {
+            fail_under: 70,
+            branch: true,
+        };
+        assert_eq!(
+            evaluate_patch(&changed(&[("w.py", &[1, 2, 3, 4])]), &files, floor_70),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn patch_counts_branch_arcs_whose_source_is_a_changed_line() {
+        // Lines 1,2 executed (2 covered) + a taken arc out of line 2 (covered) and an
+        // untaken arc out of line 2 (missed): 3 covered of 4 → 75% < 85.
+        let files = BTreeMap::from([("w.py".to_string(), cov(&[1, 2], &[], &[[2, 3]], &[[2, 4]]))]);
+        let out = evaluate_patch(&changed(&[("w.py", &[1, 2])]), &files, FLOOR_85);
+        assert!(
+            matches!(&out, Outcome::Fail(m) if m.contains("75.00%")),
+            "got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn patch_branches_off_ignores_arcs() {
+        // Same data, branch disabled: only the two executed lines count → 100%.
+        let files = BTreeMap::from([("w.py".to_string(), cov(&[1, 2], &[], &[[2, 3]], &[[2, 4]]))]);
+        let no_branch = Thresholds {
+            fail_under: 85,
+            branch: false,
+        };
+        assert_eq!(
+            evaluate_patch(&changed(&[("w.py", &[1, 2])]), &files, no_branch),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn patch_a_changed_file_absent_from_coverage_is_skipped() {
+        // A test file (never measured) contributes nothing; with no other executable
+        // changed line the diff is vacuously covered.
+        let files = BTreeMap::from([("w.py".to_string(), cov(&[1], &[], &[], &[]))]);
+        assert_eq!(
+            evaluate_patch(&changed(&[("w_test.py", &[1, 2])]), &files, FLOOR_85),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn patch_a_diff_with_no_executable_changed_lines_passes() {
+        // Changed lines are comments/blanks (in neither executed nor missing) → vacuous.
+        let files = BTreeMap::from([("w.py".to_string(), cov(&[1, 2], &[], &[], &[]))]);
+        assert_eq!(
+            evaluate_patch(&changed(&[("w.py", &[9, 10])]), &files, FLOOR_85),
+            Outcome::Pass
         );
     }
 

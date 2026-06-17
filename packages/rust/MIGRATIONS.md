@@ -372,6 +372,18 @@ the floor via `run_cargo_llvm_cov`); the Python / TypeScript arms and the existi
 API are unchanged. With Rust landed, `unit patch-coverage` covers all three
 languages.
 
+Also folds `unit patch-coverage` into `unit coverage --base` (#162, part of the #158
+CLI taxonomy redesign). The diff-scoped changed-line check is no longer a separate
+command: `unit coverage --language <LANG> --base <REF> [--config <CONFIG>] <PATH>`
+measures the **same configured floor** (`fail_under`/`branch`; the four TypeScript
+metrics; Rust regions/lines) over the `<base>...HEAD` diff instead of the whole tree.
+Breaking — the `unit patch-coverage` command is removed. Two behavior changes from it:
+the diff is judged against the configured floor rather than an implicit 100% (a diff
+that clears the floor passes even with an uncovered changed line; they coincide only at
+`fail_under = 100`), and there is no small-diff carve-out (a tiny diff below the floor
+fails like any other). Config and `[[<lang>.exempt]] rules = ["coverage"]` waivers are
+unchanged — both scopes already share the `coverage` rule id.
+
 ### Required changes
 
 `unit isolation` is now `unit lint` (#160), mirroring `integration lint`. Update any

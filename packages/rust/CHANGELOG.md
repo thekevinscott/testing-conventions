@@ -18,6 +18,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `isolation::Language` selector, and every library entry point are untouched.
   Migration: replace `unit isolation` with `unit lint` wherever you invoke it (e.g. the
   reusable `testing-conventions.yml` workflow). (#160)
+- **BREAKING — `unit patch-coverage` folded into `unit coverage --base`** (#162, part of the
+  #158 CLI taxonomy redesign). The diff-scoped changed-line check is no longer a separate
+  command: `unit coverage --language <LANG> --base <REF> [--config <CONFIG>] <PATH>` measures the
+  **same configured floor** (`fail_under`/`branch` for Python; the four vitest metrics for
+  TypeScript; regions/lines for Rust) over the `<base>...HEAD` diff instead of the whole tree.
+  Two behavior changes from the old command: the diff is judged against the configured floor
+  rather than an implicit 100% (a diff that clears the floor passes even with an uncovered changed
+  line — they coincide only at `fail_under = 100`), and there is no small-diff carve-out (a tiny
+  diff below the floor fails like any other). Config and `[[<lang>.exempt]] rules = ["coverage"]`
+  waivers are unchanged — both scopes already share the `coverage` rule id. Migration: replace
+  `unit patch-coverage --base X` with `unit coverage --base X` wherever you invoke it (the reusable
+  `testing-conventions.yml` workflow, CI). (#162)
 
 ### Added
 

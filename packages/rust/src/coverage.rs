@@ -84,6 +84,13 @@ pub struct FileCoverage {
     /// patch coverage. Empty when branch coverage was off.
     #[serde(default)]
     pub missing_branches: Vec<Vec<i64>>,
+    /// `[source_line, dest_line]` pairs for branches the suite DID take (coverage.py
+    /// emits these alongside `missing_branches` under `--branch`). The diff-scoped
+    /// floor (#162) counts an arc toward changed-line branch coverage when its source
+    /// line is in the diff; with `missing_branches` it gives branch coverage over the
+    /// changed lines. Empty when branch coverage was off.
+    #[serde(default)]
+    pub executed_branches: Vec<Vec<i64>>,
 }
 
 /// The `totals` block of a coverage.py report.

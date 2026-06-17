@@ -39,9 +39,6 @@ name: Testing Conventions (self-test)
 #                    `detect` recognizes a crate and fans the lint job over it.
 #   isolation-red    drives the published `unit lint` on a violating crate and
 #                    asserts a non-zero exit.
-# NOTE: isolation-clean / isolation-red drive the *published* binary, which won't
-# recognize `unit lint` until the #160 release ships — so both are disabled
-# (`if: false`) until then; isolation-wired (a static grep of the workflow) stays on.
 #
 # integration lint — the TypeScript + Rust arms and the config waiver (#126):
 #   integration-lint-config-waiver   a #102 waiver in a *non-default* config path
@@ -118,14 +115,6 @@ jobs:
 
   integration-lint-rust:
     name: A clean Rust library passes the reusable workflow (rust arm runs)
-    # DEFERRED until the #160 release publishes `unit lint`. Calling the reusable
-    # workflow with a rust crate fans out the renamed `unit-lint (rust)` job too (its
-    # matrix includes rust), which runs `npx unit lint` against the *published* binary
-    # — and npx latest won't know `unit lint` until this release ships, so it fails
-    # (same root cause as isolation-clean / isolation-red). Re-enable by dropping
-    # `if: false` once released. The rust integration-lint *behavior* stays covered
-    # meanwhile by `integration-lint-new-arms-trip`, which drives the command directly.
-    if: false
     # A clean Rust crate must pass the reusable workflow: the rust arm runs
     # `integration lint`, and the rust sources must *not* enter the coverage/colocated
     # matrix — `unit coverage` has no rust arm and would error.
@@ -205,13 +194,9 @@ jobs:
 
   isolation-clean:
     name: A clean crate passes the unit-lint job
-    # DEFERRED until the #160 release publishes `unit lint`: this drives the *published*
-    # binary through the reusable workflow, which now invokes `unit lint` — a command
-    # `npx` latest won't recognize until the rename ships. Re-enable (drop `if: false`)
-    # once released. Exercises the Rust path end to end: ["rust"] over a clean crate, so
-    # `detect` recognizes the crate and fans the lint job over `rust` (#125); the
-    # source-matrix jobs skip on this rust-only fixture.
-    if: false
+    # Exercises the Rust path end to end: ["rust"] over a clean crate, so `detect`
+    # recognizes the crate and fans the lint job over `rust` (#125); the source-matrix
+    # jobs skip on this rust-only fixture.
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["rust"]'
@@ -219,13 +204,10 @@ jobs:
 
   isolation-red:
     name: A crate with an un-isolated unit trips the lint check
-    # DEFERRED until the #160 release publishes `unit lint` (same reason as
-    # isolation-clean: it drives the *published* binary, which won't know `unit lint`
-    # until then). Re-enable by dropping `if: false`. The fail path: a `uses:` call that
-    # fails would fail the whole run, so drive the published `unit lint` command directly
-    # on a crate whose unit test reaches out of its module (effectful `std::fs`) and
-    # assert the non-zero exit that fails a consumer's build.
-    if: false
+    # The fail path: a `uses:` call that fails would fail the whole run, so drive the
+    # published `unit lint` command directly on a crate whose unit test reaches out of
+    # its module (effectful `std::fs`) and assert the non-zero exit that fails a
+    # consumer's build.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

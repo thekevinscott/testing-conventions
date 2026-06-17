@@ -30,9 +30,10 @@ name: Testing Conventions (self-test)
 #   packaging-red    drives the published `packaging` command on a committed wheel
 #                    that ships a `*_test.py` and asserts a non-zero exit.
 #
-# unit lint (#125; renamed from `unit isolation` in #160) — wired for TypeScript and
-# Rust, the languages the published binary (what `npx` pulls) ships. Python is merged
-# but unreleased, deferred to #146.
+# unit lint (#125; renamed from `unit isolation` in #160) — wired for Python, TypeScript,
+# and Rust. The published binary (what `npx` pulls) now ships Python isolation too, so
+# `detect` routes it into the lint matrix (#146); the `clean` / `absent-language-skipped`
+# jobs exercise the Python arm end to end.
 #   isolation-wired  asserts the reusable workflow actually invokes `unit lint`
 #                    — the red→green signal for the wiring itself.
 #   isolation-python-wired  runs the workflow's real `detect` script against the clean

@@ -112,27 +112,6 @@ enum UnitRule {
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
-    /// Check that every line a git diff touches is covered by the unit suite
-    /// (patch / changed-line coverage, #132). Diff-scoped complement to the
-    /// whole-suite `unit coverage` floor: only the `<base>...HEAD` changed lines
-    /// must be covered.
-    PatchCoverage {
-        /// Directory whose unit suite is run and measured; also where git runs.
-        path: PathBuf,
-        /// Language convention to enforce (required). Python (coverage.py),
-        /// TypeScript (vitest), or Rust (`cargo llvm-cov`).
-        #[arg(long, value_enum)]
-        language: colocated_test::Language,
-        /// Base ref to diff against: the check compares `<base>...HEAD`, the
-        /// changes this branch introduced (what a PR shows). Defaults to
-        /// `origin/main`; override for a different base or an explicit range.
-        #[arg(long, default_value = "origin/main")]
-        base: String,
-        /// testing-conventions config file supplying the coverage `exempt` list.
-        /// Optional: if the file is absent, nothing is exempt.
-        #[arg(long, default_value = "testing-conventions.toml")]
-        config: PathBuf,
-    },
     /// Lint unit test files for isolation: mock every collaborator (Python, TypeScript, Rust).
     Lint {
         /// Crate root / source dir to scan recursively.
@@ -218,12 +197,6 @@ where
                 base,
                 config,
             } => run_unit_coverage(&path, language, base.as_deref(), &config),
-            UnitRule::PatchCoverage {
-                path,
-                language,
-                base,
-                config,
-            } => run_unit_patch_coverage(&path, &base, language, &config),
             UnitRule::Lint {
                 path,
                 language,
@@ -494,68 +467,6 @@ fn run_unit_coverage(
             Ok(1)
         }
     }
-}
-
-/// Run the patch (changed-line) coverage check over `root` for `language`,
-/// diffing `<base>...HEAD` and requiring every changed line to be covered by the
-/// unit suite (Python #132, TypeScript #135, Rust #136). Returns `0` when every
-/// changed line is covered; otherwise prints each uncovered line to stderr and
-/// returns `1`.
-///
-/// Python runs coverage.py, TypeScript runs vitest, and Rust runs `cargo
-/// llvm-cov`; all three reuse the same `<base>...HEAD` diff machinery. The
-/// `coverage`-rule exemptions from the config at `config_path` lift a file's
-/// changed lines (a missing config file → nothing exempt), reusing the floor's
-/// exemption surface (#32).
-fn run_unit_patch_coverage(
-    root: &Path,
-    base: &str,
-    language: colocated_test::Language,
-    config_path: &Path,
-) -> anyhow::Result<i32> {
-    let exempt = patch_coverage_exemptions(root, config_path, language)?;
-    let uncovered = match language {
-        colocated_test::Language::Python => patch_coverage::check(root, base, &exempt)?,
-        colocated_test::Language::TypeScript => {
-            patch_coverage::check_typescript(root, base, &exempt)?
-        }
-        colocated_test::Language::Rust => patch_coverage::check_rust(root, base, &exempt)?,
-    };
-    if uncovered.is_empty() {
-        return Ok(0);
-    }
-    for u in &uncovered {
-        eprintln!(
-            "changed line not covered by the unit suite: {}:{}",
-            u.file, u.line
-        );
-    }
-    eprintln!(
-        "error: {} changed line(s) not covered by the unit suite \
-         (add a unit test, or a `coverage` exempt entry with a reason)",
-        uncovered.len()
-    );
-    Ok(1)
-}
-
-/// The `coverage`-rule exempt paths for `language` resolved from the config at
-/// `config_path` (the `[<language>].exempt` table), as `root`-relative patterns. A
-/// missing config file means nothing is exempt. Mirrors `run_unit_coverage`, so a
-/// file waived from the floor is waived from patch coverage too.
-fn patch_coverage_exemptions(
-    root: &Path,
-    config_path: &Path,
-    language: colocated_test::Language,
-) -> anyhow::Result<Vec<String>> {
-    if !config_path.exists() {
-        return Ok(Vec::new());
-    }
-    let config = config::load_config(config_path)?;
-    Ok(
-        config::resolve_exempt(root, config.exemptions(language), config::Rule::Coverage)?
-            .into_iter()
-            .collect(),
-    )
 }
 
 /// Run the `unit lint` check over `root` for `language` — the unit-suite

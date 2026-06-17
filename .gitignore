@@ -28,3 +28,4 @@ docs/node_modules/
 
 # cargo-llvm-cov regenerates these for the unit-coverage Rust fixture crates
 packages/rust/tests/fixtures/unit_coverage/rust/*/Cargo.lock
+.github/selftest/coverage-rust/**/Cargo.lock

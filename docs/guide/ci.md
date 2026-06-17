@@ -41,11 +41,24 @@ not yet on npm, so it's deferred until a release ships it; see
 
 | Input                | Default                     | Description                                                |
 | -------------------- | --------------------------- | ---------------------------------------------------------- |
-| `languages`          | `["python", "typescript"]`  | JSON array of languages to check (`python`, `typescript`; also `rust`, for the integration-lint rule). |
+| `languages`          | `["python", "typescript"]`  | JSON array of languages to check (`python`, `typescript`; also `rust`, for the unit-lint, integration-lint, and coverage rules). |
 | `path`               | `src`                       | Directory scanned recursively for sources.                 |
 | `version`            | latest                      | `testing-conventions` version to install (e.g. `0.1.0`).   |
 | `config`             | `testing-conventions.toml`  | Optional config file to refine the checks (coverage thresholds, exemptions). Absent → every check runs with defaults. |
+| `base`               | `origin/main`               | Base ref for the diff-scoped `--base` jobs, diffed as `<base>...HEAD`. The `*-changed` jobs run on `pull_request` only. |
+| `run_e2e`            | `false`                     | Opt in to the `e2e verify` job: fail if the committed `e2e-attestation.json` doesn't name the latest code commit. Needs a committed attestation and full history. |
 | `packaging_artifact` | `''` (skipped)              | Name of an uploaded build artifact holding your built distributions; when set, the packaging rule downloads and inspects it. See [Check the built distribution](#check-the-built-distribution-packaging). |
+
+### Diff-scoped and opt-in checks
+
+Two rules also run a **diff-scoped** variant as its own `*-changed` job, on **pull requests** only (they check out full history and diff `<base>...HEAD`, with `base` defaulting to `origin/main`):
+
+- **co-change** — `unit colocated-test --base`: a source changed in the PR whose colocated test didn't change with it fails (Python, TypeScript).
+- **changed-line coverage** — `unit coverage --base`: a line changed in the PR that lands below the floor fails, no matter how small the diff (Python, TypeScript, Rust).
+
+The whole-tree colocated-test and coverage jobs run regardless; the `*-changed` jobs add the commit-scoped gate on top.
+
+Set `run_e2e: true` to add an **`e2e verify`** job: it checks that your committed `e2e-attestation.json` names the latest code commit and fails (with a re-attest nudge) when the code has moved on. It never runs the e2e suite — CI only confirms someone attested against this code. Off by default, since it needs a committed attestation and full git history.
 
 The **coverage** job runs once per requested language that has sources (a language with none is
 skipped, not failed). Without a config file it enforces the language's default floor (Python
@@ -55,9 +68,10 @@ suite under `coverage.py` (branch on, `*_test.py` excluded) and fails if the tot
 floor, installing `coverage` + `pytest`. For `typescript` it runs the suite under `vitest` v8
 coverage and fails below any of the four thresholds (`lines` / `branches` / `functions` /
 `statements`), installing your project's deps with `pnpm` so `vitest` + `@vitest/coverage-v8` are
-present. A project on a different toolchain (a non-`pnpm` package manager, or Python sources that
-need third-party runtime deps installed) should drive the CLI directly (below) until #56 makes
-this config-driven.
+present. For `rust` it runs `cargo llvm-cov` against the `regions` / `lines` floor; Rust has no
+default floor, so the crate must declare a `[rust].coverage` table. A project on a different
+toolchain (a non-`pnpm` package manager, or Python sources that need third-party runtime deps
+installed) should drive the CLI directly (below) until #56 makes this config-driven.
 
 ### Check the built distribution (packaging)
 

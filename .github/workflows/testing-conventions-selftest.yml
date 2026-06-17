@@ -384,23 +384,16 @@ jobs:
           fi
           echo "reusable workflow offers opt-in e2e verify"
 
-  build-from-source-wired:
-    name: The reusable workflow can run a from-source build
-    # Red→green wiring signal for #174: the workflow must accept a `build_from_source`
-    # input and build the CLI from packages/rust, so it can run the local binary
-    # instead of the lagging published npx — the prerequisite for dogfooding the
-    # shipped workflow over our own (often unreleased) source (#175).
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: testing-conventions.yml must wire `build_from_source`
-        run: |
-          set -euo pipefail
-          missing=0
-          grep -q 'build_from_source' .github/workflows/testing-conventions.yml || missing=1
-          grep -q 'cargo build --release' .github/workflows/testing-conventions.yml || missing=1
-          if [ "$missing" -ne 0 ]; then
-            echo "::error::the reusable workflow has no \`build_from_source\` escape hatch (input + \`cargo build\`) — it can only run the lagging published npx (#174)"
-            exit 1
-          fi
-          echo "reusable workflow can run a from-source build"
+  diff-scoped-runs:
+    name: A clean PR passes the diff-scoped --base jobs
+    # The runtime half of #172: call the reusable workflow with the new `base` input
+    # over a fixture added in this PR, so `<base>...HEAD` carries real changed lines.
+    # On a PR the `*-changed` jobs run — co-change excuses the added file but
+    # requires its colocated test to exist, and the added lines clear the coverage
+    # floor — so the whole call passes.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["python"]'
+      path: .github/selftest/diff-clean
+      config: .github/selftest/diff-clean/testing-conventions.toml
+      base: origin/main

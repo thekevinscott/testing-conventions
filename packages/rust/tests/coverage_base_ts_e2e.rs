@@ -1,12 +1,9 @@
-//! E2E tests for patch (changed-line) coverage (TypeScript — #135): drive the
-//! built CLI binary as a real subprocess against throwaway git repos and assert
-//! the exit code (and, for a red case, the named offender). Complements the
-//! in-process integration tests in `patch_coverage_ts.rs`. Requires `git` + a Node
-//! toolchain with vitest installed; the repo symlinks the fixtures' `node_modules`
-//! so `npx vitest` resolves.
-//!
-//! Starts red against the stub in `src/patch_coverage.rs` (`check_typescript`
-//! reports nothing) and goes green once the diff + vitest detection is implemented.
+//! E2E tests for diff-scoped TypeScript coverage — `unit coverage --language
+//! typescript --base` (#162): drive the built CLI binary as a real subprocess
+//! against throwaway git repos and assert the exit code (and, for a red case, the
+//! failure on stderr). Complements the in-process integration tests in
+//! `coverage_base_ts.rs`. Requires `git` + a Node toolchain with vitest installed;
+//! the repo symlinks the fixtures' `node_modules` so `npx vitest` resolves.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -21,13 +18,14 @@ fn fixtures_node_modules() -> PathBuf {
 
 /// A throwaway git repo, removed on drop. A test writes a baseline, `commit`s it,
 /// captures `head()` as the `base`, then mutates and commits the "after".
+/// `node_modules` is symlinked to the fixtures' install so vitest resolves.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
     fn new(slug: &str) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let root = std::env::temp_dir().join(format!(
-            "tc-patch-cov-ts-e2e-{}-{}-{}",
+            "tc-cov-base-ts-e2e-{}-{}-{}",
             slug,
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed),
@@ -81,16 +79,14 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// Exit code + stderr of `unit patch-coverage <repo> --language typescript --base
-/// <base> [--config <repo>/<config>]`, run as a real subprocess.
-fn patch_coverage(repo: &TempRepo, base: &str, config: Option<&str>) -> (i32, String) {
+/// Exit code + stderr of `unit coverage <repo> --language typescript --base <base>
+/// [--config <repo>/<config>]`, run as a real subprocess.
+fn coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> (i32, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
-    cmd.arg("unit").arg("patch-coverage").arg(&repo.0).args([
-        "--language",
-        "typescript",
-        "--base",
-        base,
-    ]);
+    cmd.arg("unit")
+        .arg("coverage")
+        .arg(&repo.0)
+        .args(["--language", "typescript", "--base", base]);
     if let Some(name) = config {
         cmd.arg("--config").arg(repo.0.join(name));
     }
@@ -118,43 +114,67 @@ test('widget', () => {
   expect(widget(-1)).toBe('neg');
 });
 "#;
-const WIDGET_TS_UNCOVERED: &str = r#"export function widget(n: number): string {
+
+/// After: a covered and an uncovered one-line helper → the diff (new lines 5-12)
+/// lands at functions 50% / statements 66.67% / branches 100% (see
+/// `coverage_base_ts.rs`), so its minimum metric is below the default 80 floor.
+const WIDGET_TS_75: &str = r#"export function widget(n: number): string {
   if (n > 0) return 'pos';
-  if (n === 42) {
-    return 'answer';
-  }
   return 'neg';
 }
+
+export function covered(): number {
+  return 1;
+}
+
+export function uncovered(): number {
+  return 2;
+}
+"#;
+const WIDGET_TEST_75: &str = r#"import { expect, test } from 'vitest';
+
+import { widget, covered } from './widget';
+
+test('widget', () => {
+  expect(widget(1)).toBe('pos');
+  expect(widget(-1)).toBe('neg');
+});
+
+test('covered', () => {
+  expect(covered()).toBe(1);
+});
 "#;
 
-#[test]
-fn uncovered_changed_line_exits_nonzero_and_names_it() {
-    let repo = TempRepo::new("red");
+fn baseline(repo: &TempRepo) -> String {
     repo.write("widget.ts", WIDGET_TS);
     repo.write("widget.test.ts", WIDGET_TEST_TS);
     repo.commit("base");
-    let base = repo.head();
-    repo.write("widget.ts", WIDGET_TS_UNCOVERED);
-    repo.commit("add an untested branch");
+    repo.head()
+}
 
-    let (code, stderr) = patch_coverage(&repo, &base, None);
+#[test]
+fn ts_below_floor_diff_exits_nonzero_and_reports_coverage() {
+    let repo = TempRepo::new("red");
+    let base = baseline(&repo);
+    repo.write("widget.ts", WIDGET_TS_75);
+    repo.write("widget.test.ts", WIDGET_TEST_75);
+    repo.commit("add a covered and an uncovered helper");
+
+    let (code, stderr) = coverage_base(&repo, &base, None);
     assert_eq!(
         code, 1,
-        "an uncovered changed line must exit non-zero; stderr: {stderr}"
+        "a diff below the floor must exit non-zero; stderr: {stderr}"
     );
     assert!(
-        stderr.contains("widget.ts"),
-        "stderr should name the uncovered file; got: {stderr}"
+        stderr.contains("coverage"),
+        "stderr should report the coverage shortfall; got: {stderr}"
     );
 }
 
 #[test]
-fn covered_change_exits_zero() {
+fn ts_covered_change_exits_zero() {
     let repo = TempRepo::new("clean");
-    repo.write("widget.ts", WIDGET_TS);
-    repo.write("widget.test.ts", WIDGET_TEST_TS);
-    repo.commit("base");
-    let base = repo.head();
+    let base = baseline(&repo);
     repo.write(
         "widget.ts",
         r#"export function widget(n: number): string {
@@ -177,60 +197,47 @@ test('widget', () => {
     );
     repo.commit("reword a covered line and update its test");
 
-    let (code, stderr) = patch_coverage(&repo, &base, None);
+    let (code, stderr) = coverage_base(&repo, &base, None);
     assert_eq!(code, 0, "a fully covered change passes; stderr: {stderr}");
 }
 
 #[test]
-fn added_untested_file_exits_nonzero() {
-    let repo = TempRepo::new("added");
-    repo.write("widget.ts", WIDGET_TS);
-    repo.write("widget.test.ts", WIDGET_TEST_TS);
-    repo.commit("base");
-    let base = repo.head();
+fn ts_a_lower_configured_floor_lets_the_same_diff_pass() {
+    // The behavior change: the diff that fails the default 80 floor passes once the
+    // configured floors are 40 — the floor is the single source of truth. The config
+    // is committed so the measurement is deterministic.
+    let repo = TempRepo::new("floor40");
     repo.write(
-        "lonely.ts",
-        "export function lonely(): number {\n  return 41;\n}\n",
+        "testing-conventions.toml",
+        "[typescript.coverage]\nlines = 40\nbranches = 40\nfunctions = 40\nstatements = 40\n",
     );
-    repo.commit("add a brand-new untested source");
+    let base = baseline(&repo);
+    repo.write("widget.ts", WIDGET_TS_75);
+    repo.write("widget.test.ts", WIDGET_TEST_75);
+    repo.commit("add a covered and an uncovered helper");
 
-    let (code, stderr) = patch_coverage(&repo, &base, None);
+    let (code, stderr) = coverage_base(&repo, &base, Some("testing-conventions.toml"));
     assert_eq!(
-        code, 1,
-        "an added file's uncovered lines must exit non-zero; stderr: {stderr}"
-    );
-    assert!(
-        stderr.contains("lonely.ts"),
-        "stderr should name the added file; got: {stderr}"
+        code, 0,
+        "the diff (min 50%) clears a configured 40 floor; stderr: {stderr}"
     );
 }
 
 #[test]
-fn a_coverage_exemption_lifts_the_uncovered_change() {
-    let repo = TempRepo::new("exempt");
+fn ts_a_tiny_below_floor_diff_still_exits_nonzero() {
+    // No small-diff carve-out (#162): a single untested helper (a brand-new file the
+    // suite never imports → 0% on its lines) fails the default 80 floor.
+    let repo = TempRepo::new("tiny");
+    let base = baseline(&repo);
     repo.write(
-        "testing-conventions.toml",
-        "[[typescript.exempt]]\npath = \"shim.ts\"\nrules = [\"coverage\"]\n\
-         reason = \"thin launcher; logic lives in tested modules\"\n",
+        "lonely.ts",
+        "export function lonely(): number {\n  return 41;\n}\n",
     );
-    repo.write("widget.ts", WIDGET_TS);
-    repo.write("widget.test.ts", WIDGET_TEST_TS);
-    repo.write(
-        "shim.ts",
-        "export function shim(): number {\n  return 0;\n}\n",
-    );
-    repo.commit("base");
-    let base = repo.head();
-    repo.write(
-        "shim.ts",
-        "export function shim(): number {\n  return 1;\n}\n",
-    );
-    repo.commit("edit the untested launcher");
+    repo.commit("add one untested helper");
 
-    // Flagged with no config, lifted once the `coverage` exemption is supplied.
-    assert_eq!(patch_coverage(&repo, &base, None).0, 1);
+    let (code, stderr) = coverage_base(&repo, &base, None);
     assert_eq!(
-        patch_coverage(&repo, &base, Some("testing-conventions.toml")).0,
-        0
+        code, 1,
+        "a tiny diff below the floor is not exempted; stderr: {stderr}"
     );
 }

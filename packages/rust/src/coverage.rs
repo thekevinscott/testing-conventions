@@ -84,6 +84,13 @@ pub struct FileCoverage {
     /// patch coverage. Empty when branch coverage was off.
     #[serde(default)]
     pub missing_branches: Vec<Vec<i64>>,
+    /// `[source_line, dest_line]` pairs for branches the suite DID take (coverage.py
+    /// emits these alongside `missing_branches` under `--branch`). The diff-scoped
+    /// floor (#162) counts an arc toward changed-line branch coverage when its source
+    /// line is in the diff; with `missing_branches` it gives branch coverage over the
+    /// changed lines. Empty when branch coverage was off.
+    #[serde(default)]
+    pub executed_branches: Vec<Vec<i64>>,
 }
 
 /// The `totals` block of a coverage.py report.
@@ -497,35 +504,18 @@ fn run_vitest_coverage(
 }
 
 // ---------------------------------------------------------------------------
-// TypeScript patch (changed-line) coverage — issue #135.
+// TypeScript diff-scoped coverage detail — issues #135, #162.
 //
-// What patch coverage (`crate::patch_coverage::check_typescript`) reads: the set
-// of uncovered lines per file. vitest's `json-summary` gives only per-file totals,
-// so this measures with the detailed `json` (Istanbul `coverage-final.json`)
-// reporter and reduces it to the lines a changed line must avoid — the v8 twin of
-// coverage.py's `missing_lines` / `missing_branches`.
+// What the diff-scoped floor (`crate::patch_coverage::measure_typescript`) reads:
+// per-file coverage detail for the four vitest metrics. vitest's `json-summary`
+// gives only per-file totals, so this measures with the detailed `json` (Istanbul
+// `coverage-final.json`) reporter and reduces each file to the per-statement /
+// per-branch-arm / per-function `(line, covered)` counts the floor's ratio needs.
 // ---------------------------------------------------------------------------
 
-/// Run the TypeScript unit suite under vitest in `root` and return the uncovered
-/// lines per file — keyed by the absolute path vitest reports, the caller
-/// re-keying to `root`-relative to match the diff. A line is uncovered when it
-/// carries a statement the suite never executed, or the source of a branch a path
-/// of which the suite never took (the v8 analogue of the Python arm's missing line
-/// / missing branch). `exclude` is the `coverage`-rule exemptions, dropped from the
-/// run so an exempt file's changed lines are lifted. `npx` resolves the
-/// project-local `vitest`, so it and `@vitest/coverage-v8` must be installed under
-/// `root`.
-pub fn measure_patch_typescript(
-    root: &Path,
-    exclude: &[String],
-) -> Result<BTreeMap<String, BTreeSet<u64>>> {
-    let json = run_vitest_coverage(root, exclude, "json", "coverage-final.json")?;
-    uncovered_istanbul_lines(&json)
-}
-
 /// One file's entry in a vitest v8 `coverage-final.json` (Istanbul) report, pared
-/// to what patch coverage reads: the statement / branch maps and their hit counts.
-/// Unmodeled fields (`path`, `fnMap`/`f`, per-node metadata) are ignored.
+/// to what patch coverage reads: the statement / branch / function maps and their
+/// hit counts. Unmodeled fields (`path`, per-node metadata) are ignored.
 #[derive(Debug, Clone, Deserialize)]
 struct IstanbulFile {
     /// Statement id → source span. A statement whose hit count in `s` is `0` was
@@ -539,9 +529,17 @@ struct IstanbulFile {
     /// path the suite never took, so its source line is uncovered.
     #[serde(rename = "branchMap", default)]
     branch_map: BTreeMap<String, IstanbulBranch>,
-    /// Branch id → per-path execution counts.
+    /// Branch id → per-arm execution counts (one count per branch arm).
     #[serde(default)]
     b: BTreeMap<String, Vec<u64>>,
+    /// Function id → declaration location. A function whose hit count in `f` is `0`
+    /// was never called. The diff-scoped floor (#162) reads this via
+    /// [`istanbul_patch_detail`].
+    #[serde(rename = "fnMap", default)]
+    fn_map: BTreeMap<String, IstanbulFn>,
+    /// Function id → execution count.
+    #[serde(default)]
+    f: BTreeMap<String, u64>,
 }
 
 /// A source span — only the 1-based line numbers matter to patch coverage.
@@ -564,33 +562,87 @@ struct IstanbulBranch {
     loc: IstanbulSpan,
 }
 
-/// Pure: every uncovered line per file from a vitest v8 `coverage-final.json`
-/// (Istanbul) report — a statement the suite never ran (every line it spans) and
-/// the source line of a branch a path of which it never took. Keyed by the path
-/// vitest reports (absolute). A file present but fully covered maps to an empty
-/// set. Mirrors [`crate::patch_coverage::uncovered_changed_lines`]'s Python rule
-/// (missing line ∪ missing-branch source) for the v8 shape.
-fn uncovered_istanbul_lines(json: &str) -> Result<BTreeMap<String, BTreeSet<u64>>> {
+/// A function entry — only its declaration's start line (the function's source
+/// line) matters; the `name`, `loc`, and top-level `line` are ignored. vitest's
+/// v8 export shapes this as `{"name":.., "decl":{"start":{"line":N,..},..}, ..}`.
+#[derive(Debug, Clone, Deserialize)]
+struct IstanbulFn {
+    decl: IstanbulSpan,
+}
+
+/// Per-file coverage detail from a vitest v8 `coverage-final.json` (Istanbul)
+/// report — the counts the diff-scoped floor (#162) needs. Each entry carries the
+/// Istanbul maps reduced to `(line, …, covered)` tuples, so the pure
+/// [`crate::patch_coverage::evaluate_patch_typescript`] can restrict each of the
+/// four metrics to the changed lines.
+#[derive(Debug, Clone, Default)]
+pub struct TsPatchCoverage {
+    /// One per `statementMap` entry: `(start_line, end_line, covered)` — `covered`
+    /// is `s[id] > 0`. A statement counts toward the diff when any line it spans is
+    /// a changed line.
+    pub statements: Vec<(u64, u64, bool)>,
+    /// One per branch **arm**: `(source_line, covered)` — `source_line` is the
+    /// branch's `loc.start.line` (shared by every arm) and `covered` is that arm's
+    /// count `> 0`. An arm counts toward the diff when its source line is changed.
+    pub branch_arms: Vec<(u64, bool)>,
+    /// One per `fnMap` entry: `(decl_line, covered)` — `decl_line` is `decl.start.line`
+    /// and `covered` is `f[id] > 0`. A function counts toward the diff when its
+    /// declaration line is changed.
+    pub functions: Vec<(u64, bool)>,
+}
+
+/// Run the TypeScript unit suite under vitest in `root` and return the per-file
+/// coverage detail for the four metrics — keyed by the absolute path vitest
+/// reports, the caller re-keying to `root`-relative to match the diff. Reads the
+/// Istanbul report for the diff-scoped floor (#162): the per-statement /
+/// per-branch-arm / per-function `(line, covered)` detail the floor's ratio needs.
+/// `exclude` is the `coverage`-rule exemptions,
+/// dropped from the run so an exempt file's changed lines are lifted. `npx`
+/// resolves the project-local `vitest`, so it and `@vitest/coverage-v8` must be
+/// installed under `root`.
+pub fn measure_patch_typescript_detail(
+    root: &Path,
+    exclude: &[String],
+) -> Result<BTreeMap<String, TsPatchCoverage>> {
+    let json = run_vitest_coverage(root, exclude, "json", "coverage-final.json")?;
+    istanbul_patch_detail(&json)
+}
+
+/// Pure: per-file [`TsPatchCoverage`] from a vitest v8 `coverage-final.json`
+/// (Istanbul) report. Keyed by the path vitest reports (absolute). A file present
+/// but with no statements/branches/functions maps to an empty `TsPatchCoverage`.
+fn istanbul_patch_detail(json: &str) -> Result<BTreeMap<String, TsPatchCoverage>> {
     let files: BTreeMap<String, IstanbulFile> = serde_json::from_str(json)
         .context("parsing vitest coverage-final (Istanbul) JSON report")?;
     let mut out = BTreeMap::new();
     for (path, file) in files {
-        let mut lines = BTreeSet::new();
-        // A statement never executed (`s[id] == 0`) — every line it spans is
-        // uncovered (a single-line statement spans one line).
+        let mut detail = TsPatchCoverage::default();
+        // Each statement → (start, end, covered): covered when its count is > 0.
         for (id, span) in &file.statement_map {
-            if file.s.get(id) == Some(&0) {
-                lines.extend(span.start.line..=span.end.line);
-            }
+            let covered = file.s.get(id).is_some_and(|&count| count > 0);
+            detail
+                .statements
+                .push((span.start.line, span.end.line, covered));
         }
-        // A branch with an untaken path (a `0` among its counts) — its source line
-        // (the location's start) is uncovered, even when the line itself ran.
+        // Each branch arm → (source_line, covered): the branch's location start line
+        // (shared by every arm) with that arm's count > 0. v8 may model a branch as
+        // a single arm (a `[count]` array) or several (`[arm0, arm1, …]`); one tuple
+        // per arm either way.
         for (id, branch) in &file.branch_map {
-            if file.b.get(id).is_some_and(|counts| counts.contains(&0)) {
-                lines.insert(branch.loc.start.line);
+            let line = branch.loc.start.line;
+            if let Some(counts) = file.b.get(id) {
+                for &count in counts {
+                    detail.branch_arms.push((line, count > 0));
+                }
             }
         }
-        out.insert(path, lines);
+        // Each function → (decl_line, covered): the declaration's start line with
+        // its call count > 0.
+        for (id, function) in &file.fn_map {
+            let covered = file.f.get(id).is_some_and(|&count| count > 0);
+            detail.functions.push((function.decl.start.line, covered));
+        }
+        out.insert(path, detail);
     }
     Ok(out)
 }
@@ -740,9 +792,9 @@ fn run_llvm_cov(root: &Path, ignore: &[String]) -> Result<LlvmCovReport> {
 }
 
 /// Run `cargo llvm-cov` over the unit suite in `root` with the given coverage
-/// `format` args (`["--json", "--summary-only"]` for the floor's totals,
-/// `["--lcov"]` for patch coverage's per-line detail) and return its stdout.
-/// Shared by the floor (#37) and patch coverage (#136).
+/// `format` args (`["--json", "--summary-only"]` for the whole-tree floor's totals,
+/// `["--json"]` for the diff-scoped floor's per-region detail) and return its
+/// stdout. Shared by the whole-tree floor (#37) and the diff-scoped floor (#162).
 ///
 /// The build goes to an out-of-tree target dir (via `CARGO_TARGET_DIR`) so the
 /// scanned crate stays pristine; the `coverage`-rule exemptions become one
@@ -800,55 +852,135 @@ fn run_cargo_llvm_cov(root: &Path, ignore: &[String], format: &[&str]) -> Result
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// Run the Rust unit suite under `cargo llvm-cov` in `root` and return the
-/// uncovered lines per file — keyed by the absolute path llvm-cov reports, the
-/// caller re-keying to `root`-relative to match the diff. A line is uncovered when
-/// llvm-cov records no execution for it (an LCOV `DA:<line>,0`). What patch
-/// coverage (#136, [`crate::patch_coverage::check_rust`]) reads; `ignore` is the
-/// `coverage`-rule exemptions, dropped from the run so an exempt file's changed
-/// lines are lifted. `cargo-llvm-cov` must be installed.
-pub fn measure_patch_rust(
-    root: &Path,
-    ignore: &[String],
-) -> Result<BTreeMap<String, BTreeSet<u64>>> {
-    Ok(uncovered_lcov_lines(&run_cargo_llvm_cov(
-        root,
-        ignore,
-        &["--lcov"],
-    )?))
+/// Per-file region detail from a `cargo llvm-cov --json` export — the per-region
+/// counts the diff-scoped floor (#162) needs. Each entry carries one
+/// `(start_line, end_line, covered)` tuple per code region, so the pure
+/// [`crate::patch_coverage::evaluate_patch_rust`] can restrict both the regions and
+/// lines metrics to the changed lines.
+#[derive(Debug, Clone, Default)]
+pub struct RustPatchCoverage {
+    /// One per code region (a `kind == 0` region of the LLVM export):
+    /// `(start_line, end_line, covered)` — `covered` is the region's
+    /// `executionCount > 0`. A region counts toward the diff when any line it spans
+    /// is a changed line.
+    pub regions: Vec<(u64, u64, bool)>,
 }
 
-/// Pure: every uncovered line per file from a `cargo llvm-cov --lcov` report — a
-/// `DA:<line>,<count>` record with a zero count, grouped under the `SF:<path>` it
-/// falls within (an `end_of_record` closes the file). Keyed by the path llvm-cov
-/// reports (absolute). A measured file with no zero-count line maps to an empty
-/// set. Lines a file's records don't mention (a comment, a blank) aren't executable
-/// and so are never uncovered.
-fn uncovered_lcov_lines(lcov: &str) -> BTreeMap<String, BTreeSet<u64>> {
-    let mut out: BTreeMap<String, BTreeSet<u64>> = BTreeMap::new();
-    let mut current: Option<String> = None;
-    for line in lcov.lines() {
-        if let Some(path) = line.strip_prefix("SF:") {
-            let path = path.trim().to_string();
-            out.entry(path.clone()).or_default();
-            current = Some(path);
-        } else if let Some(rest) = line.strip_prefix("DA:") {
-            // `DA:<line>,<count>[,<checksum>]` — a zero count is an uncovered line.
-            if let Some(file) = &current {
-                let mut fields = rest.split(',');
-                if let (Some(line_no), Some(count)) = (fields.next(), fields.next()) {
-                    if let (Ok(line_no), Ok(0)) =
-                        (line_no.trim().parse::<u64>(), count.trim().parse::<u64>())
-                    {
-                        out.entry(file.clone()).or_default().insert(line_no);
-                    }
+/// A full `cargo llvm-cov --json` export (LLVM's `llvm.coverage.json.export`),
+/// modeling the per-function region detail the diff-scoped floor needs — separate
+/// from [`LlvmCovReport`], which keeps only the `totals` the whole-tree floor
+/// reads. A single run produces one `data` entry; unmodeled fields (`totals`,
+/// `type`, `version`) are ignored.
+#[derive(Debug, Clone, Deserialize)]
+struct LlvmCovExport {
+    data: Vec<LlvmCovExportData>,
+}
+
+/// One export entry — its per-function `functions` block carries the regions (the
+/// `--summary-only` runs that feed [`LlvmCovReport`] omit it), and its `files` block
+/// names the measured files. `--ignore-filename-regex` drops an exempt file from
+/// `files` but *not* from `functions` (the regions array is unfiltered), so the
+/// `files` list is the allowlist [`llvm_cov_patch_detail`] restricts the regions to.
+#[derive(Debug, Clone, Deserialize)]
+struct LlvmCovExportData {
+    files: Vec<LlvmCovExportFile>,
+    functions: Vec<LlvmCovFunction>,
+}
+
+/// One measured file in the export's `files` block — only its `filename` (the
+/// absolute path) is needed, to build the not-ignored allowlist. The per-file
+/// `segments` / `summary` detail is ignored (the regions come from `functions`).
+#[derive(Debug, Clone, Deserialize)]
+struct LlvmCovExportFile {
+    filename: String,
+}
+
+/// One function's coverage in the export: the source files it spans (`filenames`,
+/// indexed by a region's `fileID`) and its regions. Each region is a flat array
+/// `[lineStart, colStart, lineEnd, colEnd, executionCount, fileID, expandedFileID,
+/// kind]`; the fields are read positionally in [`llvm_cov_patch_detail`].
+#[derive(Debug, Clone, Deserialize)]
+struct LlvmCovFunction {
+    filenames: Vec<String>,
+    regions: Vec<Vec<i64>>,
+}
+
+/// Run the Rust unit suite under `cargo llvm-cov` in `root` and return the per-file
+/// region detail — keyed by the absolute path llvm-cov reports, the caller re-keying
+/// to `root`-relative to match the diff. Reads the full `--json` export for the
+/// diff-scoped floor (#162): the per-region `(line, covered)` detail the floor's
+/// regions metric needs. `ignore` is the `coverage`-rule exemptions, dropped
+/// from the run so an exempt file's changed lines are lifted. `cargo-llvm-cov` must
+/// be installed.
+pub fn measure_patch_rust_detail(
+    root: &Path,
+    ignore: &[String],
+) -> Result<BTreeMap<String, RustPatchCoverage>> {
+    llvm_cov_patch_detail(&run_cargo_llvm_cov(root, ignore, &["--json"])?)
+}
+
+/// Pure: per-file [`RustPatchCoverage`] from a `cargo llvm-cov --json` export.
+/// Keyed by the path llvm-cov reports (absolute). Walks every function's regions;
+/// for each region:
+///   - **skips** any region whose file is not in the export's `files` allowlist —
+///     `--ignore-filename-regex` drops an exempt file from `files` (and the totals)
+///     but leaves it in the unfiltered `functions` regions, so honoring the
+///     exemption means intersecting with `files`. A run with nothing exempt lists
+///     every measured file, so this is a no-op there.
+///   - **skips** any region whose `kind` (index 7) is not `0` — only `kind == 0`
+///     code regions count toward coverage (gap / expansion / skipped / branch
+///     regions carry no line-coverage signal). The kept count (with nothing
+///     ignored) matches the `totals.regions.count` a `--summary-only` run reports.
+///   - reads `start_line = region[0]`, `end_line = region[2]`,
+///     `covered = region[4] > 0`, and the file `filenames[region[5]]` (the
+///     `fileID`), pushing `(start_line, end_line, covered)` under that file.
+///
+/// A region array with fewer than 8 elements (malformed — never seen from
+/// llvm-cov) is skipped rather than panicking on an index, as is one whose `fileID`
+/// is out of range for its `filenames`.
+fn llvm_cov_patch_detail(json: &str) -> Result<BTreeMap<String, RustPatchCoverage>> {
+    let export: LlvmCovExport =
+        serde_json::from_str(json).context("parsing cargo llvm-cov JSON export")?;
+    let mut out: BTreeMap<String, RustPatchCoverage> = BTreeMap::new();
+    for data in &export.data {
+        // The `files` block honors `--ignore-filename-regex`; the `functions` regions
+        // do not, so restrict to the measured (not-ignored) files.
+        let measured: BTreeSet<&str> = data.files.iter().map(|f| f.filename.as_str()).collect();
+        for function in &data.functions {
+            for region in &function.regions {
+                // A code region carries eight fields; anything shorter is malformed
+                // (never emitted by llvm-cov) and skipped rather than indexed.
+                if region.len() < 8 {
+                    continue;
                 }
+                // Only `kind == 0` (a code region) contributes to line coverage;
+                // gap (1) / expansion (2) / skipped / branch regions are ignored.
+                if region[7] != 0 {
+                    continue;
+                }
+                let file_id = region[5];
+                let Ok(file_id) = usize::try_from(file_id) else {
+                    continue;
+                };
+                let Some(file) = function.filenames.get(file_id) else {
+                    continue;
+                };
+                // Skip a file the run ignored (absent from `files`) so a `coverage`
+                // exemption drops its regions, lifting its changed lines.
+                if !measured.contains(file.as_str()) {
+                    continue;
+                }
+                let start = region[0].max(0) as u64;
+                let end = region[2].max(0) as u64;
+                let covered = region[4] > 0;
+                out.entry(file.clone())
+                    .or_default()
+                    .regions
+                    .push((start, end, covered));
             }
-        } else if line.trim() == "end_of_record" {
-            current = None;
         }
     }
-    out
+    Ok(out)
 }
 
 /// The single `--ignore-filename-regex` value for the run, or `None` when nothing
@@ -1160,102 +1292,6 @@ mod tests {
         assert!(parse_vitest_report(json).is_err());
     }
 
-    // --- TypeScript patch coverage (Istanbul `coverage-final.json`) — issue #135 ---
-
-    #[test]
-    fn istanbul_flags_an_unexecuted_statement() {
-        // s1 (line 2) never ran → line 2 is uncovered; s0 (line 1) ran → not.
-        let json = r#"{"/abs/widget.ts":{
-            "statementMap":{"0":{"start":{"line":1,"column":0},"end":{"line":1,"column":40}},
-                            "1":{"start":{"line":2,"column":2},"end":{"line":2,"column":20}}},
-            "s":{"0":1,"1":0},
-            "branchMap":{},"b":{}
-        }}"#;
-        let out = uncovered_istanbul_lines(json).unwrap();
-        assert_eq!(out["/abs/widget.ts"], BTreeSet::from([2]));
-    }
-
-    #[test]
-    fn istanbul_flags_an_untaken_branch_source() {
-        // The branch out of line 3 has an untaken path (`[4, 0]`) → line 3 is
-        // uncovered, even though its statement ran.
-        let json = r#"{"/abs/widget.ts":{
-            "statementMap":{"0":{"start":{"line":3,"column":2},"end":{"line":3,"column":20}}},
-            "s":{"0":5},
-            "branchMap":{"0":{"loc":{"start":{"line":3,"column":2},"end":{"line":3,"column":40}}}},
-            "b":{"0":[4,0]}
-        }}"#;
-        let out = uncovered_istanbul_lines(json).unwrap();
-        assert_eq!(out["/abs/widget.ts"], BTreeSet::from([3]));
-    }
-
-    #[test]
-    fn istanbul_v8_single_arm_branch_counts_as_uncovered() {
-        // vitest's v8 provider models each branch arm as its own entry with a
-        // single-element count array; `[0]` is an arm the suite never took.
-        let json = r#"{"/abs/widget.ts":{
-            "statementMap":{},"s":{},
-            "branchMap":{"0":{"loc":{"start":{"line":7,"column":0},"end":{"line":7,"column":3}}}},
-            "b":{"0":[0]}
-        }}"#;
-        let out = uncovered_istanbul_lines(json).unwrap();
-        assert_eq!(out["/abs/widget.ts"], BTreeSet::from([7]));
-    }
-
-    #[test]
-    fn istanbul_spans_every_line_of_an_unexecuted_multiline_statement() {
-        // A statement that never ran and spans lines 4-6 marks all three.
-        let json = r#"{"/abs/widget.ts":{
-            "statementMap":{"0":{"start":{"line":4,"column":2},"end":{"line":6,"column":3}}},
-            "s":{"0":0},
-            "branchMap":{},"b":{}
-        }}"#;
-        let out = uncovered_istanbul_lines(json).unwrap();
-        assert_eq!(out["/abs/widget.ts"], BTreeSet::from([4, 5, 6]));
-    }
-
-    #[test]
-    fn istanbul_fully_covered_file_has_no_uncovered_lines() {
-        let json = r#"{"/abs/widget.ts":{
-            "statementMap":{"0":{"start":{"line":1,"column":0},"end":{"line":1,"column":40}}},
-            "s":{"0":3},
-            "branchMap":{"0":{"loc":{"start":{"line":1,"column":0},"end":{"line":1,"column":40}}}},
-            "b":{"0":[2,1]}
-        }}"#;
-        let out = uncovered_istanbul_lines(json).unwrap();
-        assert!(out["/abs/widget.ts"].is_empty());
-    }
-
-    #[test]
-    fn istanbul_widget_report_flags_statement_and_branch_lines() {
-        // The realistic shape vitest emits for the `if (n === 42) { return 'answer';
-        // }` red fixture: lines 4-5 are unexecuted statements and line 3 is an
-        // untaken branch source → {3, 4, 5}.
-        let json = r#"{"/abs/widget.ts":{
-            "statementMap":{
-                "0":{"start":{"line":1,"column":0},"end":{"line":1,"column":43}},
-                "1":{"start":{"line":2,"column":2},"end":{"line":2,"column":25}},
-                "2":{"start":{"line":3,"column":2},"end":{"line":3,"column":16}},
-                "3":{"start":{"line":4,"column":4},"end":{"line":4,"column":20}},
-                "4":{"start":{"line":5,"column":2},"end":{"line":5,"column":3}},
-                "5":{"start":{"line":6,"column":2},"end":{"line":6,"column":15}}
-            },
-            "s":{"0":1,"1":2,"2":2,"3":0,"4":0,"5":1},
-            "branchMap":{
-                "0":{"loc":{"start":{"line":2,"column":2},"end":{"line":2,"column":25}}},
-                "1":{"loc":{"start":{"line":3,"column":2},"end":{"line":3,"column":16}}}
-            },
-            "b":{"0":[2],"1":[0]}
-        }}"#;
-        let out = uncovered_istanbul_lines(json).unwrap();
-        assert_eq!(out["/abs/widget.ts"], BTreeSet::from([3, 4, 5]));
-    }
-
-    #[test]
-    fn istanbul_malformed_json_is_an_error() {
-        assert!(uncovered_istanbul_lines("{ not json").is_err());
-    }
-
     // --- Rust (cargo llvm-cov) — issue #37 ---
 
     fn rust_metric(percent: f64) -> LlvmCovMetric {
@@ -1375,6 +1411,142 @@ mod tests {
         assert_eq!(report.data[0].totals.lines.count, 20);
     }
 
+    // --- Rust diff-scoped region detail (`cargo llvm-cov --json`) — issue #162 ---
+
+    #[test]
+    fn llvm_cov_patch_detail_reads_code_regions_per_file() {
+        // A realistic full `--json` export: one function spanning two regions on
+        // `/abs/grade.rs` — line 6 covered (execCount 1), line 10 the uncovered
+        // `else` arm (execCount 0). Both are `kind == 0` code regions, indexed back
+        // to `filenames[0]`.
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/grade.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/grade.rs"],
+                    "regions": [
+                        [6, 5, 6, 26, 1, 0, 0, 0],
+                        [10, 9, 10, 17, 0, 0, 0, 0]
+                    ]
+                }],
+                "totals": {}
+            }],
+            "type": "llvm.coverage.json.export",
+            "version": "3.0.1"
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert_eq!(
+            out["/abs/grade.rs"].regions,
+            vec![(6, 6, true), (10, 10, false)]
+        );
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_skips_non_code_regions() {
+        // Only `kind == 0` counts: a gap region (kind 1) and an expansion region
+        // (kind 2) on the same function are ignored, leaving just the one code region.
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/a.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/a.rs"],
+                    "regions": [
+                        [1, 1, 1, 10, 2, 0, 0, 0],
+                        [2, 1, 2, 10, 0, 0, 0, 1],
+                        [3, 1, 3, 10, 0, 0, 0, 2]
+                    ]
+                }]
+            }]
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert_eq!(out["/abs/a.rs"].regions, vec![(1, 1, true)]);
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_groups_regions_by_filename_id() {
+        // A region's `fileID` (index 5) selects its file from the function's
+        // `filenames`; two regions under the same function land in different files.
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/a.rs"}, {"filename": "/abs/b.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/a.rs", "/abs/b.rs"],
+                    "regions": [
+                        [1, 1, 1, 5, 1, 0, 0, 0],
+                        [9, 1, 9, 5, 0, 1, 1, 0]
+                    ]
+                }]
+            }]
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert_eq!(out["/abs/a.rs"].regions, vec![(1, 1, true)]);
+        assert_eq!(out["/abs/b.rs"].regions, vec![(9, 9, false)]);
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_skips_a_malformed_short_region() {
+        // A region array shorter than the eight fields (never seen from llvm-cov) is
+        // skipped rather than panicking on an index; the well-formed one survives.
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/a.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/a.rs"],
+                    "regions": [
+                        [4, 1, 4],
+                        [5, 1, 5, 9, 1, 0, 0, 0]
+                    ]
+                }]
+            }]
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert_eq!(out["/abs/a.rs"].regions, vec![(5, 5, true)]);
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_spans_a_multiline_region() {
+        // A region spanning lines 3–5 keeps both endpoints, so a changed line
+        // anywhere in 3..=5 can count it.
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/a.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/a.rs"],
+                    "regions": [[3, 5, 5, 6, 0, 0, 0, 0]]
+                }]
+            }]
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert_eq!(out["/abs/a.rs"].regions, vec![(3, 5, false)]);
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_drops_a_file_absent_from_the_files_allowlist() {
+        // `--ignore-filename-regex` drops an exempt file from `files` but leaves its
+        // regions in `functions`; restricting to the `files` allowlist lifts them, so
+        // the ignored file contributes nothing while the kept file still does.
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/kept.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/kept.rs", "/abs/ignored.rs"],
+                    "regions": [
+                        [1, 1, 1, 9, 1, 0, 0, 0],
+                        [2, 1, 2, 9, 0, 1, 0, 0]
+                    ]
+                }]
+            }]
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert_eq!(out["/abs/kept.rs"].regions, vec![(1, 1, true)]);
+        assert!(!out.contains_key("/abs/ignored.rs"));
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_malformed_json_is_an_error() {
+        assert!(llvm_cov_patch_detail("{ not json").is_err());
+    }
+
     #[test]
     fn rust_ignore_regex_is_none_when_nothing_is_exempt() {
         assert_eq!(ignore_filename_regex(&[]), None);
@@ -1389,49 +1561,5 @@ mod tests {
             ignore_filename_regex(&exempt).as_deref(),
             Some(r"src/shim\.rs|src/gen\.rs")
         );
-    }
-
-    // --- Rust patch coverage (`cargo llvm-cov --lcov`) — issue #136 ---
-
-    #[test]
-    fn lcov_flags_an_unexecuted_line() {
-        // The `below` fixture's shape: line 10 is the uncovered `else` arm.
-        let lcov = "SF:/abs/grade.rs\nDA:6,1\nDA:7,1\nDA:8,1\nDA:10,0\nDA:12,1\nend_of_record\n";
-        let out = uncovered_lcov_lines(lcov);
-        assert_eq!(out["/abs/grade.rs"], BTreeSet::from([10]));
-    }
-
-    #[test]
-    fn lcov_a_fully_covered_file_maps_to_an_empty_set() {
-        let lcov = "SF:/abs/widget.rs\nDA:1,2\nDA:2,1\nend_of_record\n";
-        let out = uncovered_lcov_lines(lcov);
-        assert!(out["/abs/widget.rs"].is_empty());
-    }
-
-    #[test]
-    fn lcov_groups_uncovered_lines_by_source_file() {
-        let lcov =
-            "SF:/abs/a.rs\nDA:3,0\nend_of_record\nSF:/abs/b.rs\nDA:5,1\nDA:6,0\nend_of_record\n";
-        let out = uncovered_lcov_lines(lcov);
-        assert_eq!(out["/abs/a.rs"], BTreeSet::from([3]));
-        assert_eq!(out["/abs/b.rs"], BTreeSet::from([6]));
-    }
-
-    #[test]
-    fn lcov_a_da_record_outside_a_file_is_ignored() {
-        // A stray `DA` before any `SF` (shouldn't happen) contributes nothing
-        // rather than panicking; the `end_of_record` closes the file.
-        let lcov = "DA:9,0\nSF:/abs/a.rs\nDA:1,1\nend_of_record\nDA:2,0\n";
-        let out = uncovered_lcov_lines(lcov);
-        assert_eq!(out.len(), 1);
-        assert!(out["/abs/a.rs"].is_empty());
-    }
-
-    #[test]
-    fn lcov_a_checksummed_da_record_parses() {
-        // LCOV may append a line checksum: `DA:<line>,<count>,<checksum>`.
-        let lcov = "SF:/abs/a.rs\nDA:4,0,abc123\nend_of_record\n";
-        let out = uncovered_lcov_lines(lcov);
-        assert_eq!(out["/abs/a.rs"], BTreeSet::from([4]));
     }
 }

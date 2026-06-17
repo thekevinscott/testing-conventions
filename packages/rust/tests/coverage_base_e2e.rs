@@ -1,11 +1,12 @@
-//! E2E tests for patch (changed-line) coverage (Python — #132): drive the built
-//! CLI binary as a real subprocess against throwaway git repos and assert the
-//! exit code (and, for a red case, the named offender). Complements the
-//! in-process integration tests in `patch_coverage.rs`. Requires `coverage` +
+//! E2E tests for diff-scoped coverage — `unit coverage --base` (#162): drive the
+//! built CLI binary as a real subprocess against throwaway git repos and assert
+//! the exit code (and, for a red case, the failure on stderr). Complements the
+//! in-process integration tests in `coverage_base.rs`. Requires `coverage` +
 //! `pytest` + `git` on PATH.
 //!
-//! Starts red against the stub in `src/patch_coverage.rs` (detection reports
-//! nothing) and goes green once the diff + coverage detection is implemented.
+//! Starts red against the stub in `src/patch_coverage.rs` (the diff-scoped ratio
+//! reports Pass) and goes green once the ratio-vs-floor measurement is
+//! implemented.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -19,7 +20,7 @@ impl TempRepo {
     fn new(slug: &str) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let root = std::env::temp_dir().join(format!(
-            "tc-patch-cov-e2e-{}-{}-{}",
+            "tc-cov-base-e2e-{}-{}-{}",
             slug,
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed),
@@ -71,21 +72,14 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// Exit code + stderr of `unit patch-coverage <repo> --language <lang> --base
-/// <base> [--config <repo>/<config>]`, run as a real subprocess.
-fn patch_coverage(
-    repo: &TempRepo,
-    language: &str,
-    base: &str,
-    config: Option<&str>,
-) -> (i32, String) {
+/// Exit code + stderr of `unit coverage <repo> --language python --base <base>
+/// [--config <repo>/<config>]`, run as a real subprocess.
+fn coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> (i32, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
-    cmd.arg("unit").arg("patch-coverage").arg(&repo.0).args([
-        "--language",
-        language,
-        "--base",
-        base,
-    ]);
+    cmd.arg("unit")
+        .arg("coverage")
+        .arg(&repo.0)
+        .args(["--language", "python", "--base", base]);
     if let Some(name) = config {
         cmd.arg("--config").arg(repo.0.join(name));
     }
@@ -111,42 +105,64 @@ def test_widget():
     assert widget(1) == "pos"
     assert widget(-1) == "neg"
 "#;
-const WIDGET_PY_UNCOVERED: &str = r#"def widget(n):
+
+/// After: a covered and an uncovered one-line helper → 75% covered on the diff
+/// (see `coverage_base.rs`).
+const WIDGET_PY_75: &str = r#"def widget(n):
     if n > 0:
         return "pos"
-    if n == 42:
-        return "answer"
     return "neg"
+
+
+def covered():
+    return 1
+
+
+def uncovered():
+    return 2
+"#;
+const WIDGET_TEST_75: &str = r#"from widget import widget, covered
+
+
+def test_widget():
+    assert widget(1) == "pos"
+    assert widget(-1) == "neg"
+
+
+def test_covered():
+    assert covered() == 1
 "#;
 
-#[test]
-fn uncovered_changed_line_exits_nonzero_and_names_it() {
-    let repo = TempRepo::new("red");
+fn baseline(repo: &TempRepo) -> String {
     repo.write("widget.py", WIDGET_PY);
     repo.write("widget_test.py", WIDGET_TEST_PY);
     repo.commit("base");
-    let base = repo.head();
-    repo.write("widget.py", WIDGET_PY_UNCOVERED);
-    repo.commit("add an untested branch");
+    repo.head()
+}
 
-    let (code, stderr) = patch_coverage(&repo, "python", &base, None);
+#[test]
+fn below_floor_diff_exits_nonzero_and_reports_coverage() {
+    let repo = TempRepo::new("red");
+    let base = baseline(&repo);
+    repo.write("widget.py", WIDGET_PY_75);
+    repo.write("widget_test.py", WIDGET_TEST_75);
+    repo.commit("add a covered and an uncovered helper");
+
+    let (code, stderr) = coverage_base(&repo, &base, None);
     assert_eq!(
         code, 1,
-        "an uncovered changed line must exit non-zero; stderr: {stderr}"
+        "a diff below the floor must exit non-zero; stderr: {stderr}"
     );
     assert!(
-        stderr.contains("widget.py"),
-        "stderr should name the uncovered file; got: {stderr}"
+        stderr.contains("coverage"),
+        "stderr should report the coverage shortfall; got: {stderr}"
     );
 }
 
 #[test]
 fn covered_change_exits_zero() {
     let repo = TempRepo::new("clean");
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
-    repo.commit("base");
-    let base = repo.head();
+    let base = baseline(&repo);
     repo.write(
         "widget.py",
         r#"def widget(n):
@@ -167,51 +183,46 @@ def test_widget():
     );
     repo.commit("reword a covered line and update its test");
 
-    let (code, stderr) = patch_coverage(&repo, "python", &base, None);
+    let (code, stderr) = coverage_base(&repo, &base, None);
     assert_eq!(code, 0, "a fully covered change passes; stderr: {stderr}");
 }
 
 #[test]
-fn added_untested_file_exits_nonzero() {
-    let repo = TempRepo::new("added");
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
-    repo.commit("base");
-    let base = repo.head();
-    repo.write("lonely.py", "def lonely():\n    return 41\n");
-    repo.commit("add a brand-new untested source");
-
-    let (code, stderr) = patch_coverage(&repo, "python", &base, None);
-    assert_eq!(
-        code, 1,
-        "an added file's uncovered lines must exit non-zero; stderr: {stderr}"
+fn a_lower_configured_floor_lets_the_same_diff_pass() {
+    // The behavior change: the 75% diff that fails the default 85 floor passes once
+    // the configured floor is 70 — the floor is the single source of truth.
+    let repo = TempRepo::new("floor70");
+    repo.write(
+        "testing-conventions.toml",
+        "[python.coverage]\nbranch = true\nfail_under = 70\n",
     );
-    assert!(
-        stderr.contains("lonely.py"),
-        "stderr should name the added file; got: {stderr}"
+    let base = baseline(&repo);
+    repo.write("widget.py", WIDGET_PY_75);
+    repo.write("widget_test.py", WIDGET_TEST_75);
+    repo.commit("add a covered and an uncovered helper");
+
+    let (code, stderr) = coverage_base(&repo, &base, Some("testing-conventions.toml"));
+    assert_eq!(
+        code, 0,
+        "75% on the diff clears a configured 70 floor; stderr: {stderr}"
     );
 }
 
 #[test]
-fn a_coverage_exemption_lifts_the_uncovered_change() {
-    let repo = TempRepo::new("exempt");
+fn a_tiny_below_floor_diff_still_exits_nonzero() {
+    // No small-diff carve-out (#162): a single untested helper (50% on a two-line
+    // diff) fails the 85 floor.
+    let repo = TempRepo::new("tiny");
+    let base = baseline(&repo);
     repo.write(
-        "testing-conventions.toml",
-        "[[python.exempt]]\npath = \"shim.py\"\nrules = [\"coverage\"]\n\
-         reason = \"thin launcher; logic lives in tested modules\"\n",
+        "widget.py",
+        &format!("{WIDGET_PY}\n\ndef lonely():\n    return 41\n"),
     );
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
-    repo.write("shim.py", "def shim():\n    return 0\n");
-    repo.commit("base");
-    let base = repo.head();
-    repo.write("shim.py", "def shim():\n    return 1\n");
-    repo.commit("edit the untested launcher");
+    repo.commit("add one untested helper");
 
-    // Flagged with no config, lifted once the `coverage` exemption is supplied.
-    assert_eq!(patch_coverage(&repo, "python", &base, None).0, 1);
+    let (code, stderr) = coverage_base(&repo, &base, None);
     assert_eq!(
-        patch_coverage(&repo, "python", &base, Some("testing-conventions.toml")).0,
-        0
+        code, 1,
+        "a tiny diff below the floor is not exempted; stderr: {stderr}"
     );
 }

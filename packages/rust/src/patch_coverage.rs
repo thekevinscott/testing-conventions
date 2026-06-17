@@ -37,7 +37,9 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 
-use crate::coverage::{self, FileCoverage};
+use crate::coverage::{
+    self, FileCoverage, Outcome, RustThresholds, Thresholds, TypeScriptThresholds,
+};
 
 /// A changed source line the unit suite doesn't cover — a `root`-relative path
 /// and the 1-based new-side line number.
@@ -122,6 +124,66 @@ pub fn check_rust(root: &Path, base: &str, exclude: &[String]) -> Result<Vec<Unc
     // intersection is the set-based [`uncovered_changed_lines_ts`].
     let uncovered = relative_keys(coverage::measure_patch_rust(root, exclude)?, root);
     Ok(uncovered_changed_lines_ts(&changed, &uncovered))
+}
+
+// ---------------------------------------------------------------------------
+// Diff-scoped coverage floor — issue #162.
+//
+// Where `check` / `check_typescript` / `check_rust` above *list* the uncovered
+// changed lines (the implicit-100% `unit patch-coverage`), these measure the
+// configured floor over the diff: covered ÷ total changed-executable, against the
+// same thresholds `unit coverage` enforces whole-tree. `unit coverage --base`
+// routes here, so a diff that clears the configured floor passes even with an
+// uncovered changed line — and one below it fails, no matter how small.
+//
+// Opens at RED per AGENTS.md: the ratio isn't computed yet, so each reports
+// `Pass` regardless (an unresolvable base still errors). The real reduction —
+// Python lines+branches, the four TypeScript metrics, Rust regions+lines, each
+// restricted to the changed lines — lands once CI witnesses these red.
+// ---------------------------------------------------------------------------
+
+/// Diff-scoped Python coverage floor (#162): measure `thresholds` over the
+/// `<base>...HEAD` changed `.py` lines instead of the whole tree. `omit` is the
+/// `coverage`-rule exemptions, as in [`check`]. **Stub — opens red.**
+pub fn measure(
+    root: &Path,
+    base: &str,
+    thresholds: Thresholds,
+    omit: &[String],
+) -> Result<Outcome> {
+    // The diff still resolves (an unresolvable base errors), but the ratio is not
+    // yet computed — reports Pass regardless until the implementation lands.
+    changed_lines(root, base)?;
+    let _ = (thresholds, omit);
+    Ok(Outcome::Pass)
+}
+
+/// Diff-scoped TypeScript coverage floor (#162): the four vitest metrics measured
+/// over the `<base>...HEAD` changed `.ts`/`.tsx`/`.mts`/`.cts` lines. `exclude` is
+/// the `coverage`-rule exemptions, as in [`check_typescript`]. **Stub — opens red.**
+pub fn measure_typescript(
+    root: &Path,
+    base: &str,
+    thresholds: TypeScriptThresholds,
+    exclude: &[String],
+) -> Result<Outcome> {
+    changed_lines(root, base)?;
+    let _ = (thresholds, exclude);
+    Ok(Outcome::Pass)
+}
+
+/// Diff-scoped Rust coverage floor (#162): the `cargo llvm-cov` regions/lines
+/// metrics measured over the `<base>...HEAD` changed `.rs` lines. `ignore` is the
+/// `coverage`-rule exemptions, as in [`check_rust`]. **Stub — opens red.**
+pub fn measure_rust(
+    root: &Path,
+    base: &str,
+    thresholds: RustThresholds,
+    ignore: &[String],
+) -> Result<Outcome> {
+    changed_lines(root, base)?;
+    let _ = (thresholds, ignore);
+    Ok(Outcome::Pass)
 }
 
 /// The new-side lines each file gained in `repo`'s `<base>...HEAD` diff, keyed by

@@ -88,13 +88,23 @@ enum UnitRule {
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
-    /// Check that the unit suite meets the configured coverage floor.
+    /// Check that the unit suite meets the configured coverage floor. With
+    /// `--base`, the same configured floor is measured over the `<base>...HEAD`
+    /// diff (the changed lines) instead of the whole tree (#162) — a changed line
+    /// below the floor fails, no matter how small the diff.
     Coverage {
         /// Directory whose unit suite is run and measured.
         path: PathBuf,
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
         language: colocated_test::Language,
+        /// Opt-in diff-scoped coverage (#162): diff `<base>...HEAD` and measure the
+        /// configured floor over only the changed lines, instead of the whole tree.
+        /// Absent means whole-tree — there is no default. This is the patch-scoped
+        /// check the old `unit patch-coverage` command did, re-homed onto the floor
+        /// it shares.
+        #[arg(long)]
+        base: Option<String>,
         /// testing-conventions config file with the coverage thresholds and
         /// `exempt` list. Optional: if the file — or its `[<language>].coverage`
         /// table — is absent, the language's sane default floor is used and
@@ -205,8 +215,9 @@ where
             UnitRule::Coverage {
                 path,
                 language,
+                base,
                 config,
-            } => run_unit_coverage(&path, language, &config),
+            } => run_unit_coverage(&path, language, base.as_deref(), &config),
             UnitRule::PatchCoverage {
                 path,
                 language,
@@ -391,6 +402,11 @@ fn co_change_exemptions(
 /// floor from the config at `config_path`. Returns `0` when the floor is met,
 /// `1` otherwise.
 ///
+/// With `base` set, the same configured floor is measured over the
+/// `<base>...HEAD` diff (the changed lines) rather than the whole tree (#162),
+/// via the diff-scoped [`patch_coverage::measure`] / `measure_typescript` /
+/// `measure_rust`; without it, the whole-tree [`coverage::measure`] family runs.
+///
 /// Coverage is zero-config by default for Python and TypeScript (#80): a missing
 /// config file — or a config with no `[<language>].coverage` table — falls back to
 /// the language's sane default floor ([`config::PythonCoverage::default`] /
@@ -402,6 +418,7 @@ fn co_change_exemptions(
 fn run_unit_coverage(
     root: &Path,
     language: colocated_test::Language,
+    base: Option<&str>,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
     let config = if config_path.exists() {
@@ -421,7 +438,10 @@ fn run_unit_coverage(
                 config::resolve_exempt(root, &python.exempt, config::Rule::Coverage)?
                     .into_iter()
                     .collect();
-            coverage::measure(root, thresholds, &omit)?
+            match base {
+                Some(base) => patch_coverage::measure(root, base, thresholds, &omit)?,
+                None => coverage::measure(root, thresholds, &omit)?,
+            }
         }
         colocated_test::Language::TypeScript => {
             let typescript = config.typescript.unwrap_or_default();
@@ -436,7 +456,10 @@ fn run_unit_coverage(
                 config::resolve_exempt(root, &typescript.exempt, config::Rule::Coverage)?
                     .into_iter()
                     .collect();
-            coverage::measure_typescript(root, thresholds, &exclude)?
+            match base {
+                Some(base) => patch_coverage::measure_typescript(root, base, thresholds, &exclude)?,
+                None => coverage::measure_typescript(root, thresholds, &exclude)?,
+            }
         }
         colocated_test::Language::Rust => {
             let rust = config.rust.unwrap_or_default();
@@ -458,7 +481,10 @@ fn run_unit_coverage(
                 config::resolve_exempt(root, &rust.exempt, config::Rule::Coverage)?
                     .into_iter()
                     .collect();
-            coverage::measure_rust(root, thresholds, &ignore)?
+            match base {
+                Some(base) => patch_coverage::measure_rust(root, base, thresholds, &ignore)?,
+                None => coverage::measure_rust(root, thresholds, &ignore)?,
+            }
         }
     };
     match outcome {

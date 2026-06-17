@@ -4,7 +4,7 @@ layout: home
 hero:
   name: 'testing-conventions'
   text: 'Enforce testing conventions in CI'
-  tagline: 'Opionated testing standards enforcing structure, measuement, and isolation. For Python, TypeScript, and Rust.'
+  tagline: 'Opinionated testing standards enforcing structure, measurement, and isolation. For Python, TypeScript, and Rust.'
   actions:
     - theme: brand
       text: Getting Started

@@ -76,13 +76,14 @@ supports Rust).
 Run the unit suite under coverage and fail if it's below the floor.
 
 ```
-testing-conventions unit coverage --language <LANG> [--config <CONFIG>] <PATH>
+testing-conventions unit coverage --language <LANG> [--base <REF>] [--config <CONFIG>] <PATH>
 ```
 
 | Argument / flag     | Description                                                                |
 | ------------------- | -------------------------------------------------------------------------- |
 | `<PATH>`            | Directory whose unit suite is run and measured.                            |
 | `--language <LANG>` | **Required.** `python`, `typescript`, or `rust`. |
+| `--base <REF>`      | Optional. Measure the floor over the `<base>...HEAD` diff (the lines the change touched) instead of the whole tree; absent means whole-tree. See **diff-scoped coverage** below. |
 | `--config <CONFIG>` | Config file providing the thresholds and `exempt` list (default `testing-conventions.toml`). Optional for Python / TypeScript — if the file, or its `[<language>].coverage` table, is absent, the language's default floor is used and nothing is exempt. **Rust has no default floor yet**, so a `[rust].coverage` table is required (see below). |
 
 With no `[<language>].coverage` table (or no config file at all), the check uses the language's
@@ -116,56 +117,26 @@ excluded by filename, and `#[coverage(off)]` is still nightly, so on a stable to
 test code is measured alongside the source. And unlike Python / TypeScript, Rust has **no default
 floor** — a config without a `[rust].coverage` table errors rather than guessing one.
 
-### `unit patch-coverage`
+#### `--base`: diff-scoped coverage
 
-Diff-scoped coverage: require every line a change touches to be covered by the unit suite. Where
-[`unit coverage`](#unit-coverage) measures the whole suite against a floor, this measures only the
-lines `<base>...HEAD` added or modified: the changed-line guarantee the README's Coverage rule
-calls for.
+With `--base <REF>`, the **same configured floor** is measured over only the lines a `<base>...HEAD`
+diff added or modified — the change a PR introduces — instead of the whole tree. The thresholds stay
+the single source of truth; `--base` only changes *what they're measured over*. The changed-line
+ratio uses the same definition as the whole-tree floor — coverage.py's `percent_covered` (lines +
+branches) for Python, the four vitest metrics for TypeScript, `cargo llvm-cov` regions + lines for
+Rust — restricted to the changed lines. Exits `0` when the diff meets the floor, `1` (with the
+shortfall on stderr) when it doesn't. `git` must resolve `<REF>`, and `--base` is opt-in with no
+default (absent runs the whole-tree floor).
 
-```
-testing-conventions unit patch-coverage --language <LANG> [--base <REF>] [--config <CONFIG>] <PATH>
-```
-
-| Argument / flag     | Description                                                                |
-| ------------------- | -------------------------------------------------------------------------- |
-| `<PATH>`            | Directory whose unit suite is run and measured; also where git runs.       |
-| `--language <LANG>` | **Required.** `python` (coverage.py), `typescript` (vitest), or `rust` (`cargo llvm-cov`). |
-| `--base <REF>`      | Ref to diff against: the check compares `<base>...HEAD` (the changes this branch introduced, what a PR shows). Defaults to `origin/main`; override for a different base or an explicit range. |
-| `--config <CONFIG>` | Config file supplying the coverage `exempt` list (default `testing-conventions.toml`). Optional; if absent, nothing is exempt. |
-
-For **`python`**, runs `coverage.py` (branch on, with `--source` so an untested changed file is
-seen as wholly uncovered) over the unit suite under `<PATH>`, then intersects coverage.py's per-file
-`missing_lines` / `missing_branches` with the lines the diff touched. A changed line is **uncovered**
-when it's a missing line, or the source of a branch the suite never took (line + branch). Exits `0`
-when every changed line is covered, `1` (printing each uncovered line as `<path>:<line>` on stderr,
-then a count) when any isn't. `coverage` and `pytest` must be installed, and `git` must resolve the
-`<REF>`.
-
-A non-executable changed line (comment, blank) has nothing to cover and is never flagged; a file
-with a `coverage` [exemption](#exemptions) is omitted, so its changed lines are lifted, the same
-waiver the floor honors. Unlike [`unit colocated-test --base`](#unit-colocated-test), an **added**
-file's new lines *are* subjects (brand-new code must be covered too). The two are complementary: co-change enforces
-that a changed source and its colocated *test* move together, patch coverage enforces that the
-changed *lines* are exercised; one can pass while the other fails.
-
-For **`typescript`**, the twin of the above: runs `npx vitest` with the `json` (Istanbul) reporter
-and `--coverage.all` (so an untested changed file is seen as wholly uncovered) over the unit suite
-under `<PATH>`, then intersects the changed `.ts` / `.tsx` / `.mts` / `.cts` lines with vitest's
-per-file v8 coverage. A changed line is **uncovered** when it carries a statement the suite never
-executed, or the source of a branch a path of which the suite never took (line + branch). `vitest`
-and `@vitest/coverage-v8` must be installed under `<PATH>`, and `git` must resolve the `<REF>`. The
-same rules apply as for Python: comments and blanks aren't subjects, a `coverage`-exempt file's
-changed lines are lifted, and an added file's new lines *are* subjects.
-
-For **`rust`**, the twin built on the Rust coverage rule (#37): runs `cargo llvm-cov --lcov` over
-the crate at `<PATH>`, then intersects the changed `.rs` lines with its per-line coverage. A changed
-line is **uncovered** when llvm-cov records no execution for it (a `DA:<line>,0` record).
-`cargo-llvm-cov` must be installed, and `git` must resolve the `<REF>`. The same rules apply:
-comments and blanks aren't subjects, a `coverage`-exempt file's changed lines are lifted (via
-`--ignore-filename-regex`), and an added file's new lines *are* subjects. As with the Rust floor,
-inline `#[cfg(test)]` code is measured alongside the source — on a stable toolchain it can't be
-excluded by filename.
+Because the diff is judged against the configured floor rather than an implicit 100%, a diff that
+clears the floor passes even if it leaves a changed line uncovered (the two coincide only at a 100
+floor), and a diff below the floor fails however small it is — there is no small-diff carve-out. A
+change touching no measured line of the language passes vacuously, and a file with a `coverage`
+[exemption](#exemptions) is lifted from the diff scope just as from the whole-tree floor. An
+**added** file's new lines *are* subjects (brand-new code must be covered too). This complements
+[`unit colocated-test --base`](#unit-colocated-test): co-change enforces that a changed source and
+its colocated *test* move together, while `--base` coverage enforces that the changed *lines* are
+exercised — one can pass while the other fails.
 
 ### `unit lint`
 

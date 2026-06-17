@@ -16,8 +16,7 @@ Every rule is a CLI command that fails CI on a violation, and links to its refer
 **Unit**
 
 - [`unit colocated-test`](https://thekevinscott.github.io/testing-conventions/reference/#unit-colocated-test) — every source file has a colocated, matching-named unit test (Python, TypeScript, Rust); with `--base`, a source changed in the diff must also change its colocated test (co-change; Python, TypeScript; [#33](https://github.com/thekevinscott/testing-conventions/issues/33)).
-- [`unit coverage`](https://thekevinscott.github.io/testing-conventions/reference/#unit-coverage) — enforce a coverage floor on the unit suite (Python, TypeScript; Rust in flight, [#37](https://github.com/thekevinscott/testing-conventions/issues/37)).
-- [`unit patch-coverage`](https://thekevinscott.github.io/testing-conventions/reference/#unit-patch-coverage) — require every line a change touches to be covered by the unit suite (Python, TypeScript; Rust planned, [#136](https://github.com/thekevinscott/testing-conventions/issues/136)).
+- [`unit coverage`](https://thekevinscott.github.io/testing-conventions/reference/#unit-coverage) — enforce a coverage floor on the unit suite (Python, TypeScript, Rust); with `--base`, the same floor is measured over the changed lines of a `<base>...HEAD` diff instead of the whole tree ([#162](https://github.com/thekevinscott/testing-conventions/issues/162)).
 - [`unit lint`](https://thekevinscott.github.io/testing-conventions/reference/#unit-lint) — a unit test mocks every collaborator: no out-of-module calls or imports (Rust); no un-mocked first-party or external collaborators (Python, TypeScript); typed mocks (TypeScript).
 
 **Integration**

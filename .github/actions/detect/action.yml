@@ -33,6 +33,12 @@ outputs:
   coverage_languages:
     description: 'Present languages, plus rust when a [rust].coverage floor is configured.'
     value: ${{ steps.scan.outputs.coverage_languages }}
+  packaging_dist:
+    description: 'true when a conventional dist/ holding a built distribution is discoverable in the checkout.'
+    value: ${{ steps.scan.outputs.packaging_dist }}
+  e2e_attestation:
+    description: 'true when a committed e2e-attestation.json sits at the checkout root.'
+    value: ${{ steps.scan.outputs.e2e_attestation }}
 
 runs:
   using: composite

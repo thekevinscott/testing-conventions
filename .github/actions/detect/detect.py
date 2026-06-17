@@ -72,14 +72,33 @@ def rust_coverage_configured(config_path: str) -> bool:
         return bool(table and re.search(r"(?m)^\s*coverage\s*=", table.group(0)))
 
 
+_DIST_GLOBS: tuple[str, ...] = ("*.whl", "*.tar.gz", "*.tgz", "*.crate")
+
+
+def has_dist(root: Path) -> bool:
+    """True if a conventional `dist/` under `root` holds a recognized built distribution.
+
+    Lets packaging run by default (#186): the rule inspects whatever dist is discoverable.
+    """
+    dist = root / "dist"
+    return dist.is_dir() and _any_match(dist, _DIST_GLOBS)
+
+
+def has_attestation(root: Path) -> bool:
+    """True if a committed `e2e-attestation.json` sits at `root` (the e2e-verify default-on, #186)."""
+    return (root / "e2e-attestation.json").is_file()
+
+
 # --- orchestration (runs for real under both test kinds; only the fs is mocked) ---
 
 def eligible(languages_input: str, language: str) -> bool:
     """Whether `language` is in scope, given the raw `LANGUAGES` restrictor.
 
-    Today: a language is eligible only when explicitly named in `languages_input`.
+    `languages_input` is an optional restrictor: empty (or `[]`) puts every supported language
+    in scope — auto-detect (#185); a non-empty JSON array restricts to the languages it names.
     """
-    return f'"{language}"' in languages_input
+    restrictor = languages_input.strip()
+    return restrictor in ("", "[]") or f'"{language}"' in restrictor
 
 
 def _to_json(languages: list[str]) -> str:
@@ -87,11 +106,15 @@ def _to_json(languages: list[str]) -> str:
     return json.dumps(languages, separators=(",", ":"))
 
 
-def compute_outputs(languages_input: str, scan_root: str, config_path: str) -> dict[str, str]:
+def compute_outputs(
+    languages_input: str, scan_root: str, config_path: str, repo_root: str = "."
+) -> dict[str, str]:
     """The detected sets, as `name -> value` strings for GITHUB_OUTPUT.
 
     `languages` (python/typescript present) drives colocated-test + coverage; the lint/isolation
     sets add Rust when a crate is present; coverage adds Rust only when a floor is configured.
+    `packaging_dist` / `e2e_attestation` (looked for at `repo_root`, the checkout root) let the
+    packaging and e2e-verify jobs run by default and skip — never fail — when absent (#186).
     """
     root = Path(scan_root)
     present = [
@@ -102,11 +125,14 @@ def compute_outputs(languages_input: str, scan_root: str, config_path: str) -> d
     rust_crate = eligible(languages_input, "rust") and has_rust_crate(root)
     with_rust = present + (["rust"] if rust_crate else [])
     coverage = present + (["rust"] if rust_crate and rust_coverage_configured(config_path) else [])
+    repo = Path(repo_root)
     return {
         "languages": _to_json(present),
         "integration_lint_languages": _to_json(with_rust),
         "isolation_languages": _to_json(with_rust),
         "coverage_languages": _to_json(coverage),
+        "packaging_dist": "true" if has_dist(repo) else "false",
+        "e2e_attestation": "true" if has_attestation(repo) else "false",
     }
 
 

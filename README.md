@@ -200,6 +200,8 @@ real unit tests lets integration tests inflate the number.
 - **TypeScript:** `vitest` coverage (v8/istanbul). Set the `lines` / `branches` / `functions` / `statements` thresholds; exclude `*.test.ts`.
 - **Rust:** `cargo llvm-cov`. Set `regions` / `lines` (branch coverage is still experimental). Inline units can't be excluded by filename; use `#[coverage(off)]` (toolchain-dependent).
 
+**Diff-scoped (`--base`):** `unit coverage --base <ref>` measures the same configured floor over only the lines a `<base>...HEAD` diff changed — the slice a PR introduces — instead of the whole tree. An opt-in, additive scope of `unit coverage`: without `--base`, the whole-tree floor runs.
+
 **Checked:** deterministic (run coverage; compare to the configured thresholds).
 
 ### Packaging

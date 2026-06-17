@@ -531,8 +531,8 @@ pub fn measure_patch_typescript(
 }
 
 /// One file's entry in a vitest v8 `coverage-final.json` (Istanbul) report, pared
-/// to what patch coverage reads: the statement / branch maps and their hit counts.
-/// Unmodeled fields (`path`, `fnMap`/`f`, per-node metadata) are ignored.
+/// to what patch coverage reads: the statement / branch / function maps and their
+/// hit counts. Unmodeled fields (`path`, per-node metadata) are ignored.
 #[derive(Debug, Clone, Deserialize)]
 struct IstanbulFile {
     /// Statement id → source span. A statement whose hit count in `s` is `0` was
@@ -546,9 +546,17 @@ struct IstanbulFile {
     /// path the suite never took, so its source line is uncovered.
     #[serde(rename = "branchMap", default)]
     branch_map: BTreeMap<String, IstanbulBranch>,
-    /// Branch id → per-path execution counts.
+    /// Branch id → per-arm execution counts (one count per branch arm).
     #[serde(default)]
     b: BTreeMap<String, Vec<u64>>,
+    /// Function id → declaration location. A function whose hit count in `f` is `0`
+    /// was never called. The diff-scoped floor (#162) reads this; the bare patch
+    /// reader ([`uncovered_istanbul_lines`]) ignores it.
+    #[serde(rename = "fnMap", default)]
+    fn_map: BTreeMap<String, IstanbulFn>,
+    /// Function id → execution count.
+    #[serde(default)]
+    f: BTreeMap<String, u64>,
 }
 
 /// A source span — only the 1-based line numbers matter to patch coverage.
@@ -569,6 +577,14 @@ struct IstanbulPos {
 #[derive(Debug, Clone, Deserialize)]
 struct IstanbulBranch {
     loc: IstanbulSpan,
+}
+
+/// A function entry — only its declaration's start line (the function's source
+/// line) matters; the `name`, `loc`, and top-level `line` are ignored. vitest's
+/// v8 export shapes this as `{"name":.., "decl":{"start":{"line":N,..},..}, ..}`.
+#[derive(Debug, Clone, Deserialize)]
+struct IstanbulFn {
+    decl: IstanbulSpan,
 }
 
 /// Pure: every uncovered line per file from a vitest v8 `coverage-final.json`
@@ -598,6 +614,86 @@ fn uncovered_istanbul_lines(json: &str) -> Result<BTreeMap<String, BTreeSet<u64>
             }
         }
         out.insert(path, lines);
+    }
+    Ok(out)
+}
+
+/// Per-file coverage detail from a vitest v8 `coverage-final.json` (Istanbul)
+/// report — the counts the diff-scoped floor (#162) needs, where
+/// [`uncovered_istanbul_lines`] keeps only the bare uncovered-line set. Each entry
+/// carries the four Istanbul maps reduced to `(line, …, covered)` tuples, so the
+/// pure [`crate::patch_coverage::evaluate_patch_typescript`] can restrict each of
+/// the four metrics to the changed lines.
+#[derive(Debug, Clone, Default)]
+pub struct TsPatchCoverage {
+    /// One per `statementMap` entry: `(start_line, end_line, covered)` — `covered`
+    /// is `s[id] > 0`. A statement counts toward the diff when any line it spans is
+    /// a changed line.
+    pub statements: Vec<(u64, u64, bool)>,
+    /// One per branch **arm**: `(source_line, covered)` — `source_line` is the
+    /// branch's `loc.start.line` (shared by every arm) and `covered` is that arm's
+    /// count `> 0`. An arm counts toward the diff when its source line is changed.
+    pub branch_arms: Vec<(u64, bool)>,
+    /// One per `fnMap` entry: `(decl_line, covered)` — `decl_line` is `decl.start.line`
+    /// and `covered` is `f[id] > 0`. A function counts toward the diff when its
+    /// declaration line is changed.
+    pub functions: Vec<(u64, bool)>,
+}
+
+/// Run the TypeScript unit suite under vitest in `root` and return the per-file
+/// coverage detail for the four metrics — keyed by the absolute path vitest
+/// reports, the caller re-keying to `root`-relative to match the diff. The
+/// counts-carrying twin of [`measure_patch_typescript`] for the diff-scoped floor
+/// (#162): where that reduces the Istanbul report to a bare uncovered-line set,
+/// this keeps the per-statement / per-branch-arm / per-function `(line, covered)`
+/// detail the floor's ratio needs. `exclude` is the `coverage`-rule exemptions,
+/// dropped from the run so an exempt file's changed lines are lifted. `npx`
+/// resolves the project-local `vitest`, so it and `@vitest/coverage-v8` must be
+/// installed under `root`.
+pub fn measure_patch_typescript_detail(
+    root: &Path,
+    exclude: &[String],
+) -> Result<BTreeMap<String, TsPatchCoverage>> {
+    let json = run_vitest_coverage(root, exclude, "json", "coverage-final.json")?;
+    istanbul_patch_detail(&json)
+}
+
+/// Pure: per-file [`TsPatchCoverage`] from a vitest v8 `coverage-final.json`
+/// (Istanbul) report. Keyed by the path vitest reports (absolute). A file present
+/// but with no statements/branches/functions maps to an empty `TsPatchCoverage`.
+/// The counts-carrying analogue of [`uncovered_istanbul_lines`].
+fn istanbul_patch_detail(json: &str) -> Result<BTreeMap<String, TsPatchCoverage>> {
+    let files: BTreeMap<String, IstanbulFile> = serde_json::from_str(json)
+        .context("parsing vitest coverage-final (Istanbul) JSON report")?;
+    let mut out = BTreeMap::new();
+    for (path, file) in files {
+        let mut detail = TsPatchCoverage::default();
+        // Each statement → (start, end, covered): covered when its count is > 0.
+        for (id, span) in &file.statement_map {
+            let covered = file.s.get(id).is_some_and(|&count| count > 0);
+            detail
+                .statements
+                .push((span.start.line, span.end.line, covered));
+        }
+        // Each branch arm → (source_line, covered): the branch's location start line
+        // (shared by every arm) with that arm's count > 0. v8 may model a branch as
+        // a single arm (a `[count]` array) or several (`[arm0, arm1, …]`); one tuple
+        // per arm either way.
+        for (id, branch) in &file.branch_map {
+            let line = branch.loc.start.line;
+            if let Some(counts) = file.b.get(id) {
+                for &count in counts {
+                    detail.branch_arms.push((line, count > 0));
+                }
+            }
+        }
+        // Each function → (decl_line, covered): the declaration's start line with
+        // its call count > 0.
+        for (id, function) in &file.fn_map {
+            let covered = file.f.get(id).is_some_and(|&count| count > 0);
+            detail.functions.push((function.decl.start.line, covered));
+        }
+        out.insert(path, detail);
     }
     Ok(out)
 }

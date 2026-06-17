@@ -239,17 +239,150 @@ fn arc_source_in(arc: &[i64], lines: &BTreeSet<u64>) -> bool {
 }
 
 /// Diff-scoped TypeScript coverage floor (#162): the four vitest metrics measured
-/// over the `<base>...HEAD` changed `.ts`/`.tsx`/`.mts`/`.cts` lines. `exclude` is
-/// the `coverage`-rule exemptions, as in [`check_typescript`]. **Stub — opens red.**
+/// over the `<base>...HEAD` changed `.ts`/`.tsx`/`.mts`/`.cts` lines instead of the
+/// whole tree. `exclude` is the `coverage`-rule exemptions, as in
+/// [`check_typescript`] — an excluded file is left out of the run, so its changed
+/// lines drop out of the ratios.
+///
+/// Scopes to TypeScript sources and returns early — with no coverage run — when the
+/// diff touches none, so a PR that changes only docs or other languages doesn't pay
+/// for a measurement (and is vacuously covered). Requires vitest + git; an
+/// unresolvable `base` surfaces as an error rather than a silent pass.
 pub fn measure_typescript(
     root: &Path,
     base: &str,
     thresholds: TypeScriptThresholds,
     exclude: &[String],
 ) -> Result<Outcome> {
-    changed_lines(root, base)?;
-    let _ = (thresholds, exclude);
-    Ok(Outcome::Pass)
+    let mut changed = changed_lines(root, base)?;
+    changed.retain(|path, _| TS_EXTENSIONS.iter().any(|ext| path.ends_with(ext)));
+    if changed.is_empty() {
+        return Ok(Outcome::Pass);
+    }
+    let detail = relative_keys(
+        coverage::measure_patch_typescript_detail(root, exclude)?,
+        root,
+    );
+    Ok(evaluate_patch_typescript(&changed, &detail, thresholds))
+}
+
+/// Pure: the four vitest floors measured over the changed lines. Each metric's
+/// ratio is restricted to the lines the diff touched, so the same numbers
+/// `unit coverage` enforces whole-tree are judged on the diff:
+///   - **statements**: a `statementMap` entry counts when any line in its
+///     `start..=end` is a changed line; covered when its flag is set.
+///   - **lines**: a changed line counts when ≥1 statement *starts* on it; covered
+///     when ≥1 statement starting on it is covered.
+///   - **branches**: a branch arm counts when its `source_line` is a changed line;
+///     covered when its flag is set.
+///   - **functions**: a function counts when its `decl_line` is a changed line;
+///     covered when its flag is set.
+///
+/// A changed file absent from `detail` (a test file, a declaration file, or a
+/// `coverage`-exempt file left out of the run) has nothing to cover and is skipped.
+/// Each metric's percent is `100 * covered / total`, or `100` when its denominator
+/// is empty — a diff-scoped empty denominator is **vacuously satisfied**, not the
+/// "measured no code" failure the whole-tree [`coverage::evaluate_typescript`]
+/// returns (a diff may legitimately touch no branches or functions). The fail
+/// message lists every metric below its floor, matching
+/// [`coverage::evaluate_typescript`]'s. No small-diff carve-out: a tiny diff below
+/// the floor fails like any other (#162).
+fn evaluate_patch_typescript(
+    changed: &BTreeMap<String, BTreeSet<u64>>,
+    detail: &BTreeMap<String, coverage::TsPatchCoverage>,
+    thresholds: TypeScriptThresholds,
+) -> Outcome {
+    let (mut s_cov, mut s_tot) = (0u64, 0u64);
+    let (mut l_cov, mut l_tot) = (0u64, 0u64);
+    let (mut b_cov, mut b_tot) = (0u64, 0u64);
+    let (mut f_cov, mut f_tot) = (0u64, 0u64);
+
+    for (file, lines) in changed {
+        let Some(cov) = detail.get(file) else {
+            continue;
+        };
+
+        // Statements: count one whenever any line it spans was changed.
+        for &(start, end, covered) in &cov.statements {
+            if (start..=end).any(|line| lines.contains(&line)) {
+                s_tot += 1;
+                if covered {
+                    s_cov += 1;
+                }
+            }
+        }
+
+        // Lines: a changed line on which ≥1 statement *starts* counts; covered when
+        // ≥1 statement starting on it is covered.
+        for &line in lines {
+            let mut starts_here = false;
+            let mut covered_here = false;
+            for &(start, _end, covered) in &cov.statements {
+                if start == line {
+                    starts_here = true;
+                    covered_here |= covered;
+                }
+            }
+            if starts_here {
+                l_tot += 1;
+                if covered_here {
+                    l_cov += 1;
+                }
+            }
+        }
+
+        // Branch arms: count one whenever its source line was changed.
+        for &(source_line, covered) in &cov.branch_arms {
+            if lines.contains(&source_line) {
+                b_tot += 1;
+                if covered {
+                    b_cov += 1;
+                }
+            }
+        }
+
+        // Functions: count one whenever its declaration line was changed.
+        for &(decl_line, covered) in &cov.functions {
+            if lines.contains(&decl_line) {
+                f_tot += 1;
+                if covered {
+                    f_cov += 1;
+                }
+            }
+        }
+    }
+
+    // An empty denominator is vacuously full (100%) — a diff may touch no branch or
+    // function, which is satisfied, not the whole-tree "measured no code" failure.
+    let pct = |covered: u64, total: u64| {
+        if total == 0 {
+            100.0
+        } else {
+            100.0 * covered as f64 / total as f64
+        }
+    };
+    let checks = [
+        ("lines", pct(l_cov, l_tot), thresholds.lines),
+        ("branches", pct(b_cov, b_tot), thresholds.branches),
+        ("functions", pct(f_cov, f_tot), thresholds.functions),
+        ("statements", pct(s_cov, s_tot), thresholds.statements),
+    ];
+    let mut shortfalls = Vec::new();
+    for (name, actual, required) in checks {
+        // A hair of tolerance so a percent that rounds to the floor isn't failed by
+        // float noise (matches the whole-tree `coverage::evaluate_typescript`).
+        if actual + 1e-9 < f64::from(required) {
+            shortfalls.push(format!("{name} {actual:.2}% < {required}%"));
+        }
+    }
+    if shortfalls.is_empty() {
+        Outcome::Pass
+    } else {
+        Outcome::Fail(format!(
+            "coverage below thresholds: {}",
+            shortfalls.join(", ")
+        ))
+    }
 }
 
 /// Diff-scoped Rust coverage floor (#162): the `cargo llvm-cov` regions/lines
@@ -736,6 +869,196 @@ mod tests {
         assert_eq!(
             evaluate_patch(&changed(&[("w.py", &[9, 10])]), &files, FLOOR_85),
             Outcome::Pass
+        );
+    }
+
+    // ---- evaluate_patch_typescript (diff-scoped TS floor, #162) -------------
+
+    use coverage::TsPatchCoverage;
+
+    fn ts_detail(entries: &[(&str, TsPatchCoverage)]) -> BTreeMap<String, TsPatchCoverage> {
+        entries
+            .iter()
+            .map(|(path, cov)| (path.to_string(), cov.clone()))
+            .collect()
+    }
+
+    const TS_FLOOR_80: TypeScriptThresholds = TypeScriptThresholds {
+        lines: 80,
+        branches: 80,
+        functions: 80,
+        statements: 80,
+    };
+
+    #[test]
+    fn ts_patch_a_fully_covered_diff_passes() {
+        // Two statements on lines 1-2, both starting on their line and both covered;
+        // a covered function on line 1; a taken branch arm off line 2 → 100% all four.
+        let detail = ts_detail(&[(
+            "w.ts",
+            TsPatchCoverage {
+                statements: vec![(1, 1, true), (2, 2, true)],
+                branch_arms: vec![(2, true)],
+                functions: vec![(1, true)],
+            },
+        )]);
+        assert_eq!(
+            evaluate_patch_typescript(&changed(&[("w.ts", &[1, 2])]), &detail, TS_FLOOR_80),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn ts_patch_below_floor_fails_and_names_the_metric() {
+        // Four changed lines each carry one statement; three covered, one not →
+        // statements (and lines) 75% < 80, named; branches/functions are empty
+        // (vacuously 100) and not named.
+        let detail = ts_detail(&[(
+            "w.ts",
+            TsPatchCoverage {
+                statements: vec![(1, 1, true), (2, 2, true), (3, 3, true), (4, 4, false)],
+                branch_arms: vec![],
+                functions: vec![],
+            },
+        )]);
+        let out =
+            evaluate_patch_typescript(&changed(&[("w.ts", &[1, 2, 3, 4])]), &detail, TS_FLOOR_80);
+        assert!(
+            matches!(&out, Outcome::Fail(m)
+                if m.contains("statements 75.00% < 80%")
+                    && m.contains("lines 75.00% < 80%")
+                    && !m.contains("branches")
+                    && !m.contains("functions")),
+            "got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn ts_patch_the_same_diff_clears_a_lower_floor() {
+        // The #162 behavior: the 75% diff passes a 70 floor despite the uncovered line.
+        let detail = ts_detail(&[(
+            "w.ts",
+            TsPatchCoverage {
+                statements: vec![(1, 1, true), (2, 2, true), (3, 3, true), (4, 4, false)],
+                branch_arms: vec![],
+                functions: vec![],
+            },
+        )]);
+        let floor_70 = TypeScriptThresholds {
+            lines: 70,
+            branches: 70,
+            functions: 70,
+            statements: 70,
+        };
+        assert_eq!(
+            evaluate_patch_typescript(&changed(&[("w.ts", &[1, 2, 3, 4])]), &detail, floor_70),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn ts_patch_an_untaken_branch_arm_on_a_changed_line_fails_branches() {
+        // Line 3's statement ran (covered) but one of its two branch arms never did:
+        // branches 50% < 80, named; lines/statements are 100 (the statement is covered).
+        let detail = ts_detail(&[(
+            "w.ts",
+            TsPatchCoverage {
+                statements: vec![(3, 3, true)],
+                branch_arms: vec![(3, true), (3, false)],
+                functions: vec![],
+            },
+        )]);
+        let out = evaluate_patch_typescript(&changed(&[("w.ts", &[3])]), &detail, TS_FLOOR_80);
+        assert!(
+            matches!(&out, Outcome::Fail(m)
+                if m.contains("branches 50.00% < 80%")
+                    && !m.contains("lines")
+                    && !m.contains("statements")),
+            "got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn ts_patch_an_uncovered_function_decl_on_a_changed_line_fails_functions() {
+        // A function declared on changed line 9 was never called → functions 0% < 80.
+        let detail = ts_detail(&[(
+            "w.ts",
+            TsPatchCoverage {
+                statements: vec![],
+                branch_arms: vec![],
+                functions: vec![(9, false)],
+            },
+        )]);
+        let out = evaluate_patch_typescript(&changed(&[("w.ts", &[9])]), &detail, TS_FLOOR_80);
+        assert!(
+            matches!(&out, Outcome::Fail(m) if m.contains("functions 0.00% < 80%")),
+            "got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn ts_patch_a_changed_file_absent_from_coverage_is_skipped() {
+        // A test file (never measured) contributes nothing; with no other changed
+        // executable line the diff is vacuously covered.
+        let detail = ts_detail(&[(
+            "w.ts",
+            TsPatchCoverage {
+                statements: vec![(1, 1, true)],
+                branch_arms: vec![],
+                functions: vec![],
+            },
+        )]);
+        assert_eq!(
+            evaluate_patch_typescript(&changed(&[("w.test.ts", &[1, 2])]), &detail, TS_FLOOR_80),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn ts_patch_a_comment_only_diff_passes() {
+        // The changed lines carry no statement/branch/function (a comment or blank) →
+        // every denominator empty → vacuously covered.
+        let detail = ts_detail(&[(
+            "w.ts",
+            TsPatchCoverage {
+                statements: vec![(1, 1, true), (2, 2, true)],
+                branch_arms: vec![(2, true)],
+                functions: vec![(1, true)],
+            },
+        )]);
+        assert_eq!(
+            evaluate_patch_typescript(&changed(&[("w.ts", &[9, 10])]), &detail, TS_FLOOR_80),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn ts_patch_an_empty_diff_passes() {
+        // No changed lines at all → vacuously covered at any floor.
+        assert_eq!(
+            evaluate_patch_typescript(&changed(&[]), &BTreeMap::new(), TS_FLOOR_80),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn ts_patch_a_multiline_statement_counts_when_any_of_its_lines_changed() {
+        // A statement spanning lines 3-5 that never ran; only line 4 is in the diff →
+        // it still counts (and is uncovered) → statements 0% < 80. No statement
+        // *starts* on line 4, so lines has an empty denominator (vacuously 100).
+        let detail = ts_detail(&[(
+            "w.ts",
+            TsPatchCoverage {
+                statements: vec![(3, 5, false)],
+                branch_arms: vec![],
+                functions: vec![],
+            },
+        )]);
+        let out = evaluate_patch_typescript(&changed(&[("w.ts", &[4])]), &detail, TS_FLOOR_80);
+        assert!(
+            matches!(&out, Outcome::Fail(m)
+                if m.contains("statements 0.00% < 80%") && !m.contains("lines")),
+            "got: {out:?}"
         );
     }
 

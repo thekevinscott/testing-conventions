@@ -41,9 +41,9 @@ end to end.
     (`std::fs`), an out-of-module effectful-`std` call, so `unit lint` exits
     non-zero. (The fail path drives the published command directly, since a failing
     `uses:` call would fail the whole run.) The workflow's isolation job covers
-    TypeScript + Rust today; Python isolation is merged but unreleased, so it's
-    deferred to [#146](https://github.com/thekevinscott/testing-conventions/issues/146)
-    until a release ships it.
+    Python, TypeScript, and Rust; the Python arm shipped to npm and now rides the
+    `clean` / `absent-language-skipped` jobs
+    ([#146](https://github.com/thekevinscott/testing-conventions/issues/146)).
 
 `clean/`, `below-floor/`, and `integration-waiver/` each carry their own
 `testing-conventions.toml` with the `[python].coverage` floor for that run. The

@@ -1,0 +1,66 @@
+name: Detect action (tests)
+
+# Red/green tests for the repo-only detect helper (.github/actions/detect). The detect logic
+# used to live as inline bash in the reusable workflow with no real tests; it now lives in
+# detect.py and is covered here by integration tests (the filesystem mocked) and e2e tests
+# (the real filesystem), run with pytest. This is the gate that goes red before a behavior
+# change lands and green after it.
+
+on:
+  pull_request:
+    paths:
+      - '.github/actions/detect/**'
+      - '.github/workflows/detect-action.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: detect.py — integration + e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install pytest
+        run: python -m pip install --quiet pytest
+      - name: Integration + e2e tests
+        run: python -m pytest .github/actions/detect/tests/ -v --import-mode=importlib
+
+  action:
+    name: action.yml — end-to-end (local use)
+    # pytest covers detect.py directly; this covers the composite action's own wiring
+    # (inputs → env → detect.py → step outputs) by *using* it locally, the way the
+    # reusable workflow will once it's released. Uses `./.github/actions/detect`, which
+    # resolves here because this repo is the checkout.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Stage a fixture (rust crate under path; dist/ + attestation at the root)
+        run: |
+          set -euo pipefail
+          mkdir -p detect-fixture/src dist
+          printf '[package]\nname = "x"\n' > detect-fixture/Cargo.toml
+          echo 'pub fn f() {}' > detect-fixture/src/lib.rs
+          : > dist/x-0.1.0-py3-none-any.whl
+          echo '{}' > e2e-attestation.json
+      - id: detect
+        uses: ./.github/actions/detect
+        with:
+          languages: ''
+          path: detect-fixture
+      - name: Assert the action's outputs
+        env:
+          LINT: ${{ steps.detect.outputs.integration_lint_languages }}
+          PKG: ${{ steps.detect.outputs.packaging_dist }}
+          ATT: ${{ steps.detect.outputs.e2e_attestation }}
+        run: |
+          set -euo pipefail
+          echo "integration_lint_languages=$LINT packaging_dist=$PKG e2e_attestation=$ATT"
+          [ "$LINT" = '["rust"]' ] || { echo "::error::expected rust auto-detected, got $LINT"; exit 1; }
+          [ "$PKG" = "true" ]     || { echo "::error::expected packaging_dist=true, got $PKG"; exit 1; }
+          [ "$ATT" = "true" ]     || { echo "::error::expected e2e_attestation=true, got $ATT"; exit 1; }
+          echo "action.yml glue OK"

@@ -1,0 +1,54 @@
+name: 'Detect languages'
+description: >-
+  Repo-only helper for the reusable testing-conventions workflow: detect which languages
+  (and conditions) are present under a path and emit them as step outputs. NOT part of the
+  published testing-conventions tool — it exists only in this repository and carries its own
+  integration + e2e tests (see tests/). The workflow calls it as a composite action so the
+  script is available without checking out this repo into the consumer's workspace.
+
+inputs:
+  languages:
+    description: 'JSON array restricting which languages to check; empty (the default) auto-detects every supported language present under `path`.'
+    required: false
+    default: ''
+  path:
+    description: 'Directory scanned recursively for sources.'
+    required: false
+    default: 'src'
+  config:
+    description: 'Config file consulted for the [rust].coverage floor.'
+    required: false
+    default: 'testing-conventions.toml'
+
+outputs:
+  languages:
+    description: 'JSON array of present python/typescript languages (the colocated-test / coverage matrix).'
+    value: ${{ steps.scan.outputs.languages }}
+  integration_lint_languages:
+    description: 'Present languages plus rust (the integration-lint matrix).'
+    value: ${{ steps.scan.outputs.integration_lint_languages }}
+  isolation_languages:
+    description: 'Present languages plus rust (the unit-lint matrix).'
+    value: ${{ steps.scan.outputs.isolation_languages }}
+  coverage_languages:
+    description: 'Present languages, plus rust when a [rust].coverage floor is configured.'
+    value: ${{ steps.scan.outputs.coverage_languages }}
+  packaging_dist:
+    description: 'true when a conventional dist/ holding a built distribution is discoverable in the checkout.'
+    value: ${{ steps.scan.outputs.packaging_dist }}
+  e2e_attestation:
+    description: 'true when a committed e2e-attestation.json sits at the checkout root.'
+    value: ${{ steps.scan.outputs.e2e_attestation }}
+
+runs:
+  using: composite
+  steps:
+    - id: scan
+      shell: bash
+      env:
+        LANGUAGES: ${{ inputs.languages }}
+        SCAN_PATH: ${{ inputs.path }}
+        CONFIG: ${{ inputs.config }}
+      # `$GITHUB_ACTION_PATH` is this action's directory, so detect.py is found whether the
+      # action is used locally (./.github/actions/detect) or by a consumer (owner/repo@ref).
+      run: python3 "$GITHUB_ACTION_PATH/detect.py"

@@ -107,12 +107,32 @@ impl Default for TypeScriptCoverage {
 }
 
 /// `[rust].coverage`. Branch coverage is still experimental, so only
-/// regions/lines are configurable.
+/// regions/lines are configurable, and `regions` is opt-in (Rust-only, sub-line):
+/// `None` unless the table sets it, while `lines` always carries a value.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RustCoverage {
-    pub regions: u8,
+    #[serde(default)]
+    pub regions: Option<u8>,
     pub lines: u8,
+}
+
+/// The default Rust floor used when coverage isn't configured (#206): `lines = 100`,
+/// matching Python/TypeScript's line-level 100. Two deliberate asymmetries from the
+/// other languages, both forced by `cargo llvm-cov` on stable: there is **no branch
+/// component** (branch coverage is experimental), and **`regions` is opt-in** (a
+/// Rust-only sub-line metric, harsher than lines — `None` unless a config sets it),
+/// so the zero-config floor is lines only. As with Python/TypeScript, "100" means
+/// "100% of what you didn't explicitly exempt" — the rule honors reason-required
+/// `[[rust.exempt]]` entries. A config `[rust].coverage` table lowers the line floor
+/// or adds a `regions` floor.
+impl Default for RustCoverage {
+    fn default() -> Self {
+        Self {
+            regions: None,
+            lines: 100,
+        }
+    }
 }
 
 /// A rule a file can be exempted from (issue #32).
@@ -379,6 +399,31 @@ mod tests {
                 statements: 100,
             }
         );
+    }
+
+    #[test]
+    fn default_rust_coverage_is_the_strict_line_floor() {
+        // The zero-config Rust floor (#206) is `lines = 100` — matching Python/TS — with
+        // `regions` opt-in (None) and no branch component, two deliberate asymmetries
+        // forced by `cargo llvm-cov` on stable. Locked here so it can't silently drift
+        // from the Defaults reference.
+        assert_eq!(
+            RustCoverage::default(),
+            RustCoverage {
+                regions: None,
+                lines: 100,
+            }
+        );
+    }
+
+    #[test]
+    fn rust_coverage_table_parses_with_regions_omitted() {
+        // `regions` is opt-in (#206): a `[rust].coverage` table may set `lines` alone,
+        // leaving the region check off.
+        let config = parse("[rust]\ncoverage = { lines = 90 }\n").unwrap();
+        let coverage = config.rust.unwrap().coverage.unwrap();
+        assert_eq!(coverage.regions, None);
+        assert_eq!(coverage.lines, 90);
     }
 
     #[test]

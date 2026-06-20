@@ -19,11 +19,11 @@ fn crate_dir(name: &str) -> PathBuf {
 }
 
 const FULL: RustThresholds = RustThresholds {
-    regions: 100,
+    regions: Some(100),
     lines: 100,
 };
 const MID: RustThresholds = RustThresholds {
-    regions: 80,
+    regions: Some(80),
     lines: 80,
 };
 

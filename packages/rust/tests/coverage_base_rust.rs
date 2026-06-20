@@ -97,7 +97,7 @@ fn git(dir: &Path, args: &[&str]) {
 /// against (its minimum metric is 50%, so an 80 floor fails and a 40 floor clears).
 fn floors(level: u8) -> RustThresholds {
     RustThresholds {
-        regions: level,
+        regions: Some(level),
         lines: level,
     }
 }
@@ -132,8 +132,9 @@ fn run_coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> anyho
 const CARGO_TOML: &str =
     "[package]\nname = \"tc_cov_base_rust\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n";
 
-/// A `[rust.coverage]` config at the given uniform floor — committed so the CLI's
-/// measurement is deterministic (Rust has no zero-config default).
+/// A `[rust.coverage]` config at the given uniform floor — committed so the CLI
+/// measures against a known floor (both metrics at `level`), not the zero-config
+/// default (`lines = 100`, regions off), which these diff cases aren't calibrated to.
 fn config_toml(level: u8) -> String {
     format!("[rust.coverage]\nregions = {level}\nlines = {level}\n")
 }
@@ -313,9 +314,9 @@ fn rust_an_unknown_base_ref_is_an_error() {
 
 #[test]
 fn rust_cli_exits_nonzero_on_a_below_floor_diff() {
-    // Rust has no zero-config default floor, so the case commits an 80
-    // `[rust.coverage]` table; the known-ratio diff (regions/lines 50%) is below it →
-    // exit 1.
+    // The case commits an 80 `[rust.coverage]` table — a known floor the diff is
+    // calibrated to, not the zero-config default (`lines = 100`, regions off); the
+    // known-ratio diff (regions/lines 50%) is below it → exit 1.
     let repo = TempRepo::new("cli-red");
     repo.write("testing-conventions.toml", &config_toml(80));
     let base = baseline(&repo);

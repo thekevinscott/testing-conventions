@@ -12,14 +12,13 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parents[2] / "detect.py"
 
 
-def _run(tmp_path, *, languages="", scan=".", config=""):
+def _run(tmp_path, *, languages="", scan="."):
     out_file = tmp_path / "github_output"
     out_file.write_text("")
     env = {
         **os.environ,
         "LANGUAGES": languages,
         "SCAN_PATH": scan,
-        "CONFIG": config,
         "GITHUB_OUTPUT": str(out_file),
     }
     subprocess.run([sys.executable, str(SCRIPT)], cwd=tmp_path, env=env, check=True)
@@ -43,12 +42,14 @@ def test_e2e_explicit_python(tmp_path):
     assert out["coverage_languages"] == '["python"]'
 
 
-def test_e2e_explicit_rust_without_floor(tmp_path):
+def test_e2e_explicit_rust_routes_into_coverage_zero_config(tmp_path):
+    # Rust coverage is zero-config now (#206): a crate enters the coverage matrix with
+    # no `[rust].coverage` floor configured — the default `lines = 100` applies.
     _mk(tmp_path, "Cargo.toml", '[package]\nname = "x"\n')
     _mk(tmp_path, "src/lib.rs", "pub fn f() {}\n")
     out = _run(tmp_path, languages='["rust"]', scan=".")
     assert out["integration_lint_languages"] == '["rust"]'
-    assert out["coverage_languages"] == "[]"
+    assert out["coverage_languages"] == '["rust"]'
 
 
 def test_e2e_absent_language_skipped(tmp_path):

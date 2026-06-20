@@ -3,8 +3,9 @@
 //! throwaway cargo crates (each a git repo) and assert the exit code (and, for a red
 //! case, the failure on stderr). Complements the in-process integration tests in
 //! `coverage_base_rust.rs`. Each crate carries its own `[workspace]` so `cargo
-//! llvm-cov` measures it in isolation; Rust has no zero-config default floor, so
-//! every case commits a `[rust.coverage]` table. Requires `git` + `cargo-llvm-cov`
+//! llvm-cov` measures it in isolation; every case commits a `[rust.coverage]` table
+//! to pin a known floor rather than lean on the zero-config default (`lines = 100`,
+//! regions off, #206), which these calibrated diff cases aren't sized to. Requires `git` + `cargo-llvm-cov`
 //! on PATH (the runs are slow — building and instrumenting each crate from scratch).
 
 use std::path::{Path, PathBuf};
@@ -100,7 +101,8 @@ const CARGO_TOML: &str =
     "[package]\nname = \"tc_cov_base_rust_e2e\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n";
 
 /// A `[rust.coverage]` config at the given uniform floor — committed so the
-/// measurement is deterministic (Rust has no zero-config default).
+/// measurement pins a known floor, not the zero-config default (`lines = 100`,
+/// regions off, #206).
 fn config_toml(level: u8) -> String {
     format!("[rust.coverage]\nregions = {level}\nlines = {level}\n")
 }

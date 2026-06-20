@@ -658,11 +658,13 @@ fn istanbul_patch_detail(json: &str) -> Result<BTreeMap<String, TsPatchCoverage>
 // that produces one land with the implementation (#37).
 // ---------------------------------------------------------------------------
 
-/// The two `cargo llvm-cov` coverage floors, from a `[rust].coverage` table.
-/// Branch coverage is still experimental, so only regions and lines are enforced.
+/// The `cargo llvm-cov` coverage floors, from a `[rust].coverage` table (or the
+/// zero-config default). Branch coverage is still experimental, so only regions
+/// and lines are enforced, and `regions` is opt-in — `None` skips the region check
+/// (the zero-config default floors lines only, #206).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RustThresholds {
-    pub regions: u8,
+    pub regions: Option<u8>,
     pub lines: u8,
 }
 
@@ -724,10 +726,13 @@ pub fn evaluate_rust(report: &LlvmCovReport, thresholds: RustThresholds) -> Outc
             "the unit suite measured no code — check the path and that the suite runs".to_string(),
         );
     }
-    let checks = [
-        ("regions", totals.regions.percent, thresholds.regions),
-        ("lines", totals.lines.percent, thresholds.lines),
-    ];
+    // `regions` is opt-in (#206): the zero-config default floors lines only, so the
+    // region check is skipped unless a config set a `regions` floor.
+    let mut checks: Vec<(&str, f64, u8)> = Vec::new();
+    if let Some(regions) = thresholds.regions {
+        checks.push(("regions", totals.regions.percent, regions));
+    }
+    checks.push(("lines", totals.lines.percent, thresholds.lines));
     let mut shortfalls = Vec::new();
     for (name, actual, required) in checks {
         // A hair of tolerance so a percent that rounds to the floor isn't failed by
@@ -1314,11 +1319,11 @@ mod tests {
     }
 
     const RUST_FULL: RustThresholds = RustThresholds {
-        regions: 100,
+        regions: Some(100),
         lines: 100,
     };
     const RUST_MID: RustThresholds = RustThresholds {
-        regions: 80,
+        regions: Some(80),
         lines: 85,
     };
 
@@ -1348,6 +1353,35 @@ mod tests {
         assert!(
             matches!(&outcome, Outcome::Fail(message)
                 if message.contains("regions") && message.contains("lines")),
+            "got: {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn rust_skips_the_region_check_when_regions_is_opt_out() {
+        // The zero-config default (#206) sets `regions: None`, so only lines are
+        // enforced: a crate at 100% lines clears the floor even with low regions.
+        let thresholds = RustThresholds {
+            regions: None,
+            lines: 100,
+        };
+        assert_eq!(
+            evaluate_rust(&rust_report(40.0, 100.0), thresholds),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn rust_still_fails_lines_with_regions_opt_out() {
+        // `regions: None` skips only the region check — the line floor still bites.
+        let thresholds = RustThresholds {
+            regions: None,
+            lines: 100,
+        };
+        let outcome = evaluate_rust(&rust_report(100.0, 80.0), thresholds);
+        assert!(
+            matches!(&outcome, Outcome::Fail(message)
+                if message.contains("lines") && !message.contains("regions")),
             "got: {outcome:?}"
         );
     }

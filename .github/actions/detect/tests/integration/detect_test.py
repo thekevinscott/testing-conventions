@@ -2,8 +2,8 @@
 
 Per the standard, an integration test runs first-party code for real and mocks the externals.
 The one external here is the filesystem, so each test patches the boundary functions
-(`has_source` / `has_rust_crate` / `has_dist` / `has_attestation` / `rust_coverage_configured`)
-and drives the real orchestration, asserting the emitted sets.
+(`has_source` / `has_rust_crate` / `has_dist` / `has_attestation`) and drives the real
+orchestration, asserting the emitted sets.
 """
 import sys
 from pathlib import Path
@@ -13,14 +13,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # .github/scripts
 import detect  # noqa: E402
 
 
-def _run(languages, *, python=False, typescript=False, rust_crate=False, rust_cov=False,
+def _run(languages, *, python=False, typescript=False, rust_crate=False,
          dist=False, attestation=False):
     """Run compute_outputs with the filesystem fully mocked to the given facts."""
     present = {"python": python, "typescript": typescript}
     patches = [
         patch.object(detect, "has_source", lambda root, lang: present[lang]),
         patch.object(detect, "has_rust_crate", lambda root: rust_crate),
-        patch.object(detect, "rust_coverage_configured", lambda cfg: rust_cov),
     ]
     # has_dist / has_attestation only exist once #186 lands; patch them when present so these
     # helpers don't themselves force the feature.
@@ -31,7 +30,7 @@ def _run(languages, *, python=False, typescript=False, rust_crate=False, rust_co
     for p in patches:
         p.start()
     try:
-        return detect.compute_outputs(languages, scan_root="/repo", config_path="cfg.toml")
+        return detect.compute_outputs(languages, scan_root="/repo")
     finally:
         for p in patches:
             p.stop()
@@ -47,15 +46,12 @@ def test_explicit_python_only():
     assert out["coverage_languages"] == '["python"]'
 
 
-def test_explicit_rust_without_coverage_floor():
-    out = _run('["rust"]', rust_crate=True, rust_cov=False)
+def test_explicit_rust_routes_into_coverage_zero_config():
+    # Rust coverage is zero-config now (#206): a crate enters the coverage matrix even
+    # without a configured floor — the default `lines = 100` applies.
+    out = _run('["rust"]', rust_crate=True)
     assert out["integration_lint_languages"] == '["rust"]'
     assert out["isolation_languages"] == '["rust"]'
-    assert out["coverage_languages"] == "[]"  # Rust has no default floor
-
-
-def test_explicit_rust_with_coverage_floor():
-    out = _run('["rust"]', rust_crate=True, rust_cov=True)
     assert out["coverage_languages"] == '["rust"]'
 
 

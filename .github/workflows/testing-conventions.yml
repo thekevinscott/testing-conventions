@@ -62,12 +62,11 @@ name: Testing Conventions
 #         packaging_artifact: dist
 #
 # No config file is required: every check runs with sane defaults, opting a new
-# library into the full set in one drop-in (#80). The coverage floor falls back
-# to the language's reasonable default — Python: branch on, 85; TypeScript:
-# lines/functions/statements 80, branches 75 — when no `testing-conventions.toml`
-# is present (Rust has no default floor yet, so a Rust crate must declare a
-# `[rust].coverage` table). Add a config file only to tighten a floor or declare
-# exemptions.
+# library into the full set in one drop-in (#80). The coverage floor falls back to
+# the language's strict default — a 100% line floor for all three (#194/#195): Python
+# branch on at 100, TypeScript all four metrics at 100, and Rust `lines = 100` with
+# `regions` opt-in and no branch component (#206) — when no `testing-conventions.toml`
+# is present. Add a config file only to loosen a floor or declare exemptions.
 #
 # `languages` is a JSON array (when set) so the matrix can fan out over it directly
 # (reusable-workflow inputs can't be native lists); empty — the default — means
@@ -122,10 +121,10 @@ jobs:
       integration_lint_languages: ${{ steps.scan.outputs.integration_lint_languages }}
       # `unit lint` (#125): python/typescript + rust, also kept off the coverage matrix.
       isolation_languages: ${{ steps.scan.outputs.isolation_languages }}
-      # `unit coverage` (#37/#171): present python/typescript, plus rust when a crate
-      # is present *and* a `[rust].coverage` floor is configured — the matrix the
-      # whole-tree and changed-line coverage jobs fan out over. Kept as its own set
-      # so a future coverage-less language can diverge.
+      # `unit coverage` (#37/#171): present python/typescript, plus rust whenever a
+      # crate is present — Rust coverage is zero-config now (`lines = 100` by default,
+      # #206) — the matrix the whole-tree and changed-line coverage jobs fan out over.
+      # Kept as its own set so a future coverage-less language can diverge.
       coverage_languages: ${{ steps.scan.outputs.coverage_languages }}
       # Whether a built distribution is discoverable in the checkout, and whether a
       # committed e2e-attestation.json is present (#186) — the packaging and e2e-verify
@@ -142,7 +141,6 @@ jobs:
         with:
           languages: ${{ inputs.languages }}
           path: ${{ inputs.path }}
-          config: ${{ inputs.config }}
 
   colocated-test:
     name: Colocated test (${{ matrix.language }})
@@ -226,10 +224,10 @@ jobs:
     needs: detect
     # `unit coverage` enforces the Python (#26), TypeScript (#31), and Rust (#37)
     # floors. The matrix is `coverage_languages` — the requested languages with
-    # sources present (#94), plus rust when a crate is here and a `[rust].coverage`
-    # floor is configured (#171/#37) — so a requested-but-absent language (or a rust
-    # crate with no floor) is skipped rather than erroring. #56 (config-driven
-    # `check`) will eventually drive this from the config file.
+    # sources present (#94), plus rust whenever a crate is here (Rust coverage is
+    # zero-config now, `lines = 100` by default, #206) — so a requested-but-absent
+    # language is skipped rather than erroring. #56 (config-driven `check`) will
+    # eventually drive this from the config file.
     if: needs.detect.outputs.coverage_languages != '[]'
     runs-on: ubuntu-latest
     strategy:

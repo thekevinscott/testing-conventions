@@ -1,4 +1,4 @@
 # Below-floor self-test fixture: grade()'s failing branch is untested, so the
 # unit suite lands under the floor and `unit coverage` must exit non-zero.
 [python]
-coverage = { branch = true, fail_under = 90 }
+coverage = { branch = true, fail_under = 100 }

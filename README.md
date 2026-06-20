@@ -18,6 +18,7 @@ Every rule is a CLI command that fails CI on a violation.
 - [`unit colocated-test`](https://thekevinscott.github.io/testing-conventions/reference/#unit-colocated-test) — every source file has a colocated, matching-named unit test (Python, TypeScript, Rust); with `--base`, a source changed in the diff must also change its colocated test (co-change; Python, TypeScript; [#33](https://github.com/thekevinscott/testing-conventions/issues/33)).
 - [`unit coverage`](https://thekevinscott.github.io/testing-conventions/reference/#unit-coverage) — enforce a coverage floor on the unit suite (Python, TypeScript, Rust); with `--base`, the same floor is measured over the changed lines of a `<base>...HEAD` diff instead of the whole tree ([#162](https://github.com/thekevinscott/testing-conventions/issues/162)).
 - [`unit lint`](https://thekevinscott.github.io/testing-conventions/reference/#unit-lint) — a unit test mocks every collaborator: no out-of-module calls or imports (Rust); no un-mocked first-party or external collaborators (Python, TypeScript); typed mocks (TypeScript).
+- [`unit mutation`](https://thekevinscott.github.io/testing-conventions/guide/mutation) _(planned)_ — every line a change touches is *verified*, not just executed: mutation testing breaks the code and requires a test to fail. The gate is binary and diff-scoped — no unexplained surviving mutant on the diff — not a score percentage (Python, TypeScript, Rust; [#199](https://github.com/thekevinscott/testing-conventions/issues/199)).
 
 **Integration**
 
@@ -204,21 +205,26 @@ real unit tests lets integration tests inflate the number.
 
 **Checked:** deterministic (run coverage; compare to the configured thresholds).
 
-### Mutation testing (planned)
+### Mutation
 
-Coverage measures execution, not verification: a unit test can run a line without
-asserting anything about it. [Mutation testing][mutation] closes that gap — it
-deliberately breaks the code (a *mutant*) and checks that some test *fails*. A
-surviving mutant is a line your tests run but never actually check.
+**Rule:** every line a change touches is *verified*, not just executed — some test
+must fail when that line is broken.
 
-The planned [`unit mutation`][mutation] rule is the verification rung above the
-coverage floor, and the signal an agent can't satisfy without real assertions. Its
-gate isn't a score percentage (equivalent mutants make 100% unreachable) but a
-binary, diff-scoped one: no *unexplained* surviving mutant on changed lines, with
-reasoned exemptions for the rest. See [the guide][mutation] and [the epic][mutation-epic].
+**Why:** coverage measures execution, not assertion; a test can run a line without
+checking it. Mutation testing introduces a small fault (a *mutant*) and requires a
+test to catch it — the verification rung above the coverage floor, and the signal an
+agent can't satisfy without real assertions.
 
-[mutation]: https://thekevinscott.github.io/testing-conventions/guide/mutation
-[mutation-epic]: https://github.com/thekevinscott/testing-conventions/issues/199
+- **Python:** [mutmut](https://github.com/boxed/mutmut) over the unit suite.
+- **TypeScript:** [Stryker](https://stryker-mutator.io/) over the unit suite.
+- **Rust:** [cargo-mutants](https://github.com/sourcefrog/cargo-mutants) over the unit suite.
+
+The gate is not a score percentage — equivalent mutants (mutations no test can ever
+kill) make 100% unreachable, and a score isn't comparable across engines. Instead
+it's binary and diff-scoped: **no unexplained surviving mutant on changed lines**,
+with reasoned `[[<language>.exempt]]` entries for the rest.
+
+**Checked:** _planned_ — see the [mutation-testing guide](https://thekevinscott.github.io/testing-conventions/guide/mutation) and [the epic](https://github.com/thekevinscott/testing-conventions/issues/199). Deterministic (a diff-scoped mutation run; any unexplained survivor on a changed line fails the build).
 
 ### Packaging
 

@@ -16,9 +16,3 @@ hero:
 ---
 
 <!--@include: ../README.md#rules-->
-
-## Beyond the coverage floor
-
-Coverage proves your tests *ran* the code; it can't prove they *checked* it.
-[Mutation testing](/guide/mutation) — the planned `unit mutation` rule — closes that
-gap, and is the verification signal an agent can't fake.

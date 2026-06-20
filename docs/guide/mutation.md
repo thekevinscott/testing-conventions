@@ -132,7 +132,16 @@ The rule wraps each language's mutation tool behind one contract:
 
 ## Status
 
-The `unit mutation` rule is **planned** — see the
-[epic](https://github.com/thekevinscott/testing-conventions/issues/199). This page
-documents the concept and the design (the binary, diff-scoped floor above) ahead of
-implementation.
+The `unit mutation` rule is landing **one language at a time** — see the
+[epic](https://github.com/thekevinscott/testing-conventions/issues/199).
+
+- **Rust** — available now as `unit mutation --language rust` (via
+  [cargo-mutants](https://github.com/sourcefrog/cargo-mutants)). It is **report-only by
+  default**: it lists any surviving mutant but exits `0` unless a `[rust].mutation` table
+  opts into the hard gate. Pass `--base <ref>` to scope it to a diff.
+- **TypeScript** and **Python** — still planned.
+
+Because the bar is **least parity** (a rule ships to consumers only once all three languages
+meet one contract), `unit mutation` is **not yet wired into the [reusable workflow](./ci)**.
+The Rust command runs today for local use and experimentation; the CI rule turns on once
+TypeScript and Python reach parity.

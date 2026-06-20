@@ -37,6 +37,16 @@ coverage = { lines = 90 }                  # lines only — regions stays unenfo
 # coverage = { lines = 90, regions = 90 }  # opt into the finer region floor too
 ```
 
+### Mutation: report-only, no score floor
+
+`unit mutation` (Rust today) has **no percentage default** — and deliberately so. Equivalent
+mutants (mutations no test can ever kill) put an unknown, undecidable ceiling below 100%, so a
+fixed "≥ N%" floor can be unreachable through no fault of the tests; a score also isn't comparable
+across the per-language engines. The default is instead **report-only**: the command lists
+surviving mutants and exits `0`. A `[rust].mutation` table opts into the **binary** gate — *no
+un-exempted surviving mutant* (on the changed lines, under `--base`) — with reason-required
+`mutation` exemptions for survivors that are equivalent or deliberately defensive.
+
 ## What runs by default
 
 With the inputs-free [drop-in](../getting-started), the workflow auto-detects every
@@ -49,6 +59,7 @@ job that fails the build on a violation:
 | `unit coverage`       | on                                   | Python / TypeScript / Rust on their default floor above. |
 | `unit lint`           | on                                   | Python, TypeScript, Rust. |
 | `integration lint`    | on                                   | Python, TypeScript, Rust. |
+| `unit mutation`       | off (not yet wired)                  | Lands per-language (Rust today, `unit mutation --language rust`); ships to the workflow only once all three reach parity (#199). Report-only by default — see below. |
 | `packaging`           | on when a built dist is discoverable | Inspects a `dist/` found in the checkout, or a named `packaging_artifact`; **skipped, never failed** when neither exists. |
 | `e2e verify`          | on when an attestation is present    | Runs when a committed `e2e-attestation.json` sits at the repo root; **skipped, never failed** otherwise. `run_e2e` forces it on. |
 

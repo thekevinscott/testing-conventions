@@ -115,8 +115,9 @@ branch coverage is still experimental, so it isn't enforced. Exits `0` when both
 installed. Files with a `coverage` [exemption](#exemptions) are dropped from the denominator via
 `--ignore-filename-regex`. Two caveats are Rust-specific: inline `#[cfg(test)]` units can't be
 excluded by filename, and `#[coverage(off)]` is still nightly, so on a stable toolchain the inline
-test code is measured alongside the source. And unlike Python / TypeScript, Rust has **no default
-floor** — a config without a `[rust].coverage` table errors rather than guessing one.
+test code is measured alongside the source. Like Python / TypeScript, Rust is zero-config: with no
+`[rust].coverage` table it uses the default `lines = 100` floor (`regions` opt-in, no branch
+component) rather than erroring (#206).
 
 #### `--base`: diff-scoped coverage
 
@@ -138,6 +139,41 @@ change touching no measured line of the language passes vacuously, and a file wi
 [`unit colocated-test --base`](#unit-colocated-test): co-change enforces that a changed source and
 its colocated *test* move together, while `--base` coverage enforces that the changed *lines* are
 exercised — one can pass while the other fails.
+
+### `unit mutation`
+
+Run mutation testing over the unit suite and report (or gate on) surviving mutants — the
+third rung above coverage: a test that *runs* a line still passes if you delete its
+assertions, but a surviving mutant proves it. See the [mutation guide](../guide/mutation) for
+the concept. **Rust only** for now, and **not yet wired into the [reusable workflow](../guide/ci)**
+— it ships per-language and turns on in CI once all three reach parity (#199).
+
+```
+testing-conventions unit mutation --language rust [--base <REF>] [--config <CONFIG>] <PATH>
+```
+
+| Argument / flag     | Description                                                                |
+| ------------------- | -------------------------------------------------------------------------- |
+| `<PATH>`            | Crate whose unit suite is mutated.                                         |
+| `--language <LANG>` | **Required.** `rust` (the only supported language today).                 |
+| `--base <REF>`      | Optional. Scope to mutants on lines a `<base>...HEAD` diff added or modified, instead of the whole crate (whole-tree mutation is slow). Maps to cargo-mutants' `--in-diff`. |
+| `--config <CONFIG>` | Config file providing the `[rust].mutation` gate and `exempt` list (default `testing-conventions.toml`). Optional — absent means report-only with nothing exempt. |
+
+For **`rust`**, runs [`cargo mutants`](https://github.com/sourcefrog/cargo-mutants) over the crate
+at `<PATH>` and reads its `outcomes.json`, collecting every **surviving** mutant (cargo-mutants'
+`MissedMutant`). A mutant with a `mutation` [exemption](#exemptions) on its file is dropped (an
+equivalent or deliberately-defensive mutation, with a reason). The gate is **binary, not a
+percentage** — there is no mutation-score floor (equivalent mutants make a fixed threshold
+unreachable, and a score isn't comparable across engines). Instead:
+
+- **Report-only by default.** With no `[rust].mutation` table, the command lists any surviving
+  mutant and exits `0` — a signal, not a gate.
+- **`[rust].mutation` opts into the hard gate.** With the table present, any *un-exempted* surviving
+  mutant fails the run (exit `1`, listing each survivor with its file, line, and mutation).
+
+`cargo-mutants` must be installed. With `--base <REF>` the gate is **diff-scoped**: only survivors
+on changed lines count — "no unexplained surviving mutant on the lines you touched." `git` must
+resolve `<REF>`.
 
 ### `unit lint`
 

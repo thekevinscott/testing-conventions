@@ -1,16 +1,10 @@
 # Clean self-test crate `gadget`: its integration test runs first-party code for
-# real and doubles only an external crate. Parsed by `syn` (never compiled), so the
-# deps need not resolve; `[workspace]` keeps it standalone.
+# real and doubles nothing, so it passes `integration lint` and — built and run
+# under `cargo llvm-cov` for the zero-config Rust coverage floor (#206) — covers
+# every line. No deps, so `[workspace]` keeps it standalone.
 [package]
 name = "gadget"
 version = "0.0.0"
 edition = "2021"
-
-[dependencies]
-rand = "0.8"
-
-[dev-dependencies]
-mockall = "0.13"
-mockall_double = "0.3"
 
 [workspace]

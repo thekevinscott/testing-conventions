@@ -6,11 +6,10 @@
 //! to catch.
 //!
 //! The gate is **binary, not a percentage** (equivalent mutants make a fixed score
-//! unreachable, and a score isn't comparable across engines): any *un-exempted*
-//! surviving mutant is a finding. The CLI layer decides what to do with the findings
-//! — report-only by default, a hard failure when a `[rust].mutation` table opts in —
-//! so this module stays a pure measurement: [`measure_rust`] returns the survivors,
-//! and [`unexplained_survivors`] is the pure core over a parsed report.
+//! unreachable, and a score isn't comparable across engines) and on by default: any
+//! *un-exempted* surviving mutant is a finding. This module stays a pure measurement —
+//! [`measure_rust`] returns the survivors and [`unexplained_survivors`] is the pure
+//! core over a parsed report; the CLI layer turns a non-empty result into the failure.
 //!
 //! Diff-scoping (`--base`) is delegated to cargo-mutants' own `--in-diff`: the
 //! `<base>...HEAD` diff is written out and passed through, so only mutants on changed

@@ -18,14 +18,14 @@ Each entry has five sections, in order:
 Adds `unit mutation --language rust` (#201) — the rung above coverage: a test that *runs*
 a line still passes if you delete its assertions, and a surviving mutant proves it. It wraps
 [cargo-mutants](https://github.com/sourcefrog/cargo-mutants), reads its `outcomes.json`, and
-reports the surviving mutants. The gate is binary, not a percentage (equivalent mutants make a
-fixed score unreachable): any un-exempted survivor is a finding. **Report-only by default** — a
-`[rust].mutation` table opts into the hard gate, `--base <REF>` scopes to the diff (cargo-mutants'
-`--in-diff`), and `[[rust.exempt]] rules = ["mutation"]` lifts an equivalent / defensive survivor.
-Purely additive — a new `unit mutation` subcommand and `mutation` module
-(`measure_rust`, `unexplained_survivors`, `Survivor`), plus `config::RustMutation` and
-`config::Rule::Mutation`; nothing existing changes. Rust-only and unwired from the reusable
-workflow until TypeScript and Python reach parity (#199). Requires `cargo-mutants`.
+finds the surviving mutants. The gate is binary, not a percentage (equivalent mutants make a
+fixed score unreachable), and **on by default**: any un-exempted survivor fails the run, with no
+report-only mode. The only loosening is a reason-required `[[rust.exempt]] rules = ["mutation"]`
+entry for an equivalent / defensive survivor; `--base <REF>` scopes to the diff (cargo-mutants'
+`--in-diff`). Purely additive — a new `unit mutation` subcommand and `mutation` module
+(`measure_rust`, `unexplained_survivors`, `Survivor`), plus `config::Rule::Mutation`; nothing
+existing changes. Rust-only and unwired from the reusable workflow until TypeScript and Python
+reach parity (#199). Requires `cargo-mutants`.
 
 Gives Rust a zero-config default coverage floor of `lines = 100` (#206), closing the
 last gap from the strict-100 default (#194). With no `[rust].coverage` table, `unit
@@ -567,9 +567,9 @@ cd packages/rust && cargo test --lib mutation:: --test mutation_rust --test muta
 
 Expected: the mutation tests pass — the pure `unexplained_survivors` collects only `MissedMutant`
 outcomes and honors a `mutation` exemption; over the fixture crates, `killed` reports no survivors
-while `survivors` (an assertion-light suite) reports several; and report-only vs. the
-`[rust].mutation` hard gate vs. an exemption drive the exit codes `0` / `1` / `0`. Requires
-`cargo-mutants`.
+while `survivors` (an assertion-light suite) reports several; and the always-on gate drives the
+exit codes — `killed` `0`, `survivors` `1`, and `survivors` with a `mutation` exemption back to
+`0`. Requires `cargo-mutants`.
 
 ```
 cd packages/rust && cargo test --test config_loader

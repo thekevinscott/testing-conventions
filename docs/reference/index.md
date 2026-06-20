@@ -157,19 +157,20 @@ testing-conventions unit mutation --language rust [--base <REF>] [--config <CONF
 | `<PATH>`            | Crate whose unit suite is mutated.                                         |
 | `--language <LANG>` | **Required.** `rust` (the only supported language today).                 |
 | `--base <REF>`      | Optional. Scope to mutants on lines a `<base>...HEAD` diff added or modified, instead of the whole crate (whole-tree mutation is slow). Maps to cargo-mutants' `--in-diff`. |
-| `--config <CONFIG>` | Config file providing the `[rust].mutation` gate and `exempt` list (default `testing-conventions.toml`). Optional — absent means report-only with nothing exempt. |
+| `--config <CONFIG>` | Config file providing the `exempt` list (default `testing-conventions.toml`). Optional — absent means nothing is exempt. |
 
 For **`rust`**, runs [`cargo mutants`](https://github.com/sourcefrog/cargo-mutants) over the crate
 at `<PATH>` and reads its `outcomes.json`, collecting every **surviving** mutant (cargo-mutants'
 `MissedMutant`). A mutant with a `mutation` [exemption](#exemptions) on its file is dropped (an
 equivalent or deliberately-defensive mutation, with a reason). The gate is **binary, not a
 percentage** — there is no mutation-score floor (equivalent mutants make a fixed threshold
-unreachable, and a score isn't comparable across engines). Instead:
+unreachable, and a score isn't comparable across engines):
 
-- **Report-only by default.** With no `[rust].mutation` table, the command lists any surviving
-  mutant and exits `0` — a signal, not a gate.
-- **`[rust].mutation` opts into the hard gate.** With the table present, any *un-exempted* surviving
-  mutant fails the run (exit `1`, listing each survivor with its file, line, and mutation).
+- **On by default.** Any *un-exempted* surviving mutant fails the run (exit `1`, listing each
+  survivor with its file, line, and mutation); a clean run exits `0`. There is no report-only mode.
+- **Exemptions are the only loosening.** A survivor confirmed equivalent or deliberately defensive
+  is lifted with a reason-required `[[rust.exempt]] rules = ["mutation"]` entry — so a passing run
+  means every survivor was killed or explained.
 
 `cargo-mutants` must be installed. With `--base <REF>` the gate is **diff-scoped**: only survivors
 on changed lines count — "no unexplained surviving mutant on the lines you touched." `git` must

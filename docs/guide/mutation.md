@@ -94,8 +94,10 @@ survivor must be killed. It's the mutation analog of the coverage philosophy —
 can't reach."* And it ports cleanly across languages, where a score number does
 not.
 
-By default it's **report-only**: surviving mutants on a change are surfaced as
-review signal, not a hard failure, until a project opts in.
+The gate is **on by default**: an unexplained survivor fails the build, the way
+`unit coverage` does — there's no separate report-only mode, and config can't loosen
+it. The only escape is a reasoned, per-file exemption (above), so a passing run means
+"every survivor was either killed or explained."
 
 ## Where it fits: the unit ladder
 
@@ -136,9 +138,10 @@ The `unit mutation` rule is landing **one language at a time** — see the
 [epic](https://github.com/thekevinscott/testing-conventions/issues/199).
 
 - **Rust** — available now as `unit mutation --language rust` (via
-  [cargo-mutants](https://github.com/sourcefrog/cargo-mutants)). It is **report-only by
-  default**: it lists any surviving mutant but exits `0` unless a `[rust].mutation` table
-  opts into the hard gate. Pass `--base <ref>` to scope it to a diff.
+  [cargo-mutants](https://github.com/sourcefrog/cargo-mutants)). The gate is **on by
+  default**: any un-exempted surviving mutant fails the run (exit `1`), with reasoned
+  `[[rust.exempt]] rules = ["mutation"]` entries the only loosening. Pass `--base <ref>`
+  to scope it to a diff.
 - **TypeScript** and **Python** — still planned.
 
 Because the bar is **least parity** (a rule ships to consumers only once all three languages

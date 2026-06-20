@@ -128,9 +128,10 @@ enum UnitRule {
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
-    /// Run mutation testing over the unit suite and report (or, with a `[rust].mutation`
-    /// table, gate on) surviving mutants — the rung above coverage (#201). Rust only
-    /// for now, and not yet wired into the reusable workflow (parity pending, #199).
+    /// Run mutation testing over the unit suite and fail on any surviving mutant not
+    /// lifted by a `mutation` exemption — the rung above coverage (#201). The gate is
+    /// on by default (no report-only mode). Rust only for now, and not yet wired into
+    /// the reusable workflow (parity pending, #199).
     Mutation {
         /// Crate whose unit suite is mutated.
         path: PathBuf,
@@ -142,8 +143,8 @@ enum UnitRule {
         /// whole crate (slower).
         #[arg(long)]
         base: Option<String>,
-        /// testing-conventions config file providing the `[rust].mutation` gate and
-        /// `exempt` list. Optional: absent means report-only with nothing exempt.
+        /// testing-conventions config file providing the `exempt` list. Optional:
+        /// absent means nothing is exempt (every survivor must be killed).
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
@@ -493,14 +494,16 @@ fn run_unit_coverage(
     }
 }
 
-/// Run `unit mutation` over `root` (#201): run cargo-mutants, report the surviving
-/// mutants, and — when a `[rust].mutation` table is configured — fail on any that
-/// aren't lifted by a `mutation` exemption.
+/// Run `unit mutation` over `root` (#201): run cargo-mutants and fail on any
+/// surviving mutant not lifted by a `mutation` exemption.
 ///
+/// The gate is **on by default and binary** — "no *unexplained* surviving mutant":
+/// every survivor must be killed with an assertion, or lifted by a reason-required
+/// `[[rust.exempt]] rules = ["mutation"]` for an equivalent / deliberately-defensive
+/// mutation. There is no percentage floor (equivalent mutants make one unreachable)
+/// and no report-only mode — the only loosening is a reasoned, per-file exemption.
 /// Rust only for now (the least-parity bar, #199): `--language python|typescript` is
-/// rejected rather than silently passing. Report-only by default — the survivors are
-/// printed and the command exits `0`; a `[rust].mutation` table flips it to the hard,
-/// binary gate (exit `1` on any unexplained survivor). `--base` scopes to the diff.
+/// rejected rather than silently passing. `--base` scopes the run to the diff.
 fn run_unit_mutation(
     root: &Path,
     language: colocated_test::Language,
@@ -520,7 +523,6 @@ fn run_unit_mutation(
         config::Config::default()
     };
     let rust = config.rust.unwrap_or_default();
-    let gate = rust.mutation.is_some();
     let exempt: Vec<String> = config::resolve_exempt(root, &rust.exempt, config::Rule::Mutation)?
         .into_iter()
         .collect();
@@ -531,25 +533,18 @@ fn run_unit_mutation(
         return Ok(0);
     }
 
-    println!("unit mutation: {} surviving mutant(s):", survivors.len());
+    eprintln!(
+        "error: {} unexplained surviving mutant(s) — kill each with an assertion, or lift an \
+         equivalent/defensive one with a reason-required `[[rust.exempt]] rules = [\"mutation\"]`:",
+        survivors.len()
+    );
     for survivor in &survivors {
-        println!(
+        eprintln!(
             "  {}:{}: {}",
             survivor.file, survivor.line, survivor.description
         );
     }
-    if gate {
-        eprintln!(
-            "error: {} unexplained surviving mutant(s) — kill them with assertions, or \
-             lift an equivalent/defensive one with a reason-required \
-             `[[rust.exempt]] rules = [\"mutation\"]`",
-            survivors.len()
-        );
-        Ok(1)
-    } else {
-        println!("(report-only: add a `[rust].mutation` table to fail the build on these)");
-        Ok(0)
-    }
+    Ok(1)
 }
 
 /// Run the `unit lint` check over `root` for `language` — the unit-suite

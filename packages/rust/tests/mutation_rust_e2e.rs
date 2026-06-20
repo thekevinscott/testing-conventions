@@ -2,10 +2,11 @@
 //! end-to-end (no mocks) against the fixture crates and assert the exit code.
 //! Requires `cargo-mutants`.
 //!
-//! The rule is **report-only by default**: it lists surviving mutants but exits `0`
-//! unless a `[rust].mutation` table opts into the hard gate. The fixtures are the
-//! standard pair: `killed` (every mutant caught) and `survivors` (a coverage-passing
-//! but assertion-light suite whose mutants all survive).
+//! The gate is **on by default and binary**: an un-exempted surviving mutant fails the
+//! run, and the only way to pass with a survivor present is a reason-required
+//! `mutation` exemption. The fixtures are the standard pair: `killed` (every mutant
+//! caught) and `survivors` (a coverage-passing but assertion-light suite whose mutants
+//! all survive).
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -31,32 +32,22 @@ fn unit_mutation_exit(crate_name: &str, config: Option<&str>) -> i32 {
 
 #[test]
 fn killed_crate_passes_with_no_survivors() {
-    // Every mutant is caught, so the crate passes whether or not the gate is on.
+    // Every mutant is caught, so the crate clears the gate.
     assert_eq!(unit_mutation_exit("killed", None), 0);
-    assert_eq!(unit_mutation_exit("killed", Some("mutation_gate.toml")), 0);
 }
 
 #[test]
-fn survivors_report_only_exits_zero() {
-    // No `[rust].mutation` table: report-only, so surviving mutants are listed but the
-    // command still exits 0 — a signal, not a gate.
-    assert_eq!(unit_mutation_exit("survivors", None), 0);
-}
-
-#[test]
-fn survivors_under_the_gate_exit_nonzero() {
-    // With the `[rust].mutation` table the hard gate bites: an un-exempted surviving
-    // mutant fails the run.
-    assert_eq!(
-        unit_mutation_exit("survivors", Some("mutation_gate.toml")),
-        1
-    );
+fn survivors_fail_the_gate_by_default() {
+    // The gate is on by default and binary: an un-exempted surviving mutant fails the
+    // run, no config required.
+    assert_eq!(unit_mutation_exit("survivors", None), 1);
 }
 
 #[test]
 fn an_exempted_survivor_passes_the_gate() {
     // The survivor's file carries a `mutation` exemption, so the gate clears it (an
-    // equivalent / deliberately-defensive mutation, lifted with a reason).
+    // equivalent / deliberately-defensive mutation, lifted with a reason) — the only
+    // way to pass with a survivor present.
     assert_eq!(
         unit_mutation_exit("survivors", Some("mutation_exempt.toml")),
         0

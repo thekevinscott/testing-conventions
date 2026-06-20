@@ -29,6 +29,7 @@ export default defineConfig({
             { text: 'Isolate tests', link: '/guide/isolation' },
             { text: 'Exempt a file', link: '/guide/exemptions' },
             { text: 'Enforce conventions in CI', link: '/guide/ci' },
+            { text: 'Mutation testing', link: '/guide/mutation' },
           ],
         },
         {

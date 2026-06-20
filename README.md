@@ -204,6 +204,22 @@ real unit tests lets integration tests inflate the number.
 
 **Checked:** deterministic (run coverage; compare to the configured thresholds).
 
+### Mutation testing (planned)
+
+Coverage measures execution, not verification: a unit test can run a line without
+asserting anything about it. [Mutation testing][mutation] closes that gap — it
+deliberately breaks the code (a *mutant*) and checks that some test *fails*. A
+surviving mutant is a line your tests run but never actually check.
+
+The planned [`unit mutation`][mutation] rule is the verification rung above the
+coverage floor, and the signal an agent can't satisfy without real assertions. Its
+gate isn't a score percentage (equivalent mutants make 100% unreachable) but a
+binary, diff-scoped one: no *unexplained* surviving mutant on changed lines, with
+reasoned exemptions for the rest. See [the guide][mutation] and [the epic][mutation-epic].
+
+[mutation]: https://thekevinscott.github.io/testing-conventions/guide/mutation
+[mutation-epic]: https://github.com/thekevinscott/testing-conventions/issues/199
+
 ### Packaging
 
 **Rule:** test files never ship in the built package.

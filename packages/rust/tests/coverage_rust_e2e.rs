@@ -46,3 +46,21 @@ fn exempt_cov_exits_zero_with_the_shim_exempted() {
         0
     );
 }
+
+// Zero-config (#206): a `--config` pointing at a file that doesn't exist falls
+// back to the default Rust floor — the same way a brand-new crate with no
+// `testing-conventions.toml` runs. That default is `lines = 100` with `regions`
+// opt-in (#206), so a fully-covered crate clears it while a below-floor crate
+// fails — Rust no longer errors out demanding an explicit `[rust].coverage` table.
+
+#[test]
+fn above_exits_zero_with_no_config_via_the_default_floor() {
+    assert_eq!(unit_coverage_exit("above", "no-such-config.toml"), 0);
+}
+
+#[test]
+fn below_exits_nonzero_with_no_config_via_the_default_floor() {
+    // `below` leaves the `else` arm's line uncovered, so it fails the 100 line
+    // default even though `regions` isn't part of the zero-config floor.
+    assert_eq!(unit_coverage_exit("below", "no-such-config.toml"), 1);
+}

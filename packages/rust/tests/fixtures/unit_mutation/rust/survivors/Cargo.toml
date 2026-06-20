@@ -1,0 +1,9 @@
+# Fixture crate `mut_survivors`: its colocated test *runs* `is_positive` but asserts
+# nothing, so cargo-mutants' mutations all survive (a coverage-passing, assertion-light
+# suite — exactly what mutation testing catches). `[workspace]` keeps it standalone.
+[package]
+name = "mut_survivors"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

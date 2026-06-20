@@ -1,0 +1,4 @@
+# Opt into the hard mutation gate: with the table present, an un-exempted surviving
+# mutant fails the run (report-only otherwise).
+[rust]
+mutation = {}

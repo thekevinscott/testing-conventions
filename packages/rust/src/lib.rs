@@ -5,6 +5,7 @@ pub mod coverage;
 pub mod e2e;
 pub mod isolation;
 pub mod lint;
+pub mod mutation;
 pub mod packaging;
 pub mod patch_coverage;
 pub mod ts;
@@ -127,6 +128,25 @@ enum UnitRule {
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
+    /// Run mutation testing over the unit suite and report (or, with a `[rust].mutation`
+    /// table, gate on) surviving mutants — the rung above coverage (#201). Rust only
+    /// for now, and not yet wired into the reusable workflow (parity pending, #199).
+    Mutation {
+        /// Crate whose unit suite is mutated.
+        path: PathBuf,
+        /// Language convention to enforce (required). `rust` only for now.
+        #[arg(long, value_enum)]
+        language: colocated_test::Language,
+        /// Opt-in diff-scoping (#201): restrict to mutants on lines a `<base>...HEAD`
+        /// diff added or modified, via cargo-mutants' `--in-diff`. Absent means the
+        /// whole crate (slower).
+        #[arg(long)]
+        base: Option<String>,
+        /// testing-conventions config file providing the `[rust].mutation` gate and
+        /// `exempt` list. Optional: absent means report-only with nothing exempt.
+        #[arg(long, default_value = "testing-conventions.toml")]
+        config: PathBuf,
+    },
 }
 
 /// Languages the integration-test lints support — its own set (Python,
@@ -205,6 +225,12 @@ where
                 language,
                 config,
             } => run_unit_lint(&path, language, &config),
+            UnitRule::Mutation {
+                path,
+                language,
+                base,
+                config,
+            } => run_unit_mutation(&path, language, base.as_deref(), &config),
         },
         Some(Command::Integration { rule }) => match rule {
             IntegrationRule::Lint {
@@ -467,6 +493,65 @@ fn run_unit_coverage(
     }
 }
 
+/// Run `unit mutation` over `root` (#201): run cargo-mutants, report the surviving
+/// mutants, and — when a `[rust].mutation` table is configured — fail on any that
+/// aren't lifted by a `mutation` exemption.
+///
+/// Rust only for now (the least-parity bar, #199): `--language python|typescript` is
+/// rejected rather than silently passing. Report-only by default — the survivors are
+/// printed and the command exits `0`; a `[rust].mutation` table flips it to the hard,
+/// binary gate (exit `1` on any unexplained survivor). `--base` scopes to the diff.
+fn run_unit_mutation(
+    root: &Path,
+    language: colocated_test::Language,
+    base: Option<&str>,
+    config_path: &Path,
+) -> anyhow::Result<i32> {
+    match language {
+        colocated_test::Language::Rust => {}
+        _ => anyhow::bail!(
+            "`unit mutation` supports `--language rust` only for now — \
+             TypeScript and Python land with the mutation epic (#199)"
+        ),
+    }
+    let config = if config_path.exists() {
+        config::load_config(config_path)?
+    } else {
+        config::Config::default()
+    };
+    let rust = config.rust.unwrap_or_default();
+    let gate = rust.mutation.is_some();
+    let exempt: Vec<String> = config::resolve_exempt(root, &rust.exempt, config::Rule::Mutation)?
+        .into_iter()
+        .collect();
+
+    let survivors = mutation::measure_rust(root, &exempt, base)?;
+    if survivors.is_empty() {
+        println!("unit mutation: no surviving mutants — every mutation was caught");
+        return Ok(0);
+    }
+
+    println!("unit mutation: {} surviving mutant(s):", survivors.len());
+    for survivor in &survivors {
+        println!(
+            "  {}:{}: {}",
+            survivor.file, survivor.line, survivor.description
+        );
+    }
+    if gate {
+        eprintln!(
+            "error: {} unexplained surviving mutant(s) — kill them with assertions, or \
+             lift an equivalent/defensive one with a reason-required \
+             `[[rust.exempt]] rules = [\"mutation\"]`",
+            survivors.len()
+        );
+        Ok(1)
+    } else {
+        println!("(report-only: add a `[rust].mutation` table to fail the build on these)");
+        Ok(0)
+    }
+}
+
 /// Run the `unit lint` check over `root` for `language` — the unit-suite
 /// isolation lints (`unmocked-collaborator`, `untyped-mock`, `no-out-of-module-call`,
 /// `no-out-of-module-import`) — printing each violation to stderr as
@@ -719,5 +804,25 @@ mod tests {
             .downcast_ref::<clap::Error>()
             .expect("error should be a clap::Error");
         assert_eq!(clap_err.kind(), clap::error::ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn unit_mutation_rejects_a_non_rust_language() {
+        // Least parity (#199): `unit mutation` is Rust-only for now, so a
+        // python/typescript request errors before running any engine — no silent
+        // pass, and no fixture/toolchain needed.
+        let err = run([
+            "testing-conventions",
+            "unit",
+            "mutation",
+            "pkg",
+            "--language",
+            "python",
+        ])
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("supports `--language rust` only"),
+            "got: {err}"
+        );
     }
 }

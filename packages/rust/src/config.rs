@@ -53,6 +53,9 @@ pub struct TypeScriptConfig {
 #[serde(deny_unknown_fields)]
 pub struct RustConfig {
     pub coverage: Option<RustCoverage>,
+    /// `[rust].mutation` (#201): present opts into the hard mutation gate; absent is
+    /// report-only.
+    pub mutation: Option<RustMutation>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
 }
@@ -135,6 +138,15 @@ impl Default for RustCoverage {
     }
 }
 
+/// `[rust].mutation` (#201). Its **presence** opts a crate into the hard mutation
+/// gate — an un-exempted surviving mutant fails `unit mutation`; absent, the command
+/// is report-only. No fields yet (the table is a marker), but it's a table rather
+/// than a bool so engine tuning (timeouts, jobs) can extend it without a breaking
+/// change. `deny_unknown_fields` keeps a typo'd key from silently parsing.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RustMutation {}
+
 /// A rule a file can be exempted from (issue #32).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -168,6 +180,8 @@ pub enum Rule {
     UntypedMock,
     /// `integration lint` — a `vi.mock` of a first-party module in a TS integration test (#75).
     NoFirstPartyMock,
+    /// `unit mutation` — a surviving mutant the unit suite didn't catch ([`crate::mutation`], #201).
+    Mutation,
 }
 
 impl Rule {
@@ -189,6 +203,7 @@ impl Rule {
             Rule::UnmockedCollaborator => "unmocked-collaborator",
             Rule::UntypedMock => "untyped-mock",
             Rule::NoFirstPartyMock => "no-first-party-mock",
+            Rule::Mutation => "mutation",
         }
     }
 
@@ -209,6 +224,7 @@ impl Rule {
             Rule::UnmockedCollaborator,
             Rule::UntypedMock,
             Rule::NoFirstPartyMock,
+            Rule::Mutation,
         ]
         .into_iter()
         .find(|rule| rule.id() == id)

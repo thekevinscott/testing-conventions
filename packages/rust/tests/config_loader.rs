@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 use testing_conventions::config::{
     load_config, Config, PythonConfig, PythonCoverage, Rule, RustConfig, RustCoverage,
-    TypeScriptConfig, TypeScriptCoverage,
+    RustMutation, TypeScriptConfig, TypeScriptCoverage,
 };
 
 /// Absolute path to a file under `tests/fixtures/`.
@@ -46,6 +46,7 @@ fn expected_valid() -> Config {
                 regions: Some(100),
                 lines: 100,
             }),
+            mutation: Some(RustMutation {}),
             exempt: vec![],
         }),
     }

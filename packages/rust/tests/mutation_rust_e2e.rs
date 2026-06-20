@@ -47,12 +47,18 @@ fn survivors_report_only_exits_zero() {
 fn survivors_under_the_gate_exit_nonzero() {
     // With the `[rust].mutation` table the hard gate bites: an un-exempted surviving
     // mutant fails the run.
-    assert_eq!(unit_mutation_exit("survivors", Some("mutation_gate.toml")), 1);
+    assert_eq!(
+        unit_mutation_exit("survivors", Some("mutation_gate.toml")),
+        1
+    );
 }
 
 #[test]
 fn an_exempted_survivor_passes_the_gate() {
     // The survivor's file carries a `mutation` exemption, so the gate clears it (an
     // equivalent / deliberately-defensive mutation, lifted with a reason).
-    assert_eq!(unit_mutation_exit("survivors", Some("mutation_exempt.toml")), 0);
+    assert_eq!(
+        unit_mutation_exit("survivors", Some("mutation_exempt.toml")),
+        0
+    );
 }

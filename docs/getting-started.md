@@ -45,12 +45,12 @@ default is safe on any library.
 
 ### Customize with a config file
 
-Tighten a floor or declare an exemption in a `testing-conventions.toml` at your repo root:
+Adjust a floor or declare an exemption in a `testing-conventions.toml` at your repo root:
 
 ```toml
-# Tighten the Python floor past the default 85:
+# Relax the Python floor below the strict default 100:
 [python]
-coverage = { branch = true, fail_under = 95 }
+coverage = { branch = true, fail_under = 90 }
 
 # Exempt a launcher shim; explicit, and a reason is required:
 [[python.exempt]]

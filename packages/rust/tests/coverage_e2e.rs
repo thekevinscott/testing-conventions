@@ -54,9 +54,10 @@ fn exempt_cov_exits_zero_against_a_100_floor() {
 }
 
 // Zero-config (#80): a `--config` pointing at a file that doesn't exist falls
-// back to the default Python floor (branch on, 85) — the same way a brand-new
-// library with no `testing-conventions.toml` runs. The default is specifically
-// 85, not 100: `above_85` (over 85, under 100) clears it.
+// back to the default Python floor — the same way a brand-new library with no
+// `testing-conventions.toml` runs. That default is now 100 (#194), so only a
+// fully-covered suite clears it: `full` (100%) passes, while `above_85` (~86%,
+// which cleared the old 85 default) and `below_85` (~71%) both fail.
 
 #[test]
 fn full_exits_zero_with_no_config_via_the_default_floor() {
@@ -64,8 +65,9 @@ fn full_exits_zero_with_no_config_via_the_default_floor() {
 }
 
 #[test]
-fn above_85_exits_zero_with_no_config_via_the_default_floor() {
-    assert_eq!(unit_coverage_exit("above_85", "no-such-config.toml"), 0);
+fn above_85_exits_nonzero_with_no_config_via_the_default_floor() {
+    // ~86% cleared the old 85 default; the strict 100 default (#194) fails it.
+    assert_eq!(unit_coverage_exit("above_85", "no-such-config.toml"), 1);
 }
 
 #[test]

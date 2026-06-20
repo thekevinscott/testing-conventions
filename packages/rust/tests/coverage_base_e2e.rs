@@ -189,7 +189,7 @@ def test_widget():
 
 #[test]
 fn a_lower_configured_floor_lets_the_same_diff_pass() {
-    // The behavior change: the 75% diff that fails the default 85 floor passes once
+    // The behavior change: the 75% diff that fails the default floor passes once
     // the configured floor is 70 — the floor is the single source of truth.
     let repo = TempRepo::new("floor70");
     repo.write(
@@ -211,7 +211,7 @@ fn a_lower_configured_floor_lets_the_same_diff_pass() {
 #[test]
 fn a_tiny_below_floor_diff_still_exits_nonzero() {
     // No small-diff carve-out (#162): a single untested helper (50% on a two-line
-    // diff) fails the 85 floor.
+    // diff) fails the default floor.
     let repo = TempRepo::new("tiny");
     let base = baseline(&repo);
     repo.write(

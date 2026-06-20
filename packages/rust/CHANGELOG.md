@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **BREAKING — default coverage floors raised to a strict 100%** (#194). With no
+  `[<language>].coverage` table, `unit coverage` now requires 100%: Python `fail_under = 100`
+  (branch on), TypeScript `lines`/`branches`/`functions`/`statements` all 100 — up from the #80
+  defaults (Python 85; TypeScript 80/75/80/80). The premise is that the exemption system
+  (`# pragma: no cover`, reason-required `[[<lang>.exempt]]` entries, the empty/comment-only and
+  `.d.ts` auto-exemptions) already carries trivia, so the default enforces "100% of what you didn't
+  explicitly exempt." A zero-config build whose unit suite sat between the old floor and 100 will
+  now **fail**; restore the previous floor with an explicit `[<language>].coverage` table (see
+  MIGRATIONS). Rust is unchanged — it still has no default floor.
 - The private `workflow` guard command is now **hidden from `--help`** (#191). It was
   always undocumented and run only from our own CI; `#[command(hide = true)]` makes that
   explicit. It still runs when invoked directly (hidden, not removed), and the `@v0` drift

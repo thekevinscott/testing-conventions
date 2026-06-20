@@ -117,7 +117,7 @@ test('widget', () => {
 
 /// After: a covered and an uncovered one-line helper → the diff (new lines 5-12)
 /// lands at functions 50% / statements 66.67% / branches 100% (see
-/// `coverage_base_ts.rs`), so its minimum metric is below the default 80 floor.
+/// `coverage_base_ts.rs`), so its minimum metric is below the default floor.
 const WIDGET_TS_75: &str = r#"export function widget(n: number): string {
   if (n > 0) return 'pos';
   return 'neg';
@@ -203,7 +203,7 @@ test('widget', () => {
 
 #[test]
 fn ts_a_lower_configured_floor_lets_the_same_diff_pass() {
-    // The behavior change: the diff that fails the default 80 floor passes once the
+    // The behavior change: the diff that fails the default floor passes once the
     // configured floors are 40 — the floor is the single source of truth. The config
     // is committed so the measurement is deterministic.
     let repo = TempRepo::new("floor40");
@@ -226,7 +226,7 @@ fn ts_a_lower_configured_floor_lets_the_same_diff_pass() {
 #[test]
 fn ts_a_tiny_below_floor_diff_still_exits_nonzero() {
     // No small-diff carve-out (#162): a single untested helper (a brand-new file the
-    // suite never imports → 0% on its lines) fails the default 80 floor.
+    // suite never imports → 0% on its lines) fails the default floor.
     let repo = TempRepo::new("tiny");
     let base = baseline(&repo);
     repo.write(

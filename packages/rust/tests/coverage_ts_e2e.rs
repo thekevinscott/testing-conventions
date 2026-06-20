@@ -53,13 +53,19 @@ fn exempt_cov_exits_zero_with_the_shim_exempted() {
 }
 
 // Zero-config (#80): a `--config` pointing at a file that doesn't exist falls
-// back to the default TypeScript floors (lines/functions/statements 80,
-// branches 75) — the same floors as `ts_mid.toml`, so `above` clears them and
-// `below` (100% lines but ~66% branches) fails on branches.
+// back to the default TypeScript floors — now all four metrics at 100 (#194), the
+// same floors as `ts_full.toml`. So only `full` (100% on all four) clears the
+// default; `above` (which cleared the old 80/75 default) and `below` both fail.
 
 #[test]
-fn above_exits_zero_with_no_config_via_the_default_floor() {
-    assert_eq!(unit_coverage_exit("above", "no-such-config.toml"), 0);
+fn full_exits_zero_with_no_config_via_the_default_floor() {
+    assert_eq!(unit_coverage_exit("full", "no-such-config.toml"), 0);
+}
+
+#[test]
+fn above_exits_nonzero_with_no_config_via_the_default_floor() {
+    // Cleared the old 80/75 default; the strict 100 default (#194) fails it.
+    assert_eq!(unit_coverage_exit("above", "no-such-config.toml"), 1);
 }
 
 #[test]

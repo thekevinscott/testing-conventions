@@ -65,15 +65,17 @@ pub struct PythonCoverage {
     pub fail_under: u8,
 }
 
-/// The sane default Python floor used when coverage isn't configured (#80):
-/// branch coverage on, `fail_under = 85`. Per `internals/python/testing.md`,
-/// "85 is a reasonable floor; aiming for 100 forces tests for trivia." A config
-/// `[python].coverage` table overrides it.
+/// The default Python floor used when coverage isn't configured (#80): branch
+/// coverage on, `fail_under = 100` (#194). Strict by default — "100% of what you
+/// didn't explicitly exempt" — because the rule already honors `# pragma: no cover`,
+/// reason-required `[[python.exempt]]` entries, and the empty/comment-only
+/// auto-exemption, so trivia is excluded deliberately rather than by a slack floor.
+/// A config `[python].coverage` table lowers it when a project wants headroom.
 impl Default for PythonCoverage {
     fn default() -> Self {
         Self {
             branch: true,
-            fail_under: 85,
+            fail_under: 100,
         }
     }
 }
@@ -88,16 +90,18 @@ pub struct TypeScriptCoverage {
     pub statements: u8,
 }
 
-/// The sane default TypeScript floors used when coverage isn't configured (#80),
-/// matching `internals/typescript/testing.md`: lines/functions/statements 80,
-/// branches 75. A config `[typescript].coverage` table overrides it.
+/// The default TypeScript floors used when coverage isn't configured (#80): all
+/// four metrics at 100 (#194), matching the strict-by-default Python floor. As with
+/// Python, "100" means "100% of what you didn't explicitly exempt" — the rule honors
+/// reason-required `[[typescript.exempt]]` entries and skips declaration files
+/// (`*.d.ts`). A config `[typescript].coverage` table lowers any of the four.
 impl Default for TypeScriptCoverage {
     fn default() -> Self {
         Self {
-            lines: 80,
-            branches: 75,
-            functions: 80,
-            statements: 80,
+            lines: 100,
+            branches: 100,
+            functions: 100,
+            statements: 100,
         }
     }
 }
@@ -350,29 +354,29 @@ mod tests {
     }
 
     #[test]
-    fn default_python_coverage_is_the_reasonable_floor() {
-        // The zero-config floor (#80) is the internals' reasonable one: branch on,
-        // 85. Locked here so it can't silently drift from internals/python/testing.md.
+    fn default_python_coverage_is_the_strict_floor() {
+        // The zero-config floor (#80, #194) is strict by default: branch on, 100.
+        // Locked here so it can't silently drift from the Defaults reference.
         assert_eq!(
             PythonCoverage::default(),
             PythonCoverage {
                 branch: true,
-                fail_under: 85,
+                fail_under: 100,
             }
         );
     }
 
     #[test]
-    fn default_typescript_coverage_matches_internals() {
-        // Matches internals/typescript/testing.md: lines/functions/statements 80,
-        // branches 75 (#80).
+    fn default_typescript_coverage_is_the_strict_floor() {
+        // The zero-config floor (#80, #194) is strict by default: all four metrics
+        // at 100. Locked here so it can't silently drift from the Defaults reference.
         assert_eq!(
             TypeScriptCoverage::default(),
             TypeScriptCoverage {
-                lines: 80,
-                branches: 75,
-                functions: 80,
-                statements: 80,
+                lines: 100,
+                branches: 100,
+                functions: 100,
+                statements: 100,
             }
         );
     }

@@ -11,13 +11,13 @@ the [workflow inputs](../guide/ci#inputs) — but nothing here requires it.
 ## Coverage floors
 
 Coverage floors apply to the **unit suite only** (test files are excluded from the
-denominator). Each language's default is the reasonable floor from its internal style
-guide; a `[<language>].coverage` table overrides it.
+denominator). Each language's default is a strict **100%** floor — 100% of what you
+didn't explicitly exempt; a `[<language>].coverage` table lowers it.
 
 | Language       | Default floor                                                  | Why |
 | -------------- | -------------------------------------------------------------- | --- |
-| **Python**     | `branch = true`, `fail_under = 85`                             | "85 is a reasonable floor; aiming for 100 forces tests for trivia" (`internals/python/testing.md`). |
-| **TypeScript** | `lines = 80`, `branches = 75`, `functions = 80`, `statements = 80` | Matches `internals/typescript/testing.md`. Four metrics, because line coverage can read 100% while a branch lags. |
+| **Python**     | `branch = true`, `fail_under = 100`                             | Strict by default — 100% of what you don't explicitly exempt. The rule honors `# pragma: no cover`, reason-required `[[python.exempt]]` entries, and the empty/comment-only auto-exemption, so trivia is excluded deliberately, not by a slack floor. |
+| **TypeScript** | `lines = 100`, `branches = 100`, `functions = 100`, `statements = 100` | Strict by default, like Python. Still four independent metrics — line coverage can read 100% while a branch lags, so each is enforced separately. |
 | **Rust**       | **none — must be configured**                                  | Branch coverage is still experimental on stable and no single floor is obviously right yet (see below). |
 
 ### Rust has no default floor

@@ -314,9 +314,9 @@ fn ts_an_unknown_base_ref_is_an_error() {
 
 #[test]
 fn ts_cli_exits_nonzero_on_a_below_floor_diff() {
-    // The default TypeScript floors are lines/functions/statements 80, branches 75
-    // (#80); the known-ratio diff (functions 50%, statements 66.67%) is below them →
-    // exit 1, no config needed.
+    // No config, so the diff is judged against the default TypeScript floors — now all
+    // four at 100 (#194); the known-ratio diff (functions 50%, statements 66.67%) is
+    // below them → exit 1.
     let repo = TempRepo::new("cli-red");
     let base = baseline(&repo);
     repo.write("widget.ts", WIDGET_TS_75);
@@ -358,7 +358,7 @@ test('widget', () => {
 #[test]
 fn ts_cli_a_lower_configured_floor_lets_the_same_diff_pass() {
     // A `[typescript.coverage]` table with all four floors at 40 re-scopes the floor:
-    // the known-ratio diff that fails the default 80 now passes — the floor is the
+    // the known-ratio diff that fails the default floor now passes — the floor is the
     // single source of truth, whole-tree or diff. The config is committed so the
     // measurement is deterministic.
     let repo = TempRepo::new("cli-floor40");

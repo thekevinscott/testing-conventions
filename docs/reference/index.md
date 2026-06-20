@@ -84,14 +84,15 @@ testing-conventions unit coverage --language <LANG> [--base <REF>] [--config <CO
 | `<PATH>`            | Directory whose unit suite is run and measured.                            |
 | `--language <LANG>` | **Required.** `python`, `typescript`, or `rust`. |
 | `--base <REF>`      | Optional. Measure the floor over the `<base>...HEAD` diff (the lines the change touched) instead of the whole tree; absent means whole-tree. See **diff-scoped coverage** below. |
-| `--config <CONFIG>` | Config file providing the thresholds and `exempt` list (default `testing-conventions.toml`). Optional for Python / TypeScript — if the file, or its `[<language>].coverage` table, is absent, the language's default floor is used and nothing is exempt. **Rust has no default floor yet**, so a `[rust].coverage` table is required (see below). |
+| `--config <CONFIG>` | Config file providing the thresholds and `exempt` list (default `testing-conventions.toml`). Optional for all three — if the file, or its `[<language>].coverage` table, is absent, the language's default floor is used and nothing is exempt (Rust floors `lines = 100`; `regions` is opt-in). |
 
 With no `[<language>].coverage` table (or no config file at all), the check uses the language's
 **default floor** — a strict 100%: Python `branch = true, fail_under = 100`; TypeScript
-`lines = 100, branches = 100, functions = 100, statements = 100`. A config table lowers it. This
-lets the [reusable workflow](../guide/ci) opt a new library into coverage with no config file —
-100% of what you don't explicitly exempt. **Rust is the exception** — it has no default
-floor yet, so `--language rust` requires a `[rust].coverage` table and errors without one.
+`lines = 100, branches = 100, functions = 100, statements = 100`; Rust `lines = 100`. A config table
+lowers it. This lets the [reusable workflow](../guide/ci) opt a new library into coverage with no
+config file — 100% of what you don't explicitly exempt. **Rust** floors `lines` only: `regions` is
+opt-in via `[rust].coverage`, and branch coverage is experimental on stable, so there's no branch
+component.
 
 For **`python`**, runs `coverage.py` with branch coverage on (measuring the sources under
 `<PATH>` with `*_test.py` excluded from the denominator) and compares the total against

@@ -22,9 +22,9 @@ Rust), scans `src`, and runs every rule with sensible defaults — each as its o
 fails the build on a violation. That's the whole setup: this one file opts a new library
 into the full check set.
 
-The one thing Rust needs before its coverage floor is enforced is a `[rust].coverage`
-table — it has no default floor. Every other rule runs with no config. See
-[Defaults](./reference/defaults) for every default the workflow applies and why.
+Every rule — including coverage — runs on Rust with no config: coverage defaults to a
+`lines = 100` floor (`regions` is opt-in; no branch component, since that's experimental on
+stable). See [Defaults](./reference/defaults) for every default the workflow applies and why.
 
 ## Going further
 

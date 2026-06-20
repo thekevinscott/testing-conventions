@@ -4,7 +4,7 @@
 # *non-default* config path. The reusable workflow's integration-lint job applies
 # this waiver only when it forwards `--config` to the CLI (#126).
 [python]
-coverage = { branch = true, fail_under = 90 }
+coverage = { branch = true, fail_under = 100 }
 
 [[python.exempt]]
 path = "tests/integration/billing_test.py"

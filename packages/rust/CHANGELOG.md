@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **BREAKING — Rust coverage now has a zero-config default floor of `lines = 100`** (#206).
+  Closing the last gap from the strict-100 default (#194): with no `[rust].coverage` table,
+  `unit coverage --language rust` no longer errors asking for one — it enforces a 100% **line**
+  floor, matching Python/TypeScript. Two deliberate asymmetries from the other languages, both
+  forced by `cargo llvm-cov` on stable and documented in the Defaults reference: there is **no
+  branch component** (branch coverage is experimental), and **`regions` is opt-in** (a Rust-only
+  sub-line metric, harsher than lines — off unless a config sets it). The reusable workflow now
+  fans `unit coverage` over a detected Rust crate whether or not a floor is configured. A
+  zero-config Rust crate whose unit suite is below 100% lines will now **fail** where it
+  previously had no coverage gate; restore the prior posture with an explicit `[rust].coverage`
+  table (lower `lines`, or add a `regions` floor). API: `RustCoverage` gains a `Default` impl, and
+  its `regions` field — plus `coverage::RustThresholds.regions` — becomes `Option<u8>` (see
+  MIGRATIONS).
 - **BREAKING — default coverage floors raised to a strict 100%** (#194). With no
   `[<language>].coverage` table, `unit coverage` now requires 100%: Python `fail_under = 100`
   (branch on), TypeScript `lines`/`branches`/`functions`/`statements` all 100 — up from the #80
@@ -15,7 +28,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `.d.ts` auto-exemptions) already carries trivia, so the default enforces "100% of what you didn't
   explicitly exempt." A zero-config build whose unit suite sat between the old floor and 100 will
   now **fail**; restore the previous floor with an explicit `[<language>].coverage` table (see
-  MIGRATIONS). Rust is unchanged — it still has no default floor.
+  MIGRATIONS). Rust's line floor lands separately in #206 (above).
 - The private `workflow` guard command is now **hidden from `--help`** (#191). It was
   always undocumented and run only from our own CI; `#[command(hide = true)]` makes that
   explicit. It still runs when invoked directly (hidden, not removed), and the `@v0` drift

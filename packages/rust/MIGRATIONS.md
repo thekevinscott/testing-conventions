@@ -15,6 +15,18 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Gives Rust a zero-config default coverage floor of `lines = 100` (#206), closing the
+last gap from the strict-100 default (#194). With no `[rust].coverage` table, `unit
+coverage --language rust` no longer errors asking for one — it enforces a 100% line
+floor, matching Python/TypeScript, and the reusable workflow fans `unit coverage` over
+a detected Rust crate whether or not a floor is configured. Two deliberate asymmetries
+from the other languages, both forced by `cargo llvm-cov` on stable: there is no branch
+component (branch coverage is experimental), and `regions` is opt-in (a Rust-only
+sub-line metric, harsher than lines — off unless a config sets it). API change:
+`RustCoverage` gains a `Default` impl, and `RustCoverage.regions` /
+`coverage::RustThresholds.regions` move from `u8` to `Option<u8>` (see **Required
+changes**, **Behavior changes**, and **Verification**).
+
 Raises the zero-config default coverage floors to a strict 100% (#194). With no
 `[<language>].coverage` table, `unit coverage` now enforces 100% — Python `fail_under = 100`
 (branch on), TypeScript all four metrics at 100 — up from the #80 defaults (Python 85;
@@ -396,6 +408,19 @@ unchanged — both scopes already share the `coverage` rule id.
 
 ### Required changes
 
+`regions` on the Rust coverage types is now `Option<u8>` (#206), so the region check can
+be left off (the zero-config default floors lines only). Library callers that construct
+these directly must wrap the value:
+
+| Type | Before | After |
+| --- | --- | --- |
+| `config::RustCoverage` | `RustCoverage { regions: 100, lines: 100 }` | `RustCoverage { regions: Some(100), lines: 100 }` |
+| `coverage::RustThresholds` | `RustThresholds { regions: 80, lines: 80 }` | `RustThresholds { regions: Some(80), lines: 80 }` |
+
+`Some(n)` reproduces the prior behavior; `None` skips the region check. A
+`[rust].coverage` table written in TOML is unaffected — `regions = 100` still parses
+(into `Some(100)`), and `regions` may now be omitted entirely.
+
 `unit isolation` is now `unit lint` (#160), mirroring `integration lint`. Update any
 invocation — CI steps, scripts, the reusable `testing-conventions.yml` workflow:
 
@@ -481,7 +506,7 @@ Exemptions (#32) change runtime behavior:
   defaults above (Python 85; TypeScript 80/75/80/80). A zero-config build whose unit suite sat
   between the old floor and 100 now **fails** where it passed; restore the prior floor with an
   explicit `[<language>].coverage` table (e.g. `[python].coverage` with `fail_under = 85`). Rust
-  is unaffected — it still has no default floor.
+  gets its matching line floor separately in #206 (below).
 - `integration lint --language typescript` (#43, #75) previously errored
   (`supports --language python only for now`); it now parses the TypeScript test
   files and runs the `no-first-party-mock` lint.
@@ -505,17 +530,24 @@ Exemptions (#32) change runtime behavior:
   unit-isolation scan scans `*_test.py`, only. A `*_test.py` is unaffected.
 - `unit coverage --language rust` previously errored (`Rust coverage … is a separate item`);
   it now runs `cargo llvm-cov` and enforces the `[rust].coverage` floor (#37). With no
-  `[rust].coverage` table it still errors — Rust has no zero-config default floor yet — so this is
-  not a silent new default, only a newly-working subcommand.
+  `[rust].coverage` table it falls back to the zero-config default added in #206 (below).
+- `unit coverage --language rust` with no `[rust].coverage` table no longer errors asking for one
+  (#206): it enforces a zero-config default of `lines = 100` (no branch component; `regions`
+  opt-in), matching Python/TypeScript. The reusable workflow's `detect` now routes any Rust crate
+  into the coverage matrix, not only crates with a configured floor. A zero-config Rust crate
+  below 100% lines now **fails** where it previously had no coverage gate; lower `lines` (or omit
+  it differently) with an explicit `[rust].coverage` table to restore headroom, and add a
+  `regions = N` floor to opt the sub-line metric back in.
 
 ### Verification
 
 ```
-cd packages/rust && cargo test --lib default_python_coverage_is_the_strict_floor default_typescript_coverage_is_the_strict_floor
+cd packages/rust && cargo test --lib default_python_coverage_is_the_strict_floor default_typescript_coverage_is_the_strict_floor default_rust_coverage_is_the_strict_line_floor
 ```
 
-Expected: both pass — `PythonCoverage::default()` is `fail_under = 100` with branch on, and
-`TypeScriptCoverage::default()` is all four metrics at 100 (the strict zero-config floor, #194).
+Expected: all three pass — `PythonCoverage::default()` is `fail_under = 100` with branch on,
+`TypeScriptCoverage::default()` is all four metrics at 100 (the strict zero-config floor, #194),
+and `RustCoverage::default()` is `lines = 100` with `regions: None` (the line floor, #206).
 
 ```
 cd packages/rust && cargo test --test config_loader

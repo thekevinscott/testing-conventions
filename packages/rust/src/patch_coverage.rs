@@ -385,10 +385,13 @@ fn evaluate_patch_rust(
             100.0 * covered as f64 / total as f64
         }
     };
-    let checks = [
-        ("regions", pct(r_cov, r_tot), thresholds.regions),
-        ("lines", pct(l_cov, l_tot), thresholds.lines),
-    ];
+    // `regions` is opt-in (#206): skip the region check unless a config set a floor,
+    // matching the whole-tree `coverage::evaluate_rust`.
+    let mut checks: Vec<(&str, f64, u8)> = Vec::new();
+    if let Some(regions) = thresholds.regions {
+        checks.push(("regions", pct(r_cov, r_tot), regions));
+    }
+    checks.push(("lines", pct(l_cov, l_tot), thresholds.lines));
     let mut shortfalls = Vec::new();
     for (name, actual, required) in checks {
         // A hair of tolerance so a percent that rounds to the floor isn't failed by
@@ -900,7 +903,7 @@ mod tests {
     }
 
     const RUST_FLOOR_80: RustThresholds = RustThresholds {
-        regions: 80,
+        regions: Some(80),
         lines: 80,
     };
 
@@ -949,11 +952,33 @@ mod tests {
             },
         )]);
         let floor_70 = RustThresholds {
-            regions: 70,
+            regions: Some(70),
             lines: 70,
         };
         assert_eq!(
             evaluate_patch_rust(&changed(&[("w.rs", &[1, 2, 3, 4])]), &detail, floor_70),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn rust_patch_skips_the_region_check_when_regions_is_opt_out() {
+        // The zero-config default (#206) sets `regions: None`, so the diff-scoped floor
+        // enforces lines only: a diff whose changed lines are all covered passes even
+        // though one of its regions is uncovered (lines 1-4 are each covered by ≥1
+        // region, but region 4 is not).
+        let detail = rust_detail(&[(
+            "w.rs",
+            RustPatchCoverage {
+                regions: vec![(1, 4, true), (4, 4, false)],
+            },
+        )]);
+        let lines_only = RustThresholds {
+            regions: None,
+            lines: 100,
+        };
+        assert_eq!(
+            evaluate_patch_rust(&changed(&[("w.rs", &[1, 2, 3, 4])]), &detail, lines_only),
             Outcome::Pass
         );
     }

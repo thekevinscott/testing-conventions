@@ -15,10 +15,6 @@ inputs:
     description: 'Directory scanned recursively for sources.'
     required: false
     default: 'src'
-  config:
-    description: 'Config file consulted for the [rust].coverage floor.'
-    required: false
-    default: 'testing-conventions.toml'
 
 outputs:
   languages:
@@ -31,7 +27,7 @@ outputs:
     description: 'Present languages plus rust (the unit-lint matrix).'
     value: ${{ steps.scan.outputs.isolation_languages }}
   coverage_languages:
-    description: 'Present languages, plus rust when a [rust].coverage floor is configured.'
+    description: 'Present languages, plus rust when a crate is present (Rust coverage is zero-config, #206).'
     value: ${{ steps.scan.outputs.coverage_languages }}
   packaging_dist:
     description: 'true when a conventional dist/ holding a built distribution is discoverable in the checkout.'
@@ -48,7 +44,6 @@ runs:
       env:
         LANGUAGES: ${{ inputs.languages }}
         SCAN_PATH: ${{ inputs.path }}
-        CONFIG: ${{ inputs.config }}
       # `$GITHUB_ACTION_PATH` is this action's directory, so detect.py is found whether the
       # action is used locally (./.github/actions/detect) or by a consumer (owner/repo@ref).
       run: python3 "$GITHUB_ACTION_PATH/detect.py"

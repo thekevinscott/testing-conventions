@@ -18,20 +18,23 @@ didn't explicitly exempt; a `[<language>].coverage` table lowers it.
 | -------------- | -------------------------------------------------------------- | --- |
 | **Python**     | `branch = true`, `fail_under = 100`                             | Strict by default — 100% of what you don't explicitly exempt. The rule honors `# pragma: no cover`, reason-required `[[python.exempt]]` entries, and the empty/comment-only auto-exemption, so trivia is excluded deliberately, not by a slack floor. |
 | **TypeScript** | `lines = 100`, `branches = 100`, `functions = 100`, `statements = 100` | Strict by default, like Python. Still four independent metrics — line coverage can read 100% while a branch lags, so each is enforced separately. |
-| **Rust**       | **none — must be configured**                                  | Branch coverage is still experimental on stable and no single floor is obviously right yet (see below). |
+| **Rust**       | `lines = 100` (`regions` opt-in)                               | Strict by default, like the others — but on **lines** only. `regions` is a Rust-only sub-line metric (opt-in), and branch coverage is experimental on stable, so there's no branch component (see below). |
 
-### Rust has no default floor
+### Rust: a line floor, no branch
 
-Unlike Python and TypeScript, Rust has **no** built-in coverage default. `unit coverage
---language rust` requires an explicit `[rust].coverage` table (`regions` / `lines`) and
-**errors without one** — it never guesses a floor. In the reusable workflow this means the
-Rust *coverage* job is **skipped** until you add that table; every other Rust rule
-(colocated-test, unit lint, integration lint) still runs with no config. The omission is
-deliberate, not an oversight.
+Rust defaults to `lines = 100` — the same line-level floor Python and TypeScript enforce. A
+zero-config Rust crate's coverage job runs and gates on lines (it no longer skips or errors for
+want of a `[rust].coverage` table). Two deliberate, documented asymmetries:
+
+- **No branch component.** Branch coverage is experimental on stable Rust / `llvm-cov`, so Rust
+  can't offer it (Python folds branch into its total; TypeScript has a `branches` metric).
+- **`regions` is opt-in.** Region coverage is a Rust-only, sub-line metric with no Python/TypeScript
+  analog and a harsher bar, so it isn't in the default. Add it (or lower `lines`) explicitly:
 
 ```toml
 [rust]
-coverage = { regions = 90, lines = 90 }
+coverage = { lines = 90 }                  # lines only — regions stays unenforced
+# coverage = { lines = 90, regions = 90 }  # opt into the finer region floor too
 ```
 
 ## What runs by default
@@ -43,7 +46,7 @@ job that fails the build on a violation:
 | Rule                  | Default                              | Notes |
 | --------------------- | ------------------------------------ | --- |
 | `unit colocated-test` | on                                   | Plus the diff-scoped co-change (`--base`) job on pull requests. |
-| `unit coverage`       | on                                   | Python / TypeScript on their default floor above; Rust only once `[rust].coverage` is set. |
+| `unit coverage`       | on                                   | Python / TypeScript / Rust on their default floor above. |
 | `unit lint`           | on                                   | Python, TypeScript, Rust. |
 | `integration lint`    | on                                   | Python, TypeScript, Rust. |
 | `packaging`           | on when a built dist is discoverable | Inspects a `dist/` found in the checkout, or a named `packaging_artifact`; **skipped, never failed** when neither exists. |

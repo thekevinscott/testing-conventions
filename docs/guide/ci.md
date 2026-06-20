@@ -29,8 +29,8 @@ not run**, so the auto-detect default is safe on any library. Pass `languages` (
 **restrict** the run to specific languages — e.g. `'["python"]'` to check Python alone.
 
 The **unit lint** and **integration lint** rules run for Python, TypeScript, and Rust; Rust is
-detected as a crate (a `Cargo.toml` / `*.rs`) under `path`. Rust stays out of the coverage matrix
-unless a `[rust].coverage` floor is configured (it has no default floor).
+detected as a crate (a `Cargo.toml` / `*.rs`) under `path`. Rust is in the coverage matrix too — it
+defaults to a `lines = 100` floor (`regions` opt-in; no branch component).
 
 ### Inputs
 
@@ -63,8 +63,9 @@ suite under `coverage.py` (branch on, `*_test.py` excluded) and fails if the tot
 floor, installing `coverage` + `pytest`. For `typescript` it runs the suite under `vitest` v8
 coverage and fails below any of the four thresholds (`lines` / `branches` / `functions` /
 `statements`), installing your project's deps with `pnpm` so `vitest` + `@vitest/coverage-v8` are
-present. For `rust` it runs `cargo llvm-cov` against the `regions` / `lines` floor; Rust has no
-default floor, so the crate must declare a `[rust].coverage` table. A project on a different
+present. For `rust` it runs `cargo llvm-cov` against the `lines` floor (default `100`; `regions` is
+opt-in via `[rust].coverage`, and branch coverage is experimental on stable, so there's no branch
+component). A project on a different
 toolchain (a non-`pnpm` package manager, or Python sources that need third-party runtime deps
 installed) should drive the CLI directly (below) until #56 makes this config-driven.
 

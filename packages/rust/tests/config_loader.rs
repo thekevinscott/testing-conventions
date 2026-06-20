@@ -43,7 +43,7 @@ fn expected_valid() -> Config {
         }),
         rust: Some(RustConfig {
             coverage: Some(RustCoverage {
-                regions: 100,
+                regions: Some(100),
                 lines: 100,
             }),
             exempt: vec![],

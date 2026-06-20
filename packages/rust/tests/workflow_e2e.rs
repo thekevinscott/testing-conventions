@@ -35,3 +35,26 @@ fn red_workflow_exits_nonzero() {
 fn clean_workflow_exits_zero() {
     assert_eq!(workflow_exit("clean"), 0);
 }
+
+/// Stdout of `testing-conventions --help`.
+fn help_stdout() -> String {
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .arg("--help")
+        .output()
+        .expect("the built binary should run");
+    String::from_utf8(out.stdout).expect("--help output is utf-8")
+}
+
+#[test]
+fn help_does_not_list_the_private_workflow_command() {
+    // `workflow` is the private #92 drift guard (#191): it must not be listed as a command
+    // in `--help`. `clean_workflow_exits_zero` above proves it still runs when invoked
+    // explicitly (hidden, not removed).
+    let help = help_stdout();
+    assert!(
+        !help
+            .lines()
+            .any(|line| line.trim_start().starts_with("workflow")),
+        "`workflow` must not be listed in --help (#191):\n{help}"
+    );
+}

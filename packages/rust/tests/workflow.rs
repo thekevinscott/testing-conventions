@@ -68,3 +68,18 @@ fn invocations_are_extracted_from_the_shell() {
     assert_eq!(found.len(), 2);
     assert_eq!(found[0].args.first().map(String::as_str), Some("unit"));
 }
+
+#[test]
+fn workflow_command_is_hidden_from_help() {
+    // The `workflow` guard is private (#191): it stays in the binary (the drift guard needs
+    // the in-process command tree) but must not appear in `--help`. Hidden, not removed.
+    let cli = command();
+    let workflow_cmd = cli
+        .get_subcommands()
+        .find(|c| c.get_name() == "workflow")
+        .expect("the workflow subcommand should still exist (hidden, not removed)");
+    assert!(
+        workflow_cmd.is_hide_set(),
+        "the private `workflow` command must be hidden from --help (#191)"
+    );
+}

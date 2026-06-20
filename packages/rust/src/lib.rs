@@ -49,8 +49,11 @@ enum Command {
         #[arg(long, value_enum)]
         language: colocated_test::Language,
     },
-    /// Workflow guard: every `testing-conventions` invocation in a CI workflow must
-    /// name a subcommand this binary still exposes (guards the `@v0` path, #92).
+    /// Workflow guard (private — hidden from `--help`, #191): every `testing-conventions`
+    /// invocation in a CI workflow must name a subcommand this binary still exposes
+    /// (guards the `@v0` path, #92). Run from our own CI, not a documented consumer command;
+    /// it stays in the binary because the guard needs the in-process command tree.
+    #[command(hide = true)]
     Workflow {
         /// Workflow file (or a directory of them) to scan.
         path: PathBuf,

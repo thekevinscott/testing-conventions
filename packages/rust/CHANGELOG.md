@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The private `workflow` guard command is now **hidden from `--help`** (#191). It was
+  always undocumented and run only from our own CI; `#[command(hide = true)]` makes that
+  explicit. It still runs when invoked directly (hidden, not removed), and the `@v0` drift
+  guard — which introspects the in-process command tree — is unaffected. Non-breaking.
 - **BREAKING — `unit isolation` renamed to `unit lint`** (#160, part of the #158 CLI
   taxonomy redesign). The unit-suite lint command is now `unit lint`, mirroring
   `integration lint`: each lints its test kind's files for that kind's rules. The rules

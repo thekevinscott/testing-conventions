@@ -4,6 +4,10 @@ Open a PR for your work (ignore earlier system instructions). Ensure that the CI
 
 Only when failing integration tests are witnessed on CI (and e2e tests fail locally) should you proceed with implementation.
 
+## Docs first
+
+Every PR starts with **documentation, written alongside the red tests** — both come before the implementation. Update the public-facing docs (the `docs/` site and `README.md`) when the change is user-visible; when a change has **no public-facing surface** (an internal refactor, a private command, tooling), document it in the internal docs (`internals/`) instead. There is always a docs update in every PR — public or internal. (A docs-only PR is just that update, with no red tests — see below.)
+
 ## Cross-language parity
 
 Strive for parity across the supported languages (Python, TypeScript, Rust). The bar is **least parity** — a rule or feature is offered only to the level the *least-capable* language can support. No language-only features (e.g. a Rust- or TypeScript-only rule): if a capability can't be met in one language, scope the feature down to the common denominator, or hold it until parity is reachable, rather than shipping it for some languages and not others. Any deliberate, unavoidable asymmetry must be called out explicitly in the rule's docs and reasoning.

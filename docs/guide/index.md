@@ -31,8 +31,8 @@ launcher shim, get an explicit, reason-required exemption in config; see
 
 Coverage floors are enforced on the **unit suite only**, with test files excluded from the
 denominator. Put the floors in your config and run `unit coverage`. Skip the config and `unit
-coverage` uses the language's default floor (Python `fail_under = 85` with branch on; TypeScript
-`lines`/`functions`/`statements` 80, `branches` 75). Rust is the exception: it has no default
+coverage` uses the language's default floor — a strict 100% (Python `fail_under = 100` with branch
+on; TypeScript all four metrics at 100). Rust is the exception: it has no default
 floor yet, so give it an explicit `[rust].coverage` table.
 
 **Python:** one total floor, branch coverage on, measured by `coverage.py`:

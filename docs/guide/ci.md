@@ -56,9 +56,9 @@ The whole-tree colocated-test and coverage jobs run regardless; the `*-changed` 
 The **`e2e verify`** job checks that your committed `e2e-attestation.json` names the latest code commit and fails (with a re-attest nudge) when the code has moved on. It never runs the e2e suite — CI only confirms someone attested against this code. It's **default-on, verify-if-present**: it runs whenever an `e2e-attestation.json` is committed at the repo root, and is skipped (never failed) otherwise. Set `run_e2e: true` to force it on regardless.
 
 The **coverage** job runs once per requested language that has sources (a language with none is
-skipped, not failed). Without a config file it enforces the language's default floor (Python
-`fail_under = 85` with branch coverage on; TypeScript `lines` / `functions` / `statements` 80 and
-`branches` 75), and a `[<language>].coverage` table overrides it. For `python` it runs your unit
+skipped, not failed). Without a config file it enforces the language's default floor — a strict
+100% (Python `fail_under = 100` with branch coverage on; TypeScript all four metrics at 100), and a
+`[<language>].coverage` table lowers it. For `python` it runs your unit
 suite under `coverage.py` (branch on, `*_test.py` excluded) and fails if the total is below the
 floor, installing `coverage` + `pytest`. For `typescript` it runs the suite under `vitest` v8
 coverage and fails below any of the four thresholds (`lines` / `branches` / `functions` /

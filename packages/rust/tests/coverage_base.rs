@@ -180,7 +180,7 @@ fn baseline(repo: &TempRepo) -> String {
 
 #[test]
 fn a_diff_below_the_floor_fails() {
-    // The core red case: the 75%-covered diff is below the default-ish 85 floor,
+    // The core red case: the 75%-covered diff is below the 85 floor under test,
     // so `--base` fails it — even though the whole tree is still well covered.
     let repo = TempRepo::new("below");
     let base = baseline(&repo);
@@ -300,7 +300,8 @@ fn an_unknown_base_ref_is_an_error() {
 
 #[test]
 fn cli_exits_nonzero_on_a_below_floor_diff() {
-    // The default Python floor is 85 (#80); the 75% diff is below it → exit 1.
+    // No config, so the diff is judged against the default Python floor (now 100,
+    // #194); the 75% diff is below it → exit 1.
     let repo = TempRepo::new("cli-red");
     let base = baseline(&repo);
     repo.write("widget.py", WIDGET_PY_75);
@@ -340,7 +341,7 @@ def test_widget():
 #[test]
 fn cli_a_lower_configured_floor_lets_the_same_diff_pass() {
     // A `[python.coverage] fail_under = 70` config re-scopes the floor: the 75%
-    // diff that fails the default 85 now passes — the floor is the single source
+    // diff that fails the default floor now passes — the floor is the single source
     // of truth, whole-tree or diff.
     let repo = TempRepo::new("cli-floor70");
     repo.write(

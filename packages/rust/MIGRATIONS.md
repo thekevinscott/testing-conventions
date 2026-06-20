@@ -15,6 +15,16 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Raises the zero-config default coverage floors to a strict 100% (#194). With no
+`[<language>].coverage` table, `unit coverage` now enforces 100% — Python `fail_under = 100`
+(branch on), TypeScript all four metrics at 100 — up from the #80 defaults (Python 85;
+TypeScript lines/functions/statements 80, branches 75). The premise: the exemption system
+(`# pragma: no cover`, reason-required `[[<lang>.exempt]]` entries, the empty/comment-only and
+`.d.ts` auto-exemptions) already carries the trivia, so the default covers "100% of what you
+didn't explicitly exempt." The `PythonCoverage` / `TypeScriptCoverage` struct fields are
+unchanged — only their `Default` values move — so there is no API change; see **Behavior
+changes** and **Verification**.
+
 Renames the `unit isolation` command to `unit lint` (#160, part of the #158 CLI
 taxonomy redesign), mirroring `integration lint` — each lints its test kind's files
 for that kind's rules. Breaking for the command word only: the rules
@@ -466,6 +476,12 @@ Exemptions (#32) change runtime behavior:
   the `[<language>].coverage` table): it enforces the language's default floor
   instead — Python 85 with branch on; TypeScript lines/functions/statements 80,
   branches 75. A `[<language>].coverage` table still overrides it. (#80)
+- The zero-config default coverage floors are now a strict 100% (#194): Python
+  `fail_under = 100` (branch on) and all four TypeScript metrics at 100, up from the #80
+  defaults above (Python 85; TypeScript 80/75/80/80). A zero-config build whose unit suite sat
+  between the old floor and 100 now **fails** where it passed; restore the prior floor with an
+  explicit `[<language>].coverage` table (e.g. `[python].coverage` with `fail_under = 85`). Rust
+  is unaffected — it still has no default floor.
 - `integration lint --language typescript` (#43, #75) previously errored
   (`supports --language python only for now`); it now parses the TypeScript test
   files and runs the `no-first-party-mock` lint.
@@ -493,6 +509,13 @@ Exemptions (#32) change runtime behavior:
   not a silent new default, only a newly-working subcommand.
 
 ### Verification
+
+```
+cd packages/rust && cargo test --lib default_python_coverage_is_the_strict_floor default_typescript_coverage_is_the_strict_floor
+```
+
+Expected: both pass — `PythonCoverage::default()` is `fail_under = 100` with branch on, and
+`TypeScriptCoverage::default()` is all four metrics at 100 (the strict zero-config floor, #194).
 
 ```
 cd packages/rust && cargo test --test config_loader

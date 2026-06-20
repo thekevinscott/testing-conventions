@@ -62,7 +62,7 @@ def mock_external_api(mocker):
 
 For mocking a streaming external service (LLM client, network stream), build a fixture that exposes `set_response`, `set_error`, `set_responses` so each test configures the mock declaratively.
 
-**Coverage** with `pytest-cov`, `branch=true`, `fail_under` set per project — 85 is a reasonable floor; aiming for 100 forces tests for trivia.
+**Coverage** with `pytest-cov`, `branch=true`, `fail_under=100` by default — strict, on the premise that the exemption system (`# pragma: no cover`, reason-required exemptions) carries the trivia, so the floor covers everything you didn't deliberately exclude. Lower it per project only when a slice genuinely warrants headroom.
 
 **E2E attestation** — e2e tests aren't run in CI. Run them locally and attest:
 `testing-conventions e2e attest 'pytest tests/e2e'` commits a receipt naming the

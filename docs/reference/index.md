@@ -87,10 +87,10 @@ testing-conventions unit coverage --language <LANG> [--base <REF>] [--config <CO
 | `--config <CONFIG>` | Config file providing the thresholds and `exempt` list (default `testing-conventions.toml`). Optional for Python / TypeScript — if the file, or its `[<language>].coverage` table, is absent, the language's default floor is used and nothing is exempt. **Rust has no default floor yet**, so a `[rust].coverage` table is required (see below). |
 
 With no `[<language>].coverage` table (or no config file at all), the check uses the language's
-**default floor**, the reasonable one from the internals style guides: Python
-`branch = true, fail_under = 85`; TypeScript `lines = 80, branches = 75, functions = 80,
-statements = 80`. A config table overrides it. This lets the [reusable workflow](../guide/ci)
-opt a new library into coverage with no config file. **Rust is the exception** — it has no default
+**default floor** — a strict 100%: Python `branch = true, fail_under = 100`; TypeScript
+`lines = 100, branches = 100, functions = 100, statements = 100`. A config table lowers it. This
+lets the [reusable workflow](../guide/ci) opt a new library into coverage with no config file —
+100% of what you don't explicitly exempt. **Rust is the exception** — it has no default
 floor yet, so `--language rust` requires a `[rust].coverage` table and errors without one.
 
 For **`python`**, runs `coverage.py` with branch coverage on (measuring the sources under

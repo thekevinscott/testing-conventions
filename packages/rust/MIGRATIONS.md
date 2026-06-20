@@ -440,6 +440,11 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`testing-conventions --help` no longer lists the private `workflow` command (#191): it
+was always undocumented and run only from our own CI, and is now `#[command(hide = true)]`.
+It still runs when invoked explicitly (hidden, not removed), and the `@v0` drift guard is
+unaffected. No action needed.
+
 Omitting the language is now a usage error (exit code `2`) instead of defaulting to
 `python`. Before, running the check on a TypeScript project without a flag scanned
 for `*.py`, found none, and exited `0` — a silent false green; now the language

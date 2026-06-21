@@ -62,11 +62,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/rust
-      # The coverage rule's integration/e2e tests (#26) shell out to coverage.py.
+      # The coverage rule's integration/e2e tests (#26) shell out to coverage.py;
+      # the Python mutation rule's tests (#203) shell out to cosmic-ray (driving pytest).
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: python -m pip install --quiet coverage pytest
+      - run: python -m pip install --quiet coverage pytest cosmic-ray
       # The TypeScript coverage rule's integration/e2e tests (#31) shell out to
       # vitest; install the fixtures' toolchain so `npx vitest` resolves it.
       - uses: actions/setup-node@v6

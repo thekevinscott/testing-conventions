@@ -39,7 +39,7 @@ coverage = { lines = 90 }                  # lines only — regions stays unenfo
 
 ### Mutation: a binary gate, no score floor
 
-`unit mutation` (Rust and TypeScript today) has **no percentage default** — and deliberately so. Equivalent
+`unit mutation` (all three languages) has **no percentage default** — and deliberately so. Equivalent
 mutants (mutations no test can ever kill) put an unknown, undecidable ceiling below 100%, so a
 fixed "≥ N%" floor can be unreachable through no fault of the tests; a score also isn't comparable
 across the per-language engines. The gate is instead **binary and on by default**: *no un-exempted
@@ -60,7 +60,7 @@ job that fails the build on a violation:
 | `unit coverage`       | on                                   | Python / TypeScript / Rust on their default floor above. |
 | `unit lint`           | on                                   | Python, TypeScript, Rust. |
 | `integration lint`    | on                                   | Python, TypeScript, Rust. |
-| `unit mutation`       | off (not yet wired)                  | Lands per-language (Rust and TypeScript today, `unit mutation --language <rust\|typescript>`); ships to the workflow only once all three reach parity (#199). A binary gate, on by default — see below. |
+| `unit mutation`       | off (not yet wired)                  | Available for all three languages (`unit mutation --language <rust\|typescript\|python>`); ships to the workflow only once the matrix wiring lands (#199). A binary gate, on by default — see below. |
 | `packaging`           | on when a built dist is discoverable | Inspects a `dist/` found in the checkout, or a named `packaging_artifact`; **skipped, never failed** when neither exists. |
 | `e2e verify`          | on when an attestation is present    | Runs when a committed `e2e-attestation.json` sits at the repo root; **skipped, never failed** otherwise. `run_e2e` forces it on. |
 

@@ -110,10 +110,10 @@ The non-zero exit fails CI, so an orphaned or missing test is caught. `unit cove
 the same way, and its `--config` is optional too: omit it and the default floor applies.
 
 Going further, **`unit mutation`** raises the bar from "a test runs the code" to "a test
-*verifies* it" by checking whether surviving mutants slip past the suite. It's landing
-per-language — **Rust** (`--language rust`) and **TypeScript** (`--language typescript`) today,
-a binary gate that fails on any un-exempted survivor — and isn't wired into CI yet; see the
-[mutation guide](./guide/mutation).
+*verifies* it" by checking whether surviving mutants slip past the suite. It's available for all
+three languages — **Rust** (`--language rust`), **TypeScript** (`--language typescript`), and
+**Python** (`--language python`) — a binary gate that fails on any un-exempted survivor, not yet
+wired into CI; see the [mutation guide](./guide/mutation).
 
 ## Next steps
 

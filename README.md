@@ -18,7 +18,7 @@ Every rule is a CLI command that fails CI on a violation.
 - [`unit colocated-test`](https://thekevinscott.github.io/testing-conventions/reference/#unit-colocated-test) — every source file has a colocated, matching-named unit test (Python, TypeScript, Rust); with `--base`, a source changed in the diff must also change its colocated test (co-change; Python, TypeScript; [#33](https://github.com/thekevinscott/testing-conventions/issues/33)).
 - [`unit coverage`](https://thekevinscott.github.io/testing-conventions/reference/#unit-coverage) — enforce a coverage floor on the unit suite (Python, TypeScript, Rust); with `--base`, the same floor is measured over the changed lines of a `<base>...HEAD` diff instead of the whole tree ([#162](https://github.com/thekevinscott/testing-conventions/issues/162)).
 - [`unit lint`](https://thekevinscott.github.io/testing-conventions/reference/#unit-lint) — a unit test mocks every collaborator: no out-of-module calls or imports (Rust); no un-mocked first-party or external collaborators (Python, TypeScript); typed mocks (TypeScript).
-- [`unit mutation`](https://thekevinscott.github.io/testing-conventions/guide/mutation) _(Rust + TypeScript available; not yet in the workflow)_ — every line a change touches is *verified*, not just executed: mutation testing breaks the code and requires a test to fail. The gate is binary and diff-scoped — no unexplained surviving mutant on the diff — not a score percentage (Python, TypeScript, Rust; [#199](https://github.com/thekevinscott/testing-conventions/issues/199)).
+- [`unit mutation`](https://thekevinscott.github.io/testing-conventions/guide/mutation) _(all three languages available; not yet in the workflow)_ — every line a change touches is *verified*, not just executed: mutation testing breaks the code and requires a test to fail. The gate is binary and diff-scoped — no unexplained surviving mutant on the diff — not a score percentage (Python, TypeScript, Rust; [#199](https://github.com/thekevinscott/testing-conventions/issues/199)).
 
 **Integration**
 
@@ -215,7 +215,7 @@ checking it. Mutation testing introduces a small fault (a *mutant*) and requires
 test to catch it — the verification rung above the coverage floor, and the signal an
 agent can't satisfy without real assertions.
 
-- **Python:** [mutmut](https://github.com/boxed/mutmut) over the unit suite.
+- **Python:** [cosmic-ray](https://github.com/sixty-north/cosmic-ray) over the unit suite.
 - **TypeScript:** [Stryker](https://stryker-mutator.io/) over the unit suite.
 - **Rust:** [cargo-mutants](https://github.com/sourcefrog/cargo-mutants) over the unit suite.
 
@@ -224,7 +224,7 @@ kill) make 100% unreachable, and a score isn't comparable across engines. Instea
 it's binary and diff-scoped: **no unexplained surviving mutant on changed lines**,
 with reasoned `[[<language>.exempt]]` entries for the rest.
 
-**Checked:** _landing per-language_ — **Rust** (`unit mutation --language rust`, via cargo-mutants) and **TypeScript** (`unit mutation --language typescript`, via Stryker) are available now — a binary gate, on by default: any un-exempted survivor fails, with reasoned `[[<language>.exempt]] rules = ["mutation"]` entries the only loosening. Python is still planned. Because the bar is least parity, it's **not yet wired into the reusable workflow** — that turns on once all three reach parity. See the [mutation-testing guide](https://thekevinscott.github.io/testing-conventions/guide/mutation) and [the epic](https://github.com/thekevinscott/testing-conventions/issues/199). Deterministic (a diff-scoped mutation run; any unexplained survivor on a changed line fails the build).
+**Checked:** all three languages are available now — **Rust** (`unit mutation --language rust`, via cargo-mutants), **TypeScript** (`unit mutation --language typescript`, via Stryker), and **Python** (`unit mutation --language python`, via cosmic-ray) — a binary gate, on by default: any un-exempted survivor fails, with reasoned `[[<language>.exempt]] rules = ["mutation"]` entries the only loosening. They're at parity but **not yet wired into the reusable workflow** — turning that on across the matrix is the remaining step. See the [mutation-testing guide](https://thekevinscott.github.io/testing-conventions/guide/mutation) and [the epic](https://github.com/thekevinscott/testing-conventions/issues/199). Deterministic (a diff-scoped mutation run; any unexplained survivor on a changed line fails the build).
 
 ### Packaging
 

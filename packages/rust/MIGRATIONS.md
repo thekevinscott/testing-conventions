@@ -15,6 +15,17 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Adds `unit mutation --language python` (#203) — the Python arm, completing cross-language parity.
+Wraps [cosmic-ray](https://github.com/sixty-north/cosmic-ray): a baseline check guards the suite,
+then `init` / `exec` run the mutants and `cosmic-ray dump` is parsed for the `survived` outcomes,
+feeding the shared `mutation::evaluate` core. Same on-by-default binary gate and reason-required
+`[[python.exempt]] rules = ["mutation"]` loosening as the other arms. cosmic-ray has no native
+git-diff mode, so `--base` scopes the run to the changed `.py` files and filters survivors to the
+changed lines (line granularity). Purely additive — `mutation::measure_python` and the cosmic-ray
+dump types; nothing existing changes. With all three languages now at parity, `unit mutation` is
+still unwired from the reusable workflow until the matrix wiring lands (#199). Requires cosmic-ray
++ pytest.
+
 Adds `unit mutation --language typescript` (#202) — the TypeScript arm of the mutation rule,
 parity with the Rust vertical. Wraps [Stryker](https://stryker-mutator.io/), reads its
 `mutation.json` report, and collects the surviving mutants (`Survived` / `NoCoverage`), feeding
@@ -593,6 +604,16 @@ reports no survivors while `survivors` (an assertion-light suite) reports severa
 the run to the changed lines; and the always-on gate drives the exit codes `0` / `1` / `0`.
 Requires the fixtures' Stryker toolchain (`npm ci` in
 `tests/fixtures/unit_mutation/typescript`).
+
+```
+cd packages/rust && cargo test --lib mutation:: --test mutation_python --test mutation_python_e2e --test mutation_base_py
+```
+
+Expected: the Python mutation tests pass — the pure cosmic-ray-dump parser collects `survived`
+outcomes and feeds the shared `evaluate` core; over the fixture projects, `killed` reports no
+survivors while `survivors` (an assertion-light suite) reports several; `--base` scopes the run to
+the changed files and filters survivors to the changed lines; and the always-on gate drives the
+exit codes `0` / `1` / `0`. Requires cosmic-ray + pytest on PATH.
 
 ```
 cd packages/rust && cargo test --test config_loader

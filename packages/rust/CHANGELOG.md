@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`unit mutation --language python`** (#203) — the Python arm of the mutation rule, completing
+  cross-language parity. Wraps [cosmic-ray](https://github.com/sixty-north/cosmic-ray): a baseline
+  check guards the suite, then `init` / `exec` run the mutants and `cosmic-ray dump` is parsed for
+  the `survived` outcomes (file + line), feeding the shared `mutation::evaluate` core. Same
+  **on-by-default binary gate** as the other arms — any un-exempted survivor fails the run — with
+  reasoned `[[python.exempt]] rules = ["mutation"]` entries the only loosening. cosmic-ray has no
+  native git-diff scoping, so `--base <REF>` scopes the run to the changed `.py` files and filters
+  the survivors to the `<base>...HEAD` changed lines (line granularity, matching the Rust/TS arms).
+  All cosmic-ray artifacts (config + session) live in an out-of-tree temp dir. New library surface:
+  `mutation::measure_python` and the cosmic-ray dump types. With all three languages at parity,
+  the rule is still **not wired into the reusable workflow** — that matrix wiring is the remaining
+  step (#199). cosmic-ray + pytest must be installed.
+
 - **`unit mutation --language typescript`** (#202) — the TypeScript arm of the mutation rule,
   parity with the Rust vertical. Wraps [Stryker](https://stryker-mutator.io/): runs the engine,
   reads its `mutation.json` report, and collects the surviving mutants (`Survived` and `NoCoverage`)

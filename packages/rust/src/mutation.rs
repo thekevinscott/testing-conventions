@@ -357,6 +357,25 @@ impl Drop for ReportCleanup {
     }
 }
 
+/// Run cosmic-ray over the Python project at `root` and return its un-exempted
+/// survivors — the Python arm of the mutation rule (#203), parity with [`measure_rust`]
+/// and [`measure_typescript`].
+///
+/// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested;
+/// without it, the whole project. `exempt` is the resolved `mutation`-rule exempt
+/// paths. cosmic-ray + the test runner must be installed.
+///
+/// NOTE: stub — returns no survivors until the cosmic-ray wiring lands (the
+/// implementation commit). It exists now so the red integration/e2e tests compile and
+/// fail for the right reason before the engine is wired (#203).
+pub fn measure_python(
+    _root: &Path,
+    _exempt: &[String],
+    _base: Option<&str>,
+) -> Result<Vec<Survivor>> {
+    Ok(Vec::new())
+}
+
 /// A unique temp dir for one cargo-mutants run's `--output`, removed on drop so the
 /// scanned crate stays pristine and parallel runs don't collide.
 struct MutantsOut(PathBuf);

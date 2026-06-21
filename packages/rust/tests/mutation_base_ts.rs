@@ -128,3 +128,25 @@ fn base_scopes_the_run_to_the_changed_lines() {
         "only the added lines should be mutated, not the well-tested `add`; got {survivors:?}"
     );
 }
+
+#[test]
+fn base_with_no_mutatable_changed_files_skips_the_run() {
+    // The only change on the diff is to a test file, which is never mutated — so the
+    // diff scopes to nothing and the run is skipped entirely (no survivors, no Stryker).
+    let repo = TempRepo::new("notests");
+    repo.write("index.ts", BASELINE);
+    repo.write("index.test.ts", BASELINE_TEST);
+    repo.commit("baseline");
+    let base = repo.head();
+    repo.write(
+        "index.test.ts",
+        &format!("{BASELINE_TEST}// touch the test file only\n"),
+    );
+    repo.commit("tweak only the test file");
+
+    let survivors = measure_typescript(&repo.0, &[], Some(&base)).expect("no run needed");
+    assert!(
+        survivors.is_empty(),
+        "a test-file-only diff has nothing mutatable; got {survivors:?}"
+    );
+}

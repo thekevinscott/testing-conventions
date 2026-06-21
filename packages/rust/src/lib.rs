@@ -810,10 +810,10 @@ mod tests {
     }
 
     #[test]
-    fn unit_mutation_rejects_a_non_rust_language() {
-        // Least parity (#199): `unit mutation` is Rust-only for now, so a
-        // python/typescript request errors before running any engine — no silent
-        // pass, and no fixture/toolchain needed.
+    fn unit_mutation_rejects_python_until_parity() {
+        // Rust (#201) and TypeScript (#202) are wired; Python lands with #203. Until
+        // then a `--language python` request errors before running any engine — no
+        // silent pass, and no fixture/toolchain needed.
         let err = run([
             "testing-conventions",
             "unit",
@@ -824,7 +824,7 @@ mod tests {
         ])
         .unwrap_err();
         assert!(
-            err.to_string().contains("supports `--language rust` only"),
+            err.to_string().contains("doesn't support Python yet"),
             "got: {err}"
         );
     }

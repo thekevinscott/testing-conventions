@@ -7,24 +7,29 @@
 //! surviving mutant fails the run, and the only way to pass with a survivor present is a
 //! reason-required `mutation` exemption. The fixtures are the standard pair: `killed`
 //! (every mutant caught) and `survivors` (a coverage-passing but assertion-light suite
-//! whose mutants all survive).
+//! whose mutants all survive). Each test runs against its own staged copy so the
+//! parallel Stryker runs never collide in a shared project dir.
 
-use std::path::PathBuf;
+mod common;
+
+use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use common::Staged;
 
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unit_mutation")
 }
 
 /// Exit code of `testing-conventions unit mutation --language typescript [--config <cfg>] <project>`.
-fn unit_mutation_exit(project: &str, config: Option<&str>) -> i32 {
+fn unit_mutation_exit(project: &Path, config: Option<&str>) -> i32 {
     let mut command = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
     command.args(["unit", "mutation", "--language", "typescript"]);
     if let Some(config) = config {
         command.arg("--config").arg(fixtures().join(config));
     }
     command
-        .arg(fixtures().join("typescript").join(project))
+        .arg(project)
         .status()
         .expect("the built binary should run")
         .code()
@@ -34,14 +39,16 @@ fn unit_mutation_exit(project: &str, config: Option<&str>) -> i32 {
 #[test]
 fn killed_project_passes_with_no_survivors() {
     // Every mutant is caught, so the project clears the gate.
-    assert_eq!(unit_mutation_exit("killed", None), 0);
+    let project = Staged::new("killed");
+    assert_eq!(unit_mutation_exit(project.path(), None), 0);
 }
 
 #[test]
 fn survivors_fail_the_gate_by_default() {
     // The gate is on by default and binary: an un-exempted surviving mutant fails the
     // run, no config required.
-    assert_eq!(unit_mutation_exit("survivors", None), 1);
+    let project = Staged::new("survivors");
+    assert_eq!(unit_mutation_exit(project.path(), None), 1);
 }
 
 #[test]
@@ -49,8 +56,9 @@ fn an_exempted_survivor_passes_the_gate() {
     // The survivor's file carries a `mutation` exemption, so the gate clears it (an
     // equivalent / deliberately-defensive mutation, lifted with a reason) — the only
     // way to pass with a survivor present.
+    let project = Staged::new("survivors");
     assert_eq!(
-        unit_mutation_exit("survivors", Some("mutation_exempt_ts.toml")),
+        unit_mutation_exit(project.path(), Some("mutation_exempt_ts.toml")),
         0
     );
 }

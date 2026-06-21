@@ -158,8 +158,9 @@ The `unit mutation` rule is landing **one language at a time** — see the
   and then filters the survivors to the `<base>...HEAD` changed lines — **line** granularity,
   matching the other arms.
 
-All three languages are now at parity. Because the bar is **least parity** (a rule ships to
-consumers only once every language meets one contract), the per-language commands run today for
-local use and experimentation, but `unit mutation` is **not yet wired into the [reusable
-workflow](./ci)** — turning it on across the matrix is the remaining step of the
-[epic](https://github.com/thekevinscott/testing-conventions/issues/199).
+All three languages are at parity, so `unit mutation` is now **wired into the [reusable
+workflow](./ci)** (#204) — the last step of the
+[epic](https://github.com/thekevinscott/testing-conventions/issues/199). The workflow's mutation
+job is **on by default** and runs on pull requests only, **diff-scoped** to the `<base>...HEAD`
+changed lines (whole-tree mutation is too slow to gate): a PR fails on any un-exempted surviving
+mutant on a changed line. The per-language commands also run standalone for local use.

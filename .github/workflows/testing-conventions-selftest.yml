@@ -182,6 +182,47 @@ jobs:
           fi
           echo "below-floor suite correctly tripped the coverage gate"
 
+  mutation-gate:
+    name: An un-exempted survivor trips the mutation gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - name: A clean crate passes `unit mutation`
+        # Every mutant is caught, so the gate clears — the green half of the signal.
+        run: npx -y testing-conventions unit mutation --language rust .github/selftest/mutation/clean
+      - name: A crate with an un-exempted survivor must fail `unit mutation`
+        # The same invocation the reusable workflow's mutation job runs. The non-zero
+        # exit is what fails a consumer's build, so assert it here: this job stays green
+        # precisely when the gate correctly trips on a surviving mutant.
+        run: |
+          if npx -y testing-conventions unit mutation --language rust .github/selftest/mutation/survivor; then
+            echo "::error::expected the survivor crate to fail the mutation gate, but it passed"
+            exit 1
+          fi
+          echo "survivor crate correctly tripped the mutation gate"
+
+  mutation-wired:
+    name: The reusable workflow enforces unit mutation
+    # The red→green signal for #204: the reusable workflow must actually invoke
+    # `unit mutation`, or the shipped rule isn't enforced on the @v0 path. A static grep
+    # of the workflow file, so it passes regardless of what the published binary ships.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: testing-conventions.yml must invoke `unit mutation`
+        run: |
+          set -euo pipefail
+          if ! grep -q 'unit mutation --language' .github/workflows/testing-conventions.yml; then
+            echo "::error::the reusable workflow does not invoke \`unit mutation\` — the shipped mutation rule is not enforced on the @v0 path (#204)"
+            exit 1
+          fi
+          echo "reusable workflow invokes \`unit mutation\`"
+
   isolation-wired:
     name: The reusable workflow enforces unit lint
     # The red→green signal for #125: the reusable workflow must actually invoke

@@ -1,0 +1,9 @@
+# Selftest crate: its colocated test executes `is_positive` (full line coverage) but
+# asserts nothing, so mutants survive un-exempted and `unit mutation` must fail — the
+# gate-trips half of the selftest signal (#204). `[workspace]` keeps it standalone.
+[package]
+name = "selftest_mutation_survivor"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

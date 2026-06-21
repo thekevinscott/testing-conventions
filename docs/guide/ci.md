@@ -29,7 +29,8 @@ not run**, so the auto-detect default is safe on any library. Pass `languages` (
 **restrict** the run to specific languages — e.g. `'["python"]'` to check Python alone.
 
 The **unit lint** and **integration lint** rules run for Python, TypeScript, and Rust; Rust is
-detected as a crate (a `Cargo.toml` / `*.rs`) under `path`. Rust is in the coverage matrix too — it
+detected as a crate (a `Cargo.toml` **with** `.rs` source) under `path` — a manifest alone, with no
+source to measure, is not treated as a crate. Rust is in the coverage matrix too — it
 defaults to a `lines = 100` floor (`regions` opt-in; no branch component).
 
 ### Inputs

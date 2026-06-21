@@ -27,7 +27,6 @@ _SOURCE_GLOBS: dict[str, tuple[str, ...]] = {
     "python": ("*.py",),
     "typescript": ("*.ts", "*.tsx", "*.mts", "*.cts"),
 }
-_RUST_GLOBS: tuple[str, ...] = ("Cargo.toml", "*.rs")
 
 
 # --- filesystem boundary (the external dependency an integration test mocks) ---
@@ -46,8 +45,13 @@ def has_source(root: Path, language: str) -> bool:
 
 
 def has_rust_crate(root: Path) -> bool:
-    """True if `root` holds a Rust crate — a Cargo.toml or any *.rs."""
-    return _any_match(root, _RUST_GLOBS)
+    """True if `root` holds a Rust crate *to check* — a `Cargo.toml` **and** at least one
+    `.rs` source. A manifest alone has nothing to measure: e.g. `packages/python` carries a
+    `Cargo.toml` but generates its Rust sources at wheel-build time, so a plain checkout has
+    no `.rs`. Treating that as a crate makes the zero-config rust coverage/mutation jobs
+    (#206) run `cargo` over absent sources and fail; requiring real source skips it instead.
+    """
+    return _any_match(root, ("Cargo.toml",)) and _any_match(root, ("*.rs",))
 
 
 _DIST_GLOBS: tuple[str, ...] = ("*.whl", "*.tar.gz", "*.tgz", "*.crate")

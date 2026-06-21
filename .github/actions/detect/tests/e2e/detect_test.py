@@ -52,6 +52,17 @@ def test_e2e_explicit_rust_routes_into_coverage_zero_config(tmp_path):
     assert out["coverage_languages"] == '["rust"]'
 
 
+def test_e2e_cargo_toml_without_rust_source_is_not_a_crate(tmp_path):
+    # A manifest with no `.rs` source — e.g. a wheel package whose Rust is generated at
+    # build time, like packages/python — has nothing to measure, so rust is NOT
+    # detected and no rust coverage / lint / mutation job runs over it (#206 follow-up).
+    _mk(tmp_path, "Cargo.toml", '[package]\nname = "x"\n')
+    out = _run(tmp_path, languages="", scan=".")
+    assert out["coverage_languages"] == "[]"
+    assert out["integration_lint_languages"] == "[]"
+    assert out["isolation_languages"] == "[]"
+
+
 def test_e2e_absent_language_skipped(tmp_path):
     _mk(tmp_path, "src/widget.py", "x = 1\n")
     out = _run(tmp_path, languages='["python","typescript"]', scan="src")

@@ -351,12 +351,15 @@ jobs:
     # so this is **PR-only and diff-scoped** (`--base`, like coverage-changed) — only the
     # mutants on the `<base>...HEAD` changed lines are run. The matrix is
     # `mutation_languages` (the coverage set; all three arms are at parity, #201/#202/#203).
-    if: ${{ github.event_name == 'pull_request' && needs.detect.outputs.mutation_languages != '[]' }}
+    # `mutation_languages` is a new detect output, so until a release moves `@v0` to a
+    # detect that emits it (this PR's own run still pins the old `@v0`), it's empty — fall
+    # back to `coverage_languages` (the identical set) so the matrix stays valid.
+    if: ${{ github.event_name == 'pull_request' && (needs.detect.outputs.mutation_languages || needs.detect.outputs.coverage_languages) != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        language: ${{ fromJSON(needs.detect.outputs.mutation_languages) }}
+        language: ${{ fromJSON(needs.detect.outputs.mutation_languages || needs.detect.outputs.coverage_languages) }}
     steps:
       - uses: actions/checkout@v6
         with:

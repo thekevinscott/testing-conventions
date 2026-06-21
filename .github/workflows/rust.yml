@@ -79,6 +79,11 @@ jobs:
       # The Rust mutation rule's integration/e2e tests (#201) shell out to cargo-mutants
       # over the tiny fixture crates.
       - uses: taiki-e/install-action@cargo-mutants
+      # The TypeScript mutation rule's integration/e2e tests (#202) shell out to Stryker
+      # over the tiny fixture projects; install its toolchain so `npx stryker` resolves it.
+      - name: Install the TypeScript mutation fixtures' toolchain
+        working-directory: packages/rust/tests/fixtures/unit_mutation/typescript
+        run: npm ci
       # `cargo llvm-cov` runs the integration + e2e suites under `tests/` (and the
       # library tests) under instrumentation, enforcing the 95% line floor over the
       # whole suite — unit tests alone don't exercise the CLI dispatch in lib.rs.

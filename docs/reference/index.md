@@ -145,36 +145,43 @@ exercised — one can pass while the other fails.
 Run mutation testing over the unit suite and report (or gate on) surviving mutants — the
 third rung above coverage: a test that *runs* a line still passes if you delete its
 assertions, but a surviving mutant proves it. See the [mutation guide](../guide/mutation) for
-the concept. **Rust only** for now, and **not yet wired into the [reusable workflow](../guide/ci)**
-— it ships per-language and turns on in CI once all three reach parity (#199).
+the concept. **Rust and TypeScript** today (Python still planned), and **not yet wired into the
+[reusable workflow](../guide/ci)** — it ships per-language and turns on in CI once all three reach
+parity (#199).
 
 ```
-testing-conventions unit mutation --language rust [--base <REF>] [--config <CONFIG>] <PATH>
+testing-conventions unit mutation --language <rust|typescript> [--base <REF>] [--config <CONFIG>] <PATH>
 ```
 
 | Argument / flag     | Description                                                                |
 | ------------------- | -------------------------------------------------------------------------- |
-| `<PATH>`            | Crate whose unit suite is mutated.                                         |
-| `--language <LANG>` | **Required.** `rust` (the only supported language today).                 |
-| `--base <REF>`      | Optional. Scope to mutants on lines a `<base>...HEAD` diff added or modified, instead of the whole crate (whole-tree mutation is slow). Maps to cargo-mutants' `--in-diff`. |
+| `<PATH>`            | Project whose unit suite is mutated.                                       |
+| `--language <LANG>` | **Required.** `rust` or `typescript`.                                      |
+| `--base <REF>`      | Optional. Scope to mutants on lines a `<base>...HEAD` diff added or modified, instead of the whole project (whole-tree mutation is slow). Rust maps it to cargo-mutants' `--in-diff`; TypeScript translates the changed lines into Stryker `--mutate <file>:<line>-<line>` ranges (same line granularity). |
 | `--config <CONFIG>` | Config file providing the `exempt` list (default `testing-conventions.toml`). Optional — absent means nothing is exempt. |
 
-For **`rust`**, runs [`cargo mutants`](https://github.com/sourcefrog/cargo-mutants) over the crate
-at `<PATH>` and reads its `outcomes.json`, collecting every **surviving** mutant (cargo-mutants'
-`MissedMutant`). A mutant with a `mutation` [exemption](#exemptions) on its file is dropped (an
-equivalent or deliberately-defensive mutation, with a reason). The gate is **binary, not a
-percentage** — there is no mutation-score floor (equivalent mutants make a fixed threshold
-unreachable, and a score isn't comparable across engines):
+Each language wraps its standard engine and collects every **surviving** mutant — one the suite
+ran but no test failed on:
+
+- **Rust** runs [`cargo mutants`](https://github.com/sourcefrog/cargo-mutants) and reads its
+  `outcomes.json` (`MissedMutant` outcomes). `cargo-mutants` must be installed.
+- **TypeScript** runs [Stryker](https://stryker-mutator.io/) and reads its `mutation.json`
+  report (`Survived` and `NoCoverage` mutants). Stryker (`@stryker-mutator/core` and a
+  test-runner plugin) must be installed/resolvable.
+
+A mutant with a `mutation` [exemption](#exemptions) on its file is dropped (an equivalent or
+deliberately-defensive mutation, with a reason). The gate is **binary, not a percentage** —
+there is no mutation-score floor (equivalent mutants make a fixed threshold unreachable, and a
+score isn't comparable across engines):
 
 - **On by default.** Any *un-exempted* surviving mutant fails the run (exit `1`, listing each
   survivor with its file, line, and mutation); a clean run exits `0`. There is no report-only mode.
 - **Exemptions are the only loosening.** A survivor confirmed equivalent or deliberately defensive
-  is lifted with a reason-required `[[rust.exempt]] rules = ["mutation"]` entry — so a passing run
-  means every survivor was killed or explained.
+  is lifted with a reason-required `[[<language>.exempt]] rules = ["mutation"]` entry — so a passing
+  run means every survivor was killed or explained.
 
-`cargo-mutants` must be installed. With `--base <REF>` the gate is **diff-scoped**: only survivors
-on changed lines count — "no unexplained surviving mutant on the lines you touched." `git` must
-resolve `<REF>`.
+With `--base <REF>` the gate is **diff-scoped**: only survivors on changed lines count — "no
+unexplained surviving mutant on the lines you touched." `git` must resolve `<REF>`.
 
 ### `unit lint`
 

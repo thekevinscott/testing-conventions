@@ -138,6 +138,24 @@ pub fn measure_rust(root: &Path, exempt: &[String], base: Option<&str>) -> Resul
     Ok(unexplained_survivors(&report, exempt))
 }
 
+/// Run Stryker over the TypeScript project at `root` and return its un-exempted
+/// survivors — the TS arm of the mutation rule (#202), parity with [`measure_rust`].
+///
+/// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested;
+/// without it, the whole project. `exempt` is the resolved `mutation`-rule exempt
+/// paths. Stryker must be installed / resolvable.
+///
+/// NOTE: stub — returns no survivors until the Stryker wiring lands (the
+/// implementation commit). It exists now so the red integration/e2e tests compile and
+/// fail for the right reason before the engine is wired (#202).
+pub fn measure_typescript(
+    _root: &Path,
+    _exempt: &[String],
+    _base: Option<&str>,
+) -> Result<Vec<Survivor>> {
+    Ok(Vec::new())
+}
+
 /// A unique temp dir for one cargo-mutants run's `--output`, removed on drop so the
 /// scanned crate stays pristine and parallel runs don't collide.
 struct MutantsOut(PathBuf);

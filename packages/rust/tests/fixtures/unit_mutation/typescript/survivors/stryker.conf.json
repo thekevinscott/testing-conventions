@@ -1,0 +1,5 @@
+{
+  "testRunner": "vitest",
+  "reporters": ["json"],
+  "mutate": ["index.ts"]
+}

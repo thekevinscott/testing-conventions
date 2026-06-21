@@ -7,6 +7,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`unit mutation --language typescript`** (#202) — the TypeScript arm of the mutation rule,
+  parity with the Rust vertical. Wraps [Stryker](https://stryker-mutator.io/): runs the engine,
+  reads its `mutation.json` report, and collects the surviving mutants (`Survived` and `NoCoverage`)
+  the suite ran but didn't catch, feeding the shared evaluation core (`mutation::evaluate`). Same
+  **on-by-default binary gate** as Rust — any un-exempted survivor fails the run — with reasoned
+  `[[typescript.exempt]] rules = ["mutation"]` entries the only loosening. Stryker has no native
+  git-diff scoping, so `--base <REF>` translates the `<base>...HEAD` changed lines into Stryker
+  `--mutate <file>:<line>-<line>` ranges — **line** granularity, matching cargo-mutants' `--in-diff`
+  (one called-out asymmetry: under `--base` the ranges replace Stryker's configured `mutate` set,
+  filtering test/`.d.ts` files). New library surface: `mutation::measure_typescript`, the shared
+  `mutation::evaluate` core, and the Stryker report types. Still **not wired into the reusable
+  workflow** — that waits on Python parity (#199). Stryker (`@stryker-mutator/core` and a
+  test-runner plugin) must be installed/resolvable.
+
 - **`unit mutation --language rust`** (#201) — the rung above coverage. Wraps
   [cargo-mutants](https://github.com/sourcefrog/cargo-mutants): runs the engine, reads its
   `outcomes.json`, and finds the surviving mutants the suite ran but didn't catch. The gate is

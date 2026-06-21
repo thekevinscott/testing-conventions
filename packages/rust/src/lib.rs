@@ -494,40 +494,48 @@ fn run_unit_coverage(
     }
 }
 
-/// Run `unit mutation` over `root` (#201): run cargo-mutants and fail on any
-/// surviving mutant not lifted by a `mutation` exemption.
+/// Run `unit mutation` over `root` (#201, #202): run the per-language engine and fail
+/// on any surviving mutant not lifted by a `mutation` exemption.
 ///
 /// The gate is **on by default and binary** — "no *unexplained* surviving mutant":
 /// every survivor must be killed with an assertion, or lifted by a reason-required
-/// `[[rust.exempt]] rules = ["mutation"]` for an equivalent / deliberately-defensive
+/// `[[<language>.exempt]] rules = ["mutation"]` for an equivalent / deliberately-defensive
 /// mutation. There is no percentage floor (equivalent mutants make one unreachable)
 /// and no report-only mode — the only loosening is a reasoned, per-file exemption.
-/// Rust only for now (the least-parity bar, #199): `--language python|typescript` is
-/// rejected rather than silently passing. `--base` scopes the run to the diff.
+/// Rust (cargo-mutants) and TypeScript (Stryker) are wired; Python lands with #203.
+/// `--base` scopes the run to the diff.
 fn run_unit_mutation(
     root: &Path,
     language: colocated_test::Language,
     base: Option<&str>,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
-    match language {
-        colocated_test::Language::Rust => {}
-        _ => anyhow::bail!(
-            "`unit mutation` supports `--language rust` only for now — \
-             TypeScript and Python land with the mutation epic (#199)"
-        ),
-    }
     let config = if config_path.exists() {
         config::load_config(config_path)?
     } else {
         config::Config::default()
     };
-    let rust = config.rust.unwrap_or_default();
-    let exempt: Vec<String> = config::resolve_exempt(root, &rust.exempt, config::Rule::Mutation)?
-        .into_iter()
-        .collect();
-
-    let survivors = mutation::measure_rust(root, &exempt, base)?;
+    let survivors = match language {
+        colocated_test::Language::Rust => {
+            let rust = config.rust.unwrap_or_default();
+            let exempt: Vec<String> =
+                config::resolve_exempt(root, &rust.exempt, config::Rule::Mutation)?
+                    .into_iter()
+                    .collect();
+            mutation::measure_rust(root, &exempt, base)?
+        }
+        colocated_test::Language::TypeScript => {
+            let typescript = config.typescript.unwrap_or_default();
+            let exempt: Vec<String> =
+                config::resolve_exempt(root, &typescript.exempt, config::Rule::Mutation)?
+                    .into_iter()
+                    .collect();
+            mutation::measure_typescript(root, &exempt, base)?
+        }
+        colocated_test::Language::Python => anyhow::bail!(
+            "`unit mutation` doesn't support Python yet — it lands with the mutation epic (#203)"
+        ),
+    };
     if survivors.is_empty() {
         println!("unit mutation: no surviving mutants — every mutation was caught");
         return Ok(0);
@@ -535,7 +543,7 @@ fn run_unit_mutation(
 
     eprintln!(
         "error: {} unexplained surviving mutant(s) — kill each with an assertion, or lift an \
-         equivalent/defensive one with a reason-required `[[rust.exempt]] rules = [\"mutation\"]`:",
+         equivalent/defensive one with a reason-required `[[<language>.exempt]] rules = [\"mutation\"]`:",
         survivors.len()
     );
     for survivor in &survivors {

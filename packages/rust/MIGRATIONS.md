@@ -15,6 +15,18 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Adds `unit mutation --language typescript` (#202) — the TypeScript arm of the mutation rule,
+parity with the Rust vertical. Wraps [Stryker](https://stryker-mutator.io/), reads its
+`mutation.json` report, and collects the surviving mutants (`Survived` / `NoCoverage`), feeding
+the shared `mutation::evaluate` core extracted from the Rust arm. Same on-by-default binary gate
+and reason-required `[[typescript.exempt]] rules = ["mutation"]` loosening. Stryker has no native
+git-diff scoping, so `--base` translates the `<base>...HEAD` changed lines into Stryker `--mutate
+<file>:<line>-<line>` ranges (line granularity; the one asymmetry is that under `--base` the ranges
+replace Stryker's configured `mutate` set, filtering test/`.d.ts` files). Purely additive —
+`mutation::measure_typescript`, the shared `mutation::evaluate`, and the Stryker report types;
+nothing existing changes. Unwired from the reusable workflow until Python reaches parity (#199).
+Requires Stryker (`@stryker-mutator/core` and a test-runner plugin).
+
 Adds `unit mutation --language rust` (#201) — the rung above coverage: a test that *runs*
 a line still passes if you delete its assertions, and a surviving mutant proves it. It wraps
 [cargo-mutants](https://github.com/sourcefrog/cargo-mutants), reads its `outcomes.json`, and
@@ -570,6 +582,17 @@ outcomes and honors a `mutation` exemption; over the fixture crates, `killed` re
 while `survivors` (an assertion-light suite) reports several; and the always-on gate drives the
 exit codes — `killed` `0`, `survivors` `1`, and `survivors` with a `mutation` exemption back to
 `0`. Requires `cargo-mutants`.
+
+```
+cd packages/rust && cargo test --lib mutation:: --test mutation_typescript --test mutation_typescript_e2e --test mutation_base_ts
+```
+
+Expected: the TypeScript mutation tests pass — the pure Stryker-report parser collects `Survived` /
+`NoCoverage` mutants and feeds the shared `evaluate` core; over the fixture projects, `killed`
+reports no survivors while `survivors` (an assertion-light suite) reports several; `--base` scopes
+the run to the changed lines; and the always-on gate drives the exit codes `0` / `1` / `0`.
+Requires the fixtures' Stryker toolchain (`npm ci` in
+`tests/fixtures/unit_mutation/typescript`).
 
 ```
 cd packages/rust && cargo test --test config_loader

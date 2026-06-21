@@ -1,38 +1,62 @@
-//! Shared test helper for the TypeScript mutation suites (#202).
+//! Shared test helper for the mutation suites (#202, #203).
 //!
-//! Stryker writes its report and sandbox *into the project dir*, so two runs in the
-//! same fixture would collide when cargo runs tests in parallel. [`Staged`] copies a
-//! fixture project into a unique temp dir — with `node_modules` symlinked to the shared
-//! toolchain rather than copied — so every test gets a pristine, isolated project and
-//! the committed fixtures are never written to.
+//! The engines write into the project dir — Stryker its report/sandbox, cosmic-ray
+//! mutates files in place — so two runs in the same fixture would collide when cargo
+//! runs tests in parallel. [`Staged`] copies a fixture project into a unique temp dir
+//! (for TypeScript, with `node_modules` symlinked to the shared toolchain rather than
+//! copied) so every test gets a pristine, isolated project and the committed fixtures
+//! are never written to.
+
+// Each constructor is used by only some of the mutation test binaries.
+#![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// A throwaway copy of a fixture project under `tests/fixtures/unit_mutation/typescript`,
+/// A throwaway copy of a fixture project under `tests/fixtures/unit_mutation/<lang>`,
 /// removed on drop.
 pub struct Staged(PathBuf);
 
 impl Staged {
-    /// Stage the named fixture project (`killed` / `survivors`) into a fresh temp dir.
+    /// Stage a TypeScript fixture (`killed` / `survivors`), symlinking the shared
+    /// Stryker toolchain's `node_modules` in.
     pub fn new(project: &str) -> Self {
+        Self::stage(
+            "typescript",
+            project,
+            &["index.ts", "index.test.ts", "stryker.conf.json"],
+            true,
+        )
+    }
+
+    /// Stage a Python fixture (`killed` / `survivors`); cosmic-ray and pytest resolve
+    /// from the ambient install, so there's no `node_modules` to link.
+    pub fn python(project: &str) -> Self {
+        Self::stage("python", project, &["calc.py", "calc_test.py"], false)
+    }
+
+    fn stage(lang: &str, project: &str, files: &[&str], link_node_modules: bool) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/unit_mutation/typescript");
+            .join("tests/fixtures/unit_mutation")
+            .join(lang);
         let dst = std::env::temp_dir().join(format!(
-            "tc-mut-ts-{}-{}-{}",
+            "tc-mut-{}-{}-{}-{}",
+            lang,
             project,
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed),
         ));
         std::fs::create_dir_all(&dst).expect("create staged project dir");
-        for file in ["index.ts", "index.test.ts", "stryker.conf.json"] {
+        for file in files {
             std::fs::copy(fixtures.join(project).join(file), dst.join(file))
-                .unwrap_or_else(|e| panic!("copy fixture {project}/{file}: {e}"));
+                .unwrap_or_else(|e| panic!("copy fixture {lang}/{project}/{file}: {e}"));
         }
-        // Symlink (not copy) the shared install — concurrent read-only resolution is safe.
-        std::os::unix::fs::symlink(fixtures.join("node_modules"), dst.join("node_modules"))
-            .expect("symlink node_modules");
+        if link_node_modules {
+            // Symlink (not copy) the shared install — concurrent read-only resolution is safe.
+            std::os::unix::fs::symlink(fixtures.join("node_modules"), dst.join("node_modules"))
+                .expect("symlink node_modules");
+        }
         Staged(dst)
     }
 
@@ -44,7 +68,8 @@ impl Staged {
 
 impl Drop for Staged {
     fn drop(&mut self) {
-        // Remove the symlink first so we never recurse into the shared toolchain.
+        // Remove the node_modules symlink first (if any) so we never recurse into the
+        // shared toolchain.
         let _ = std::fs::remove_file(self.0.join("node_modules"));
         let _ = std::fs::remove_dir_all(&self.0);
     }

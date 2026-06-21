@@ -145,19 +145,19 @@ exercised — one can pass while the other fails.
 Run mutation testing over the unit suite and report (or gate on) surviving mutants — the
 third rung above coverage: a test that *runs* a line still passes if you delete its
 assertions, but a surviving mutant proves it. See the [mutation guide](../guide/mutation) for
-the concept. **Rust and TypeScript** today (Python still planned), and **not yet wired into the
-[reusable workflow](../guide/ci)** — it ships per-language and turns on in CI once all three reach
-parity (#199).
+the concept. **All three languages** today, at parity, and **not yet wired into the
+[reusable workflow](../guide/ci)** — it ships per-language and turns on in CI once the matrix
+wiring lands (#199).
 
 ```
-testing-conventions unit mutation --language <rust|typescript> [--base <REF>] [--config <CONFIG>] <PATH>
+testing-conventions unit mutation --language <rust|typescript|python> [--base <REF>] [--config <CONFIG>] <PATH>
 ```
 
 | Argument / flag     | Description                                                                |
 | ------------------- | -------------------------------------------------------------------------- |
 | `<PATH>`            | Project whose unit suite is mutated.                                       |
-| `--language <LANG>` | **Required.** `rust` or `typescript`.                                      |
-| `--base <REF>`      | Optional. Scope to mutants on lines a `<base>...HEAD` diff added or modified, instead of the whole project (whole-tree mutation is slow). Rust maps it to cargo-mutants' `--in-diff`; TypeScript translates the changed lines into Stryker `--mutate <file>:<line>-<line>` ranges (same line granularity). |
+| `--language <LANG>` | **Required.** `rust`, `typescript`, or `python`.                           |
+| `--base <REF>`      | Optional. Scope to mutants on lines a `<base>...HEAD` diff added or modified, instead of the whole project (whole-tree mutation is slow). Rust maps it to cargo-mutants' `--in-diff`; TypeScript translates the changed lines into Stryker `--mutate <file>:<line>-<line>` ranges; Python scopes cosmic-ray to the changed files and filters survivors to the changed lines (all line granularity). |
 | `--config <CONFIG>` | Config file providing the `exempt` list (default `testing-conventions.toml`). Optional — absent means nothing is exempt. |
 
 Each language wraps its standard engine and collects every **surviving** mutant — one the suite
@@ -168,6 +168,9 @@ ran but no test failed on:
 - **TypeScript** runs [Stryker](https://stryker-mutator.io/) and reads its `mutation.json`
   report (`Survived` and `NoCoverage` mutants). Stryker (`@stryker-mutator/core` and a
   test-runner plugin) must be installed/resolvable.
+- **Python** runs [cosmic-ray](https://github.com/sixty-north/cosmic-ray) (driving pytest) and
+  reads its session via `cosmic-ray dump` (`survived` outcomes). A baseline check guards against
+  a broken suite reporting a false pass. cosmic-ray + pytest must be installed.
 
 A mutant with a `mutation` [exemption](#exemptions) on its file is dropped (an equivalent or
 deliberately-defensive mutation, with a reason). The gate is **binary, not a percentage** —

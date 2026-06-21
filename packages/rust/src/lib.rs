@@ -502,8 +502,8 @@ fn run_unit_coverage(
 /// `[[<language>.exempt]] rules = ["mutation"]` for an equivalent / deliberately-defensive
 /// mutation. There is no percentage floor (equivalent mutants make one unreachable)
 /// and no report-only mode — the only loosening is a reasoned, per-file exemption.
-/// Rust (cargo-mutants) and TypeScript (Stryker) are wired; Python lands with #203.
-/// `--base` scopes the run to the diff.
+/// All three languages are wired: Rust (cargo-mutants), TypeScript (Stryker), and
+/// Python (cosmic-ray). `--base` scopes the run to the diff.
 fn run_unit_mutation(
     root: &Path,
     language: colocated_test::Language,
@@ -532,9 +532,14 @@ fn run_unit_mutation(
                     .collect();
             mutation::measure_typescript(root, &exempt, base)?
         }
-        colocated_test::Language::Python => anyhow::bail!(
-            "`unit mutation` doesn't support Python yet — it lands with the mutation epic (#203)"
-        ),
+        colocated_test::Language::Python => {
+            let python = config.python.unwrap_or_default();
+            let exempt: Vec<String> =
+                config::resolve_exempt(root, &python.exempt, config::Rule::Mutation)?
+                    .into_iter()
+                    .collect();
+            mutation::measure_python(root, &exempt, base)?
+        }
     };
     if survivors.is_empty() {
         println!("unit mutation: no surviving mutants — every mutation was caught");
@@ -807,25 +812,5 @@ mod tests {
             .downcast_ref::<clap::Error>()
             .expect("error should be a clap::Error");
         assert_eq!(clap_err.kind(), clap::error::ErrorKind::DisplayVersion);
-    }
-
-    #[test]
-    fn unit_mutation_rejects_python_until_parity() {
-        // Rust (#201) and TypeScript (#202) are wired; Python lands with #203. Until
-        // then a `--language python` request errors before running any engine — no
-        // silent pass, and no fixture/toolchain needed.
-        let err = run([
-            "testing-conventions",
-            "unit",
-            "mutation",
-            "pkg",
-            "--language",
-            "python",
-        ])
-        .unwrap_err();
-        assert!(
-            err.to_string().contains("doesn't support Python yet"),
-            "got: {err}"
-        );
     }
 }

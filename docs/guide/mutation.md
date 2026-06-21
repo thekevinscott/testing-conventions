@@ -130,7 +130,7 @@ The rule wraps each language's mutation tool behind one contract:
 | --- | --- | --- |
 | TypeScript | [Stryker](https://stryker-mutator.io/) | changed-line `--mutate` ranges |
 | Rust | [cargo-mutants](https://github.com/sourcefrog/cargo-mutants) | `--in-diff` |
-| Python | [mutmut](https://github.com/boxed/mutmut) | via the wrapper |
+| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray) | changed-file scope + changed-line filter |
 
 ## Status
 
@@ -151,9 +151,15 @@ The `unit mutation` rule is landing **one language at a time** — see the
   changed-line ranges *replace* the project's configured `mutate` set (test and `.d.ts`
   files are filtered out), where cargo-mutants' `--in-diff` intersects with its own file
   selection.
-- **Python** — still planned.
+- **Python** — available now as `unit mutation --language python` (via
+  [cosmic-ray](https://github.com/sixty-north/cosmic-ray)). Same on-by-default gate and
+  same reasoned `[[python.exempt]] rules = ["mutation"]` loosening as the others. cosmic-ray
+  has no native git-diff mode, so `--base <ref>` scopes the run to the changed `.py` files
+  and then filters the survivors to the `<base>...HEAD` changed lines — **line** granularity,
+  matching the other arms.
 
-Because the bar is **least parity** (a rule ships to consumers only once all three languages
-meet one contract), `unit mutation` is **not yet wired into the [reusable workflow](./ci)**.
-The Rust and TypeScript commands run today for local use and experimentation; the CI rule
-turns on once Python reaches parity.
+All three languages are now at parity. Because the bar is **least parity** (a rule ships to
+consumers only once every language meets one contract), the per-language commands run today for
+local use and experimentation, but `unit mutation` is **not yet wired into the [reusable
+workflow](./ci)** — turning it on across the matrix is the remaining step of the
+[epic](https://github.com/thekevinscott/testing-conventions/issues/199).

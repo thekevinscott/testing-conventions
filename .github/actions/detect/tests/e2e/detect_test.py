@@ -73,6 +73,21 @@ def test_e2e_empty_languages_auto_detects_python(tmp_path):
     assert out["languages"] == '["python"]'
 
 
+# --- #204 mutation_languages (RED until implemented) ---
+
+def test_e2e_mutation_languages_python(tmp_path):
+    _mk(tmp_path, "src/widget.py", "x = 1\n")
+    out = _run(tmp_path, languages='["python"]', scan="src")
+    assert out["mutation_languages"] == '["python"]'
+
+
+def test_e2e_mutation_languages_includes_rust_crate(tmp_path):
+    _mk(tmp_path, "Cargo.toml", '[package]\nname = "x"\n')
+    _mk(tmp_path, "src/lib.rs", "pub fn f() {}\n")
+    out = _run(tmp_path, languages="", scan=".")
+    assert '"rust"' in out["mutation_languages"]
+
+
 # --- #186 packaging_dist / e2e_attestation (RED until implemented) ---
 
 def test_e2e_packaging_dist_located(tmp_path):

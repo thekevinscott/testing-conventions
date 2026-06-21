@@ -83,6 +83,25 @@ def test_restrictor_still_applies_when_set():
     assert "rust" not in out["integration_lint_languages"]
 
 
+# --- #204 mutation_languages (RED until implemented) ---
+
+def test_mutation_languages_mirrors_coverage_for_python():
+    # The mutation matrix is the same set as coverage: present python/typescript plus
+    # rust when a crate is here (all three arms are at parity now).
+    out = _run('["python"]', python=True)
+    assert out["mutation_languages"] == '["python"]'
+
+
+def test_mutation_languages_includes_rust_crate():
+    out = _run('["rust"]', rust_crate=True)
+    assert out["mutation_languages"] == '["rust"]'
+
+
+def test_mutation_languages_auto_detects_present_set():
+    out = _run("", python=True, rust_crate=True)
+    assert out["mutation_languages"] == '["python","rust"]'
+
+
 # --- #186 packaging_dist / e2e_attestation (RED until implemented) ---
 
 def test_packaging_dist_true_when_dist_present():

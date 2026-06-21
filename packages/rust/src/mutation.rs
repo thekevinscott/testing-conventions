@@ -134,17 +134,23 @@ pub fn evaluate(survivors: Vec<Survivor>, exempt: &[String]) -> Vec<Survivor> {
 pub fn measure_rust(root: &Path, exempt: &[String], base: Option<&str>) -> Result<Vec<Survivor>> {
     let out = MutantsOut::new();
     let diff = match base {
-        Some(base) => Some(write_base_diff(root, base, &out)?),
+        // An empty diff (no changed lines under the crate — a PR that doesn't touch it)
+        // means nothing to mutate: no survivors, no cargo-mutants run.
+        Some(base) => match write_base_diff(root, base, &out)? {
+            None => return Ok(Vec::new()),
+            Some(path) => Some(path),
+        },
         None => None,
     };
     run_cargo_mutants(root, &out.0, diff.as_deref())?;
     let outcomes = out.0.join("mutants.out").join("outcomes.json");
-    let json = std::fs::read_to_string(&outcomes).with_context(|| {
-        format!(
-            "reading cargo-mutants outcomes at `{}` — the run wrote none",
-            outcomes.display()
-        )
-    })?;
+    // cargo-mutants writes no `outcomes.json` when a run produces no mutants (e.g. an
+    // `--in-diff` that matches none of the crate's lines). `run_cargo_mutants` already
+    // bailed on a fatal exit, so a missing report here is "no mutants" → no survivors.
+    let json = match std::fs::read_to_string(&outcomes) {
+        Ok(json) => json,
+        Err(_) => return Ok(Vec::new()),
+    };
     let report = parse_mutants_report(&json)?;
     Ok(unexplained_survivors(&report, exempt))
 }
@@ -603,12 +609,19 @@ impl Drop for MutantsOut {
     }
 }
 
-/// Write the `<base>...HEAD` diff cargo-mutants' `--in-diff` scopes to, returning its path.
-fn write_base_diff(root: &Path, base: &str, out: &MutantsOut) -> Result<PathBuf> {
+/// Write the `<base>...HEAD` diff cargo-mutants' `--in-diff` scopes to, returning its
+/// path — or `None` when the diff is empty (no changed lines under the crate).
+///
+/// `--relative` restricts the diff to changes under `root` (the crate dir) and makes
+/// the paths relative to it. cargo-mutants runs *in* the crate dir and matches its
+/// `--in-diff` paths crate-relative, so without `--relative` the diff is repo-relative
+/// and matches nothing whenever the crate is a subdirectory of the git repo (the common
+/// case). Scoping also means a PR that doesn't touch the crate yields an empty diff.
+fn write_base_diff(root: &Path, base: &str, out: &MutantsOut) -> Result<Option<PathBuf>> {
     let range = format!("{base}...HEAD");
     let output = Command::new("git")
         .current_dir(root)
-        .args(["diff", &range])
+        .args(["diff", "--relative", &range])
         .output()
         .context("running `git diff` for `--base` (is git installed?)")?;
     if !output.status.success() {
@@ -617,10 +630,13 @@ fn write_base_diff(root: &Path, base: &str, out: &MutantsOut) -> Result<PathBuf>
             String::from_utf8_lossy(&output.stderr)
         );
     }
+    if output.stdout.is_empty() {
+        return Ok(None);
+    }
     std::fs::create_dir_all(&out.0).context("creating the mutants output dir")?;
     let path = out.0.join("base.diff");
     std::fs::write(&path, &output.stdout).context("writing the base diff")?;
-    Ok(path)
+    Ok(Some(path))
 }
 
 /// Run `cargo mutants --output <out> [--in-diff <diff>]` in `root`.

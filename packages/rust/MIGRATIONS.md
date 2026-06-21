@@ -15,6 +15,14 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Fixes `unit mutation --language rust --base` for a crate nested in the git repo (#204 follow-up).
+The `<base>...HEAD` diff is now taken `--relative` to the crate, so cargo-mutants' `--in-diff`
+matches a crate in a subdirectory (the common consumer layout) instead of nothing; and a diff with
+no changed lines under the crate — or one that yields no mutants — reports no survivors instead of
+erroring (`reading cargo-mutants outcomes … the run wrote none`). Purely a bug fix —
+`measure_rust`'s signature is unchanged; only its `--base` runtime behavior changes (see **Behavior
+changes without code changes**).
+
 Adds `unit mutation --language python` (#203) — the Python arm, completing cross-language parity.
 Wraps [cosmic-ray](https://github.com/sixty-north/cosmic-ray): a baseline check guards the suite,
 then `init` / `exec` run the mutants and `cosmic-ray dump` is parsed for the `survived` outcomes,

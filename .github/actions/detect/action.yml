@@ -29,6 +29,9 @@ outputs:
   coverage_languages:
     description: 'Present languages, plus rust when a crate is present (Rust coverage is zero-config, #206).'
     value: ${{ steps.scan.outputs.coverage_languages }}
+  mutation_languages:
+    description: 'The `unit mutation` matrix (#204): the same set as coverage_languages, now that all three arms are at parity.'
+    value: ${{ steps.scan.outputs.mutation_languages }}
   packaging_dist:
     description: 'true when a conventional dist/ holding a built distribution is discoverable in the checkout.'
     value: ${{ steps.scan.outputs.packaging_dist }}

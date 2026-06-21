@@ -109,6 +109,9 @@ def compute_outputs(
         "integration_lint_languages": _to_json(with_rust),
         "isolation_languages": _to_json(with_rust),
         "coverage_languages": _to_json(with_rust),
+        # `unit mutation` (#204): the same set as coverage — present python/typescript plus
+        # rust when a crate is here — now that all three arms are at parity (#201/#202/#203).
+        "mutation_languages": _to_json(with_rust),
         "packaging_dist": "true" if has_dist(repo) else "false",
         "e2e_attestation": "true" if has_attestation(repo) else "false",
     }

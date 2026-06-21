@@ -60,7 +60,7 @@ job that fails the build on a violation:
 | `unit coverage`       | on                                   | Python / TypeScript / Rust on their default floor above. |
 | `unit lint`           | on                                   | Python, TypeScript, Rust. |
 | `integration lint`    | on                                   | Python, TypeScript, Rust. |
-| `unit mutation`       | off (not yet wired)                  | Available for all three languages (`unit mutation --language <rust\|typescript\|python>`); ships to the workflow only once the matrix wiring lands (#199). A binary gate, on by default — see below. |
+| `unit mutation`       | on (pull requests only)              | A binary gate over all three languages (`--language <rust\|typescript\|python>`), diff-scoped to the `<base>...HEAD` changed lines — whole-tree mutation is too slow to gate. A PR fails on any un-exempted survivor on a changed line. See below. |
 | `packaging`           | on when a built dist is discoverable | Inspects a `dist/` found in the checkout, or a named `packaging_artifact`; **skipped, never failed** when neither exists. |
 | `e2e verify`          | on when an attestation is present    | Runs when a committed `e2e-attestation.json` sits at the repo root; **skipped, never failed** otherwise. `run_e2e` forces it on. |
 

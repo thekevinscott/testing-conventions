@@ -33,6 +33,7 @@ packages/rust/tests/fixtures/unit_coverage/rust/*/Cargo.lock
 # cargo-mutants output + lockfiles regenerated for the unit-mutation fixture crates
 mutants.out/
 packages/rust/tests/fixtures/unit_mutation/rust/*/Cargo.lock
+.github/selftest/mutation/*/Cargo.lock
 
 # Stryker run artifacts for the TypeScript unit-mutation fixtures (cleaned up after a
 # run; ignored so an interrupted run never leaks them into git)

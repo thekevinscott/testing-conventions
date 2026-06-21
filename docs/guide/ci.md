@@ -46,12 +46,13 @@ defaults to a `lines = 100` floor (`regions` opt-in; no branch component).
 
 ### Diff-scoped and opt-in checks
 
-Two rules also run a **diff-scoped** variant as its own `*-changed` job, on **pull requests** only (they check out full history and diff `<base>...HEAD`, with `base` defaulting to `origin/main`):
+Some rules also run a **diff-scoped** variant on **pull requests** only (they check out full history and diff `<base>...HEAD`, with `base` defaulting to `origin/main`):
 
 - **co-change** — `unit colocated-test --base`: a source changed in the PR whose colocated test didn't change with it fails (Python, TypeScript).
 - **changed-line coverage** — `unit coverage --base`: a line changed in the PR that lands below the floor fails, no matter how small the diff (Python, TypeScript, Rust).
+- **mutation** — `unit mutation --base`: a binary gate that fails the PR on any un-exempted surviving mutant on a changed line (Python, TypeScript, Rust). Diff-scoped because whole-tree mutation is too slow to gate, so there is no whole-tree mutation job — it runs on pull requests only. Each language installs its engine (cargo-mutants / Stryker / cosmic-ray).
 
-The whole-tree colocated-test and coverage jobs run regardless; the `*-changed` jobs add the commit-scoped gate on top.
+The whole-tree colocated-test and coverage jobs run regardless; the diff-scoped jobs add the commit-scoped gate on top.
 
 The **`e2e verify`** job checks that your committed `e2e-attestation.json` names the latest code commit and fails (with a re-attest nudge) when the code has moved on. It never runs the e2e suite — CI only confirms someone attested against this code. It's **default-on, verify-if-present**: it runs whenever an `e2e-attestation.json` is committed at the repo root, and is skipped (never failed) otherwise. Set `run_e2e: true` to force it on regardless.
 

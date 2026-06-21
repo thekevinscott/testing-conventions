@@ -112,8 +112,9 @@ the same way, and its `--config` is optional too: omit it and the default floor 
 Going further, **`unit mutation`** raises the bar from "a test runs the code" to "a test
 *verifies* it" by checking whether surviving mutants slip past the suite. It's available for all
 three languages — **Rust** (`--language rust`), **TypeScript** (`--language typescript`), and
-**Python** (`--language python`) — a binary gate that fails on any un-exempted survivor, not yet
-wired into CI; see the [mutation guide](./guide/mutation).
+**Python** (`--language python`) — a binary gate that fails on any un-exempted survivor, and the
+reusable workflow now runs it on pull requests (diff-scoped to the changed lines); see the
+[mutation guide](./guide/mutation).
 
 ## Next steps
 

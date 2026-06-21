@@ -23,9 +23,11 @@ name: Testing Conventions
 #   - integration lint     — the integration mocking lints (Python, TypeScript, Rust)
 #   - packaging            — no test files in the built distribution
 #
-# Two diff-scoped variants run as their own `*-changed` jobs on `pull_request`
-# only (they need `fetch-depth: 0` and a base ref): `unit colocated-test --base`
-# (co-change, #161) and `unit coverage --base` (changed-line coverage, #162). An
+# Diff-scoped variants run as their own jobs on `pull_request` only (they need
+# `fetch-depth: 0` and a base ref): `unit colocated-test --base` (co-change, #161),
+# `unit coverage --base` (changed-line coverage, #162), and `unit mutation --base`
+# (#204) — the mutation gate, binary and on by default, scoped to the changed lines
+# because whole-tree mutation is too slow to gate. An
 # `e2e verify` job (#68) checks the committed e2e attestation; it's default-on,
 # verify-if-present — it runs whenever an `e2e-attestation.json` is committed, and
 # `run_e2e` forces it on (#186).
@@ -126,6 +128,9 @@ jobs:
       # #206) — the matrix the whole-tree and changed-line coverage jobs fan out over.
       # Kept as its own set so a future coverage-less language can diverge.
       coverage_languages: ${{ steps.scan.outputs.coverage_languages }}
+      # `unit mutation` (#204): the same set as coverage now that all three arms are at
+      # parity (#201/#202/#203) — the matrix the diff-scoped mutation job fans out over.
+      mutation_languages: ${{ steps.scan.outputs.mutation_languages }}
       # Whether a built distribution is discoverable in the checkout, and whether a
       # committed e2e-attestation.json is present (#186) — the packaging and e2e-verify
       # jobs gate on these so they run by default and skip (never fail) when absent.
@@ -334,6 +339,69 @@ jobs:
           CONFIG: ${{ inputs.config }}
           BASE: ${{ inputs.base }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit coverage --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
+
+  mutation:
+    name: Unit mutation — changed lines (${{ matrix.language }})
+    needs: detect
+    # `unit mutation` (#204) — the rung above coverage: a test that *runs* a changed
+    # line still passes if you delete its assertions, and a surviving mutant proves it.
+    # The gate is binary and on by default (no report-only mode): an un-exempted survivor
+    # on a changed line fails the build, with reasoned `[[<lang>.exempt]] rules =
+    # ["mutation"]` entries the only loosening. Whole-tree mutation is too slow to gate,
+    # so this is **PR-only and diff-scoped** (`--base`, like coverage-changed) — only the
+    # mutants on the `<base>...HEAD` changed lines are run. The matrix is
+    # `mutation_languages` (the coverage set; all three arms are at parity, #201/#202/#203).
+    if: ${{ github.event_name == 'pull_request' && needs.detect.outputs.mutation_languages != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.detect.outputs.mutation_languages) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # `--base` diffs `<base>...HEAD`, so the base ref must be reachable.
+          fetch-depth: 0
+      # Like coverage, `unit mutation` shells out to the language's mutation engine, so
+      # its toolchain — and the project's own test deps — must be present. Set up per
+      # language. #56 (config-driven `check`) will eventually drive this from config.
+      - if: matrix.language == 'python'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - if: matrix.language == 'python'
+        name: Install mutation toolchain (cosmic-ray + pytest)
+        run: python -m pip install --quiet cosmic-ray pytest
+      # TypeScript drives Stryker, which runs the project's test runner — install the
+      # project's deps (which must include @stryker-mutator/core and a runner plugin)
+      # with pnpm, the TS convention.
+      - if: matrix.language == 'typescript'
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.0
+      - if: matrix.language == 'typescript'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - if: matrix.language == 'typescript'
+        name: Install project dependencies (pnpm)
+        run: pnpm install --frozen-lockfile
+      # Rust drives cargo-mutants over the crate.
+      - if: matrix.language == 'rust'
+        uses: dtolnay/rust-toolchain@stable
+      - if: matrix.language == 'rust'
+        name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - name: Check mutation on the lines changed vs ${{ inputs.base }}
+        env:
+          LANGUAGE: ${{ matrix.language }}
+          SCAN_PATH: ${{ inputs.path }}
+          VERSION: ${{ inputs.version }}
+          CONFIG: ${{ inputs.config }}
+          BASE: ${{ inputs.base }}
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit mutation --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
 
   integration-lint:
     name: Integration lint (${{ matrix.language }})

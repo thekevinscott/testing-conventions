@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Fixed
+
+- **`unit mutation --language rust --base` now handles a crate nested in the git repo, and a diff
+  that doesn't touch it** (#204 follow-up). The `<base>...HEAD` diff is taken `--relative` to the
+  crate, so cargo-mutants' `--in-diff` matches a crate in a subdirectory (the common consumer
+  layout) rather than nothing; and a diff with no changed lines under the crate — or one that
+  produces no mutants — now reports no survivors instead of erroring with `reading cargo-mutants
+  outcomes … the run wrote none`. No API change (`measure_rust`'s signature is unchanged).
+
 ### Added
 
 - **`unit mutation --language python`** (#203) — the Python arm of the mutation rule, completing

@@ -128,7 +128,7 @@ The rule wraps each language's mutation tool behind one contract:
 
 | Language | Engine | Diff-scoping |
 | --- | --- | --- |
-| TypeScript | [Stryker](https://stryker-mutator.io/) | `--since <ref>` |
+| TypeScript | [Stryker](https://stryker-mutator.io/) | changed-line `--mutate` ranges |
 | Rust | [cargo-mutants](https://github.com/sourcefrog/cargo-mutants) | `--in-diff` |
 | Python | [mutmut](https://github.com/boxed/mutmut) | via the wrapper |
 
@@ -142,9 +142,18 @@ The `unit mutation` rule is landing **one language at a time** — see the
   default**: any un-exempted surviving mutant fails the run (exit `1`), with reasoned
   `[[rust.exempt]] rules = ["mutation"]` entries the only loosening. Pass `--base <ref>`
   to scope it to a diff.
-- **TypeScript** and **Python** — still planned.
+- **TypeScript** — available now as `unit mutation --language typescript` (via
+  [Stryker](https://stryker-mutator.io/)). Same on-by-default gate and same reasoned
+  `[[typescript.exempt]] rules = ["mutation"]` loosening as Rust. Stryker has no native
+  git-diff mode, so `--base <ref>` is implemented by translating the `<base>...HEAD`
+  changed lines into Stryker `--mutate <file>:<line>-<line>` ranges — **line** granularity,
+  matching cargo-mutants' `--in-diff`. The one called-out asymmetry: under `--base`, the
+  changed-line ranges *replace* the project's configured `mutate` set (test and `.d.ts`
+  files are filtered out), where cargo-mutants' `--in-diff` intersects with its own file
+  selection.
+- **Python** — still planned.
 
 Because the bar is **least parity** (a rule ships to consumers only once all three languages
 meet one contract), `unit mutation` is **not yet wired into the [reusable workflow](./ci)**.
-The Rust command runs today for local use and experimentation; the CI rule turns on once
-TypeScript and Python reach parity.
+The Rust and TypeScript commands run today for local use and experimentation; the CI rule
+turns on once Python reaches parity.

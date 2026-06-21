@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- **`unit mutation --language rust`** (#201) — the rung above coverage. Wraps
+  [cargo-mutants](https://github.com/sourcefrog/cargo-mutants): runs the engine, reads its
+  `outcomes.json`, and finds the surviving mutants the suite ran but didn't catch. The gate is
+  **binary, not a percentage** (equivalent mutants make a fixed score unreachable) and **on by
+  default**: any *un-exempted* surviving mutant fails the run (exit `1`), with no report-only mode.
+  The only loosening is a reason-required `[[rust.exempt]] rules = ["mutation"]` entry for an
+  equivalent / deliberately-defensive survivor — so a passing run means every survivor was killed
+  or explained. `--base <REF>` scopes to the diff via cargo-mutants' `--in-diff`. New library
+  surface: the `mutation` module (`measure_rust`, `unexplained_survivors`, `Survivor`, the
+  `outcomes.json` types) and `config::Rule::Mutation`. Rust-only for now and **not yet wired into
+  the reusable workflow** — it ships per-language and turns on in CI once TypeScript and Python
+  reach parity (#199). `cargo-mutants` must be installed.
+
 ### Changed
 
 - **BREAKING — Rust coverage now has a zero-config default floor of `lines = 100`** (#206).

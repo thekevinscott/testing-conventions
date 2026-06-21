@@ -15,6 +15,18 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Adds `unit mutation --language rust` (#201) — the rung above coverage: a test that *runs*
+a line still passes if you delete its assertions, and a surviving mutant proves it. It wraps
+[cargo-mutants](https://github.com/sourcefrog/cargo-mutants), reads its `outcomes.json`, and
+finds the surviving mutants. The gate is binary, not a percentage (equivalent mutants make a
+fixed score unreachable), and **on by default**: any un-exempted survivor fails the run, with no
+report-only mode. The only loosening is a reason-required `[[rust.exempt]] rules = ["mutation"]`
+entry for an equivalent / defensive survivor; `--base <REF>` scopes to the diff (cargo-mutants'
+`--in-diff`). Purely additive — a new `unit mutation` subcommand and `mutation` module
+(`measure_rust`, `unexplained_survivors`, `Survivor`), plus `config::Rule::Mutation`; nothing
+existing changes. Rust-only and unwired from the reusable workflow until TypeScript and Python
+reach parity (#199). Requires `cargo-mutants`.
+
 Gives Rust a zero-config default coverage floor of `lines = 100` (#206), closing the
 last gap from the strict-100 default (#194). With no `[rust].coverage` table, `unit
 coverage --language rust` no longer errors asking for one — it enforces a 100% line
@@ -548,6 +560,16 @@ cd packages/rust && cargo test --lib default_python_coverage_is_the_strict_floor
 Expected: all three pass — `PythonCoverage::default()` is `fail_under = 100` with branch on,
 `TypeScriptCoverage::default()` is all four metrics at 100 (the strict zero-config floor, #194),
 and `RustCoverage::default()` is `lines = 100` with `regions: None` (the line floor, #206).
+
+```
+cd packages/rust && cargo test --lib mutation:: --test mutation_rust --test mutation_rust_e2e
+```
+
+Expected: the mutation tests pass — the pure `unexplained_survivors` collects only `MissedMutant`
+outcomes and honors a `mutation` exemption; over the fixture crates, `killed` reports no survivors
+while `survivors` (an assertion-light suite) reports several; and the always-on gate drives the
+exit codes — `killed` `0`, `survivors` `1`, and `survivors` with a `mutation` exemption back to
+`0`. Requires `cargo-mutants`.
 
 ```
 cd packages/rust && cargo test --test config_loader

@@ -109,6 +109,11 @@ error: 2 source file(s) missing a colocated unit test
 The non-zero exit fails CI, so an orphaned or missing test is caught. `unit coverage` runs
 the same way, and its `--config` is optional too: omit it and the default floor applies.
 
+Going further, **`unit mutation`** raises the bar from "a test runs the code" to "a test
+*verifies* it" by checking whether surviving mutants slip past the suite. It's landing
+per-language — **Rust** today (`unit mutation --language rust`), a binary gate that fails on any
+un-exempted survivor — and isn't wired into CI yet; see the [mutation guide](./guide/mutation).
+
 ## Next steps
 
 - [Guides](./guide/): task-oriented recipes (enforce a rule, wire it into CI, exempt a file).

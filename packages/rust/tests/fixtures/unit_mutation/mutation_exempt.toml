@@ -1,0 +1,7 @@
+# The survivor's file is exempted from the `mutation` rule — an equivalent /
+# deliberately-defensive mutation lifted with a reason, the one way to clear the
+# always-on gate with a survivor present.
+[[rust.exempt]]
+path = "src/lib.rs"
+rules = ["mutation"]
+reason = "fixture: the surviving mutant stands in for an equivalent mutation"

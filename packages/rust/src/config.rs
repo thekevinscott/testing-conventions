@@ -168,6 +168,8 @@ pub enum Rule {
     UntypedMock,
     /// `integration lint` — a `vi.mock` of a first-party module in a TS integration test (#75).
     NoFirstPartyMock,
+    /// `unit mutation` — a surviving mutant the unit suite didn't catch ([`crate::mutation`], #201).
+    Mutation,
 }
 
 impl Rule {
@@ -189,6 +191,7 @@ impl Rule {
             Rule::UnmockedCollaborator => "unmocked-collaborator",
             Rule::UntypedMock => "untyped-mock",
             Rule::NoFirstPartyMock => "no-first-party-mock",
+            Rule::Mutation => "mutation",
         }
     }
 
@@ -209,6 +212,7 @@ impl Rule {
             Rule::UnmockedCollaborator,
             Rule::UntypedMock,
             Rule::NoFirstPartyMock,
+            Rule::Mutation,
         ]
         .into_iter()
         .find(|rule| rule.id() == id)

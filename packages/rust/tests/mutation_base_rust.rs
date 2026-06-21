@@ -65,6 +65,13 @@ struct TempRepo(PathBuf);
 
 impl TempRepo {
     fn new(slug: &str) -> Self {
+        let repo = Self::bare(slug);
+        repo.write("Cargo.toml", CARGO_TOML);
+        repo
+    }
+
+    /// A git repo with no crate at its root — for placing the crate in a subdirectory.
+    fn bare(slug: &str) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let root = std::env::temp_dir().join(format!(
             "tc-mut-base-{}-{}-{}",
@@ -76,9 +83,7 @@ impl TempRepo {
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
-        let repo = TempRepo(root);
-        repo.write("Cargo.toml", CARGO_TOML);
-        repo
+        TempRepo(root)
     }
 
     fn write(&self, rel: &str, contents: &str) {
@@ -142,5 +147,51 @@ fn base_scopes_the_run_to_the_changed_function() {
             .iter()
             .all(|s| s.description.contains("is_positive")),
         "only the changed `is_positive` should be mutated; got {survivors:?}"
+    );
+}
+
+#[test]
+fn base_finds_survivors_in_a_subdir_crate() {
+    // The crate is a subdirectory of the git repo — the common consumer layout. The
+    // diff must be made crate-relative or cargo-mutants' `--in-diff` (which runs in the
+    // crate dir) matches nothing; with `--relative` the added weak function's mutants
+    // are found.
+    let repo = TempRepo::bare("subdir-survivor");
+    repo.write("crate/Cargo.toml", CARGO_TOML);
+    repo.write("crate/src/lib.rs", BASELINE);
+    repo.commit("baseline: fully-tested add in a subdir crate");
+    let base = repo.head();
+    repo.write("crate/src/lib.rs", WITH_SURVIVOR);
+    repo.commit("add an assertion-light is_positive");
+
+    let survivors =
+        measure_rust(&repo.0.join("crate"), &[], Some(&base)).expect("cargo-mutants runs");
+    assert!(
+        !survivors.is_empty()
+            && survivors
+                .iter()
+                .all(|s| s.description.contains("is_positive")),
+        "the added weak function in the subdir crate should leave a survivor; got {survivors:?}"
+    );
+}
+
+#[test]
+fn base_with_no_changes_under_the_crate_reports_no_survivors() {
+    // A PR that changes nothing under the crate (here, only a top-level note) yields an
+    // empty crate-relative diff — nothing to mutate, so no survivors and, crucially, no
+    // error (cargo-mutants writes no outcomes for a zero-mutant run).
+    let repo = TempRepo::bare("subdir-nochange");
+    repo.write("crate/Cargo.toml", CARGO_TOML);
+    repo.write("crate/src/lib.rs", WITH_SURVIVOR); // a would-be survivor, left unchanged
+    repo.write("notes.md", "before\n");
+    repo.commit("baseline");
+    let base = repo.head();
+    repo.write("notes.md", "before\nafter\n"); // only a non-crate file changes
+    repo.commit("tweak a top-level note, not the crate");
+
+    let survivors = measure_rust(&repo.0.join("crate"), &[], Some(&base)).expect("no run needed");
+    assert!(
+        survivors.is_empty(),
+        "nothing under the crate changed, so there are no survivors; got {survivors:?}"
     );
 }

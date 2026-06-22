@@ -57,9 +57,11 @@ pub struct RustConfig {
     pub exempt: Vec<Exemption>,
 }
 
-/// `[python].coverage`.
+/// `[python].coverage`. A **partial override** — `#[serde(default)]` fills any missing
+/// field from [`PythonCoverage::default`], so a table that sets only one threshold keeps
+/// our defaults for the rest (#216); `deny_unknown_fields` still rejects a typo'd key.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct PythonCoverage {
     pub branch: bool,
     pub fail_under: u8,
@@ -80,9 +82,12 @@ impl Default for PythonCoverage {
     }
 }
 
-/// `[typescript].coverage`.
+/// `[typescript].coverage`. A **partial override** — `#[serde(default)]` fills any
+/// missing field from [`TypeScriptCoverage::default`], so a table that sets only one of
+/// the four metrics keeps our defaults for the rest (#216); `deny_unknown_fields` still
+/// rejects a typo'd key.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct TypeScriptCoverage {
     pub lines: u8,
     pub branches: u8,
@@ -106,13 +111,14 @@ impl Default for TypeScriptCoverage {
     }
 }
 
-/// `[rust].coverage`. Branch coverage is still experimental, so only
-/// regions/lines are configurable, and `regions` is opt-in (Rust-only, sub-line):
-/// `None` unless the table sets it, while `lines` always carries a value.
+/// `[rust].coverage`. A **partial override** — `#[serde(default)]` fills any missing
+/// field from [`RustCoverage::default`] (`lines = 100`, `regions = None`), so a table
+/// that sets only `regions` keeps `lines = 100` (#216); `deny_unknown_fields` still
+/// rejects a typo'd key. Branch coverage is experimental, so only regions/lines are
+/// configurable, and `regions` stays opt-in (`None` unless the table sets it).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct RustCoverage {
-    #[serde(default)]
     pub regions: Option<u8>,
     pub lines: u8,
 }

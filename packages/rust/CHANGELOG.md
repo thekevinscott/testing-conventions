@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed
+
+- **A `[<language>].coverage` table is now a partial override** (#216, parent #196). Set only the
+  fields you want to change; the rest fall back to the language's default floor — so
+  `[typescript].coverage` with just `branches = 90` keeps `lines`/`functions`/`statements` at 100,
+  and `[rust].coverage` with just `regions = 90` keeps `lines = 100`. Previously every field was
+  required, so a partial table errored (and `[rust].coverage` errored without `lines`). A typo'd key
+  is still rejected — only *missing* keys default. No API change (the struct fields are unchanged).
+
 ### Fixed
 
 - **`unit mutation --language rust --base` now handles a crate nested in the git repo, and a diff

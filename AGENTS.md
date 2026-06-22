@@ -28,14 +28,24 @@ needed change, not speculative future-proofing per **Out of scope** below.)
 
 ## Exemptions
 
-An exemption is a last resort. The gate enforces it **deterministically at file granularity**, so
-the discipline is to make the exempted file as small as the irreducible, genuinely-untestable code —
-a cross-version import shim, pytest-hook plumbing that needs a live runner. Extract that code into
-its own minimal module and exempt only it; hard-test everything else, against **coverage *and*
-mutation** (coverage proves the lines run, mutation proves the tests assert). The `reason` must say
-*why the code can't be tested*, not merely what it is. Never exempt a whole module to dodge one
-stubborn line — split the line out. ("Keep it minimal" is discipline, not a deterministic check; the
-deterministic version would be line-scoped exemptions, tracked as its own issue.)
+An exemption is a near-forbidden last resort, not a normal tool. **Almost nothing is genuinely
+untestable** — what *feels* untestable usually just needs a technique:
+
+- behind a **framework boundary** (a pytest hook): call it directly; drive a generator hook by hand
+  (`next(gen)` / `gen.send(...)`); assert the framework's own registration metadata (pluggy records
+  hookimpl opts on the function, so even `@hookimpl(wrapper=True)` is checkable).
+- touching a **global or external object** (monkeypatching `coverage.Coverage`): inject the
+  dependency (pass the module in) and assert against a fake.
+- a **version-conditional import** (`tomllib` / `tomli`): force the dead branch with
+  `sys.modules[...] = None` plus a fake fallback, then re-import.
+
+So before exempting, reach for inject / mock / drive-directly. An exemption's `reason` must show the
+techniques you **tried** and why each is impossible — never merely assert "not testable in
+isolation"; that phrasing is how laziness launders itself past review, including your own. The gate
+is file-scoped, so a real exemption is also isolated to the smallest possible file, and it's held to
+**coverage *and* mutation** (coverage proves the lines run, mutation proves the tests assert). The
+bar: the entire #218 pytest plugin ended up needing **zero** exemptions. (The deterministic form of
+"keep it minimal" would be line-scoped exemptions — #226.)
 
 ## Code style
 

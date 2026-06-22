@@ -1,3 +1,7 @@
+---
+description: Every command, flag, exit code, and config key for the testing-conventions CLI and its TOML config file.
+---
+
 # Reference
 
 Information-oriented reference for the `testing-conventions` CLI and its config file.

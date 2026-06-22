@@ -1,3 +1,7 @@
+---
+description: Run the unit mutation gate — standalone per language, diff-scoped with --base, and wired into the CI workflow.
+---
+
 # Run mutation testing
 
 `unit mutation` is the verification rung above the coverage floor: it breaks the code and requires a

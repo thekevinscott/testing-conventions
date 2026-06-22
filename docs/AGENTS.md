@@ -103,3 +103,23 @@ Voice:
 - The `README.md` is the project's own front page and may carry more than one mode at once
   (a readme is a hybrid by nature); these per-mode rules govern the `docs/` site, which doesn't have
   that excuse.
+
+## Agent-facing digest (`llms.txt`)
+
+The build emits an agent-facing entry point next to the HTML — `llms.txt` (a link-rich index of
+every page) and `llms-full.txt` (the whole site concatenated as one markdown file), per the
+[llmstxt.org](https://llmstxt.org) standard. It's **generated from these same pages** by
+`vitepress-plugin-llms` at build time (configured in `.vitepress/config.ts`), so the digest tracks
+the docs with no second corpus to hand-maintain or let drift — the pages stay the single source of
+truth. Its audience is agents *using the shipped tool*, which is why this file (`docs/AGENTS.md`, the
+authoring conventions for *contributors*) is excluded from it via `ignoreFiles`.
+
+Two authoring consequences:
+
+- **Every page carries a one-line `description` frontmatter.** It feeds both the page's HTML `<meta>`
+  description and its one-line entry in `llms.txt`, so write it as a crisp distillation of the page's
+  "why" opening — same voice and canonical terminology. A page without one still lists in `llms.txt`,
+  just without its summary line, so don't skip it.
+- **Nothing to commit.** The artifacts land in the git-ignored `.vitepress/dist`; CI (`docs.yml`)
+  regenerates and deploys them on every push. Verify locally with `pnpm --dir docs build`, then read
+  `docs/.vitepress/dist/llms.txt`.

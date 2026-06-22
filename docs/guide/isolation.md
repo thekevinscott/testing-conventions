@@ -1,3 +1,7 @@
+---
+description: Enforce the isolation boundary — mock every collaborator in a unit test, but only the external world in an integration test.
+---
+
 # Isolate tests
 
 Isolation is about which collaborators a test may fake. The answer is *opposite* for the two

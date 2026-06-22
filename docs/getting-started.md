@@ -1,3 +1,7 @@
+---
+description: Get every rule running on your repository in about five minutes with the no-config drop-in workflow.
+---
+
 # Getting Started
 
 `testing-conventions` enforces a library's testing standards deterministically in CI. This tutorial

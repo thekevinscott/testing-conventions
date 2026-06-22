@@ -1,3 +1,7 @@
+---
+description: The testing model the rules encode — the three kinds of test, the unit ladder, and why it's built to resist gaming.
+---
+
 # The testing model
 
 `testing-conventions` isn't a test runner. It's an opinionated *standard* for how a library's tests

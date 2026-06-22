@@ -1,3 +1,7 @@
+---
+description: The single source of truth for every default — coverage floors, what runs without config, and the workflow inputs — and why.
+---
+
 # Defaults
 
 `testing-conventions` is built to run with **no configuration**: the six-line

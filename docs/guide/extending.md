@@ -1,3 +1,7 @@
+---
+description: Reuse the shared test config (vitestConfig / the pytest plugin) so a local test run is held to the same floor CI enforces.
+---
+
 # Extend the defaults
 
 This is the **local test-runner** surface: the coverage floor the rules enforce is also published as

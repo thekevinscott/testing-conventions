@@ -1,3 +1,7 @@
+---
+description: Tune what the rules require in testing-conventions.toml — relax a coverage floor or exempt a file with a required reason.
+---
+
 # Configure the rules
 
 This is the **what-to-enforce** surface: a single `testing-conventions.toml` at your repo root tunes

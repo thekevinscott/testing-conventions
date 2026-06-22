@@ -1,3 +1,7 @@
+---
+description: Enforce your conventions with the reusable GitHub Actions workflow — its inputs, diff-scoped jobs, and rolling your own steps.
+---
+
 # Enforce conventions in CI
 
 `testing-conventions` ships a **reusable GitHub Actions workflow**, so a consumer repo can

@@ -115,4 +115,4 @@ filesystem are caught by patching, not by the import check.)
 
 - [The testing model — isolation](../explanation/#isolation-first-party-vs-external): why unit and integration tests mock opposite things.
 - [Reference — `integration lint`](../reference/#integration-lint): the lint list and exit codes.
-- [Exempt a file](./exemptions): the reason-required escape hatch, shared by every rule.
+- [Configure the rules — exempt a file](./configure#exempt-a-file): the reason-required escape hatch, shared by every rule.

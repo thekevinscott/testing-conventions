@@ -27,11 +27,12 @@ export default defineConfig({
           text: 'How-to Guides',
           items: [
             { text: 'Overview', link: '/guide/' },
-            { text: 'Isolate tests', link: '/guide/isolation' },
-            { text: 'Exempt a file', link: '/guide/exemptions' },
+            { text: 'Configure the rules', link: '/guide/configure' },
             { text: 'Extend the defaults', link: '/guide/extending' },
+            { text: 'Isolate tests', link: '/guide/isolation' },
             { text: 'Run mutation testing', link: '/guide/mutation' },
             { text: 'Enforce conventions in CI', link: '/guide/ci' },
+            { text: 'Use the CLI directly', link: '/guide/cli' },
           ],
         },
         {

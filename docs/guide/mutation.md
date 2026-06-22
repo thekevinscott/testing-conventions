@@ -45,7 +45,7 @@ changed-line filter), all at line granularity.
 ## Exempt a survivor
 
 A survivor you've confirmed is equivalent or deliberately defensive is lifted with a reason — the
-same [exemption](./exemptions) mechanism every rule shares:
+same [exemption](./configure#exempt-a-file) mechanism every rule shares:
 
 ```toml
 [[typescript.exempt]]
@@ -68,4 +68,4 @@ language present.
 
 - [Why mutation testing](../explanation/mutation) — the concept, equivalent mutants, and why it's a binary gate.
 - [Reference — `unit mutation`](../reference/#unit-mutation) — flags, exit codes, and per-engine detail.
-- [Exempt a file](./exemptions) — the reason-required escape hatch.
+- [Configure the rules — exempt a file](./configure#exempt-a-file) — the reason-required escape hatch.

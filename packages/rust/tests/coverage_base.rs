@@ -365,13 +365,13 @@ fn cli_a_lower_configured_floor_lets_the_same_diff_pass() {
 
 #[test]
 fn a_coverage_exemption_lifts_a_below_floor_change() {
-    // A `coverage` exemption omits a file from the run, so its changed lines drop
-    // out of the diff ratio — the same waiver the whole-tree floor honors.
+    // A line-scoped `coverage` exemption (#226) lifts the shim's changed lines from the
+    // diff ratio — the same waiver the whole-tree floor honors, now line-scoped.
     let repo = TempRepo::new("exempt");
     repo.write(
         "testing-conventions.toml",
         "[[python.exempt]]\npath = \"shim.py\"\nrules = [\"coverage\"]\n\
-         reason = \"thin launcher; logic lives in tested modules\"\n",
+         lines = [\"1-3\"]\nreason = \"thin launcher; logic lives in tested modules\"\n",
     );
     let base = baseline(&repo);
     repo.write("shim.py", "def shim():\n    return 0\n    # noqa\n");

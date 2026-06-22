@@ -404,7 +404,7 @@ fn rust_a_coverage_exemption_lifts_a_below_floor_change() {
         "testing-conventions.toml",
         "[rust.coverage]\nregions = 80\nlines = 80\n\n\
          [[rust.exempt]]\npath = \"src/shim.rs\"\nrules = [\"coverage\"]\n\
-         reason = \"thin launcher; logic lives in tested modules\"\n",
+         lines = [\"1-3\"]\nreason = \"thin launcher; logic lives in tested modules\"\n",
     );
     repo.write("src/lib.rs", &format!("{WIDGET_RS}pub mod shim;\n"));
     repo.write("src/shim.rs", "pub fn shim() -> i64 {\n    0\n}\n");

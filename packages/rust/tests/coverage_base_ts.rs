@@ -400,7 +400,7 @@ fn ts_a_coverage_exemption_lifts_a_below_floor_change() {
     repo.write(
         "testing-conventions.toml",
         "[[typescript.exempt]]\npath = \"shim.ts\"\nrules = [\"coverage\"]\n\
-         reason = \"thin launcher; logic lives in tested modules\"\n",
+         lines = [\"1-3\"]\nreason = \"thin launcher; logic lives in tested modules\"\n",
     );
     repo.write("widget.ts", WIDGET_TS);
     repo.write("widget.test.ts", WIDGET_TEST_TS);

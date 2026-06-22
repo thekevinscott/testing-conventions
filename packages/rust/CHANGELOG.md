@@ -25,6 +25,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`testing-conventions exemptions --base <REF>`** (#229) — the exemption-approval gate's
+  deterministic detection. Diffs the `[[<language>.exempt]]` entries between `<REF>` (read with
+  `git show <REF>:<config>`) and the working tree's config, and exits `1` when the diff **adds**
+  one — so each *new* exemption costs a human greenlight. Each entry expands to one *(language,
+  path, rule)* unit per rule it lifts; a unit present now but absent at `<REF>` is newly added, so
+  adding an entry (or lifting an extra rule on an existing entry) fails, while removing/keeping an
+  entry or rewording its `reason` is clean (the gate keys on the *(path, rule)* lifted, not the
+  prose). Keying on newly-added units is the anti-loophole — pre-seeding exemptions on the base is
+  itself a gated diff. One schema drives all three languages, so the gate is language-agnostic; an
+  unresolvable `<REF>` errors rather than passing as clean. New library surface: the `exemptions`
+  module (`exemptions::newly_added`, `exemptions::AddedExemption`). The **human greenlight** — a
+  reusable-workflow job gated on a `tc:exemption-approved` PR label — is the remaining wiring step,
+  mirroring how `unit mutation` shipped as a command (#201–#203) before its workflow job (#204).
+
 - **`unit mutation --language python`** (#203) — the Python arm of the mutation rule, completing
   cross-language parity. Wraps [cosmic-ray](https://github.com/sixty-north/cosmic-ray): a baseline
   check guards the suite, then `init` / `exec` run the mutants and `cosmic-ray dump` is parsed for

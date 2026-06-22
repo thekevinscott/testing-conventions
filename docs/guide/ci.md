@@ -59,6 +59,8 @@ Some rules also run a **diff-scoped** variant on **pull requests** only (they ch
 
 The whole-tree colocated-test and coverage jobs run regardless; the diff-scoped jobs add the commit-scoped gate on top.
 
+The **exemption-approval** gate — `exemptions --base` ([#229](https://github.com/thekevinscott/testing-conventions/issues/229)) — is the same diff-scoped shape: it fails the PR when the diff **adds** a `[[<language>.exempt]]` entry, so each new exemption costs a human greenlight (a reviewer applying the `tc:exemption-approved` label). The detection command ships now; wiring its reusable-workflow job is the remaining step (the command-first, workflow-next path `unit mutation` took). See [Configure — new exemptions need a greenlight](./configure#new-exemptions-need-a-greenlight).
+
 The **`e2e verify`** job checks that your committed `e2e-attestation.json` names the latest code commit and fails (with a re-attest nudge) when the code has moved on. It never runs the e2e suite — CI only confirms someone attested against this code. It's **default-on, verify-if-present**: it runs whenever an `e2e-attestation.json` is committed at the repo root, and is skipped (never failed) otherwise. Set `run_e2e: true` to force it on regardless.
 
 The **coverage** job runs once per requested language that has sources (a language with none is

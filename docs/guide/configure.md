@@ -77,6 +77,22 @@ Because every exemption lives in this one file, names its rules, and carries a r
 exemption surface is auditable in a single diff — unlike scattered ignore comments. See
 [Reference — Exemptions](../reference/#exemptions) for the exact schema.
 
+### New exemptions need a greenlight
+
+A `reason` keeps an exemption honest, but it's still cheap to add. So adding a *new* exemption
+costs a deliberate human approval, detected the same deterministic, diff-scoped way as the other
+`--base` checks:
+
+```sh
+testing-conventions exemptions --base origin/main
+```
+
+This fails when the diff **adds** a `[[<language>.exempt]]` entry (or lifts an extra rule on an
+existing one); removing or keeping an entry, or rewording a `reason`, is clean. The human
+greenlight rides on the exit code — in the reusable workflow a reviewer applies the
+`tc:exemption-approved` label to approve the new exemptions. See
+[Reference — the `exemptions` command](../reference/#the-exemptions-command) for the full behavior.
+
 ## See also
 
 - [Reference — Configuration](../reference/#configuration): every key and the full schema.

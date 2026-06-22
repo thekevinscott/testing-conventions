@@ -15,6 +15,8 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Adds the `exemptions` command (#229) — the exemption-approval gate's deterministic detection. `testing-conventions exemptions --base <REF>` diffs the `[[<language>.exempt]]` entries between `<REF>` and the working tree's config and exits `1` when the diff *adds* one, so every new exemption costs a human greenlight; removing/keeping an entry or rewording a `reason` is clean. Purely additive — a new `exemptions` subcommand and `exemptions` module (`newly_added`, `AddedExemption`); nothing existing changes. The human-greenlight half (a reusable-workflow job gated on a `tc:exemption-approved` PR label) is the remaining wiring step, command-first like `unit mutation` (#201–#203 → #204).
+
 Makes every `[<language>].coverage` table a **partial override** (#216, parent #196): missing fields
 fall back to the language's default floor instead of erroring, so a consumer sets only what they want
 to change (`[typescript].coverage] branches = 90` keeps the other three at 100; `[rust].coverage]

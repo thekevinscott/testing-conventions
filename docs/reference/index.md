@@ -411,6 +411,42 @@ scanned; a directory is scanned in place.
 **Status:** all three languages land: Python wheel + sdist (#72, #106), TypeScript `npm pack`
 tarball (#73), Rust `.crate` (#74). `<PATH>` may also be an already-unpacked directory.
 
+### The `exemptions` command
+
+The exemption-approval gate's deterministic detection ([#229](https://github.com/thekevinscott/testing-conventions/issues/229)).
+Diffs the `[[<language>.exempt]]` entries between a base ref and the working tree's config and
+fails when the diff **adds** one, so each *new* exemption costs a human greenlight. Pure and
+deterministic, the same shape as the other `--base` checks.
+
+```
+testing-conventions exemptions --base <REF> [--config <CONFIG>]
+```
+
+| Argument / flag     | Description                                                                       |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `--base <REF>`      | **Required.** The base ref to diff against. The "before" config is read from `<REF>` (`git show <REF>:<config>`); the "after" is the working tree's config (what a PR's HEAD holds). In CI, pass the PR's base, e.g. `origin/main`. An unresolvable ref is an error, never a silent pass. |
+| `--config <CONFIG>` | The config file holding the `[[<language>.exempt]]` tables (default `testing-conventions.toml`). A config absent at the base means *every* exemption present now is newly added; a config absent on both sides means nothing is exempt either way (the zero-config drop-in passes). |
+
+**What counts as a new exemption.** Each `[[<language>.exempt]]` entry expands to one
+*(language, path, rule)* unit per rule it lifts. An entry is *newly added* when a unit present
+in the working tree's config is absent at `<REF>`:
+
+- adding an entry, or lifting an **extra** rule on an existing entry → that unit is new → exit `1`;
+- removing or keeping an entry → exit `0`;
+- editing only the `reason` → exit `0` (the gate keys on the *(path, rule)* lifted, not the prose).
+
+Keying on *newly-added* units is the anti-loophole: pre-seeding exemptions on the base branch
+doesn't help, because that base change is itself a gated diff. One schema drives all three
+languages, so the gate is language-agnostic.
+
+On a violation it prints each newly-added exemption and the `tc:exemption-approved` greenlight
+hint to stderr, then exits `1`; a clean diff exits `0`.
+
+**Status:** the detection command ships now (Python, TypeScript, Rust). The **human greenlight**
+— a reusable-workflow job that passes only when the diff adds nothing **or** a reviewer has
+applied the `tc:exemption-approved` PR label — is the remaining wiring step, mirroring how
+`unit mutation` shipped as a command (#201–#203) before its workflow job (#204).
+
 ## Exemptions
 
 Not every source file should need a colocated test or full coverage: a launcher shim, a pure

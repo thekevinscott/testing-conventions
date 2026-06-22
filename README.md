@@ -27,6 +27,10 @@ Every rule is a CLI command that fails CI on a violation.
 **E2E**
 
 - [`e2e attest`](https://thekevinscott.github.io/testing-conventions/reference/#e2e-attest) / [`e2e verify`](https://thekevinscott.github.io/testing-conventions/reference/#e2e-verify) — `attest` runs the e2e suite locally and records the commit it ran against; `verify` checks that receipt in CI and never runs e2e.
+
+**Exemptions**
+
+- [`exemptions`](https://thekevinscott.github.io/testing-conventions/reference/#the-exemptions-command) — the exemption-approval gate (#229): with `--base`, fail when the `<base>...HEAD` diff *adds* a `[[<language>.exempt]]` entry, so each new exemption costs a human greenlight. Deterministic and language-agnostic (one schema across Python, TypeScript, Rust). The detection command ships now; the reusable-workflow label gate (a reviewer applying `tc:exemption-approved`) is the remaining wiring step ([#229](https://github.com/thekevinscott/testing-conventions/issues/229)).
 <!-- #endregion rules -->
 
 ## The three kinds of tests
@@ -251,6 +255,32 @@ config-driven, never a silent ignore:
   `reason`. The whole exemption surface lives in one file, auditable in a single
   diff. A stale entry (a path that no longer exists) is a hard error, so the list
   can't rot.
+
+### New exemptions need a human greenlight
+
+A required `reason` keeps an exemption *honest*, but it's still cheap to add — an
+agent (or a hurried human) can write a plausible reason and slip one through. So
+adding a *new* exemption costs a deliberate human approval, enforced the same
+deterministic, diff-scoped way as co-change and changed-line coverage:
+
+```
+testing-conventions exemptions --base <ref>
+```
+
+This diffs the `[[<language>.exempt]]` entries between `<ref>` and the working tree
+and exits non-zero when the diff **adds** one. The gate keys on the *(path, rule)*
+being lifted — not the `reason` text — so:
+
+- adding an exemption (or lifting an extra rule on an existing one) → non-zero exit;
+- removing or keeping an exemption, or rewording a reason → clean.
+
+It keys on *newly-added* entries, so you can't pre-seed exemptions on the base
+branch to dodge it — that base change is itself a gated diff.
+
+The human greenlight rides on this exit code: in the reusable workflow, a job runs
+the command and passes only when the diff adds nothing **or** a reviewer has applied
+the `tc:exemption-approved` PR label. The detection command ships now; wiring that
+label gate into the reusable workflow is the remaining step ([#229](https://github.com/thekevinscott/testing-conventions/issues/229)).
 
 ## Configuration
 

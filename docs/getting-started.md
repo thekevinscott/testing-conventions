@@ -54,6 +54,7 @@ Everything beyond the drop-in is optional and lives in a focused guide:
 - [Isolate tests](./guide/isolation) — the unit/integration boundary and the mocking rules per language.
 - [Extend the defaults](./guide/extending) — relax a floor, exempt a file, or reuse our shared test config.
 - [Exempt a file](./guide/exemptions) — the explicit, reason-required escape hatch.
+- [Run mutation testing](./guide/mutation) — verify the lines a change touches, not just execute them.
 - [Enforce conventions in CI](./guide/ci) — the reusable workflow's inputs, diff-scoped checks, and rolling your own steps.
-- [Mutation testing](./guide/mutation) — verify the lines a change touches, not just execute them.
+- [The testing model](./explanation/) — *why* the standard is shaped this way: the three kinds of test, the unit ladder, and why it's built for agents.
 - [Reference](./reference/) and [Defaults](./reference/defaults) — every subcommand, flag, exit code, config key, and default value.

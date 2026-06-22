@@ -94,6 +94,11 @@ config file — 100% of what you don't explicitly exempt. **Rust** floors `lines
 opt-in via `[rust].coverage`, and branch coverage is experimental on stable, so there's no branch
 component.
 
+A `[<language>].coverage` table is a **partial override** — set only the fields you want to change;
+the rest keep the language's default. So `[typescript].coverage` with just `branches = 90` keeps
+`lines`/`functions`/`statements` at 100, and `[rust].coverage` with just `regions = 90` keeps
+`lines = 100`. (A typo'd key is still rejected — only *missing* keys fall back to the default.)
+
 For **`python`**, runs `coverage.py` with branch coverage on (measuring the sources under
 `<PATH>` with `*_test.py` excluded from the denominator) and compares the total against
 `[python].coverage` (`fail_under`, `branch`). Exits `0` when the floor is met, `1` (with the

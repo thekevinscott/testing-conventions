@@ -441,11 +441,28 @@ impl Config {
                         entry.path
                     );
                 }
-                // A `lines` list (#226) only makes sense for the measured-line rules;
-                // pairing it with a whole-file rule (e.g. `colocated-test`) is rejected
-                // on load so the misuse can't silently scope nothing.
-                if !entry.lines.is_empty() {
-                    if let Some(rule) = entry.rules.iter().find(|r| !r.is_line_scopable()) {
+                // Line-scoping and whole-file exemptions don't mix (#226). The
+                // measured-line rules (`coverage` / `mutation`) **require** `lines` —
+                // an exemption may not lift a whole file from coverage or mutation, only
+                // the exact lines it can prove are failing. The whole-file rules
+                // (presence, lints) **reject** `lines`. So an entry is either all
+                // line-scopable rules with `lines`, or all whole-file rules without.
+                let has_scopable = entry.rules.iter().any(|rule| rule.is_line_scopable());
+                let has_whole_file = entry.rules.iter().any(|rule| !rule.is_line_scopable());
+                if entry.lines.is_empty() {
+                    if has_scopable {
+                        let rule = entry.rules.iter().find(|r| r.is_line_scopable()).unwrap();
+                        bail!(
+                            "[{table}].exempt entry for `{}` names `{}` but lists no `lines` — \
+                             a `coverage` / `mutation` exemption must name the exact lines it \
+                             covers (whole-file exemptions are for presence / lint rules only)",
+                            entry.path,
+                            rule.id()
+                        );
+                    }
+                } else {
+                    if has_whole_file {
+                        let rule = entry.rules.iter().find(|r| !r.is_line_scopable()).unwrap();
                         bail!(
                             "[{table}].exempt entry for `{}` has `lines` alongside rule \
                              `{}` — line-scoped exemptions apply only to `coverage` and \
@@ -629,15 +646,17 @@ mod tests {
 
     #[test]
     fn a_valid_exemption_parses() {
+        // A whole-file presence exemption (a launcher shim with no colocated test).
         let config = parse(
             "[python]\ncoverage = { branch = true, fail_under = 100 }\n\
-             [[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\", \"coverage\"]\n\
+             [[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\"]\n\
              reason = \"thin launcher\"\n",
         )
         .unwrap();
         let exempt = &config.python.unwrap().exempt;
         assert_eq!(exempt.len(), 1);
-        assert_eq!(exempt[0].rules, vec![Rule::ColocatedTest, Rule::Coverage]);
+        assert_eq!(exempt[0].rules, vec![Rule::ColocatedTest]);
+        assert!(exempt[0].lines.is_empty());
     }
 
     #[test]
@@ -743,13 +762,23 @@ mod tests {
     }
 
     #[test]
-    fn an_exemption_without_lines_is_whole_file() {
-        // Omitting `lines` keeps today's whole-file behavior — the field defaults empty.
-        let config = parse(
+    fn a_coverage_exemption_without_lines_is_rejected() {
+        // `lines` is required for the measured-line rules (#226): an exemption can't
+        // lift a whole file from coverage, only the lines it can prove are uncovered.
+        let err = parse(
             "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\"]\nreason = \"gen\"\n",
         )
-        .unwrap();
-        assert!(config.python.unwrap().exempt[0].lines.is_empty());
+        .unwrap_err();
+        assert!(err.to_string().contains("lists no `lines`"), "got: {err}");
+    }
+
+    #[test]
+    fn a_mutation_exemption_without_lines_is_rejected() {
+        let err = parse(
+            "[[rust.exempt]]\npath = \"src/lib.rs\"\nrules = [\"mutation\"]\nreason = \"eq\"\n",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("lists no `lines`"), "got: {err}");
     }
 
     #[test]
@@ -800,9 +829,11 @@ mod tests {
 
     #[test]
     fn resolve_scoped_distinguishes_whole_file_from_lines() {
-        let tree = TempTree::new(&["whole.py", "scoped.py"]);
+        // A `coverage` entry resolves to its lines; a `colocated-test` entry (whole-file
+        // presence) to the whole file.
+        let tree = TempTree::new(&["barrel.py", "scoped.py"]);
         let exemptions = [
-            exemption("whole.py", &[Rule::Coverage]),
+            exemption("barrel.py", &[Rule::ColocatedTest]),
             Exemption {
                 path: "scoped.py".to_string(),
                 rules: vec![Rule::Coverage],
@@ -810,35 +841,38 @@ mod tests {
                 reason: "dead branch".to_string(),
             },
         ];
-        let scopes = resolve_exempt_scoped(&tree.0, &exemptions, Rule::Coverage).unwrap();
-        assert_eq!(scopes["whole.py"], LineScope::WholeFile);
+        let coverage = resolve_exempt_scoped(&tree.0, &exemptions, Rule::Coverage).unwrap();
         assert_eq!(
-            scopes["scoped.py"],
+            coverage["scoped.py"],
             LineScope::Lines([2, 4, 5].into_iter().collect())
         );
+        let presence = resolve_exempt_scoped(&tree.0, &exemptions, Rule::ColocatedTest).unwrap();
+        assert_eq!(presence["barrel.py"], LineScope::WholeFile);
     }
 
     #[test]
     fn resolve_scoped_merges_two_entries_for_one_file() {
-        // Two line-scoped entries for the same file union; a whole-file entry subsumes.
+        // Two line-scoped entries for one file union their lines; two whole-file entries
+        // stay whole-file.
         let tree = TempTree::new(&["a.py", "b.py"]);
-        let line = |path: &str, n: u32| Exemption {
-            path: path.to_string(),
+        let line = |n: u32| Exemption {
+            path: "a.py".to_string(),
             rules: vec![Rule::Mutation],
             lines: vec![LineSpec::Single(n)],
             reason: "equivalent mutant".to_string(),
         };
-        let exemptions = [
-            line("a.py", 3),
-            line("a.py", 7),
-            line("b.py", 1),
-            exemption("b.py", &[Rule::Mutation]),
-        ];
-        let scopes = resolve_exempt_scoped(&tree.0, &exemptions, Rule::Mutation).unwrap();
+        let mutation = [line(3), line(7)];
+        let scopes = resolve_exempt_scoped(&tree.0, &mutation, Rule::Mutation).unwrap();
         assert_eq!(
             scopes["a.py"],
             LineScope::Lines([3, 7].into_iter().collect())
         );
+
+        let presence = [
+            exemption("b.py", &[Rule::ColocatedTest]),
+            exemption("b.py", &[Rule::ColocatedTest]),
+        ];
+        let scopes = resolve_exempt_scoped(&tree.0, &presence, Rule::ColocatedTest).unwrap();
         assert_eq!(scopes["b.py"], LineScope::WholeFile);
     }
 }

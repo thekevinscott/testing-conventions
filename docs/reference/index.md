@@ -191,8 +191,9 @@ score isn't comparable across engines):
 - **On by default.** Any *un-exempted* surviving mutant fails the run (exit `1`, listing each
   survivor with its file, line, and mutation); a clean run exits `0`. There is no report-only mode.
 - **Exemptions are the only loosening.** A survivor confirmed equivalent or deliberately defensive
-  is lifted with a reason-required `[[<language>.exempt]] rules = ["mutation"]` entry — so a passing
-  run means every survivor was killed or explained.
+  is lifted with a reason-required `[[<language>.exempt]] rules = ["mutation"]` entry naming the
+  survivor's [`lines`](#line-scoped-exemptions) — so a passing run means every survivor was killed or
+  explained.
 
 With `--base <REF>` the gate is **diff-scoped**: only survivors on changed lines count — "no
 unexplained surviving mutant on the lines you touched." `git` must resolve `<REF>`.
@@ -435,15 +436,19 @@ For a deliberate omission, add a `[[<language>.exempt]]` entry to the config:
 ```toml
 [[python.exempt]]
 path = "mypkg/cli.py"          # relative to the scanned <PATH>
-rules = ["colocated-test", "coverage"]  # which checks this lifts
+rules = ["colocated-test"]     # which checks this lifts
 reason = "thin launcher; logic in run(), tested in run_test.py"  # required
 ```
+
+This is a **whole-file** exemption (`colocated-test` and the lints). The measured-line rules —
+`coverage` and `mutation` — are never whole-file: they require a `lines` list, in their own entry.
+See [line-scoped exemptions](#line-scoped-exemptions) below.
 
 | Field | Meaning |
 | ----- | ------- |
 | `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
 | `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, `mutation`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
-| `lines` | *Optional.* Narrows a `coverage` / `mutation` exemption to specific lines — see [line-scoped exemptions](#line-scoped-exemptions) below. Omit it for a whole-file exemption. |
+| `lines` | The lines a `coverage` / `mutation` exemption covers — see [line-scoped exemptions](#line-scoped-exemptions) below. **Required** with `coverage` / `mutation` (those rules are never whole-file) and **rejected** with any other rule (those are always whole-file). |
 | `reason` | Why the omission is deliberate. **Required**: an empty reason is rejected on load. |
 
 Because every exemption lives in the one config file, names its rules, and carries a reason,
@@ -453,11 +458,12 @@ non-empty `__init__.py` is exempted this way, not automatically.
 
 ### Line-scoped exemptions
 
-By default an `exempt` entry lifts a rule for the **whole file**. That's blunt for the
-measured-line rules: a single irreducible line — an equivalent mutant, a cross-version import
-shim, a defensive branch that can't run on one interpreter — would otherwise force the whole
-module past the gate, waving testable code through with it. A `lines` list narrows a `coverage`
-or `mutation` exemption to exactly the lines it covers:
+Most `exempt` entries lift a rule for the **whole file** (a launcher shim has no colocated test;
+a re-export barrel needs no isolation lint). But the measured-line rules — **`coverage`** and
+**`mutation`** — are **never** whole-file: lifting an entire file from coverage or mutation would
+wave testable code past the gate on the strength of one irreducible line (an equivalent mutant, a
+cross-version import shim, a defensive branch that can't run on one interpreter). So a `coverage` /
+`mutation` exemption **must** carry a `lines` list naming exactly the lines it covers:
 
 ```toml
 [[python.exempt]]
@@ -477,11 +483,14 @@ rule keeps the exemption minimal by construction:
   forget.
 
 So the set is forced to be *exactly* the failing lines, and stays as deterministic as the rest of
-the standard. Two constraints:
+the standard. Three rules govern how `lines` and the rest interact:
 
-- `lines` is valid **only** with `coverage` and/or `mutation` (the rules that measure individual
-  lines). `colocated-test` is whole-file presence, so a `lines` key alongside it is rejected on
-  load — split it into a separate whole-file entry.
+- **Required** for `coverage` / `mutation`: an entry naming either rule without `lines` is rejected
+  on load — those rules have no whole-file form.
+- **Rejected** for every other rule: `colocated-test` and the lints are whole-file presence/style
+  checks, so a `lines` key alongside one is rejected. The two kinds therefore never share an entry —
+  a launcher shim exempt from both `colocated-test` and `coverage` is two entries (one whole-file,
+  one line-scoped), not one.
 - For `mutation` under [`--base`](#unit-mutation), a listed line outside the diff isn't mutated, so
   it's simply left alone (neither an error nor a drop) rather than failing the guard for "no
   survivor"; the guard fires only on a listed line whose mutants were actually run and all caught.
@@ -498,11 +507,19 @@ configure just coverage, just exemptions, or both.
 [python]
 coverage = { branch = true, fail_under = 100 }
 
-# A deliberate, reason-required omission (see Exemptions above):
+# A whole-file presence exemption (see Exemptions above):
 [[python.exempt]]
 path = "mypkg/cli.py"
-rules = ["colocated-test", "coverage"]
+rules = ["colocated-test"]
 reason = "thin launcher; logic in run(), tested in run_test.py"
+
+# A line-scoped coverage/mutation exemption — `lines` is required, and never shares an
+# entry with a whole-file rule:
+[[python.exempt]]
+path = "mypkg/config/tomlcompat.py"
+rules = ["coverage", "mutation"]
+lines = [9, 10, "12-13"]
+reason = "version-conditional tomllib/tomli import; one branch is dead on any single interpreter"
 
 [typescript]
 coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }

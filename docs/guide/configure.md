@@ -48,18 +48,15 @@ either a colocated test or an exemption.
 
 Add a `[[<language>.exempt]]` entry naming the rules it lifts and **why**:
 
+Whole-file exemptions are for the **presence and lint** rules — a launcher shim with no colocated
+test, a re-export barrel with no logic to isolate:
+
 ```toml
 # A launcher shim with no unit test:
 [[python.exempt]]
 path = "mypkg/cli.py"
 rules = ["colocated-test"]
 reason = "thin launcher; logic lives in run(), tested in run_test.py"
-
-# Generated code you don't want in the coverage number:
-[[python.exempt]]
-path = "mypkg/pb/messages.py"
-rules = ["coverage"]
-reason = "generated protobuf stubs, not hand-authored"
 
 # A re-export barrel, exempt from the colocated-test rule:
 [[typescript.exempt]]
@@ -70,19 +67,20 @@ reason = "pure re-export barrel; no logic of its own"
 
 - `path` is relative to the scanned `<PATH>`, and must point to a file that exists — a stale entry
   is a hard error, so the list can't silently rot.
-- `rules` names the checks the entry lifts (`colocated-test`, `coverage`, a mutation or lint rule).
+- `rules` names the checks the entry lifts (`colocated-test`, a mutation or lint rule). For
+  `coverage` / `mutation`, see the line-scoped form below — those are never whole-file.
 - `reason` is required; a reason-less entry is rejected when the config loads.
 
 Because every exemption lives in this one file, names its rules, and carries a reason, the whole
 exemption surface is auditable in a single diff — unlike scattered ignore comments. See
 [Reference — Exemptions](../reference/#exemptions) for the exact schema.
 
-### Narrow an exemption to specific lines
+### Exempt specific lines (`coverage` / `mutation`)
 
-Exempting a whole file is a blunt instrument: one stubborn line — an equivalent mutant, a
-cross-version import shim, a defensive branch that can't run on a single interpreter — forces you to
-wave the *whole* module past the gate, testable code and all. For the **`coverage`** and
-**`mutation`** rules, add a `lines` list to scope the exemption to exactly those lines:
+The measured-line rules are **never** whole-file: lifting an entire file from coverage or mutation
+would wave testable code past the gate on the strength of one stubborn line — an equivalent mutant, a
+cross-version import shim, a defensive branch that can't run on a single interpreter. So a `coverage`
+or `mutation` exemption **must** carry a `lines` list naming exactly the lines it lifts:
 
 ```toml
 [[python.exempt]]
@@ -100,9 +98,9 @@ The list is checked, not trusted — a **determinism guard** mirrors the stale-p
   and forget.
 
 So the set is forced to be *exactly* the failing lines: minimal by construction, and as deterministic
-as the rest of the standard. `lines` is **only** valid alongside `coverage` / `mutation` (the
-measured-line rules); pairing it with `colocated-test` — a whole-file presence check — is rejected
-on load. Omit `lines` and the entry stays whole-file, as before.
+as the rest of the standard. `lines` is **required** with `coverage` / `mutation` and **rejected**
+with any whole-file rule, so the two kinds never share an entry — a file exempt from both
+`colocated-test` and `coverage` is two entries, one of each.
 
 ## See also
 

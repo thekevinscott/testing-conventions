@@ -1,0 +1,10 @@
+# Each coverage table sets only one field; the rest must fall back to the language's
+# default floor (#216 — partial override / "extend our defaults").
+[python.coverage]
+fail_under = 90
+
+[typescript.coverage]
+branches = 90
+
+[rust.coverage]
+regions = 90

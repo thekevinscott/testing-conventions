@@ -1,0 +1,5 @@
+# A partial table is fine, but a typo'd key inside it must still be rejected
+# (field defaults fill missing keys; deny_unknown_fields rejects unknown ones).
+[typescript.coverage]
+branches = 90
+braanches = 80

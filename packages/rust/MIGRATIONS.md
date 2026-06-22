@@ -15,6 +15,14 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Makes every `[<language>].coverage` table a **partial override** (#216, parent #196): missing fields
+fall back to the language's default floor instead of erroring, so a consumer sets only what they want
+to change (`[typescript].coverage] branches = 90` keeps the other three at 100; `[rust].coverage]
+regions = 90` keeps `lines = 100`). Purely a loosening — configs that already specified every field
+parse identically, and a typo'd key is still rejected (`deny_unknown_fields` is retained). No public
+API change: the `PythonCoverage` / `TypeScriptCoverage` / `RustCoverage` fields are unchanged; only
+their serde defaulting moves (see **Behavior changes without code changes**).
+
 Fixes `unit mutation --language rust --base` for a crate nested in the git repo (#204 follow-up).
 The `<base>...HEAD` diff is now taken `--relative` to the crate, so cargo-mutants' `--in-diff`
 matches a crate in a subdirectory (the common consumer layout) instead of nothing; and a diff with

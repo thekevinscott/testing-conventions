@@ -121,3 +121,47 @@ fn rejects_an_exemption_with_a_blank_reason_self_guard() {
         "an exemption with a blank reason must be rejected (self-guard)"
     );
 }
+
+#[test]
+fn partial_coverage_tables_inherit_defaults() {
+    // Each table sets only one field; the rest fall back to the language's default
+    // floor (#216). Previously a partial table errored on the required fields.
+    let config = load_config(fixture("partial_coverage.toml"))
+        .expect("a partial coverage table should load, filling defaults");
+    assert_eq!(
+        config.python.expect("[python]").coverage.expect("coverage"),
+        PythonCoverage {
+            branch: true,
+            fail_under: 90,
+        }
+    );
+    assert_eq!(
+        config
+            .typescript
+            .expect("[typescript]")
+            .coverage
+            .expect("coverage"),
+        TypeScriptCoverage {
+            lines: 100,
+            branches: 90,
+            functions: 100,
+            statements: 100,
+        }
+    );
+    assert_eq!(
+        config.rust.expect("[rust]").coverage.expect("coverage"),
+        RustCoverage {
+            regions: Some(90),
+            lines: 100,
+        }
+    );
+}
+
+#[test]
+fn an_unknown_field_in_a_coverage_table_still_errors() {
+    // Field defaults fill *missing* keys; a typo'd key is still rejected.
+    assert!(
+        load_config(fixture("unknown_coverage_field.toml")).is_err(),
+        "an unknown key inside a coverage table must still be rejected"
+    );
+}

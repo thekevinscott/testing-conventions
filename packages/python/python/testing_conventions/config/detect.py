@@ -10,10 +10,10 @@ import configparser
 import os
 from pathlib import Path
 
-from .tomlcompat import load as _load_toml
+from . import tomlcompat
 
 
-def _ini_has(path, sections, key):
+def ini_has(path, sections, key):
     parser = configparser.ConfigParser()
     try:
         parser.read(path)
@@ -22,10 +22,10 @@ def _ini_has(path, sections, key):
     return any(parser.has_section(s) and parser.has_option(s, key) for s in sections)
 
 
-def _pyproject_has(path, table, key):
+def pyproject_has(path, table, key):
     try:
         with open(path, "rb") as handle:
-            data = _load_toml(handle)
+            data = tomlcompat.load(handle)
     except Exception:
         return False
     return key in data.get("tool", {}).get("coverage", {}).get(table, {})
@@ -53,11 +53,11 @@ def user_set(start, cov_config, key, table):
             continue
         name = os.path.basename(path)
         if name.endswith(".toml"):
-            if _pyproject_has(path, table, key):
+            if pyproject_has(path, table, key):
                 return True
         elif name in ("setup.cfg", "tox.ini"):
-            if _ini_has(path, ["coverage:" + table], key):
+            if ini_has(path, ["coverage:" + table], key):
                 return True
-        elif _ini_has(path, [table], key):
+        elif ini_has(path, [table], key):
             return True
     return False

@@ -4,7 +4,7 @@ Pin the precedence contract — the plugin applies a default only where the
 consumer set nothing — across every config source coverage.py reads, plus the
 malformed/unset paths.
 """
-from testing_conventions.config.detect import _ini_has, _pyproject_has, user_set
+from testing_conventions.config.detect import ini_has, pyproject_has, user_set
 
 
 def test_pyproject_table_is_detected(tmp_path):
@@ -81,27 +81,27 @@ def test_malformed_toml_is_treated_as_unset(tmp_path):
     assert user_set(tmp_path, None, "fail_under", "report") is False
 
 
-def test_ini_has_reports_presence(tmp_path):
+def testini_has_reports_presence(tmp_path):
     path = tmp_path / ".coveragerc"
     path.write_text("[run]\nbranch = true\n")
-    assert _ini_has(str(path), ["run"], "branch") is True
-    assert _ini_has(str(path), ["run"], "omit") is False
+    assert ini_has(str(path), ["run"], "branch") is True
+    assert ini_has(str(path), ["run"], "omit") is False
 
 
-def test_ini_has_on_a_malformed_file_is_false(tmp_path):
+def testini_has_on_a_malformed_file_is_false(tmp_path):
     path = tmp_path / "bad.cfg"
     path.write_text("no section header here\n")
-    assert _ini_has(str(path), ["run"], "branch") is False
+    assert ini_has(str(path), ["run"], "branch") is False
 
 
-def test_pyproject_has_reports_presence(tmp_path):
+def testpyproject_has_reports_presence(tmp_path):
     path = tmp_path / "pyproject.toml"
     path.write_text("[tool.coverage.report]\nfail_under = 90\n")
-    assert _pyproject_has(str(path), "report", "fail_under") is True
-    assert _pyproject_has(str(path), "run", "branch") is False
+    assert pyproject_has(str(path), "report", "fail_under") is True
+    assert pyproject_has(str(path), "run", "branch") is False
 
 
-def test_pyproject_has_on_malformed_toml_is_false(tmp_path):
+def testpyproject_has_on_malformed_toml_is_false(tmp_path):
     path = tmp_path / "pyproject.toml"
     path.write_text("= broken =\n")
-    assert _pyproject_has(str(path), "report", "fail_under") is False
+    assert pyproject_has(str(path), "report", "fail_under") is False

@@ -72,7 +72,7 @@ So the gate isn't a percentage. It's **binary and diff-scoped**:
 > **No unexplained surviving mutant on the lines a change touched.**
 
 A survivor you've confirmed is equivalent or deliberately defensive gets a reasoned
-[exemption](../guide/exemptions) — the same mechanism every other rule uses; every other survivor
+[exemption](../guide/configure#exempt-a-file) — the same mechanism every other rule uses; every other survivor
 must be killed. It's the mutation analog of the coverage philosophy — *"zero survivors except what
 you exempted with a reason"*, not *"hit a number you can't reach"* — and it ports cleanly across
 languages, where a score does not.

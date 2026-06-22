@@ -108,7 +108,7 @@ packaging job is skipped, never failed.
 
 ## Roll your own
 
-The CLI is a single binary. Install it (see [Getting Started](../getting-started)) and call each
+The CLI is a single binary. Install it (see [Use the CLI directly](./cli)) and call each
 rule as its own step, naming the language with the required `--language` flag:
 
 ```yaml

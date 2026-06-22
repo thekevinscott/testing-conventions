@@ -16,7 +16,7 @@ explicit, deterministic rules so an agentic workflow has a floor it can't fall t
 
 The bar is deliberately high — a strict **100% coverage floor**, a **binary mutation gate** — because
 the cost of a too-low bar is silent rot, and the escape hatch (a reason-required
-[exemption](../guide/exemptions)) is cheap and auditable.
+[exemption](../guide/configure#exempt-a-file)) is cheap and auditable.
 
 ## The three kinds of test
 
@@ -88,4 +88,4 @@ reason-required, and in one file**, never a silent ignore. A launcher shim, a re
 generated code earns an exemption that names the rules it lifts and *why*; the whole exemption
 surface is auditable in a single diff, and a stale entry is a hard error so the list can't rot. The
 philosophy is "zero violations except what you exempted with a reason" — not "hit a number you can
-soften when it's inconvenient." See [Exempt a file](../guide/exemptions).
+soften when it's inconvenient." See [Configure the rules](../guide/configure#exempt-a-file).

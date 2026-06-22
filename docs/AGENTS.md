@@ -35,14 +35,26 @@ When a page wants to do two jobs, split it and cross-link. The mutation pages ar
 example: [Explanation — Why mutation testing](./explanation/mutation) carries the concept;
 [How-to — Run mutation testing](./guide/mutation) carries the commands.
 
+## Open with the why
+
+Every page — in any mode — opens with one or two sentences answering *why am I here?*: what this
+page is for, and why the reader should care or read on. No page starts cold with mechanics. A how-to
+states its goal (and which surface it tunes) before the steps; an explanation states the question it
+answers; a reference section says what the command is for in a line. This is the single most
+important habit for keeping the docs scannable.
+
 ## Information architecture
 
-The nav and sidebar mirror the four modes, in this order. Keep them in sync — a new page is
-registered in `.vitepress/config.ts` under its mode's group, and the top nav lists the four
-landing pages.
+The **homepage (`index.md`) is the hub** — a jumping-off point that routes to the four sections, and
+the only page whose job is navigation. Mode pages carry no navigation farms; in particular the
+tutorial ends by pointing at the How-to section rather than listing every guide. The nav and sidebar
+mirror the four modes, in this order; keep them in sync with `.vitepress/config.ts`.
 
-- **Getting Started** (Tutorial) — the single tutorial page.
-- **How-to Guides** (`/guide/`) — one page per task. `guide/index.md` is the overview/landing.
+- **Getting Started** (Tutorial) — the single tutorial page. One tutorial is fine: the four modes
+  are equally *important*, not equally *sized*, and tutorials are normally the fewest.
+- **How-to Guides** (`/guide/`) — one page per task, ordered by **first need** (what a new adopter
+  hits first — customizing a floor, exempting a file), with advanced and opt-out paths last.
+  `guide/index.md` is the section landing.
 - **Reference** (`/reference/`) — `index.md` (the CLI + config) and `defaults.md`.
 - **Explanation** (`/explanation/`) — `index.md` (the testing model) and one page per concept.
 
@@ -65,6 +77,12 @@ Consistency is a feature: the same idea uses the same word everywhere.
   `integration lint` waivers, which the reference names precisely).
 - **language names** — `Python`, `TypeScript`, `Rust` capitalized in prose; lowercase
   `python` / `typescript` / `rust` only as literal CLI `--language` values or config keys.
+- **the three configuration surfaces** — keep them distinct and name each by what it tunes. The
+  **config file** (`testing-conventions.toml`) is *what the rules enforce* — floors, exemptions. The
+  **workflow inputs** (the action's `with:` block) are *where and how a run is scoped* — languages,
+  path, base; call these "inputs" or "options", never "configuration". The **shared test config**
+  (`vitestConfig` / the pytest plugin) mirrors the floor into the consumer's *own test runner*.
+  Reserve the verb "configure" for the config file.
 
 Voice:
 

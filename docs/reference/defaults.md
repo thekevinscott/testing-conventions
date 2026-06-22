@@ -91,4 +91,4 @@ non-explicit exclusions:
 - **Declaration files** (`*.d.ts` / `*.d.mts` / `*.d.cts`) — they carry no runtime code.
 
 Anything else that genuinely shouldn't be tested needs an explicit, reason-required
-[`exempt`](./#exemptions) entry; see [Exempt a file](../guide/exemptions).
+[`exempt`](./#exemptions) entry; see [Configure the rules](../guide/configure#exempt-a-file).

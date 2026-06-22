@@ -251,6 +251,13 @@ config-driven, never a silent ignore:
   `reason`. The whole exemption surface lives in one file, auditable in a single
   diff. A stale entry (a path that no longer exists) is a hard error, so the list
   can't rot.
+- **Line-scoped where it counts.** A `coverage` or `mutation` exemption can carry a
+  `lines` list (`lines = [9, 10, "12-13"]`) to lift just those lines instead of the
+  whole file — for the single irreducible line (an equivalent mutant, a cross-version
+  import shim) that shouldn't drag the rest of the module past the gate. A determinism
+  guard keeps it honest: a listed line that *isn't* actually failing is a hard error,
+  and an unlisted failing line still fails the gate, so the set is exactly the failing
+  lines. (Measured-line rules only; a `lines` key on `colocated-test` is rejected.)
 
 ## Configuration
 

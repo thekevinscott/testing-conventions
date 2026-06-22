@@ -77,6 +77,33 @@ Because every exemption lives in this one file, names its rules, and carries a r
 exemption surface is auditable in a single diff — unlike scattered ignore comments. See
 [Reference — Exemptions](../reference/#exemptions) for the exact schema.
 
+### Narrow an exemption to specific lines
+
+Exempting a whole file is a blunt instrument: one stubborn line — an equivalent mutant, a
+cross-version import shim, a defensive branch that can't run on a single interpreter — forces you to
+wave the *whole* module past the gate, testable code and all. For the **`coverage`** and
+**`mutation`** rules, add a `lines` list to scope the exemption to exactly those lines:
+
+```toml
+[[python.exempt]]
+path = "mypkg/config/tomlcompat.py"
+rules = ["coverage", "mutation"]
+lines = [9, 10, "12-13"]   # single lines and inclusive "start-end" ranges
+reason = "version-conditional tomllib/tomli import; one branch is dead on any single interpreter"
+```
+
+The list is checked, not trusted — a **determinism guard** mirrors the stale-path rule:
+
+- A listed line that **isn't actually failing** (it's covered, or has a killed mutant, or carries no
+  measured code) is a **hard error** — you can't over-exempt.
+- A line that **is** failing but **isn't listed** fails the gate as normal — you can't under-list
+  and forget.
+
+So the set is forced to be *exactly* the failing lines: minimal by construction, and as deterministic
+as the rest of the standard. `lines` is **only** valid alongside `coverage` / `mutation` (the
+measured-line rules); pairing it with `colocated-test` — a whole-file presence check — is rejected
+on load. Omit `lines` and the entry stays whole-file, as before.
+
 ## See also
 
 - [Reference — Configuration](../reference/#configuration): every key and the full schema.

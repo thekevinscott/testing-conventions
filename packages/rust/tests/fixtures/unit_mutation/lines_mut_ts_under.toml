@@ -1,0 +1,7 @@
+# Under-listing (#226): exempting only line 6 leaves line 2's survivor unexplained, so
+# the gate still fails — you can't under-list and forget.
+[[typescript.exempt]]
+path = "index.ts"
+rules = ["mutation"]
+lines = [6]
+reason = "fixture: under-lists the survivors"

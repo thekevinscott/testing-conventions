@@ -143,7 +143,8 @@ Because the diff is judged against the configured floor rather than an implicit 
 clears the floor passes even if it leaves a changed line uncovered (the two coincide only at a 100
 floor), and a diff below the floor fails however small it is — there is no small-diff carve-out. A
 change touching no measured line of the language passes vacuously, and a file with a `coverage`
-[exemption](#exemptions) is lifted from the diff scope just as from the whole-tree floor. An
+[exemption](#exemptions) — whole-file or [line-scoped](#line-scoped-exemptions) — is lifted from the
+diff scope just as from the whole-tree floor. An
 **added** file's new lines *are* subjects (brand-new code must be covered too). This complements
 [`unit colocated-test --base`](#unit-colocated-test): co-change enforces that a changed source and
 its colocated *test* move together, while `--base` coverage enforces that the changed *lines* are
@@ -182,7 +183,8 @@ ran but no test failed on:
   a broken suite reporting a false pass. cosmic-ray + pytest must be installed.
 
 A mutant with a `mutation` [exemption](#exemptions) on its file is dropped (an equivalent or
-deliberately-defensive mutation, with a reason). The gate is **binary, not a percentage** —
+deliberately-defensive mutation, with a reason) — or, with a [`lines`](#line-scoped-exemptions)
+list, only the survivors on the named lines. The gate is **binary, not a percentage** —
 there is no mutation-score floor (equivalent mutants make a fixed threshold unreachable, and a
 score isn't comparable across engines):
 
@@ -440,13 +442,49 @@ reason = "thin launcher; logic in run(), tested in run_test.py"  # required
 | Field | Meaning |
 | ----- | ------- |
 | `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
-| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
+| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, `mutation`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
+| `lines` | *Optional.* Narrows a `coverage` / `mutation` exemption to specific lines — see [line-scoped exemptions](#line-scoped-exemptions) below. Omit it for a whole-file exemption. |
 | `reason` | Why the omission is deliberate. **Required**: an empty reason is rejected on load. |
 
 Because every exemption lives in the one config file, names its rules, and carries a reason,
 the project's entire exemption surface is auditable in a single diff, unlike a prose omit-list
 or a scattered set of ignore comments. A re-export barrel (`index.ts`), a launcher shim, or a
 non-empty `__init__.py` is exempted this way, not automatically.
+
+### Line-scoped exemptions
+
+By default an `exempt` entry lifts a rule for the **whole file**. That's blunt for the
+measured-line rules: a single irreducible line — an equivalent mutant, a cross-version import
+shim, a defensive branch that can't run on one interpreter — would otherwise force the whole
+module past the gate, waving testable code through with it. A `lines` list narrows a `coverage`
+or `mutation` exemption to exactly the lines it covers:
+
+```toml
+[[python.exempt]]
+path = "mypkg/config/tomlcompat.py"
+rules = ["coverage", "mutation"]
+lines = [9, 10, "12-13"]   # single line numbers and inclusive "start-end" ranges
+reason = "version-conditional tomllib/tomli import; one branch is dead on any single interpreter"
+```
+
+Each element is a 1-based line number (a TOML integer) or an inclusive range (a `"start-end"`
+string). The list is **checked, not trusted** — a determinism guard that mirrors the stale-path
+rule keeps the exemption minimal by construction:
+
+- A listed line that **isn't actually failing** — it's covered (`coverage`) or its mutants were all
+  caught (`mutation`), or it carries no measured code — is a **hard error**. You can't over-exempt.
+- A line that **is** failing but **isn't listed** fails the gate as normal. You can't under-list and
+  forget.
+
+So the set is forced to be *exactly* the failing lines, and stays as deterministic as the rest of
+the standard. Two constraints:
+
+- `lines` is valid **only** with `coverage` and/or `mutation` (the rules that measure individual
+  lines). `colocated-test` is whole-file presence, so a `lines` key alongside it is rejected on
+  load — split it into a separate whole-file entry.
+- For `mutation` under [`--base`](#unit-mutation), a listed line outside the diff isn't mutated, so
+  it's simply left alone (neither an error nor a drop) rather than failing the guard for "no
+  survivor"; the guard fires only on a listed line whose mutants were actually run and all caught.
 
 ## Configuration
 

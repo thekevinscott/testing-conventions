@@ -1,0 +1,11 @@
+# Line-scoped coverage exemption (#226): only shim.ts's uncovered `launch` (lines 1-3)
+# is excused, not the whole file. core.ts is fully covered, so the project clears the
+# 100 floor with just these lines lifted.
+[typescript]
+coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
+
+[[typescript.exempt]]
+path = "shim.ts"
+rules = ["coverage"]
+lines = ["1-3"]
+reason = "fixture: launcher is exercised by e2e, not units"

@@ -1,0 +1,8 @@
+# Line-scoped mutation exemption (#226): only line 7 (`n > 0`, where every mutant
+# survives) is excused, not the whole file. A surviving mutant on a listed line is
+# lifted with a reason.
+[[rust.exempt]]
+path = "src/lib.rs"
+rules = ["mutation"]
+lines = [7]
+reason = "fixture: the surviving mutant on this line stands in for an equivalent mutation"

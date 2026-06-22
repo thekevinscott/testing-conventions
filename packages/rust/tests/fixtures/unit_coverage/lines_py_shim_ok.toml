@@ -1,0 +1,11 @@
+# Line-scoped coverage exemption (#226): only shim.py's uncovered launcher body
+# (lines 2-4 — line 1, the `def`, runs on import) is excused, not the whole file.
+# core.py is fully covered, so the crate clears the 100 floor with just these lines lifted.
+[python]
+coverage = { branch = true, fail_under = 100 }
+
+[[python.exempt]]
+path = "shim.py"
+rules = ["coverage"]
+lines = ["2-4"]
+reason = "fixture: launcher body is exercised by e2e, not units"

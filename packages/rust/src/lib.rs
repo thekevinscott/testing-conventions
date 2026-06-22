@@ -3,6 +3,7 @@ pub mod colocated_test;
 pub mod config;
 pub mod coverage;
 pub mod e2e;
+pub mod exemptions;
 pub mod isolation;
 pub mod lint;
 pub mod mutation;
@@ -63,6 +64,20 @@ enum Command {
     E2e {
         #[command(subcommand)]
         command: E2eCommand,
+    },
+    /// Exemption-approval gate (#229): fail when the `<base>...HEAD` diff *adds* a
+    /// `[[<language>.exempt]]` entry, so each new exemption costs a human greenlight.
+    Exemptions {
+        /// Base ref to diff against; the "before" config is read from it via
+        /// `git show <REF>:<config>`, the "after" from the working tree. In CI, the
+        /// PR's base (e.g. `origin/main`). An unresolvable ref is an error.
+        #[arg(long)]
+        base: String,
+        /// Config file holding the `[[<language>.exempt]]` tables (default
+        /// `testing-conventions.toml`). Absent at the base → every current exemption
+        /// is newly added; absent on both sides → nothing is exempt either way.
+        #[arg(long, default_value = "testing-conventions.toml")]
+        config: PathBuf,
     },
 }
 
@@ -246,6 +261,7 @@ where
             E2eCommand::Attest { command } => run_e2e_attest(&command),
             E2eCommand::Verify => run_e2e_verify(),
         },
+        Some(Command::Exemptions { base, config }) => run_exemptions(&base, &config),
     }
 }
 
@@ -775,6 +791,30 @@ fn run_e2e_verify() -> anyhow::Result<i32> {
             Ok(1)
         }
     }
+}
+
+/// Run the exemption-approval gate's detection (#229): fail when the `<base>...HEAD`
+/// diff *adds* a `[[<language>.exempt]]` entry. Returns `0` when nothing was added
+/// (the human greenlight rides on this exit code), `1` after printing each newly-added
+/// exemption and the `tc:exemption-approved` label hint to stderr.
+fn run_exemptions(base: &str, config_path: &Path) -> anyhow::Result<i32> {
+    let added = exemptions::newly_added(base, config_path)?;
+    if added.is_empty() {
+        println!("exemptions: the diff adds no new exemptions");
+        return Ok(0);
+    }
+    eprintln!(
+        "error: {} newly-added exemption(s) need a human greenlight — a reviewer must apply the \
+         `tc:exemption-approved` label to approve them (or drop the exemption):",
+        added.len()
+    );
+    for a in &added {
+        eprintln!(
+            "  [{}.exempt] {} rules = [\"{}\"]",
+            a.language, a.path, a.rule
+        );
+    }
+    Ok(1)
 }
 
 #[cfg(test)]

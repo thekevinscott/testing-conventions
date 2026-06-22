@@ -32,11 +32,10 @@ entry (separate from the CLI), so it runs no shim.
 
 ## Python: the `testing_conventions` pytest plugin
 
-coverage.py has no config-file `extends`, so the shippable equivalent of the TypeScript export above
-is a pytest plugin — shipped *inside* the same wheel. `pip install testing-conventions` (which you
-already do for the CLI) auto-loads it; there's nothing to import or enable. It brings the same floor
-to your local `pytest --cov` run: branch coverage on, `fail_under = 100`, and test files
-(`*_test.py` / `conftest.py`) omitted from the denominator.
+`pip install testing-conventions` (which you already do for the CLI) auto-loads a pytest plugin —
+nothing to import or enable. It holds your local `pytest --cov` run to the same floor: branch
+coverage on, `fail_under = 100`, and test files (`*_test.py` / `conftest.py`) omitted from the
+denominator.
 
 ```sh
 pip install testing-conventions pytest-cov

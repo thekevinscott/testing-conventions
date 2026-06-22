@@ -46,11 +46,11 @@ jobs:
   conventions:
     name: Shipped reusable workflow over the Python plugin source
     # #175 / #218: consume our own shipped reusable workflow over a real package — the
-    # Python plugin source under packages/python/python. The pure detection module
-    # (_config.py) carries a colocated unit test and meets the coverage floor; the
-    # pytest-hook glue (_pytest_plugin.py) is exempted with a reason in the config
-    # (it's covered by the tests/ integration suite, not unit-testable in isolation).
-    # The published binary it runs is current (it auto-publishes on merge).
+    # Python plugin source under packages/python/python. The decidable logic (config
+    # detection, the default decision) is pure, colocated-tested, and held to the
+    # coverage and mutation gates; only the irreducible pytest-hook + monkeypatch glue
+    # (pytest_plugin/hooks.py) is exempted, with a reason. The published binary it runs
+    # is current (it auto-publishes on merge).
     uses: ./.github/workflows/testing-conventions.yml
     with:
       path: packages/python/python

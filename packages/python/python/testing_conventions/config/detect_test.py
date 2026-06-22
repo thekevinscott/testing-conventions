@@ -1,9 +1,10 @@
 """Unit tests for the coverage-config detection (#218).
 
-These pin the precedence contract — the plugin applies a default only where the
-consumer set nothing — across every config source coverage.py reads.
+Pin the precedence contract — the plugin applies a default only where the
+consumer set nothing — across every config source coverage.py reads, plus the
+malformed/unset paths.
 """
-from testing_conventions._config import _ini_has, _pyproject_has, user_set
+from testing_conventions.config.detect import _ini_has, _pyproject_has, user_set
 
 
 def test_pyproject_table_is_detected(tmp_path):
@@ -70,6 +71,16 @@ def test_nothing_set_anywhere_returns_false(tmp_path):
     assert user_set(child, None, "branch", "run") is False
 
 
+def test_malformed_ini_is_treated_as_unset(tmp_path):
+    (tmp_path / ".coveragerc").write_text("garbage with no section header\n")
+    assert user_set(tmp_path, None, "branch", "run") is False
+
+
+def test_malformed_toml_is_treated_as_unset(tmp_path):
+    (tmp_path / "pyproject.toml").write_text("this is = not valid toml ===\n")
+    assert user_set(tmp_path, None, "fail_under", "report") is False
+
+
 def test_ini_has_reports_presence(tmp_path):
     path = tmp_path / ".coveragerc"
     path.write_text("[run]\nbranch = true\n")
@@ -77,8 +88,20 @@ def test_ini_has_reports_presence(tmp_path):
     assert _ini_has(str(path), ["run"], "omit") is False
 
 
+def test_ini_has_on_a_malformed_file_is_false(tmp_path):
+    path = tmp_path / "bad.cfg"
+    path.write_text("no section header here\n")
+    assert _ini_has(str(path), ["run"], "branch") is False
+
+
 def test_pyproject_has_reports_presence(tmp_path):
     path = tmp_path / "pyproject.toml"
     path.write_text("[tool.coverage.report]\nfail_under = 90\n")
     assert _pyproject_has(str(path), "report", "fail_under") is True
     assert _pyproject_has(str(path), "run", "branch") is False
+
+
+def test_pyproject_has_on_malformed_toml_is_false(tmp_path):
+    path = tmp_path / "pyproject.toml"
+    path.write_text("= broken =\n")
+    assert _pyproject_has(str(path), "report", "fail_under") is False

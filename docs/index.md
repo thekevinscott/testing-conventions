@@ -10,8 +10,11 @@ hero:
       text: Getting Started
       link: /getting-started
     - theme: alt
-      text: Guides
+      text: How-to Guides
       link: /guide/
+    - theme: alt
+      text: The testing model
+      link: /explanation/
 
 ---
 

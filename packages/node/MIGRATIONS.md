@@ -15,6 +15,11 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Adds a `vitestConfig` export to the package root so consumers extend the shared
+coverage floor instead of copy-pasting it. Purely additive: the `bin` entry and
+its CLI behavior are unchanged, and `vitest` is added as an *optional* peer
+dependency, so CLI-only consumers see no new install requirement.
+
 ### Required changes
 
 None.

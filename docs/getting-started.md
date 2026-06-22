@@ -17,56 +17,18 @@ jobs:
     uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
 ```
 
-On every pull request it **auto-detects the languages present** (Python, TypeScript, and
-Rust), scans `src`, and runs every rule with sensible defaults — each as its own job that
-fails the build on a violation. That's the whole setup: this one file opts a new library
-into the full check set.
+On every pull request it **auto-detects the languages present** (Python, TypeScript, and Rust),
+scans `src`, and runs every rule with strict defaults — each as its own job that fails the build
+on a violation. A language with no sources is skipped, never failed, so the default is safe on any
+library.
 
-Every rule — including coverage — runs on Rust with no config: coverage defaults to a
-`lines = 100` floor (`regions` is opt-in; no branch component, since that's experimental on
-stable). See [Defaults](./reference/defaults) for every default the workflow applies and why.
-
-## Going further
-
-Everything below is optional — the drop-in above already works.
-
-### Restrict or redirect the scan
-
-`languages` is an optional restrictor and `path` defaults to `src`:
-
-```yaml
-    with:
-      languages: '["python", "typescript"]'   # restrict to these (default: auto-detect every present language)
-      path: packages/core/src                  # scan a different directory
-```
-
-A language with no sources under `path` is skipped, never failed, so the auto-detect
-default is safe on any library.
-
-### Customize with a config file
-
-Adjust a floor or declare an exemption in a `testing-conventions.toml` at your repo root:
-
-```toml
-# Relax the Python floor below the strict default 100:
-[python]
-coverage = { branch = true, fail_under = 90 }
-
-# Exempt a launcher shim; explicit, and a reason is required:
-[[python.exempt]]
-path = "mypkg/cli.py"
-rules = ["colocated-test", "coverage"]
-reason = "thin launcher; logic in run(), tested in run_test.py"
-```
-
-Anything you omit keeps its default. See [Configuration](./reference/#configuration) for
-every key, [Defaults](./reference/defaults) for the baseline, and [Exempt a
-file](./guide/exemptions) for the exemption rules.
+That's the whole setup. To restrict languages, scan a different path, or check a built artifact,
+see [Enforce conventions in CI](./guide/ci).
 
 ## Install the CLI
 
-The workflow runs a single binary, published to three registries under the same name.
-Install it the way that matches your toolchain:
+The workflow runs a single binary, published to three registries under the same name. Install it
+to run any rule locally:
 
 ```sh
 # Rust (crates.io)
@@ -79,45 +41,20 @@ pip install testing-conventions
 npm install --save-dev testing-conventions
 ```
 
-Confirm it's available (prefix `npx` if you installed it as an npm dev dependency):
+Confirm it's available (prefix `npx` if you installed it via npm):
 
 ```sh
 testing-conventions --version
 ```
 
-Then call any rule directly, naming the language with the required `--language` flag. For
-example, the **colocated test** rule checks that every source file has a colocated unit
-test named after it:
+## Going further
 
-```sh
-# Python: foo.py must have a sibling foo_test.py
-testing-conventions unit colocated-test --language python src/
+Everything beyond the drop-in is optional and lives in a focused guide:
 
-# TypeScript: foo-bar.ts must have a sibling foo-bar.test.ts
-testing-conventions unit colocated-test --language typescript src/
-```
-
-When every source file is paired, the command prints nothing and exits `0`. When a file is
-missing its twin, each orphan is listed on stderr and the command exits `1`:
-
-```
-missing colocated unit test: src/widget.ts
-missing colocated unit test: src/pkg/orphan.ts
-error: 2 source file(s) missing a colocated unit test
-```
-
-The non-zero exit fails CI, so an orphaned or missing test is caught. `unit coverage` runs
-the same way, and its `--config` is optional too: omit it and the default floor applies.
-
-Going further, **`unit mutation`** raises the bar from "a test runs the code" to "a test
-*verifies* it" by checking whether surviving mutants slip past the suite. It's available for all
-three languages — **Rust** (`--language rust`), **TypeScript** (`--language typescript`), and
-**Python** (`--language python`) — a binary gate that fails on any un-exempted survivor, and the
-reusable workflow now runs it on pull requests (diff-scoped to the changed lines); see the
-[mutation guide](./guide/mutation).
-
-## Next steps
-
-- [Guides](./guide/): task-oriented recipes (enforce a rule, wire it into CI, exempt a file).
-- [Reference](./reference/): every subcommand, flag, exit code, and config key.
-- [Defaults](./reference/defaults): every default value, and why.
+- [Isolate tests](./guide/isolation) — the unit/integration boundary and the mocking rules per language.
+- [Extend the defaults](./guide/extending) — relax a floor, exempt a file, or reuse our shared test config.
+- [Exempt a file](./guide/exemptions) — the explicit, reason-required escape hatch.
+- [Run mutation testing](./guide/mutation) — verify the lines a change touches, not just execute them.
+- [Enforce conventions in CI](./guide/ci) — the reusable workflow's inputs, diff-scoped checks, and rolling your own steps.
+- [The testing model](./explanation/) — *why* the standard is shaped this way: the three kinds of test, the unit ladder, and why it's built for agents.
+- [Reference](./reference/) and [Defaults](./reference/defaults) — every subcommand, flag, exit code, config key, and default value.

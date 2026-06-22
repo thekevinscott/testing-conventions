@@ -8,6 +8,13 @@
   "bin": {
     "testing-conventions": "dist/bin.js"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/vitest-config.d.ts",
+      "import": "./dist/vitest-config.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist/"
   ],
@@ -15,7 +22,7 @@
     "build": "tsx scripts/build.ts",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:e2e": "cargo build --release --manifest-path ../rust/Cargo.toml --bin testing-conventions && vitest run --config vitest.e2e.config.ts",
+    "test:e2e": "pnpm run build && cargo build --release --manifest-path ../rust/Cargo.toml --bin testing-conventions && vitest run --config vitest.e2e.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run build"
   },
@@ -24,6 +31,14 @@
   },
   "dependencies": {
     "bin-shim": "^0.1.1"
+  },
+  "peerDependencies": {
+    "vitest": ">=2"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
   },
   "optionalDependencies": {
     "@testing-conventions/x86_64-unknown-linux-gnu": "0.0.1",

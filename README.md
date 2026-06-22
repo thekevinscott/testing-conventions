@@ -1,11 +1,7 @@
 # testing-conventions
 
-**Enforce testing conventions in libraries (Python, TypeScript, and Rust)**
-
-`testing-conventions` is a config-driven standard for how tests are structured,
-isolated, and measured in a library. One config file drives every rule, and rules
-are enforced deterministically in CI: a violation fails the build. It's primarily
-useful for enforcing agent (LLM) behavior.
+`testing-conventions` enforces testing conventions in libraries (Python, TypeScript, and Rust).
+Primarily useful for enforcing agent (LLM) behavior.
 
 <!-- Single source of truth for the rule list: docs/index.md pulls the region below via VitePress @include. Keep it in sync with the #3 checklist. -->
 <!-- #region rules -->

@@ -1,0 +1,13 @@
+# The plugin source. `_pytest_plugin.py` is pytest-hook + coverage-monkeypatch
+# glue — not unit-testable in isolation; it's exercised end to end by
+# tests/pytest_plugin_test.py. Its pure detection logic lives in `_config.py`,
+# which has a colocated unit test and is held to the coverage floor.
+[[python.exempt]]
+path = "testing_conventions/_pytest_plugin.py"
+rules = ["colocated-test", "coverage", "mutation"]
+reason = "pytest hook + coverage monkeypatch glue; covered by the tests/ integration suite, not unit-testable in isolation"
+
+[[python.exempt]]
+path = "testing_conventions/_config.py"
+rules = ["mutation"]
+reason = "diff-scoped mutation isn't wired for this package's pytest suite in the reusable workflow (cf. the coverage toolchain note, #56); the logic is covered by _config_test.py"

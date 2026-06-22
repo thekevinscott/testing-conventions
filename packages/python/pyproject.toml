@@ -17,3 +17,6 @@ Repository = "https://github.com/thekevinscott/testing-conventions"
 [tool.maturin]
 manifest-path = "../rust/Cargo.toml"
 bindings = "bin"
+python-source = "python"
+# Colocated unit tests live next to the source; never ship them in the wheel.
+exclude = ["**/*_test.py"]

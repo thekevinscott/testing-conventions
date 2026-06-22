@@ -15,6 +15,12 @@ Each entry has five sections, in order:
 
 ### Summary
 
+The wheel now ships an importable `testing_conventions` package with a pytest
+plugin (`pytest11` entry point) alongside the CLI binary, applying the
+recommended coverage floor to a local `pytest --cov` run unless the consumer has
+configured it themselves. Purely additive: the CLI binary and its behavior are
+unchanged, and the plugin only engages when a coverage run is active.
+
 ### Required changes
 
 None.

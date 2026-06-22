@@ -11,8 +11,9 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: 'Getting Started', link: '/getting-started' },
-      { text: 'Guides', link: '/guide/' },
+      { text: 'How-to Guides', link: '/guide/' },
       { text: 'Reference', link: '/reference/' },
+      { text: 'Explanation', link: '/explanation/' },
     ],
     sidebar: {
       '/': [
@@ -29,8 +30,8 @@ export default defineConfig({
             { text: 'Isolate tests', link: '/guide/isolation' },
             { text: 'Exempt a file', link: '/guide/exemptions' },
             { text: 'Extend the defaults', link: '/guide/extending' },
+            { text: 'Run mutation testing', link: '/guide/mutation' },
             { text: 'Enforce conventions in CI', link: '/guide/ci' },
-            { text: 'Mutation testing', link: '/guide/mutation' },
           ],
         },
         {
@@ -38,6 +39,13 @@ export default defineConfig({
           items: [
             { text: 'API', link: '/reference/' },
             { text: 'Defaults', link: '/reference/defaults' },
+          ],
+        },
+        {
+          text: 'Explanation',
+          items: [
+            { text: 'The testing model', link: '/explanation/' },
+            { text: 'Why mutation testing', link: '/explanation/mutation' },
           ],
         },
       ],

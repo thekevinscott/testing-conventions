@@ -147,12 +147,12 @@ exercised — one can pass while the other fails.
 
 ### `unit mutation`
 
-Run mutation testing over the unit suite and report (or gate on) surviving mutants — the
+Run mutation testing over the unit suite and gate on surviving mutants — the
 third rung above coverage: a test that *runs* a line still passes if you delete its
-assertions, but a surviving mutant proves it. See the [mutation guide](../guide/mutation) for
-the concept. **All three languages** today, at parity, and **not yet wired into the
-[reusable workflow](../guide/ci)** — it ships per-language and turns on in CI once the matrix
-wiring lands (#199).
+assertions, but a surviving mutant proves it. See [Why mutation testing](../explanation/mutation)
+for the concept and [Run mutation testing](../guide/mutation) for the task. **All three languages**,
+at parity, and **wired into the [reusable workflow](../guide/ci)** (#204): the workflow's mutation
+job is on by default, on pull requests only, and diff-scoped to the changed lines.
 
 ```
 testing-conventions unit mutation --language <rust|typescript|python> [--base <REF>] [--config <CONFIG>] <PATH>
@@ -266,43 +266,6 @@ the Rust Python parser:
   build test data, and pure test-helper packages beyond the framework allowlist. See the
   [Isolation guide](../guide/isolation).
 
-## Exemptions
-
-Not every source file should need a colocated test or full coverage: a launcher shim, a pure
-re-export barrel, generated code. So that the checker can be a *blocking* gate without forcing
-pointless tests, files are exempted **explicitly, in the config**. There is no automatic name-
-or shape-based exemption; the only files skipped automatically are those with no logic at all.
-
-### Empty files (automatic)
-
-A file with no code (empty, or only whitespace and comments) has nothing to test and is never
-a subject. This is the only automatic exclusion, and it's why a bare `__init__.py` needs no
-configuration. (A declaration file `*.d.ts` is likewise never tracked: it carries no runtime
-code.) The moment a file gains a statement (a re-export, a constant, a function), it becomes a
-subject and needs a colocated test or an entry below.
-
-### The `exempt` list (explicit, reason-required)
-
-For a deliberate omission, add a `[[<language>.exempt]]` entry to the config:
-
-```toml
-[[python.exempt]]
-path = "mypkg/cli.py"          # relative to the scanned <PATH>
-rules = ["colocated-test", "coverage"]  # which checks this lifts
-reason = "thin launcher; logic in run(), tested in run_test.py"  # required
-```
-
-| Field | Meaning |
-| ----- | ------- |
-| `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
-| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
-| `reason` | Why the omission is deliberate. **Required**: an empty reason is rejected on load. |
-
-Because every exemption lives in the one config file, names its rules, and carries a reason,
-the project's entire exemption surface is auditable in a single diff, unlike a prose omit-list
-or a scattered set of ignore comments. A re-export barrel (`index.ts`), a launcher shim, or a
-non-empty `__init__.py` is exempted this way, not automatically.
-
 ### `integration lint`
 
 Lint integration test files for mocking mechanism & style. The first rule group under the
@@ -387,8 +350,8 @@ exit code, and the commit SHA it was run against, and commits that file on top. 
 names the code commit beneath it, since a commit can't name its own SHA.
 
 It writes **regardless of the command's exit code** (forcing a *run*, not a *pass*) and exits
-`0` once the attestation is recorded and committed. The companion `e2e verify` (a CI gate
-confirming the latest code commit is attested) is not shipped yet.
+`0` once the attestation is recorded and committed. The companion [`e2e verify`](#e2e-verify) is
+the CI side of the nudge.
 
 ### `e2e verify`
 
@@ -443,6 +406,43 @@ scanned; a directory is scanned in place.
 
 **Status:** all three languages land: Python wheel + sdist (#72, #106), TypeScript `npm pack`
 tarball (#73), Rust `.crate` (#74). `<PATH>` may also be an already-unpacked directory.
+
+## Exemptions
+
+Not every source file should need a colocated test or full coverage: a launcher shim, a pure
+re-export barrel, generated code. So that the checker can be a *blocking* gate without forcing
+pointless tests, files are exempted **explicitly, in the config**. There is no automatic name-
+or shape-based exemption; the only files skipped automatically are those with no logic at all.
+
+### Empty files (automatic)
+
+A file with no code (empty, or only whitespace and comments) has nothing to test and is never
+a subject. This is the only automatic exclusion, and it's why a bare `__init__.py` needs no
+configuration. (A declaration file `*.d.ts` is likewise never tracked: it carries no runtime
+code.) The moment a file gains a statement (a re-export, a constant, a function), it becomes a
+subject and needs a colocated test or an entry below.
+
+### The `exempt` list (explicit, reason-required)
+
+For a deliberate omission, add a `[[<language>.exempt]]` entry to the config:
+
+```toml
+[[python.exempt]]
+path = "mypkg/cli.py"          # relative to the scanned <PATH>
+rules = ["colocated-test", "coverage"]  # which checks this lifts
+reason = "thin launcher; logic in run(), tested in run_test.py"  # required
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
+| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
+| `reason` | Why the omission is deliberate. **Required**: an empty reason is rejected on load. |
+
+Because every exemption lives in the one config file, names its rules, and carries a reason,
+the project's entire exemption surface is auditable in a single diff, unlike a prose omit-list
+or a scattered set of ignore comments. A re-export barrel (`index.ts`), a launcher shim, or a
+non-empty `__init__.py` is exempted this way, not automatically.
 
 ## Configuration
 

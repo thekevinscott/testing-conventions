@@ -109,10 +109,10 @@ def mock_record():
 filesystem are caught by patching, not by the import check.)
 
 (Rust enforces the same intent structurally with `unit lint --language rust`, via
-`no-out-of-module-call`.) See the
-[README](https://github.com/thekevinscott/testing-conventions#isolation) for the full rule.
+`no-out-of-module-call`.)
 
 ## See also
 
+- [The testing model — isolation](../explanation/#isolation-first-party-vs-external): why unit and integration tests mock opposite things.
 - [Reference — `integration lint`](../reference/#integration-lint): the lint list and exit codes.
 - [Exempt a file](./exemptions): the reason-required escape hatch, shared by every rule.

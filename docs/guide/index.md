@@ -123,4 +123,5 @@ Or skip the boilerplate with the [reusable workflow](./ci): one job that runs ev
 
 ## See also
 
+- [The testing model](../explanation/): why the standard is shaped this way — the three kinds of test, the unit ladder, isolation, and what makes it agent-resistant.
 - [Reference](../reference/): the full CLI surface and config schema.

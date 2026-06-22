@@ -92,6 +92,10 @@ Voice:
   binary gate, not a score"**. Reuse those exact phrasings rather than re-inventing them per page.
 - Cross-link generously, but each link earns its place: How-to → Explanation for *why*, How-to →
   Reference for *exact*, Explanation → How-to for *do it*.
+- **Don't justify, just state.** Describe what something does and how to use it — not why it had to
+  be built this way, or how it compares to an alternative the reader didn't ask about. A reader wants
+  to use the feature, not adjudicate its design. Avoid "X has no Y, so the equivalent is Z"; write
+  "Z does …". Genuine design rationale belongs in Explanation, never in a how-to or reference.
 
 ## Authoring workflow
 

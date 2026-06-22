@@ -36,3 +36,34 @@ jobs:
           python -m venv .venv
           .venv/bin/pip install packages/python/dist/*.whl
           .venv/bin/testing-conventions --version
+
+  plugin:
+    name: Pytest plugin (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # 3.9 exercises the tomli fallback; 3.13 the stdlib tomllib path.
+      matrix:
+        python-version: ['3.9', '3.13']
+    defaults:
+      run:
+        working-directory: packages/python
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/rust
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install maturin
+      # Install the built wheel (registers the pytest11 entry point) alongside the
+      # test toolchain, so the integration tests load the plugin exactly as a
+      # consumer's `pip install`ed run would.
+      - name: Build + install the wheel with the test toolchain
+        run: |
+          maturin build --release -o dist
+          pip install dist/*.whl pytest pytest-cov coverage
+      - name: Run the plugin integration tests
+        run: pytest tests/ -q

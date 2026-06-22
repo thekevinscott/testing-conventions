@@ -14,6 +14,12 @@ authors = [{ name = "Kevin Scott", email = "me@thekevinscott.com" }]
 [project.urls]
 Repository = "https://github.com/thekevinscott/testing-conventions"
 
+[project.entry-points.pytest11]
+testing_conventions = "testing_conventions.pytest_plugin.hooks"
+
 [tool.maturin]
 manifest-path = "../rust/Cargo.toml"
 bindings = "bin"
+python-source = "python"
+# Colocated unit tests live next to the source; never ship them in the wheel.
+exclude = ["**/*_test.py"]

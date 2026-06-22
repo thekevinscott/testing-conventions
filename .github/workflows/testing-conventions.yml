@@ -167,7 +167,10 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" "$SCAN_PATH"
+          # Forward the config so `exempt` entries apply to the whole-tree check,
+          # matching every other job (lint / coverage / co-change / mutation).
+          CONFIG: ${{ inputs.config }}
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   colocated-test-changed:
     name: Colocated test — co-change (${{ matrix.language }})

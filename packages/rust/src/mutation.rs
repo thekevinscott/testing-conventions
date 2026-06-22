@@ -34,6 +34,15 @@ pub struct Survivor {
     pub description: String,
 }
 
+/// The `(file, line)` locations an engine produced a viable mutant for — the input the
+/// #226 line-scoped guard reads to tell an over-exemption (a listed line whose mutants
+/// were all caught) from an out-of-scope line (no mutant there).
+pub type MutatedLines = BTreeSet<(String, u32)>;
+
+/// One mutation run's raw output: the surviving mutants and every viable mutant's
+/// location ([`MutatedLines`]).
+type RunOutcome = (Vec<Survivor>, MutatedLines);
+
 /// A cargo-mutants `outcomes.json` export, pared to what the rule reads. Unmodeled
 /// fields (`total_mutants`, `caught`, timings, …) are ignored.
 #[derive(Debug, Clone, Deserialize)]
@@ -94,7 +103,14 @@ pub fn parse_mutants_report(json: &str) -> Result<MutantsReport> {
 /// survivors — a timeout is inconclusive, not a pass, and an unviable mutant never
 /// compiled.
 pub fn unexplained_survivors(report: &MutantsReport, exempt: &[String]) -> Vec<Survivor> {
-    let survivors = report
+    evaluate(cargo_mutants_survivors(report), exempt)
+}
+
+/// The surviving mutants in a cargo-mutants report — the raw list before exemptions.
+/// A survivor is a `MissedMutant` outcome (the suite ran the mutated code but no test
+/// failed). `Timeout` / `Unviable` are not survivors.
+fn cargo_mutants_survivors(report: &MutantsReport) -> Vec<Survivor> {
+    report
         .outcomes
         .iter()
         .filter_map(|outcome| {
@@ -110,15 +126,34 @@ pub fn unexplained_survivors(report: &MutantsReport, exempt: &[String]) -> Vec<S
                 description: mutant.name.clone(),
             })
         })
-        .collect();
-    evaluate(survivors, exempt)
+        .collect()
 }
 
-/// The shared evaluation core both engines feed: drop the survivors lifted by a
-/// `mutation` exemption (a file-path match), leaving the rule's findings. Each engine
-/// produces the raw survivor list its own way ([`unexplained_survivors`] from a
-/// cargo-mutants report, [`stryker_survivors`] from a Stryker report); this applies
-/// the reason-required exemptions identically across languages.
+/// The `(file, line)` locations cargo-mutants produced a **viable, conclusive** mutant
+/// for — caught or missed (`CaughtMutant` / `MissedMutant`), not the inconclusive
+/// `Timeout` / `Unviable`. The #226 line-scoped guard reads this to tell an
+/// over-exemption (a listed line whose mutants were all *caught*, no survivor) from an
+/// out-of-scope line (no mutant there at all — e.g. outside a `--base` diff).
+pub fn mutated_lines(report: &MutantsReport) -> MutatedLines {
+    report
+        .outcomes
+        .iter()
+        .filter_map(|outcome| {
+            if outcome.summary != "CaughtMutant" && outcome.summary != "MissedMutant" {
+                return None;
+            }
+            let Scenario::Mutant(mutant) = &outcome.scenario else {
+                return None;
+            };
+            Some((mutant.file.clone(), mutant.span.start.line))
+        })
+        .collect()
+}
+
+/// The shared whole-file evaluation core: drop the survivors lifted by a file-level
+/// `mutation` exemption (a file-path match), leaving the rule's findings. The
+/// line-scoped path ([`evaluate_scoped`]) generalizes this to per-line exemptions with
+/// a determinism guard.
 pub fn evaluate(survivors: Vec<Survivor>, exempt: &[String]) -> Vec<Survivor> {
     survivors
         .into_iter()
@@ -126,12 +161,68 @@ pub fn evaluate(survivors: Vec<Survivor>, exempt: &[String]) -> Vec<Survivor> {
         .collect()
 }
 
+/// Apply file- and line-scoped `mutation` exemptions to the raw `survivors`, with the
+/// #226 determinism guard. `mutated` is the set of `(file, line)` that produced a
+/// viable mutant (caught or survived); `whole_file` is the file-level exemptions and
+/// `line_scoped` the per-line ones.
+///
+/// Guard: a line-scoped exemption that names a line whose mutants were **all caught**
+/// (in `mutated`, but with no survivor) is over-exemption — a hard error, the
+/// counterpart to the stale-path rule. A listed line with **no** mutant at all is left
+/// alone (it may simply be outside a `--base` diff), neither an error nor a drop. Then
+/// every survivor whose file is whole-file-exempt, or whose `(file, line)` is
+/// line-exempt, is dropped; an unlisted survivor still fails the gate.
+pub fn evaluate_scoped(
+    survivors: Vec<Survivor>,
+    mutated: &MutatedLines,
+    whole_file: &[String],
+    line_scoped: &BTreeMap<String, BTreeSet<u32>>,
+) -> Result<Vec<Survivor>> {
+    let mut over: Vec<String> = Vec::new();
+    for (file, lines) in line_scoped {
+        for &line in lines {
+            let has_survivor = survivors
+                .iter()
+                .any(|survivor| survivor.file == *file && survivor.line == line);
+            if has_survivor {
+                continue;
+            }
+            if mutated.contains(&(file.clone(), line)) {
+                over.push(format!("\n  {file}:{line}"));
+            }
+        }
+    }
+    if !over.is_empty() {
+        bail!(
+            "a line-scoped mutation exemption may only list a line with a surviving mutant, but \
+             these had mutants that were all caught:{}",
+            over.concat()
+        );
+    }
+    Ok(survivors
+        .into_iter()
+        .filter(|survivor| {
+            let whole = whole_file.iter().any(|path| path == &survivor.file);
+            let line = line_scoped
+                .get(&survivor.file)
+                .is_some_and(|lines| lines.contains(&survivor.line));
+            !(whole || line)
+        })
+        .collect())
+}
+
 /// Run cargo-mutants over the crate at `root` and return its un-exempted survivors.
 ///
 /// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested (via
-/// cargo-mutants' `--in-diff`); without it, the whole crate. `exempt` is the resolved
-/// `mutation`-rule exempt paths. `cargo-mutants` must be installed.
-pub fn measure_rust(root: &Path, exempt: &[String], base: Option<&str>) -> Result<Vec<Survivor>> {
+/// cargo-mutants' `--in-diff`); without it, the whole crate. `exempt` is the file-level
+/// `mutation` exempt paths and `exempt_lines` the line-scoped ones (#226), applied with
+/// the determinism guard in [`evaluate_scoped`]. `cargo-mutants` must be installed.
+pub fn measure_rust(
+    root: &Path,
+    exempt: &[String],
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
+    base: Option<&str>,
+) -> Result<Vec<Survivor>> {
     let out = MutantsOut::new();
     let diff = match base {
         // An empty diff (no changed lines under the crate — a PR that doesn't touch it)
@@ -152,7 +243,12 @@ pub fn measure_rust(root: &Path, exempt: &[String], base: Option<&str>) -> Resul
         Err(_) => return Ok(Vec::new()),
     };
     let report = parse_mutants_report(&json)?;
-    Ok(unexplained_survivors(&report, exempt))
+    evaluate_scoped(
+        cargo_mutants_survivors(&report),
+        &mutated_lines(&report),
+        exempt,
+        exempt_lines,
+    )
 }
 
 /// A Stryker `mutation.json` report (the mutation-testing-elements schema), pared to
@@ -242,11 +338,13 @@ fn one_line(replacement: &str) -> String {
 /// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested —
 /// Stryker has no native git-diff mode, so the changed lines become `--mutate
 /// <file>:<line>-<line>` ranges (line granularity, matching cargo-mutants' `--in-diff`).
-/// Without it, the project's configured `mutate` set runs. `exempt` is the resolved
-/// `mutation`-rule exempt paths. Stryker must be installed / resolvable.
+/// Without it, the project's configured `mutate` set runs. `exempt` is the file-level
+/// exempt paths and `exempt_lines` the line-scoped ones (#226). Stryker must be
+/// installed / resolvable.
 pub fn measure_typescript(
     root: &Path,
     exempt: &[String],
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
     base: Option<&str>,
 ) -> Result<Vec<Survivor>> {
     let mutate = match base {
@@ -262,7 +360,31 @@ pub fn measure_typescript(
     };
     let json = run_stryker(root, mutate.as_deref())?;
     let report = parse_stryker_report(&json)?;
-    Ok(evaluate(stryker_survivors(&report), exempt))
+    evaluate_scoped(
+        stryker_survivors(&report),
+        &stryker_mutated_lines(&report),
+        exempt,
+        exempt_lines,
+    )
+}
+
+/// The `(file, line)` locations Stryker produced a **viable** mutant for — caught,
+/// survived, no-coverage, or timed out, but not the unviable `CompileError` /
+/// `RuntimeError` (or the skipped `Ignored` / `Pending`). The #226 guard reads this the
+/// same way as cargo-mutants' [`mutated_lines`].
+fn stryker_mutated_lines(report: &StrykerReport) -> MutatedLines {
+    let mut mutated = BTreeSet::new();
+    for (file, contents) in &report.files {
+        for mutant in &contents.mutants {
+            if matches!(
+                mutant.status.as_str(),
+                "Killed" | "Survived" | "NoCoverage" | "Timeout"
+            ) {
+                mutated.insert((file.clone(), mutant.location.start.line));
+            }
+        }
+    }
+    mutated
 }
 
 /// Build the Stryker `--mutate` specs scoping a run to the `<base>...HEAD` changed
@@ -435,29 +557,41 @@ pub fn parse_cosmic_ray_dump(dump: &str) -> Result<Vec<Survivor>> {
 /// cosmic-ray has no native git-diff mode, so the run is scoped to the changed `.py`
 /// files (one session each) and the survivors are then filtered to the changed lines —
 /// line granularity, matching the other arms. Without it, the whole project's sources
-/// run (tests excluded). `exempt` is the resolved `mutation`-rule exempt paths.
-/// cosmic-ray + pytest must be installed.
-pub fn measure_python(root: &Path, exempt: &[String], base: Option<&str>) -> Result<Vec<Survivor>> {
-    let survivors = match base {
+/// run (tests excluded). `exempt` is the file-level exempt paths and `exempt_lines` the
+/// line-scoped ones (#226). cosmic-ray + pytest must be installed.
+pub fn measure_python(
+    root: &Path,
+    exempt: &[String],
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
+    base: Option<&str>,
+) -> Result<Vec<Survivor>> {
+    let (survivors, mutated) = match base {
         None => run_cosmic_ray(root, ".", &PY_TEST_EXCLUDES)?,
         Some(base) => {
             let changed = crate::patch_coverage::changed_lines(root, base)?;
-            let mut all = Vec::new();
+            let mut all_survivors = Vec::new();
+            let mut all_mutated = BTreeSet::new();
             for (file, lines) in &changed {
                 if !is_mutatable_py(file) {
                     continue;
                 }
                 // The file is a single non-test module, so no test exclusions are needed.
-                for survivor in run_cosmic_ray(root, file, &[])? {
+                let (survivors, mutated) = run_cosmic_ray(root, file, &[])?;
+                for survivor in survivors {
                     if lines.contains(&(survivor.line as u64)) {
-                        all.push(survivor);
+                        all_survivors.push(survivor);
+                    }
+                }
+                for (mutated_file, line) in mutated {
+                    if lines.contains(&u64::from(line)) {
+                        all_mutated.insert((mutated_file, line));
                     }
                 }
             }
-            all
+            (all_survivors, all_mutated)
         }
     };
-    Ok(evaluate(survivors, exempt))
+    evaluate_scoped(survivors, &mutated, exempt, exempt_lines)
 }
 
 /// The test/conftest globs excluded from whole-project mutation (cosmic-ray would
@@ -475,15 +609,12 @@ fn is_mutatable_py(file: &str) -> bool {
 }
 
 /// Run one cosmic-ray session over `module_path` (relative to `root`) and return its
-/// surviving mutants. A baseline check runs first so a suite that fails *unmutated*
-/// errors rather than reporting a false "all killed". The config + session DB live in
-/// an out-of-tree temp dir; cosmic-ray mutates each file in place and reverts it, so
-/// the scanned tree is left as it was.
-fn run_cosmic_ray(
-    root: &Path,
-    module_path: &str,
-    excluded_modules: &[&str],
-) -> Result<Vec<Survivor>> {
+/// surviving mutants **and** the `(file, line)` set of every viable (executed) mutant
+/// — the latter for the #226 line-scoped guard. A baseline check runs first so a suite
+/// that fails *unmutated* errors rather than reporting a false "all killed". The
+/// cosmic-ray config and session DB live in an out-of-tree temp dir; cosmic-ray mutates
+/// each file in place and reverts it, so the scanned tree is left as it was.
+fn run_cosmic_ray(root: &Path, module_path: &str, excluded_modules: &[&str]) -> Result<RunOutcome> {
     let dir = CosmicRayDir::new();
     std::fs::create_dir_all(&dir.0).context("creating the cosmic-ray temp dir")?;
     let config = dir.0.join("cr.toml");
@@ -547,7 +678,34 @@ fn run_cosmic_ray(
             String::from_utf8_lossy(&dump.stderr),
         );
     }
-    parse_cosmic_ray_dump(&String::from_utf8_lossy(&dump.stdout))
+    let stdout = String::from_utf8_lossy(&dump.stdout);
+    Ok((
+        parse_cosmic_ray_dump(&stdout)?,
+        cosmic_ray_mutated_lines(&stdout)?,
+    ))
+}
+
+/// The `(file, line)` locations cosmic-ray ran a **viable** (executed) mutant for —
+/// `survived` or `killed`, not the `incompetent` mutants that never ran (a syntax
+/// error) or the un-executed (`null`-result) work items. The #226 guard reads this the
+/// same way as the cargo-mutants / Stryker [`mutated_lines`].
+pub fn cosmic_ray_mutated_lines(dump: &str) -> Result<MutatedLines> {
+    let mut mutated = BTreeSet::new();
+    for line in dump.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let CosmicRayLine(item, result) =
+            serde_json::from_str(line).context("parsing a cosmic-ray dump line")?;
+        let outcome = result.and_then(|result| result.test_outcome);
+        if !matches!(outcome.as_deref(), Some("survived") | Some("killed")) {
+            continue;
+        }
+        if let Some(mutation) = item.mutations.first() {
+            mutated.insert((mutation.module_path.clone(), mutation.start_pos.0));
+        }
+    }
+    Ok(mutated)
 }
 
 /// Run a `cosmic-ray` subcommand in `root`, capturing its output. `PYTHONDONTWRITEBYTECODE`
@@ -858,5 +1016,116 @@ mod tests {
         assert!(!is_mutatable_py("test_calc.py"));
         assert!(!is_mutatable_py("pkg/conftest.py"));
         assert!(!is_mutatable_py("README.md"));
+    }
+
+    // --- line-scoped exemptions (#226) ---
+
+    #[test]
+    fn mutated_lines_collects_caught_and_missed() {
+        // The MissedMutant (src/lib.rs:7) and the CaughtMutant (src/other.rs:3) are both
+        // viable, conclusive mutants; the Baseline is not.
+        let report = parse_mutants_report(SAMPLE).unwrap();
+        assert_eq!(
+            mutated_lines(&report),
+            [
+                ("src/lib.rs".to_string(), 7),
+                ("src/other.rs".to_string(), 3)
+            ]
+            .into_iter()
+            .collect()
+        );
+    }
+
+    #[test]
+    fn evaluate_scoped_drops_a_survivor_on_an_exempt_line() {
+        let report = parse_mutants_report(SAMPLE).unwrap();
+        let line_scoped = BTreeMap::from([("src/lib.rs".to_string(), BTreeSet::from([7u32]))]);
+        let kept = evaluate_scoped(
+            cargo_mutants_survivors(&report),
+            &mutated_lines(&report),
+            &[],
+            &line_scoped,
+        )
+        .unwrap();
+        assert!(
+            kept.is_empty(),
+            "the src/lib.rs:7 survivor should be lifted"
+        );
+    }
+
+    #[test]
+    fn evaluate_scoped_rejects_exempting_a_caught_line() {
+        // src/other.rs:3 had only a caught mutant (no survivor) — over-exemption.
+        let report = parse_mutants_report(SAMPLE).unwrap();
+        let line_scoped = BTreeMap::from([("src/other.rs".to_string(), BTreeSet::from([3u32]))]);
+        let err = evaluate_scoped(
+            cargo_mutants_survivors(&report),
+            &mutated_lines(&report),
+            &[],
+            &line_scoped,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("all caught") && err.to_string().contains("src/other.rs:3"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn evaluate_scoped_leaves_an_unmutated_listed_line_alone() {
+        // Line 99 has no mutant at all (e.g. outside a `--base` diff) — neither an error
+        // nor a drop; the real survivor on line 7 still stands.
+        let report = parse_mutants_report(SAMPLE).unwrap();
+        let line_scoped = BTreeMap::from([("src/lib.rs".to_string(), BTreeSet::from([99u32]))]);
+        let kept = evaluate_scoped(
+            cargo_mutants_survivors(&report),
+            &mutated_lines(&report),
+            &[],
+            &line_scoped,
+        )
+        .unwrap();
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].line, 7);
+    }
+
+    #[test]
+    fn evaluate_scoped_still_honors_a_whole_file_exemption() {
+        let report = parse_mutants_report(SAMPLE).unwrap();
+        let kept = evaluate_scoped(
+            cargo_mutants_survivors(&report),
+            &mutated_lines(&report),
+            &["src/lib.rs".to_string()],
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        assert!(kept.is_empty());
+    }
+
+    #[test]
+    fn stryker_mutated_lines_collects_every_viable_mutant() {
+        // Survived (2), NoCoverage (5), and Killed (9) all ran; nothing is unviable here.
+        let report = parse_stryker_report(STRYKER_SAMPLE).unwrap();
+        assert_eq!(
+            stryker_mutated_lines(&report),
+            [
+                ("src/index.ts".to_string(), 2),
+                ("src/index.ts".to_string(), 5),
+                ("src/index.ts".to_string(), 9),
+            ]
+            .into_iter()
+            .collect()
+        );
+    }
+
+    #[test]
+    fn cosmic_ray_mutated_lines_collects_executed_mutants() {
+        // The survived (line 6) and killed (line 2) work items both ran.
+        let mutated = cosmic_ray_mutated_lines(COSMIC_RAY_DUMP).unwrap();
+        assert_eq!(
+            mutated,
+            [("calc.py".to_string(), 2), ("calc.py".to_string(), 6)]
+                .into_iter()
+                .collect()
+        );
     }
 }

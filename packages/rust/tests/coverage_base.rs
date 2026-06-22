@@ -100,6 +100,7 @@ fn measure_base(repo: &TempRepo, base: &str, fail_under: u8) -> Outcome {
             branch: true,
         },
         &[],
+        &std::collections::BTreeMap::new(),
     )
     .expect("measuring a readable repo should succeed")
 }
@@ -290,6 +291,7 @@ fn an_unknown_base_ref_is_an_error() {
                 branch: true,
             },
             &[],
+            &std::collections::BTreeMap::new(),
         )
         .is_err(),
         "an unresolvable base ref must error"

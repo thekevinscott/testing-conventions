@@ -96,7 +96,13 @@ fn base_scopes_the_run_to_the_changed_lines() {
     repo.write("calc_test.py", WITH_SURVIVOR_TEST);
     repo.commit("add an assertion-light is_positive");
 
-    let survivors = measure_python(&repo.0, &[], Some(&base)).expect("cosmic-ray runs");
+    let survivors = measure_python(
+        &repo.0,
+        &[],
+        &std::collections::BTreeMap::new(),
+        Some(&base),
+    )
+    .expect("cosmic-ray runs");
     // The added `is_positive` (lines 5-6) is in the diff and assertion-light, so its
     // mutants survive; `add` (lines 1-2) is unchanged, so it's filtered out.
     assert!(

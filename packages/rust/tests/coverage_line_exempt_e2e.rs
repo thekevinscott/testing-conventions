@@ -104,7 +104,7 @@ fn rust_over_exemption_is_a_hard_error() {
 
 #[test]
 fn typescript_minimal_line_exemption_clears_the_floor() {
-    // Only shim.ts's uncovered `launch` (lines 1-3) is exempt; core.ts is fully
+    // Only shim.ts's uncovered `launch` (lines 1-4) is exempt; core.ts is fully
     // covered, so the 100 floor passes.
     let out = run("typescript", "exempt_cov", "lines_ts_shim_ok.toml");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));

@@ -113,8 +113,14 @@ fn floors(level: u8) -> TypeScriptThresholds {
 /// The diff-scoped outcome for `<base>...HEAD` at a uniform `level` floor (no
 /// exemptions) via the SDK.
 fn measure_base(repo: &TempRepo, base: &str, level: u8) -> Outcome {
-    patch_coverage::measure_typescript(&repo.0, base, floors(level), &[])
-        .expect("measuring a readable repo should succeed")
+    patch_coverage::measure_typescript(
+        &repo.0,
+        base,
+        floors(level),
+        &[],
+        &std::collections::BTreeMap::new(),
+    )
+    .expect("measuring a readable repo should succeed")
 }
 
 /// Exit code of `unit coverage <repo> --language typescript --base <base> [--config
@@ -305,7 +311,14 @@ fn ts_an_unknown_base_ref_is_an_error() {
     let repo = TempRepo::new("bad-base");
     let _ = baseline(&repo);
     assert!(
-        patch_coverage::measure_typescript(&repo.0, "no-such-ref", floors(80), &[]).is_err(),
+        patch_coverage::measure_typescript(
+            &repo.0,
+            "no-such-ref",
+            floors(80),
+            &[],
+            &std::collections::BTreeMap::new()
+        )
+        .is_err(),
         "an unresolvable base ref must error"
     );
 }

@@ -457,7 +457,33 @@ that clears the floor passes even with an uncovered changed line; they coincide 
 fails like any other). Config and `[[<lang>.exempt]] rules = ["coverage"]` waivers are
 unchanged — both scopes already share the `coverage` rule id.
 
+Adds **line-scoped `coverage` / `mutation` exemptions** (#226). A `[[<language>.exempt]]` entry may
+carry an optional `lines` list (`lines = [9, 10, "12-13"]`) to lift only those lines instead of the
+whole file, with a determinism guard (the counterpart to the stale-path rule): a listed line that
+isn't actually failing — covered, or with a killed mutant, or carrying no measured code — is a hard
+error, and an unlisted failing line still fails, so the set is exactly the failing lines. `lines` is
+valid only with `coverage` / `mutation`; a `lines` key on `colocated-test` is rejected on load.
+Omitting `lines` keeps today's whole-file behavior. The mutation and diff-scoped coverage SDK
+functions gain an `exempt_lines` argument (see **Required changes**); the new public items
+`config::{LineSpec, LineScope, resolve_exempt_scoped}`, `Exemption::{lines, line_set}`,
+`coverage::measure_report`, `patch_coverage::measure_line_exempt{,_typescript,_rust}`, and
+`mutation::{evaluate_scoped, mutated_lines, MutatedLines}` land alongside.
+
 ### Required changes
+
+The mutation and diff-scoped coverage SDK functions gain an `exempt_lines` argument for the
+line-scoped exemptions (#226). Pass an empty map to preserve the prior behavior; build the real value
+from the `LineScope::Lines` entries of `config::resolve_exempt_scoped(root, exemptions, rule)`.
+
+| Function | Before | After |
+| --- | --- | --- |
+| `mutation::measure_rust` / `measure_typescript` / `measure_python` | `(root, exempt, base)` | `(root, exempt, exempt_lines, base)` |
+| `patch_coverage::measure` / `measure_typescript` / `measure_rust` | `(root, base, thresholds, omit)` | `(root, base, thresholds, omit, exempt_lines)` |
+
+`exempt_lines: &BTreeMap<String, BTreeSet<u32>>` maps a `root`-relative path to its exempt lines; an
+empty map is the no-op. The new whole-tree `patch_coverage::measure_line_exempt{,_typescript,_rust}`
+take the same map.
+
 
 `regions` on the Rust coverage types is now `Option<u8>` (#206), so the region check can
 be left off (the zero-config default floors lines only). Library callers that construct

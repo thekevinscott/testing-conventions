@@ -63,6 +63,30 @@ Anything you omit keeps its default. See [Configuration](./reference/#configurat
 every key, [Defaults](./reference/defaults) for the baseline, and [Exempt a
 file](./guide/exemptions) for the exemption rules.
 
+### Match your local vitest setup (TypeScript)
+
+The npm package also exports a ready-made vitest config, so your local
+`vitest --coverage` run is held to the same floor CI enforces — a shortfall shows
+up before you push. Extend it rather than copy it:
+
+```ts
+// vite.config.ts
+import { defineConfig, mergeConfig } from 'vitest/config';
+import { vitestConfig } from 'testing-conventions';
+
+export default mergeConfig(
+  vitestConfig,
+  defineConfig({
+    // project-specific overrides only
+  }),
+);
+```
+
+`vitestConfig` carries the v8 provider, the `src/**` coverage scope (declaration
+files excluded), and the `100/100/100/100` thresholds — the same TypeScript
+default the rule applies. `vitest` is a peer dependency you already have, and the
+import resolves to the library entry, so it runs no CLI shim.
+
 ## Install the CLI
 
 The workflow runs a single binary, published to three registries under the same name.

@@ -26,6 +26,23 @@ refactored to match. Never water down or postpone the right change to preserve c
 changes are still documented in `CHANGELOG.md` / `MIGRATIONS.md`, and "now" still means the
 needed change, not speculative future-proofing per **Out of scope** below.)
 
+## Exemptions
+
+An exemption is a last resort. The gate enforces it **deterministically at file granularity**, so
+the discipline is to make the exempted file as small as the irreducible, genuinely-untestable code —
+a cross-version import shim, pytest-hook plumbing that needs a live runner. Extract that code into
+its own minimal module and exempt only it; hard-test everything else, against **coverage *and*
+mutation** (coverage proves the lines run, mutation proves the tests assert). The `reason` must say
+*why the code can't be tested*, not merely what it is. Never exempt a whole module to dodge one
+stubborn line — split the line out. ("Keep it minimal" is discipline, not a deterministic check; the
+deterministic version would be line-scoped exemptions, tracked as its own issue.)
+
+## Code style
+
+Internal modules in this repo are **not** underscore-prefixed — an empty `__init__.py` already says
+"nothing public here." This is our convention for *this* library's source; it is not a rule we
+impose on consumers, who name their modules however they like.
+
 ## Docs-only changes
 
 A PR that touches **only** documentation — the `docs/` site and Markdown files like `README.md` / `AGENTS.md`, with nothing under `packages/` — changes no tested behavior, so the red/green workflow above is skipped: no red integration/e2e tests, and nothing needs to go red on CI first. The rest of the bar holds — every existing test stays green and the docs site still builds — so go straight to the change.

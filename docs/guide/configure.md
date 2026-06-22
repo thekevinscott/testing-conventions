@@ -46,10 +46,9 @@ either a colocated test or an exemption.
 
 ### Exempt a real file
 
-Add a `[[<language>.exempt]]` entry naming the rules it lifts and **why**:
-
-Whole-file exemptions are for the **presence and lint** rules — a launcher shim with no colocated
-test, a re-export barrel with no logic to isolate:
+Add a `[[<language>.exempt]]` entry naming the rules it lifts and **why**. Whole-file exemptions are
+for the **presence and lint** rules — a launcher shim with no colocated test, a re-export barrel with
+no logic to isolate:
 
 ```toml
 # A launcher shim with no unit test:
@@ -77,10 +76,8 @@ exemption surface is auditable in a single diff — unlike scattered ignore comm
 
 ### Exempt specific lines (`coverage` / `mutation`)
 
-The measured-line rules are **never** whole-file: lifting an entire file from coverage or mutation
-would wave testable code past the gate on the strength of one stubborn line — an equivalent mutant, a
-cross-version import shim, a defensive branch that can't run on a single interpreter. So a `coverage`
-or `mutation` exemption **must** carry a `lines` list naming exactly the lines it lifts:
+`coverage` and `mutation` exemptions are never whole-file — they must carry a `lines` list naming the
+exact lines they lift:
 
 ```toml
 [[python.exempt]]
@@ -90,17 +87,15 @@ lines = [9, 10, "12-13"]   # single lines and inclusive "start-end" ranges
 reason = "version-conditional tomllib/tomli import; one branch is dead on any single interpreter"
 ```
 
-The list is checked, not trusted — a **determinism guard** mirrors the stale-path rule:
+A **determinism guard** checks the list:
 
-- A listed line that **isn't actually failing** (it's covered, or has a killed mutant, or carries no
-  measured code) is a **hard error** — you can't over-exempt.
-- A line that **is** failing but **isn't listed** fails the gate as normal — you can't under-list
-  and forget.
+- A listed line that **isn't failing** (it's covered, has a killed mutant, or carries no measured
+  code) is a **hard error**.
+- A failing line that **isn't listed** fails the gate as normal.
 
-So the set is forced to be *exactly* the failing lines: minimal by construction, and as deterministic
-as the rest of the standard. `lines` is **required** with `coverage` / `mutation` and **rejected**
-with any whole-file rule, so the two kinds never share an entry — a file exempt from both
-`colocated-test` and `coverage` is two entries, one of each.
+So the list is exactly the failing lines. `lines` is required with `coverage` / `mutation` and
+rejected with any whole-file rule, so the two never share an entry — a file exempt from both
+`colocated-test` and `coverage` is two entries.
 
 ## See also
 

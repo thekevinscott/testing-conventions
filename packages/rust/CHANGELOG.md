@@ -38,12 +38,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Line-scoped `coverage` / `mutation` exemptions** (#226). A `coverage` or `mutation`
   `[[<language>.exempt]]` entry now **requires** a `lines` list (`lines = [9, 10, "12-13"]` — single
   line numbers and inclusive `"start-end"` ranges) naming the exact lines it lifts — those two rules
-  are **never whole-file**, so a stubborn line (an equivalent mutant, a cross-version import shim)
-  no longer drags the rest of the module past the gate. A determinism guard (the counterpart to the
-  stale-path rule) keeps it minimal: a listed line that isn't actually failing — covered, or with a
-  killed mutant, or carrying no measured code — is a hard error, and an unlisted failing line still
-  fails. `lines` is rejected with a whole-file rule (`colocated-test`, the lints), so the two kinds
-  never share an entry. Whole-tree `unit coverage` recomputes its floor from per-line detail over the
+  are **never whole-file**. A determinism guard rejects a listed line that isn't actually failing
+  (covered, a killed mutant, or no measured code), and an unlisted failing line still fails. `lines`
+  is rejected with a whole-file rule (`colocated-test`, the lints), so the two never share an entry. Whole-tree `unit coverage` recomputes its floor from per-line detail over the
   measured-minus-exempt lines (no coverage tool excludes line *numbers* from the outside); `unit
   coverage --base` lifts the exempt lines from the diff; and `unit mutation` lifts the survivors on
   the listed lines. New public API: `config::{LineSpec, LineScope, resolve_exempt_scoped}`,

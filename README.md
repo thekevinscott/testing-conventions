@@ -251,14 +251,12 @@ config-driven, never a silent ignore:
   `reason`. The whole exemption surface lives in one file, auditable in a single
   diff. A stale entry (a path that no longer exists) is a hard error, so the list
   can't rot.
-- **Line-scoped, always, for `coverage` / `mutation`.** Those two rules are never
-  whole-file: an exemption **must** carry a `lines` list (`lines = [9, 10, "12-13"]`)
-  naming the exact lines it lifts — you can't wave a whole file past coverage or
-  mutation, only the lines you can prove are failing. A determinism guard keeps it
-  honest: a listed line that *isn't* actually failing is a hard error, and an unlisted
-  failing line still fails the gate, so the set is exactly the failing lines. (`lines`
-  is for the measured-line rules only; a `lines` key on `colocated-test` is rejected,
-  and the two kinds don't share an entry — see Configuration.)
+- **Line-scoped, always, for `coverage` / `mutation`.** These two rules are never
+  whole-file: an exemption carries a `lines` list (`lines = [9, 10, "12-13"]`) naming
+  the exact lines it lifts. A determinism guard checks the list — a listed line that
+  *isn't* failing is a hard error, an unlisted failing line still fails — so it's
+  exactly the failing lines. (`lines` is for these two rules only; a `lines` key on
+  `colocated-test` is rejected.)
 
 ## Configuration
 
@@ -275,8 +273,7 @@ path = "mypkg/cli.py"
 rules = ["colocated-test"]
 reason = "thin launcher; logic in run(), tested in run_test.py"
 
-# A line-scoped coverage exemption — `coverage` / `mutation` require `lines`, so they
-# go in their own entry, never alongside a whole-file rule:
+# A line-scoped coverage/mutation exemption (`lines` required; its own entry):
 [[python.exempt]]
 path = "mypkg/config/tomlcompat.py"
 rules = ["coverage", "mutation"]

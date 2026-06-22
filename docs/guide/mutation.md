@@ -59,9 +59,8 @@ lines = [12]   # the exact line the surviving mutant is on — required for `mut
 reason = "equivalent mutant: the `>= 0` guard can't be reached after the earlier abs()"
 ```
 
-`mutation` exemptions are line-scoped: `lines` names the exact line(s) the survivor sits on, and a
-listed line whose mutants were *all caught* is a hard error — so the list can only ever be the real
-survivors. A passing run then means every survivor was either killed or explained.
+`mutation` exemptions are line-scoped: `lines` names the survivor's line(s), and listing a line whose
+mutants were all caught is a hard error. A passing run means every survivor was killed or explained.
 
 ## In CI
 

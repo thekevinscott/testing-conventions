@@ -448,7 +448,7 @@ See [line-scoped exemptions](#line-scoped-exemptions) below.
 | ----- | ------- |
 | `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
 | `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, `mutation`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
-| `lines` | The lines a `coverage` / `mutation` exemption covers — see [line-scoped exemptions](#line-scoped-exemptions) below. **Required** with `coverage` / `mutation` (those rules are never whole-file) and **rejected** with any other rule (those are always whole-file). |
+| `lines` | The lines a `coverage` / `mutation` exemption covers (see [line-scoped exemptions](#line-scoped-exemptions)). **Required** with `coverage` / `mutation`, **rejected** with any other rule. |
 | `reason` | Why the omission is deliberate. **Required**: an empty reason is rejected on load. |
 
 Because every exemption lives in the one config file, names its rules, and carries a reason,
@@ -458,12 +458,8 @@ non-empty `__init__.py` is exempted this way, not automatically.
 
 ### Line-scoped exemptions
 
-Most `exempt` entries lift a rule for the **whole file** (a launcher shim has no colocated test;
-a re-export barrel needs no isolation lint). But the measured-line rules — **`coverage`** and
-**`mutation`** — are **never** whole-file: lifting an entire file from coverage or mutation would
-wave testable code past the gate on the strength of one irreducible line (an equivalent mutant, a
-cross-version import shim, a defensive branch that can't run on one interpreter). So a `coverage` /
-`mutation` exemption **must** carry a `lines` list naming exactly the lines it covers:
+Most `exempt` entries lift a rule for the **whole file**. The measured-line rules — **`coverage`**
+and **`mutation`** — never do: an exemption must carry a `lines` list naming the exact lines it covers.
 
 ```toml
 [[python.exempt]]
@@ -474,26 +470,21 @@ reason = "version-conditional tomllib/tomli import; one branch is dead on any si
 ```
 
 Each element is a 1-based line number (a TOML integer) or an inclusive range (a `"start-end"`
-string). The list is **checked, not trusted** — a determinism guard that mirrors the stale-path
-rule keeps the exemption minimal by construction:
+string). A determinism guard checks the list:
 
-- A listed line that **isn't actually failing** — it's covered (`coverage`) or its mutants were all
-  caught (`mutation`), or it carries no measured code — is a **hard error**. You can't over-exempt.
-- A line that **is** failing but **isn't listed** fails the gate as normal. You can't under-list and
-  forget.
+- A listed line that **isn't failing** — covered (`coverage`), its mutants all caught (`mutation`),
+  or carrying no measured code — is a **hard error**.
+- A failing line that **isn't listed** fails the gate as normal.
 
-So the set is forced to be *exactly* the failing lines, and stays as deterministic as the rest of
-the standard. Three rules govern how `lines` and the rest interact:
+So the list is exactly the failing lines. Three rules govern `lines`:
 
 - **Required** for `coverage` / `mutation`: an entry naming either rule without `lines` is rejected
-  on load — those rules have no whole-file form.
-- **Rejected** for every other rule: `colocated-test` and the lints are whole-file presence/style
-  checks, so a `lines` key alongside one is rejected. The two kinds therefore never share an entry —
-  a launcher shim exempt from both `colocated-test` and `coverage` is two entries (one whole-file,
-  one line-scoped), not one.
-- For `mutation` under [`--base`](#unit-mutation), a listed line outside the diff isn't mutated, so
-  it's simply left alone (neither an error nor a drop) rather than failing the guard for "no
-  survivor"; the guard fires only on a listed line whose mutants were actually run and all caught.
+  on load.
+- **Rejected** for every other rule (`colocated-test`, the lints): those are whole-file checks, so a
+  `lines` key alongside one is rejected. The two kinds never share an entry — a file exempt from both
+  `colocated-test` and `coverage` is two entries.
+- Under `mutation` [`--base`](#unit-mutation), a listed line outside the diff isn't mutated, so it's
+  left alone; the guard fires only on a listed line whose mutants were actually run and all caught.
 
 ## Configuration
 

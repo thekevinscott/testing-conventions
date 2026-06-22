@@ -14,6 +14,9 @@ authors = [{ name = "Kevin Scott", email = "me@thekevinscott.com" }]
 [project.urls]
 Repository = "https://github.com/thekevinscott/testing-conventions"
 
+[project.entry-points.pytest11]
+testing_conventions = "testing_conventions._pytest_plugin"
+
 [tool.maturin]
 manifest-path = "../rust/Cargo.toml"
 bindings = "bin"

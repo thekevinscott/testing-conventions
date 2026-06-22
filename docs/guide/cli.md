@@ -1,3 +1,7 @@
+---
+description: Install and run the rules yourself — outside GitHub Actions, in another CI system, or as a one-off locally.
+---
+
 # Use the CLI directly
 
 Most projects never install the CLI — the [drop-in workflow](./ci) runs it for you. Reach for it

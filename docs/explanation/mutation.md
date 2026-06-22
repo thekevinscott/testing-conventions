@@ -1,3 +1,7 @@
+---
+description: Why mutation testing is the verification rung coverage can't reach, and why the gate is binary, not a score.
+---
+
 # Why mutation testing
 
 Coverage tells you which lines your tests *ran*. **Mutation testing** tells you whether your tests

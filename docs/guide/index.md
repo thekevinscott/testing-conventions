@@ -1,3 +1,7 @@
+---
+description: Task recipes for testing-conventions — configure the rules, extend the defaults, isolate tests, run mutation testing, and enforce conventions in CI.
+---
+
 # How-to Guides
 
 Task recipes for `testing-conventions`. Each guide is one job — reach for the one that matches what

@@ -55,6 +55,27 @@ fn survivors_are_reported() {
 }
 
 #[test]
+fn a_missing_toolchain_fails_clean_without_downloading() {
+    // No `node_modules`: the TS arm must surface a clear error via `npx --no-install`
+    // and never silently fetch the long-deprecated standalone `stryker` package (renamed
+    // to `@stryker-mutator/core` in 2019). Parity with the cosmic-ray / cargo-mutants
+    // arms, which invoke the binary directly and fail clean when it's absent.
+    let project = Staged::typescript_without_toolchain("killed");
+    let err = measure_typescript(
+        project.path(),
+        &[],
+        &std::collections::BTreeMap::new(),
+        None,
+    )
+    .expect_err("a project with no Stryker installed must error, not download one");
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("npx --no-install"),
+        "the error should name the no-download invocation; got: {msg}"
+    );
+}
+
+#[test]
 fn a_mutation_exemption_drops_the_survivors() {
     // Exempting the survivors' file lifts all of them — an equivalent / deliberately
     // defensive mutation, waived with a reason via `[[typescript.exempt]] rules = ["mutation"]`.

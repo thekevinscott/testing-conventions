@@ -33,6 +33,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   produces no mutants — now reports no survivors instead of erroring with `reading cargo-mutants
   outcomes … the run wrote none`. No API change (`measure_rust`'s signature is unchanged).
 
+- **`unit mutation --language typescript` no longer auto-downloads a deprecated package.** The TS
+  arm shelled out to `npx --yes stryker run`, which — when `@stryker-mutator/core` wasn't installed —
+  silently fetched the long-deprecated standalone `stryker` package (last published as `0.x` in 2019,
+  renamed to `@stryker-mutator/core`) and crashed with a confusing `MODULE_NOT_FOUND`. It now runs
+  `npx --no-install`, so it uses only the project's own pinned Stryker and fails fast with a clear
+  error when the engine is absent — parity with the cosmic-ray (Python) and cargo-mutants (Rust) arms,
+  which already invoke their binary directly. A project that relied on the implicit download must now
+  install `@stryker-mutator/core` + a test-runner plugin (the rule always documented this as a
+  prerequisite; the reusable workflow already installs it).
+
 ### Added
 
 - **Line-scoped `coverage` / `mutation` exemptions** (#226). A `coverage` or `mutation`

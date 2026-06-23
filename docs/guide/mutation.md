@@ -28,6 +28,11 @@ ran but no test failed on), and exits non-zero if any survive. Each engine must 
 | TypeScript | [Stryker](https://stryker-mutator.io/) | `@stryker-mutator/core` + a test-runner plugin |
 | Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray) | `cosmic-ray` + `pytest` |
 
+Each engine is run from your project's own install and is **never auto-downloaded**: the TypeScript
+arm invokes Stryker with `npx --no-install`, so a missing `@stryker-mutator/core` fails fast with a
+clear error instead of silently fetching the long-deprecated standalone `stryker` package. Install
+the engine (the table above) before running the rule — the reusable workflow does this for you.
+
 The gate is **on by default and binary**: any un-exempted survivor fails the run (exit `1`, listing
 each survivor with its file, line, and mutation); a clean run exits `0`. There is no report-only mode
 and config can't loosen it. See the [reference](../reference/#unit-mutation) for exit codes and the

@@ -36,6 +36,36 @@ fn unit_mutation_exit(project: &Path, config: Option<&str>) -> i32 {
         .expect("the process should exit with a code")
 }
 
+/// Exit code + captured stderr of `testing-conventions unit mutation --language typescript <project>`.
+fn unit_mutation_output(project: &Path) -> (i32, String) {
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "typescript"])
+        .arg(project)
+        .output()
+        .expect("the built binary should run");
+    (
+        out.status.code().expect("the process should exit with a code"),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+#[test]
+fn missing_toolchain_fails_clean_without_downloading() {
+    // End-to-end: with no Stryker installed, the binary must fail (exit 1) with a clear
+    // error and never download the deprecated `stryker` package — it runs only the
+    // project's own pinned `@stryker-mutator/core` via `npx --no-install`.
+    let project = Staged::typescript_without_toolchain("survivors");
+    let (code, stderr) = unit_mutation_output(project.path());
+    assert_eq!(
+        code, 1,
+        "a missing toolchain should fail the run; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("npx --no-install"),
+        "the error should name the no-download invocation; got: {stderr}"
+    );
+}
+
 #[test]
 fn killed_project_passes_with_no_survivors() {
     // Every mutant is caught, so the project clears the gate.

@@ -130,12 +130,13 @@ enum UnitRule {
     },
     /// Run mutation testing over the unit suite and fail on any surviving mutant not
     /// lifted by a `mutation` exemption — the rung above coverage (#201). The gate is
-    /// on by default (no report-only mode). Rust only for now, and not yet wired into
-    /// the reusable workflow (parity pending, #199).
+    /// on by default (no report-only mode). All three languages (Python, TypeScript,
+    /// Rust) are at parity and wired into the reusable workflow as a diff-scoped,
+    /// PR-only job (#204).
     Mutation {
         /// Crate whose unit suite is mutated.
         path: PathBuf,
-        /// Language convention to enforce (required). `rust` only for now.
+        /// Language convention to enforce (required): `python`, `typescript`, or `rust`.
         #[arg(long, value_enum)]
         language: colocated_test::Language,
         /// Opt-in diff-scoping (#201): restrict to mutants on lines a `<base>...HEAD`

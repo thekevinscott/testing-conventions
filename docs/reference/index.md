@@ -413,39 +413,43 @@ tarball (#73), Rust `.crate` (#74). `<PATH>` may also be an already-unpacked dir
 
 ### The `exemptions` command
 
-The exemption-approval gate's deterministic detection ([#229](https://github.com/thekevinscott/testing-conventions/issues/229)).
-Diffs the `[[<language>.exempt]]` entries between a base ref and the working tree's config and
-fails when the diff **adds** one, so each *new* exemption costs a human greenlight. Pure and
+The exemption-approval gate ([#229](https://github.com/thekevinscott/testing-conventions/issues/229)).
+An exemption turns a blocking rule off for a file, so adding one is a **last resort** — writing a
+test or isolating the code needs no approval; an exemption needs a human. This command diffs the
+`[[<language>.exempt]]` entries between a base ref and the working tree's config and fails when the
+diff **adds or modifies** one, unless a human greenlight (`--approved`) is supplied. Pure and
 deterministic, the same shape as the other `--base` checks.
 
 ```
-testing-conventions exemptions --base <REF> [--config <CONFIG>]
+testing-conventions exemptions --base <REF> [--approved] [--config <CONFIG>]
 ```
 
 | Argument / flag     | Description                                                                       |
 | ------------------- | --------------------------------------------------------------------------------- |
 | `--base <REF>`      | **Required.** The base ref to diff against. The "before" config is read from `<REF>` (`git show <REF>:<config>`); the "after" is the working tree's config (what a PR's HEAD holds). In CI, pass the PR's base, e.g. `origin/main`. An unresolvable ref is an error, never a silent pass. |
+| `--approved`        | The human greenlight. With it, added/modified exemptions **pass** and are echoed as an audit trail; without it, they fail. The reusable workflow sets this only when the `tc:exemption-approved` label has been applied by a reviewer who is **not** the PR author — so the agent can't approve its own exemption. The binary trusts the flag; the workflow is the part the agent can't forge. |
 | `--config <CONFIG>` | The config file holding the `[[<language>.exempt]]` tables (default `testing-conventions.toml`). A config absent at the base means *every* exemption present now is newly added; a config absent on both sides means nothing is exempt either way (the zero-config drop-in passes). |
 
-**What counts as a new exemption.** Each `[[<language>.exempt]]` entry expands to one
-*(language, path, rule)* unit per rule it lifts. An entry is *newly added* when a unit present
-in the working tree's config is absent at `<REF>`:
+**What counts as added or modified.** Identity is the **whole entry** — path, the set of rules it
+lifts, and the `reason`. An entry needs a greenlight unless that *exact* entry already existed at
+`<REF>`:
 
-- adding an entry, or lifting an **extra** rule on an existing entry → that unit is new → exit `1`;
-- removing or keeping an entry → exit `0`;
-- editing only the `reason` → exit `0` (the gate keys on the *(path, rule)* lifted, not the prose).
+- adding an entry, lifting an extra rule, widening its scope, or rewording its `reason` → exit `1`
+  (without `--approved`);
+- removing an entry, or leaving it byte-for-byte unchanged → exit `0`.
 
-Keying on *newly-added* units is the anti-loophole: pre-seeding exemptions on the base branch
-doesn't help, because that base change is itself a gated diff. One schema drives all three
-languages, so the gate is language-agnostic.
+Keying on the diff is the anti-loophole: pre-seeding exemptions on the base branch doesn't help
+(that base change is itself a gated diff), and you can't quietly broaden an existing one (a
+modification gates too). One schema drives all three languages, so the gate is language-agnostic.
 
-On a violation it prints each newly-added exemption and the `tc:exemption-approved` greenlight
-hint to stderr, then exits `1`; a clean diff exits `0`.
+On a violation it steers toward writing a test, prints each added/modified exemption and the
+`tc:exemption-approved` greenlight hint to stderr, then exits `1`. With `--approved` it prints the
+approved entries to stdout and exits `0`; a clean diff exits `0`.
 
-**Status:** the detection command ships now (Python, TypeScript, Rust). The **human greenlight**
-— a reusable-workflow job that passes only when the diff adds nothing **or** a reviewer has
-applied the `tc:exemption-approved` PR label — is the remaining wiring step, mirroring how
-`unit mutation` shipped as a command (#201–#203) before its workflow job (#204).
+**Status:** the command (with its `--approved` greenlight) ships now (Python, TypeScript, Rust). The
+**reusable-workflow job** that reads the label — verifying it was applied by a non-author reviewer
+and passing `--approved` — is the remaining wiring step, mirroring how `unit mutation` shipped as a
+command (#201–#203) before its workflow job (#204).
 
 ## Exemptions
 

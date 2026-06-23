@@ -25,18 +25,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **`testing-conventions exemptions --base <REF>`** (#229) — the exemption-approval gate's
-  deterministic detection. Diffs the `[[<language>.exempt]]` entries between `<REF>` (read with
-  `git show <REF>:<config>`) and the working tree's config, and exits `1` when the diff **adds**
-  one — so each *new* exemption costs a human greenlight. Each entry expands to one *(language,
-  path, rule)* unit per rule it lifts; a unit present now but absent at `<REF>` is newly added, so
-  adding an entry (or lifting an extra rule on an existing entry) fails, while removing/keeping an
-  entry or rewording its `reason` is clean (the gate keys on the *(path, rule)* lifted, not the
-  prose). Keying on newly-added units is the anti-loophole — pre-seeding exemptions on the base is
-  itself a gated diff. One schema drives all three languages, so the gate is language-agnostic; an
-  unresolvable `<REF>` errors rather than passing as clean. New library surface: the `exemptions`
-  module (`exemptions::newly_added`, `exemptions::AddedExemption`). The **human greenlight** — a
-  reusable-workflow job gated on a `tc:exemption-approved` PR label — is the remaining wiring step,
+- **`testing-conventions exemptions --base <REF> [--approved]`** (#229) — the exemption-approval
+  gate. An exemption turns a blocking rule off for a file, so adding one is a last resort; this
+  command makes that true by costing a human greenlight. It diffs the `[[<language>.exempt]]`
+  entries between `<REF>` (read with `git show <REF>:<config>`) and the working tree's config and
+  exits `1` when the diff **adds or modifies** one, unless `--approved` is passed. Identity is the
+  **whole entry** (path + rules + reason): adding an entry, lifting an extra rule, widening its
+  scope, or rewording its `reason` all gate; removing an entry or leaving it byte-for-byte unchanged
+  is free — so an agent can't quietly broaden an existing exemption. Keying on the diff is the
+  anti-loophole (pre-seeding the base is itself a gated diff). `--approved` is the binary human
+  greenlight: with it, added/modified entries pass and are echoed as an audit trail; the reusable
+  workflow will set it only when the `tc:exemption-approved` label was applied by a reviewer who is
+  **not** the PR author, so the agent can't approve its own exemption. On a violation the command
+  steers toward writing a test instead. One schema drives all three languages; an unresolvable
+  `<REF>` errors rather than passing as clean. New library surface: the `exemptions` module
+  (`exemptions::changed`, `exemptions::ChangedExemption`). The **reusable-workflow job** that reads
+  the label (verifying the non-author actor and passing `--approved`) is the remaining wiring step,
   mirroring how `unit mutation` shipped as a command (#201–#203) before its workflow job (#204).
 
 - **`unit mutation --language python`** (#203) — the Python arm of the mutation rule, completing

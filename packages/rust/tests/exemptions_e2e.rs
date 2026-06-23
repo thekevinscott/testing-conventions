@@ -68,9 +68,16 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// Exit code + stderr of `exemptions --base <base> --config <config>`, run as a real
-/// subprocess against the built binary, with cwd set to the repo.
-fn exemptions(repo: &TempRepo, base: &str, with_config_flag: bool) -> (i32, String) {
+/// Exit code + combined stdout/stderr of `exemptions --base <base> [--config …]
+/// [--approved]`, run as a real subprocess against the built binary, with cwd set to the
+/// repo. (Combined because the approved audit trail is printed to stdout, the red error
+/// to stderr.)
+fn exemptions(
+    repo: &TempRepo,
+    base: &str,
+    with_config_flag: bool,
+    approved: bool,
+) -> (i32, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
     cmd.current_dir(&repo.0)
         .arg("exemptions")
@@ -78,13 +85,18 @@ fn exemptions(repo: &TempRepo, base: &str, with_config_flag: bool) -> (i32, Stri
     if with_config_flag {
         cmd.args(["--config", "testing-conventions.toml"]);
     }
+    if approved {
+        cmd.arg("--approved");
+    }
     let output = cmd.output().expect("the built binary should run");
+    let mut combined = String::from_utf8_lossy(&output.stdout).into_owned();
+    combined.push_str(&String::from_utf8_lossy(&output.stderr));
     (
         output
             .status
             .code()
             .expect("the process should exit with a code"),
-        String::from_utf8_lossy(&output.stderr).into_owned(),
+        combined,
     )
 }
 
@@ -103,7 +115,7 @@ fn a_new_exemption_exits_nonzero_and_names_it_with_the_label_hint() {
     repo.write(CONFIG, WITH_EXEMPT);
     repo.commit("add an exemption");
 
-    let (code, stderr) = exemptions(&repo, &base, true);
+    let (code, stderr) = exemptions(&repo, &base, true, false);
     assert_eq!(
         code, 1,
         "a newly-added exemption must exit non-zero; stderr: {stderr}"
@@ -127,7 +139,7 @@ fn an_unchanged_config_exits_zero() {
     repo.write("README.md", "# hi\n");
     repo.commit("unrelated change");
 
-    let (code, stderr) = exemptions(&repo, &base, true);
+    let (code, stderr) = exemptions(&repo, &base, true, false);
     assert_eq!(code, 0, "no new exemption must exit zero; stderr: {stderr}");
 }
 
@@ -140,7 +152,7 @@ fn removing_an_exemption_exits_zero() {
     repo.write(CONFIG, COVERAGE);
     repo.commit("remove it");
 
-    let (code, stderr) = exemptions(&repo, &base, true);
+    let (code, stderr) = exemptions(&repo, &base, true, false);
     assert_eq!(
         code, 0,
         "removing an exemption must exit zero; stderr: {stderr}"
@@ -158,10 +170,33 @@ fn the_config_flag_defaults_to_testing_conventions_toml() {
     repo.write(CONFIG, WITH_EXEMPT);
     repo.commit("add an exemption");
 
-    let (code, stderr) = exemptions(&repo, &base, false);
+    let (code, stderr) = exemptions(&repo, &base, false, false);
     assert_eq!(
         code, 1,
         "the default config path must be read; stderr: {stderr}"
+    );
+}
+
+#[test]
+fn the_approved_greenlight_lets_a_new_exemption_pass_with_an_audit_line() {
+    // The binary half of the human greenlight: with --approved (which the workflow sets
+    // only when a non-author reviewer applied the label), the same diff that was red
+    // passes — and the approved exemption is echoed as an audit trail.
+    let repo = TempRepo::new("approved");
+    repo.write(CONFIG, COVERAGE);
+    repo.commit("base: no exemptions");
+    let base = repo.head();
+    repo.write(CONFIG, WITH_EXEMPT);
+    repo.commit("add an exemption");
+
+    // Red without the greenlight…
+    assert_eq!(exemptions(&repo, &base, true, false).0, 1);
+    // …green with it, and the approved exemption is listed.
+    let (code, out) = exemptions(&repo, &base, true, true);
+    assert_eq!(code, 0, "an approved exemption must pass; output: {out}");
+    assert!(
+        out.contains("mypkg/cli.py") && out.contains("approved"),
+        "an audit line should name the approved exemption; got: {out}"
     );
 }
 
@@ -171,6 +206,6 @@ fn an_unresolvable_base_ref_fails() {
     repo.write(CONFIG, COVERAGE);
     repo.commit("base");
 
-    let (code, _stderr) = exemptions(&repo, "no-such-ref", true);
+    let (code, _stderr) = exemptions(&repo, "no-such-ref", true, false);
     assert_ne!(code, 0, "an unresolvable base ref must not pass as clean");
 }

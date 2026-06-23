@@ -1,27 +1,29 @@
 //! The exemption-approval gate's deterministic detection (#229).
 //!
-//! A reason-required `[[<language>.exempt]]` entry keeps an exemption *honest*, but
-//! it's still cheap to add — an agent (or a hurried human) can write a plausible
-//! `reason` and slip one through. So adding a *new* exemption should cost a deliberate
-//! human greenlight. This module is the deterministic half of that gate: the same
-//! diff-scoped shape as co-change ([`crate::co_change`]) and changed-line coverage
-//! ([`crate::patch_coverage`]).
+//! Exemptions are a **last resort**: a `[[<language>.exempt]]` entry turns a blocking
+//! rule off for a file, so adding one should be hard and discouraged — the path of
+//! least resistance must be to write the test or isolate the code, not to reach for an
+//! exemption. This module is the deterministic engine that makes that true: it flags
+//! every exemption a PR **adds or changes**, and the CLI turns that into a non-zero exit
+//! that only a human greenlight (a `tc:exemption-approved` label applied by someone who
+//! is not the PR author, read by the reusable workflow) can clear. The agent can't clear
+//! it itself — that is the entire source of friction.
 //!
-//! [`newly_added`] compares the `[[<language>.exempt]]` entries in the working tree's
-//! config against those in the config at a base ref (`git show <base>:<config>`), and
-//! returns every exemption the diff **added**. The CLI turns a non-empty result into a
-//! non-zero exit, and the human greenlight — a reviewer applying a `tc:exemption-approved`
-//! PR label, read by the reusable workflow — rides on that exit code.
+//! It is the same diff-scoped shape as co-change ([`crate::co_change`]) and changed-line
+//! coverage ([`crate::patch_coverage`]): [`changed`] compares the `[[<language>.exempt]]`
+//! entries in the working tree's config against those in the config at a base ref
+//! (`git show <base>:<config>`) and returns every entry the PR added or modified.
 //!
-//! The unit of detection is one *(language, path, rule)* triple — each entry expands to
-//! one per rule it lifts — so:
-//!   - adding an entry, or lifting an **extra** rule on an existing entry, is *new*;
-//!   - removing or keeping an entry is not;
-//!   - editing only the `reason` is not (the gate keys on what is lifted, not the prose).
+//! **Identity is the whole entry** (path + rules + reason). An entry needs a greenlight
+//! unless that *exact* entry already existed at the base, so:
+//!   - adding an entry → gated;
+//!   - **modifying** an entry — widening it, lifting an extra rule, even rewording the
+//!     reason — → gated (an agent can't broaden an existing exemption to slip through);
+//!   - removing an entry, or leaving it byte-for-byte unchanged → free.
 //!
-//! Keying on *newly-added* units is the anti-loophole: pre-seeding exemptions on the
-//! base branch doesn't dodge the gate, because that base change is itself a gated diff.
-//! One config schema drives all three languages, so the gate is language-agnostic.
+//! Keying on the diff is the anti-loophole: pre-seeding exemptions on the base branch
+//! doesn't dodge the gate, because that base change is itself a gated diff. One config
+//! schema drives all three languages, so the gate is language-agnostic.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -31,20 +33,21 @@ use anyhow::{bail, Context, Result};
 
 use crate::config::{self, Config, Exemption};
 
-/// One newly-added exemption — a *(language, path, rule)* the diff lifted that the base
-/// did not — printed by the CLI and the unit the gate keys on.
+/// One exemption a PR **added or changed** relative to the base — the unit that needs a
+/// human greenlight, as rendered for the CLI. A modified entry (wider scope, an extra
+/// rule, a reworded reason) is reported just like a brand-new one.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AddedExemption {
+pub struct ChangedExemption {
     /// The config table the entry lives under: `python`, `typescript`, or `rust`.
     pub language: &'static str,
     /// The exempt entry's `path`, as written (with `\` normalized to `/`).
     pub path: String,
-    /// The rule the entry lifts, by its kebab-case id (e.g. `coverage`).
-    pub rule: &'static str,
+    /// The rules the entry lifts, by kebab-case id, sorted (e.g. `["coverage"]`).
+    pub rules: Vec<String>,
 }
 
-/// Every exemption newly added between the config at `base` and the working tree's
-/// config at `config_path`, sorted and de-duplicated.
+/// Every exemption the working tree's config at `config_path` **adds or changes** versus
+/// the config at `base`, sorted and de-duplicated.
 ///
 /// The working-tree ("after") config is read from disk and validated like every other
 /// command loads it (an absent file → no exemptions). The base ("before") config is read
@@ -52,12 +55,12 @@ pub struct AddedExemption {
 /// subdirectory resolves too; a config absent at `base` (e.g. one added in this diff)
 /// means no exemptions there, so everything present now is newly added. An unresolvable
 /// `base` is an error, never a silent "clean".
-pub fn newly_added(base: &str, config_path: &Path) -> Result<Vec<AddedExemption>> {
+pub fn changed(base: &str, config_path: &Path) -> Result<Vec<ChangedExemption>> {
     let head = head_config(config_path)?;
     let dir = config_dir(config_path);
     verify_base(dir, base)?;
     let base_config = base_config(dir, base, config_path)?;
-    Ok(added(&head, &base_config))
+    Ok(added_or_modified(&head, &base_config))
 }
 
 /// The working tree's config at `config_path`, validated (an absent file → an empty
@@ -102,7 +105,7 @@ fn verify_base(dir: &Path, base: &str) -> Result<()> {
 /// The config committed at `base`, via `git show <base>:./<file>`. A config absent at
 /// `base` (the show fails) means no exemptions there — so a newly-added config file can't
 /// smuggle exemptions in. Parsed leniently (the schema, without the reason-required
-/// self-guard): the base is historical, and only its exempt *sets* matter here.
+/// self-guard): the base is historical, and only its exempt *entries* matter here.
 fn base_config(dir: &Path, base: &str, config_path: &Path) -> Result<Config> {
     let file = config_path
         .file_name()
@@ -121,25 +124,32 @@ fn base_config(dir: &Path, base: &str, config_path: &Path) -> Result<Config> {
     toml::from_str(&contents).with_context(|| format!("parsing the base config from `{spec}`"))
 }
 
-/// The exemptions in `head` whose *(language, path, rule)* unit is absent in `base` —
-/// the additions the gate flags. Sorted (the [`BTreeSet`] iteration order) for
-/// deterministic output.
-fn added(head: &Config, base: &Config) -> Vec<AddedExemption> {
-    let base_units = lifted(base);
-    lifted(head)
-        .into_iter()
-        .filter(|unit| !base_units.contains(unit))
-        .map(|(language, path, rule)| AddedExemption {
-            language,
-            path,
-            rule,
-        })
-        .collect()
+/// Every entry in `head` whose **whole-entry identity** is absent in `base` — the
+/// additions *and* modifications the gate flags. Sorted (the [`BTreeSet`] dedup +
+/// `sort`) for deterministic output.
+fn added_or_modified(head: &Config, base: &Config) -> Vec<ChangedExemption> {
+    let base_keys: BTreeSet<EntryKey> = entries(base).into_iter().map(|(key, _)| key).collect();
+    let mut seen = BTreeSet::new();
+    let mut out = Vec::new();
+    for (key, display) in entries(head) {
+        // Unchanged (identical entry already at base) → free. A first sighting of a
+        // new-or-modified identity → needs a greenlight (dedup repeated identical entries).
+        if base_keys.contains(&key) || !seen.insert(key) {
+            continue;
+        }
+        out.push(display);
+    }
+    out.sort();
+    out
 }
 
-/// Every *(language, path, rule)* a config lifts — each `[[<language>.exempt]]` entry
-/// expanded to one unit per rule in its `rules`.
-fn lifted(config: &Config) -> BTreeSet<(&'static str, String, &'static str)> {
+/// A whole-entry identity: `(language, path, sorted rule ids, reason)`. Two entries are
+/// "the same exemption" only when all four match, so any edit — scope, rules, or the
+/// reason prose — is a *different* identity and therefore a change the gate flags.
+type EntryKey = (&'static str, String, Vec<String>, String);
+
+/// Each `[[<language>.exempt]]` entry in `config`, paired as `(identity, display)`.
+fn entries(config: &Config) -> Vec<(EntryKey, ChangedExemption)> {
     let tables: [(&'static str, &[Exemption]); 3] = [
         (
             "python",
@@ -163,16 +173,27 @@ fn lifted(config: &Config) -> BTreeSet<(&'static str, String, &'static str)> {
                 .map_or(&[][..], |c| c.exempt.as_slice()),
         ),
     ];
-    let mut units = BTreeSet::new();
+    let mut out = Vec::new();
     for (language, exempt) in tables {
         for entry in exempt {
             let path = entry.path.replace('\\', "/");
-            for rule in &entry.rules {
-                units.insert((language, path.clone(), rule.id()));
-            }
+            // Sort + dedup the rule ids so reordering `rules = [...]` isn't seen as a
+            // change, while adding or removing one is.
+            let mut rules: Vec<String> = entry.rules.iter().map(|r| r.id().to_string()).collect();
+            rules.sort();
+            rules.dedup();
+            let key: EntryKey = (language, path.clone(), rules.clone(), entry.reason.clone());
+            out.push((
+                key,
+                ChangedExemption {
+                    language,
+                    path,
+                    rules,
+                },
+            ));
         }
     }
-    units
+    out
 }
 
 #[cfg(test)]
@@ -184,20 +205,22 @@ mod tests {
         toml::from_str(toml_src).expect("valid test config")
     }
 
-    const REASON: &str = "reason = \"deliberate\"\n";
+    fn changed_of(head: &Config, base: &Config) -> Vec<ChangedExemption> {
+        added_or_modified(head, base)
+    }
 
     #[test]
     fn an_added_entry_is_reported() {
         let base = Config::default();
-        let head = parse(&format!(
-            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\"]\n{REASON}"
-        ));
+        let head = parse(
+            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\"]\nreason = \"shim\"\n",
+        );
         assert_eq!(
-            added(&head, &base),
-            vec![AddedExemption {
+            changed_of(&head, &base),
+            vec![ChangedExemption {
                 language: "python",
                 path: "cli.py".to_string(),
-                rule: "coverage",
+                rules: vec!["coverage".to_string()],
             }]
         );
     }
@@ -205,61 +228,72 @@ mod tests {
     #[test]
     fn an_unchanged_entry_is_not_reported() {
         let toml =
-            format!("[[rust.exempt]]\npath = \"build.rs\"\nrules = [\"coverage\"]\n{REASON}");
-        assert!(added(&parse(&toml), &parse(&toml)).is_empty());
+            "[[rust.exempt]]\npath = \"build.rs\"\nrules = [\"coverage\"]\nreason = \"gen\"\n";
+        assert!(changed_of(&parse(toml), &parse(toml)).is_empty());
     }
 
     #[test]
     fn a_removed_entry_is_not_reported() {
-        let base = parse(&format!(
-            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\"]\n{REASON}"
-        ));
-        let head = Config::default();
-        assert!(added(&head, &base).is_empty());
+        let base = parse(
+            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\"]\nreason = \"shim\"\n",
+        );
+        assert!(changed_of(&Config::default(), &base).is_empty());
     }
 
     #[test]
     fn an_extra_rule_on_an_existing_entry_is_reported() {
-        let base = parse(&format!(
-            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\"]\n{REASON}"
-        ));
-        let head = parse(&format!(
-            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\", \"coverage\"]\n{REASON}"
-        ));
-        // Only the newly-lifted (cli.py, coverage) unit is flagged.
+        let base = parse(
+            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\"]\nreason = \"shim\"\n",
+        );
+        let head = parse(
+            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\", \"coverage\"]\nreason = \"shim\"\n",
+        );
         assert_eq!(
-            added(&head, &base),
-            vec![AddedExemption {
+            changed_of(&head, &base),
+            vec![ChangedExemption {
                 language: "python",
                 path: "cli.py".to_string(),
-                rule: "coverage",
+                rules: vec!["colocated-test".to_string(), "coverage".to_string()],
             }]
         );
     }
 
     #[test]
-    fn a_reason_only_change_is_not_reported() {
+    fn a_reason_only_edit_is_reported() {
+        // Modifying an existing entry gates — even a reworded reason — so an agent can't
+        // quietly broaden the justification (or, later, the scope) of an exemption.
         let base = parse(
             "[[typescript.exempt]]\npath = \"index.ts\"\nrules = [\"colocated-test\"]\nreason = \"old\"\n",
         );
         let head = parse(
-            "[[typescript.exempt]]\npath = \"index.ts\"\nrules = [\"colocated-test\"]\nreason = \"new and improved\"\n",
+            "[[typescript.exempt]]\npath = \"index.ts\"\nrules = [\"colocated-test\"]\nreason = \"new, more thorough\"\n",
         );
-        assert!(added(&head, &base).is_empty());
+        assert_eq!(changed_of(&head, &base).len(), 1);
     }
 
     #[test]
-    fn additions_across_languages_are_sorted() {
+    fn reordering_rules_is_not_a_change() {
+        let base = parse(
+            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\", \"colocated-test\"]\nreason = \"shim\"\n",
+        );
+        let head = parse(
+            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\", \"coverage\"]\nreason = \"shim\"\n",
+        );
+        assert!(changed_of(&head, &base).is_empty());
+    }
+
+    #[test]
+    fn changes_across_languages_are_sorted() {
         let base = Config::default();
-        let head = parse(&format!(
-            "[[rust.exempt]]\npath = \"build.rs\"\nrules = [\"coverage\"]\n{REASON}\
-             [[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\"]\n{REASON}"
-        ));
-        let langs: Vec<_> = added(&head, &base)
+        let head = parse(
+            "[[rust.exempt]]\npath = \"build.rs\"\nrules = [\"coverage\"]\nreason = \"gen\"\n\
+             [[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\"]\nreason = \"shim\"\n",
+        );
+        let langs: Vec<_> = changed_of(&head, &base)
             .into_iter()
-            .map(|a| a.language)
+            .map(|c| c.language)
             .collect();
-        // BTreeSet order: "python" sorts before "rust".
+        // ChangedExemption sorts by language first: "python" before "rust".
         assert_eq!(langs, vec!["python", "rust"]);
     }
 

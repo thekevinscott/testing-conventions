@@ -77,21 +77,22 @@ Because every exemption lives in this one file, names its rules, and carries a r
 exemption surface is auditable in a single diff — unlike scattered ignore comments. See
 [Reference — Exemptions](../reference/#exemptions) for the exact schema.
 
-### New exemptions need a greenlight
+### Adding an exemption is a last resort that needs a greenlight
 
-A `reason` keeps an exemption honest, but it's still cheap to add. So adding a *new* exemption
-costs a deliberate human approval, detected the same deterministic, diff-scoped way as the other
-`--base` checks:
+An exemption turns a rule *off* for a file, so prefer writing a test or isolating the code —
+those need no approval; an exemption does. Adding **or broadening** one costs a deliberate human
+approval, detected the same deterministic, diff-scoped way as the other `--base` checks:
 
 ```sh
 testing-conventions exemptions --base origin/main
 ```
 
-This fails when the diff **adds** a `[[<language>.exempt]]` entry (or lifts an extra rule on an
-existing one); removing or keeping an entry, or rewording a `reason`, is clean. The human
-greenlight rides on the exit code — in the reusable workflow a reviewer applies the
-`tc:exemption-approved` label to approve the new exemptions. See
-[Reference — the `exemptions` command](../reference/#the-exemptions-command) for the full behavior.
+This fails when the diff **adds or modifies** a `[[<language>.exempt]]` entry — adding one, lifting
+an extra rule, widening its scope, or even rewording its `reason`; removing an entry or leaving it
+unchanged is clean. The greenlight is binary and the agent can't grant it: in the reusable workflow
+the check passes only once the `tc:exemption-approved` label is applied **by a reviewer who is not
+the PR author**. See [Reference — the `exemptions` command](../reference/#the-exemptions-command) for
+the full behavior.
 
 ## See also
 

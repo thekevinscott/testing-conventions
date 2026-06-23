@@ -65,14 +65,22 @@ enum Command {
         #[command(subcommand)]
         command: E2eCommand,
     },
-    /// Exemption-approval gate (#229): fail when the `<base>...HEAD` diff *adds* a
-    /// `[[<language>.exempt]]` entry, so each new exemption costs a human greenlight.
+    /// Exemption-approval gate (#229): fail when the `<base>...HEAD` diff *adds or
+    /// modifies* a `[[<language>.exempt]]` entry, so each new or broadened exemption
+    /// costs a human greenlight. Exemptions are a last resort — writing a test or
+    /// isolating the code needs no approval.
     Exemptions {
         /// Base ref to diff against; the "before" config is read from it via
         /// `git show <REF>:<config>`, the "after" from the working tree. In CI, the
         /// PR's base (e.g. `origin/main`). An unresolvable ref is an error.
         #[arg(long)]
         base: String,
+        /// The human greenlight. The reusable workflow sets this only when a reviewer
+        /// who is **not** the PR author has applied the `tc:exemption-approved` label —
+        /// the agent can't set it itself. With it, added/modified exemptions pass (and
+        /// are listed as an audit trail); without it, they fail the build.
+        #[arg(long)]
+        approved: bool,
         /// Config file holding the `[[<language>.exempt]]` tables (default
         /// `testing-conventions.toml`). Absent at the base → every current exemption
         /// is newly added; absent on both sides → nothing is exempt either way.
@@ -261,7 +269,11 @@ where
             E2eCommand::Attest { command } => run_e2e_attest(&command),
             E2eCommand::Verify => run_e2e_verify(),
         },
-        Some(Command::Exemptions { base, config }) => run_exemptions(&base, &config),
+        Some(Command::Exemptions {
+            base,
+            approved,
+            config,
+        }) => run_exemptions(&base, approved, &config),
     }
 }
 
@@ -793,28 +805,60 @@ fn run_e2e_verify() -> anyhow::Result<i32> {
     }
 }
 
-/// Run the exemption-approval gate's detection (#229): fail when the `<base>...HEAD`
-/// diff *adds* a `[[<language>.exempt]]` entry. Returns `0` when nothing was added
-/// (the human greenlight rides on this exit code), `1` after printing each newly-added
-/// exemption and the `tc:exemption-approved` label hint to stderr.
-fn run_exemptions(base: &str, config_path: &Path) -> anyhow::Result<i32> {
-    let added = exemptions::newly_added(base, config_path)?;
-    if added.is_empty() {
-        println!("exemptions: the diff adds no new exemptions");
+/// Run the exemption-approval gate (#229): detect every `[[<language>.exempt]]` entry the
+/// PR **adds or modifies** versus `base`, and decide on the `approved` greenlight.
+///
+/// - Nothing added/modified → `0` (the common case; no approval needed).
+/// - Added/modified **and** `approved` → `0`, listing them as an audit trail.
+/// - Added/modified and **not** `approved` → `1`, after steering toward writing a test and
+///   naming the `tc:exemption-approved` label a non-author reviewer must apply.
+///
+/// `approved` is the human greenlight, set by the reusable workflow only when a reviewer
+/// who is not the PR author applied the label — the binary itself trusts the flag, the
+/// workflow is what the agent can't forge.
+fn run_exemptions(base: &str, approved: bool, config_path: &Path) -> anyhow::Result<i32> {
+    let changed = exemptions::changed(base, config_path)?;
+    if changed.is_empty() {
+        println!("exemptions: this PR adds or changes no exemptions");
+        return Ok(0);
+    }
+    if approved {
+        println!(
+            "exemptions: {} added/changed exemption(s) approved by a human greenlight:",
+            changed.len()
+        );
+        for c in &changed {
+            println!("  {}", render_exemption(c));
+        }
         return Ok(0);
     }
     eprintln!(
-        "error: {} newly-added exemption(s) need a human greenlight — a reviewer must apply the \
-         `tc:exemption-approved` label to approve them (or drop the exemption):",
-        added.len()
+        "error: {} exemption(s) added or changed in this PR need a human greenlight.",
+        changed.len()
     );
-    for a in &added {
-        eprintln!(
-            "  [{}.exempt] {} rules = [\"{}\"]",
-            a.language, a.path, a.rule
-        );
+    eprintln!(
+        "Exemptions are a last resort — writing a test or isolating the code needs no approval; \
+         prefer that over an exemption."
+    );
+    eprintln!(
+        "If an exemption is truly warranted, a reviewer who is not the PR author must apply the \
+         `tc:exemption-approved` label:"
+    );
+    for c in &changed {
+        eprintln!("  {}", render_exemption(c));
     }
     Ok(1)
+}
+
+/// Render one added/changed exemption as `[<lang>.exempt] <path> rules = ["a", "b"]`.
+fn render_exemption(c: &exemptions::ChangedExemption) -> String {
+    let rules = c
+        .rules
+        .iter()
+        .map(|r| format!("\"{r}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{}.exempt] {} rules = [{}]", c.language, c.path, rules)
 }
 
 #[cfg(test)]

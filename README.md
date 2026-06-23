@@ -30,7 +30,7 @@ Every rule is a CLI command that fails CI on a violation.
 
 **Exemptions**
 
-- [`exemptions`](https://thekevinscott.github.io/testing-conventions/reference/#the-exemptions-command) — the exemption-approval gate (#229): with `--base`, fail when the `<base>...HEAD` diff *adds* a `[[<language>.exempt]]` entry, so each new exemption costs a human greenlight. Deterministic and language-agnostic (one schema across Python, TypeScript, Rust). The detection command ships now; the reusable-workflow label gate (a reviewer applying `tc:exemption-approved`) is the remaining wiring step ([#229](https://github.com/thekevinscott/testing-conventions/issues/229)).
+- [`exemptions`](https://thekevinscott.github.io/testing-conventions/reference/#the-exemptions-command) — the exemption-approval gate (#229): with `--base`, fail when the `<base>...HEAD` diff *adds or modifies* a `[[<language>.exempt]]` entry, so each new or broadened exemption costs a human greenlight (`--approved`) the agent can't grant itself. Deterministic and language-agnostic (one schema across Python, TypeScript, Rust). The detection command ships now; the reusable-workflow label gate (the `tc:exemption-approved` label, applied by a non-author reviewer) is the remaining wiring step ([#229](https://github.com/thekevinscott/testing-conventions/issues/229)).
 <!-- #endregion rules -->
 
 ## The three kinds of tests
@@ -256,31 +256,37 @@ config-driven, never a silent ignore:
   diff. A stale entry (a path that no longer exists) is a hard error, so the list
   can't rot.
 
-### New exemptions need a human greenlight
+### Adding an exemption is a last resort that needs a human greenlight
 
-A required `reason` keeps an exemption *honest*, but it's still cheap to add — an
-agent (or a hurried human) can write a plausible reason and slip one through. So
-adding a *new* exemption costs a deliberate human approval, enforced the same
+An exemption turns a blocking rule *off* for a file, so it should be the path of last
+resort — writing a test or isolating the code needs no approval; reaching for an
+exemption does. A required `reason` keeps one honest, but it's still cheap to add: an
+agent (or a hurried human) can write a plausible reason and slip one through. So adding
+**or broadening** an exemption costs a deliberate human approval, enforced the same
 deterministic, diff-scoped way as co-change and changed-line coverage:
 
 ```
 testing-conventions exemptions --base <ref>
 ```
 
-This diffs the `[[<language>.exempt]]` entries between `<ref>` and the working tree
-and exits non-zero when the diff **adds** one. The gate keys on the *(path, rule)*
-being lifted — not the `reason` text — so:
+This diffs the `[[<language>.exempt]]` entries between `<ref>` and the working tree and
+exits non-zero when the diff **adds or modifies** one. The gate keys on the **whole
+entry**, so:
 
-- adding an exemption (or lifting an extra rule on an existing one) → non-zero exit;
-- removing or keeping an exemption, or rewording a reason → clean.
+- adding an entry, lifting an extra rule, widening its scope, or even rewording its
+  `reason` → non-zero exit;
+- removing an entry, or leaving it byte-for-byte unchanged → clean.
 
-It keys on *newly-added* entries, so you can't pre-seed exemptions on the base
-branch to dodge it — that base change is itself a gated diff.
+Keying on the diff is the anti-loophole: you can't pre-seed exemptions on the base
+branch to dodge it (that base change is itself a gated diff), and you can't quietly
+broaden an existing one (a modification gates too).
 
-The human greenlight rides on this exit code: in the reusable workflow, a job runs
-the command and passes only when the diff adds nothing **or** a reviewer has applied
-the `tc:exemption-approved` PR label. The detection command ships now; wiring that
-label gate into the reusable workflow is the remaining step ([#229](https://github.com/thekevinscott/testing-conventions/issues/229)).
+**The greenlight is binary, and the agent can't grant it.** In the reusable workflow a
+job runs the command and passes only when the diff changes nothing **or** the
+`tc:exemption-approved` label has been applied **by a reviewer who is not the PR
+author** — so an agent can't approve its own exemption. The detection command (with its
+`--approved` greenlight) ships now; wiring that label-driven job into the reusable
+workflow is the remaining step ([#229](https://github.com/thekevinscott/testing-conventions/issues/229)).
 
 ## Configuration
 

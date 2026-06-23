@@ -4,11 +4,12 @@
 //! The gate's first half is a pure, deterministic command — the same shape as
 //! co-change / changed-line coverage. It diffs the `[[<language>.exempt]]` entries
 //! between `<base>` and the working tree's config and exits non-zero when the diff
-//! **adds** an exemption, so every *new* exemption costs a human greenlight (the
-//! second half — a `tc:exemption-approved` PR label read by the reusable workflow —
-//! rides on this exit code). Removing or keeping an existing exemption is untouched,
-//! and the gate keys on the *(path, rule)* being lifted, not on the `reason` text, so
-//! editing a reason is not a new exemption.
+//! **adds or modifies** one, so every new or broadened exemption costs a human
+//! greenlight. The greenlight is `--approved` (the second half — a
+//! `tc:exemption-approved` label applied by a non-author reviewer, read by the
+//! reusable workflow — sets it). The gate keys on the **whole entry**, so removing or
+//! leaving an entry byte-for-byte unchanged is free, while widening one, lifting an
+//! extra rule, or even rewording the reason gates.
 //!
 //! Each test builds a throwaway git repo: a `base` commit carrying the "before"
 //! config, then the "after" config in the working tree + a commit on top, so
@@ -87,9 +88,20 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 /// Result of `testing-conventions exemptions --base <base> --config <repo>/<config>`,
-/// run in-process.
+/// run in-process (without the `--approved` greenlight).
 fn run_exemptions(repo: &TempRepo, base: &str, config: &str) -> anyhow::Result<i32> {
-    let argv: Vec<OsString> = vec![
+    run_exemptions_with(repo, base, config, false)
+}
+
+/// As [`run_exemptions`], but passes `--approved` when `approved` is set — the human
+/// greenlight the reusable workflow supplies once a non-author reviewer applies the label.
+fn run_exemptions_with(
+    repo: &TempRepo,
+    base: &str,
+    config: &str,
+    approved: bool,
+) -> anyhow::Result<i32> {
+    let mut argv: Vec<OsString> = vec![
         "testing-conventions".into(),
         "exemptions".into(),
         "--base".into(),
@@ -97,6 +109,9 @@ fn run_exemptions(repo: &TempRepo, base: &str, config: &str) -> anyhow::Result<i
         "--config".into(),
         repo.0.join(config).into_os_string(),
     ];
+    if approved {
+        argv.push("--approved".into());
+    }
     run(argv)
 }
 
@@ -132,7 +147,7 @@ fn a_newly_added_exemption_exits_nonzero() {
 
 #[test]
 fn an_unchanged_exemption_exits_zero() {
-    // Keeping an existing exemption is untouched — only *additions* gate.
+    // Keeping an existing exemption is free — only additions/modifications gate.
     let repo = TempRepo::new("py-unchanged");
     let with_exempt = format!(
         "{COVERAGE}{}",
@@ -169,8 +184,8 @@ fn removing_an_exemption_exits_zero() {
 
 #[test]
 fn adding_a_rule_to_an_existing_entry_exits_nonzero() {
-    // Lifting an *additional* rule on an already-exempt path is a new exemption:
-    // the (path, rule) unit `(cli.py, coverage)` wasn't lifted at base.
+    // Lifting an *additional* rule changes the entry, so its whole-entry identity
+    // differs from base — a modification, which gates.
     let repo = TempRepo::new("py-add-rule");
     repo.write(
         CONFIG,
@@ -195,9 +210,9 @@ fn adding_a_rule_to_an_existing_entry_exits_nonzero() {
 }
 
 #[test]
-fn a_reason_only_edit_exits_zero() {
-    // The gate keys on the (path, rule) lifted, not on the reason text, so
-    // rewording a justification is not a new exemption.
+fn modifying_an_existing_entry_exits_nonzero() {
+    // Modifying an entry gates, even a reworded reason: the gate keys on the *whole*
+    // entry, so an agent can't quietly broaden an exemption's scope or justification.
     let repo = TempRepo::new("py-reason");
     repo.write(
         CONFIG,
@@ -218,7 +233,30 @@ fn a_reason_only_edit_exits_zero() {
     );
     repo.commit("reword the reason");
 
-    assert_eq!(run_exemptions(&repo, &base, CONFIG).unwrap(), 0);
+    assert_eq!(run_exemptions(&repo, &base, CONFIG).unwrap(), 1);
+}
+
+#[test]
+fn the_approved_greenlight_lets_an_added_or_changed_exemption_pass() {
+    // With the human greenlight (--approved), a newly-added exemption passes; without
+    // it, the same diff fails. This is the binary approve/not decision the label drives.
+    let repo = TempRepo::new("py-approved");
+    repo.write(CONFIG, COVERAGE);
+    repo.commit("base: no exemptions");
+    let base = repo.head();
+    repo.write(
+        CONFIG,
+        &format!(
+            "{COVERAGE}{}",
+            py_exempt("mypkg/cli.py", "\"coverage\"", "thin launcher")
+        ),
+    );
+    repo.commit("add an exemption");
+
+    // Red without approval…
+    assert_eq!(run_exemptions(&repo, &base, CONFIG).unwrap(), 1);
+    // …green once a human greenlights it.
+    assert_eq!(run_exemptions_with(&repo, &base, CONFIG, true).unwrap(), 0);
 }
 
 // ---- Anti-loophole & config presence --------------------------------------

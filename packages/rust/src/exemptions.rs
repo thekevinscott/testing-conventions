@@ -34,8 +34,8 @@ use anyhow::{bail, Context, Result};
 use crate::config::{self, Config, Exemption};
 
 /// One exemption a PR **added or changed** relative to the base — the unit that needs a
-/// human greenlight, as rendered for the CLI. A modified entry (wider scope, an extra
-/// rule, a reworded reason) is reported just like a brand-new one.
+/// human greenlight, as rendered for the CLI. A modified entry (a wider line scope, an
+/// extra rule, a reworded reason) is reported just like a brand-new one.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ChangedExemption {
     /// The config table the entry lives under: `python`, `typescript`, or `rust`.
@@ -44,6 +44,9 @@ pub struct ChangedExemption {
     pub path: String,
     /// The rules the entry lifts, by kebab-case id, sorted (e.g. `["coverage"]`).
     pub rules: Vec<String>,
+    /// The 1-based lines a `coverage` / `mutation` entry is scoped to (#226), sorted and
+    /// range-expanded. Empty for a whole-file exemption.
+    pub lines: Vec<u32>,
 }
 
 /// Every exemption the working tree's config at `config_path` **adds or changes** versus
@@ -143,10 +146,12 @@ fn added_or_modified(head: &Config, base: &Config) -> Vec<ChangedExemption> {
     out
 }
 
-/// A whole-entry identity: `(language, path, sorted rule ids, reason)`. Two entries are
-/// "the same exemption" only when all four match, so any edit — scope, rules, or the
-/// reason prose — is a *different* identity and therefore a change the gate flags.
-type EntryKey = (&'static str, String, Vec<String>, String);
+/// A whole-entry identity: `(language, path, sorted rule ids, line set, reason)`. Two
+/// entries are "the same exemption" only when all five match, so any edit — line scope
+/// (#226), rules, or the reason prose — is a *different* identity and therefore a change
+/// the gate flags. The line set is range-expanded and sorted, so `[12, 13]` and
+/// `["12-13"]` are the same scope, but **widening** it (e.g. to `"12-200"`) is a change.
+type EntryKey = (&'static str, String, Vec<String>, BTreeSet<u32>, String);
 
 /// Each `[[<language>.exempt]]` entry in `config`, paired as `(identity, display)`.
 fn entries(config: &Config) -> Vec<(EntryKey, ChangedExemption)> {
@@ -182,13 +187,23 @@ fn entries(config: &Config) -> Vec<(EntryKey, ChangedExemption)> {
             let mut rules: Vec<String> = entry.rules.iter().map(|r| r.id().to_string()).collect();
             rules.sort();
             rules.dedup();
-            let key: EntryKey = (language, path.clone(), rules.clone(), entry.reason.clone());
+            // The range-expanded, sorted line set (#226): canonical, so re-spelling the
+            // same lines isn't a change, but widening the scope is.
+            let line_set = entry.line_set();
+            let key: EntryKey = (
+                language,
+                path.clone(),
+                rules.clone(),
+                line_set.clone(),
+                entry.reason.clone(),
+            );
             out.push((
                 key,
                 ChangedExemption {
                     language,
                     path,
                     rules,
+                    lines: line_set.into_iter().collect(),
                 },
             ));
         }
@@ -221,6 +236,7 @@ mod tests {
                 language: "python",
                 path: "cli.py".to_string(),
                 rules: vec!["coverage".to_string()],
+                lines: vec![],
             }]
         );
     }
@@ -242,20 +258,50 @@ mod tests {
 
     #[test]
     fn an_extra_rule_on_an_existing_entry_is_reported() {
+        // Two whole-file rules (so the mix is valid under #226); lifting an extra rule
+        // changes the entry's identity, so it gates.
         let base = parse(
             "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\"]\nreason = \"shim\"\n",
         );
         let head = parse(
-            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\", \"coverage\"]\nreason = \"shim\"\n",
+            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\", \"co-change\"]\nreason = \"shim\"\n",
         );
         assert_eq!(
             changed_of(&head, &base),
             vec![ChangedExemption {
                 language: "python",
                 path: "cli.py".to_string(),
-                rules: vec!["colocated-test".to_string(), "coverage".to_string()],
+                rules: vec!["co-change".to_string(), "colocated-test".to_string()],
+                lines: vec![],
             }]
         );
+    }
+
+    #[test]
+    fn widening_a_line_scope_is_reported() {
+        // The #226 hole: an agent broadens an existing line-scoped exemption. The line
+        // set is part of the identity, so widening it gates.
+        let base = parse(
+            "[[python.exempt]]\npath = \"cfg.py\"\nrules = [\"coverage\"]\nlines = [\"12-13\"]\nreason = \"x\"\n",
+        );
+        let head = parse(
+            "[[python.exempt]]\npath = \"cfg.py\"\nrules = [\"coverage\"]\nlines = [\"12-200\"]\nreason = \"x\"\n",
+        );
+        let changed = changed_of(&head, &base);
+        assert_eq!(changed.len(), 1);
+        assert_eq!(changed[0].lines, (12..=200).collect::<Vec<u32>>());
+    }
+
+    #[test]
+    fn an_equivalent_line_spec_is_not_a_change() {
+        // The line set is range-expanded, so `[12, 13]` and `["12-13"]` are the same scope.
+        let base = parse(
+            "[[python.exempt]]\npath = \"cfg.py\"\nrules = [\"coverage\"]\nlines = [12, 13]\nreason = \"x\"\n",
+        );
+        let head = parse(
+            "[[python.exempt]]\npath = \"cfg.py\"\nrules = [\"coverage\"]\nlines = [\"12-13\"]\nreason = \"x\"\n",
+        );
+        assert!(changed_of(&head, &base).is_empty());
     }
 
     #[test]

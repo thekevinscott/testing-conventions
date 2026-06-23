@@ -113,7 +113,13 @@ fn base_scopes_the_run_to_the_changed_lines() {
     repo.write("index.test.ts", WITH_SURVIVOR_TEST);
     repo.commit("add an assertion-light isPositive");
 
-    let survivors = measure_typescript(&repo.0, &[], Some(&base)).expect("stryker runs");
+    let survivors = measure_typescript(
+        &repo.0,
+        &[],
+        &std::collections::BTreeMap::new(),
+        Some(&base),
+    )
+    .expect("stryker runs");
     // The added `isPositive` (lines 5-7) is in the diff and assertion-light, so its
     // mutants survive; `add` (lines 1-3) is unchanged, so it's out of scope and never
     // mutated.
@@ -144,7 +150,13 @@ fn base_with_no_mutatable_changed_files_skips_the_run() {
     );
     repo.commit("tweak only the test file");
 
-    let survivors = measure_typescript(&repo.0, &[], Some(&base)).expect("no run needed");
+    let survivors = measure_typescript(
+        &repo.0,
+        &[],
+        &std::collections::BTreeMap::new(),
+        Some(&base),
+    )
+    .expect("no run needed");
     assert!(
         survivors.is_empty(),
         "a test-file-only diff has nothing mutatable; got {survivors:?}"

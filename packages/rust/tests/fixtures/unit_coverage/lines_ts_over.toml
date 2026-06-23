@@ -1,0 +1,10 @@
+# Over-exemption (#226 determinism guard): core.ts line 2 is fully covered, so listing
+# it is a hard error.
+[typescript]
+coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
+
+[[typescript.exempt]]
+path = "core.ts"
+rules = ["coverage"]
+lines = [2]
+reason = "fixture: over-exempts a covered line"

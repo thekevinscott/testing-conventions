@@ -92,4 +92,8 @@ reason-required, and in one file**, never a silent ignore. A launcher shim, a re
 generated code earns an exemption that names the rules it lifts and *why*; the whole exemption
 surface is auditable in a single diff, and a stale entry is a hard error so the list can't rot. The
 philosophy is "zero violations except what you exempted with a reason" — not "hit a number you can
-soften when it's inconvenient." See [Configure the rules](../guide/configure#exempt-a-file).
+soften when it's inconvenient." And keep each exemption as small as the code that genuinely can't be
+tested. For `coverage` and `mutation` that's enforced: the exemption is line-scoped — it names the
+exact failing lines, never a whole file — and a determinism guard rejects any listed line that isn't
+failing. (You list the irreducible lines instead of extracting them into their own file.) See
+[Configure the rules](../guide/configure#exempt-a-file).

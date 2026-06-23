@@ -55,10 +55,12 @@ same [exemption](./configure#exempt-a-file) mechanism every rule shares:
 [[typescript.exempt]]
 path = "src/clamp.ts"
 rules = ["mutation"]
+lines = [12]   # the exact line the surviving mutant is on — required for `mutation`
 reason = "equivalent mutant: the `>= 0` guard can't be reached after the earlier abs()"
 ```
 
-A passing run then means every survivor was either killed or explained.
+`mutation` exemptions are line-scoped: `lines` names the survivor's line(s), and listing a line whose
+mutants were all caught is a hard error. A passing run means every survivor was killed or explained.
 
 ## In CI
 

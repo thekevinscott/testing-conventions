@@ -1,0 +1,7 @@
+# A `lines` list alongside a whole-file rule (`colocated-test`) is rejected on load
+# (#226): line-scoping applies only to the measured-line rules `coverage` / `mutation`.
+[[python.exempt]]
+path = "src/cli.py"
+rules = ["colocated-test", "coverage"]
+lines = [3]
+reason = "line-scoping a presence check makes no sense"

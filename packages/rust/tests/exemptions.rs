@@ -1,20 +1,20 @@
-//! Integration tests for the exemption-approval gate's deterministic detection
-//! (#229): `testing-conventions exemptions --base <REF>`.
+//! Integration tests for the exemption-approval gate (#229): `testing-conventions
+//! exemptions --base <REF> [--approved]`.
 //!
-//! The gate's first half is a pure, deterministic command — the same shape as
-//! co-change / changed-line coverage. It diffs the `[[<language>.exempt]]` entries
-//! between `<base>` and the working tree's config and exits non-zero when the diff
-//! **adds or modifies** one, so every new or broadened exemption costs a human
-//! greenlight. The greenlight is `--approved` (the second half — a
-//! `tc:exemption-approved` label applied by a non-author reviewer, read by the
-//! reusable workflow — sets it). The gate keys on the **whole entry**, so removing or
-//! leaving an entry byte-for-byte unchanged is free, while widening one, lifting an
-//! extra rule, or even rewording the reason gates.
+//! The gate's first half is a pure, deterministic command — the same shape as co-change /
+//! changed-line coverage. It diffs the `[[<language>.exempt]]` entries between `<base>`
+//! and the working tree's config and exits non-zero when the diff **adds or modifies**
+//! one, so every new or broadened exemption costs a human greenlight. The greenlight is
+//! `--approved` (the reusable workflow sets it only when a non-author reviewer applied the
+//! `tc:exemption-approved` label). The gate keys on the **whole entry** (path + rules +
+//! `lines` scope + reason), so removing or leaving an entry byte-for-byte unchanged is
+//! free, while widening a line scope (#226), lifting an extra rule, or even rewording the
+//! reason gates.
 //!
-//! Each test builds a throwaway git repo: a `base` commit carrying the "before"
-//! config, then the "after" config in the working tree + a commit on top, so
-//! `<base>...HEAD` is the change under test. These drive the CLI (`run`) end to end;
-//! `exemptions_e2e.rs` covers the built binary as a subprocess.
+//! Each test builds a throwaway git repo: a `base` commit carrying the "before" config,
+//! then the "after" config in the working tree + a commit on top, so `<base>...HEAD` is
+//! the change under test. These drive the CLI (`run`) end to end; `exemptions_e2e.rs`
+//! covers the built binary as a subprocess.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -23,9 +23,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use testing_conventions::run;
 
-/// A throwaway git repo, removed on drop. A test writes the "before" config,
-/// `commit`s it, captures `head()` as the `base`, then writes the "after" config
-/// and commits, so `<base>...HEAD` carries the exemption change.
+/// A throwaway git repo, removed on drop. A test writes the "before" config, `commit`s
+/// it, captures `head()` as the `base`, then writes the "after" config and commits.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -118,12 +117,19 @@ fn run_exemptions_with(
 const CONFIG: &str = "testing-conventions.toml";
 const COVERAGE: &str = "[python]\ncoverage = { branch = true, fail_under = 100 }\n";
 
-/// A `[[python.exempt]]` block for `path` lifting `rules`, with the given reason.
-fn py_exempt(path: &str, rules: &str, reason: &str) -> String {
+/// A whole-file `[[python.exempt]]` block for `path` lifting `rules` (no `lines`).
+fn whole(path: &str, rules: &str, reason: &str) -> String {
     format!("\n[[python.exempt]]\npath = \"{path}\"\nrules = [{rules}]\nreason = \"{reason}\"\n")
 }
 
-// ---- The core gate: a newly-added exemption fails -------------------------
+/// A line-scoped `[[python.exempt]]` block (#226): a `coverage` entry over `lines`.
+fn scoped(path: &str, lines: &str, reason: &str) -> String {
+    format!(
+        "\n[[python.exempt]]\npath = \"{path}\"\nrules = [\"coverage\"]\nlines = [{lines}]\nreason = \"{reason}\"\n"
+    )
+}
+
+// ---- Adding an exemption gates --------------------------------------------
 
 #[test]
 fn a_newly_added_exemption_exits_nonzero() {
@@ -137,7 +143,7 @@ fn a_newly_added_exemption_exits_nonzero() {
         CONFIG,
         &format!(
             "{COVERAGE}{}",
-            py_exempt("mypkg/cli.py", "\"coverage\"", "thin launcher")
+            whole("mypkg/cli.py", "\"colocated-test\"", "shim")
         ),
     );
     repo.commit("add an exemption");
@@ -151,7 +157,7 @@ fn an_unchanged_exemption_exits_zero() {
     let repo = TempRepo::new("py-unchanged");
     let with_exempt = format!(
         "{COVERAGE}{}",
-        py_exempt("mypkg/cli.py", "\"coverage\"", "shim")
+        whole("mypkg/cli.py", "\"colocated-test\"", "shim")
     );
     repo.write(CONFIG, &with_exempt);
     repo.commit("base: one exemption");
@@ -170,7 +176,7 @@ fn removing_an_exemption_exits_zero() {
     let repo = TempRepo::new("py-remove");
     let with_exempt = format!(
         "{COVERAGE}{}",
-        py_exempt("mypkg/cli.py", "\"coverage\"", "shim")
+        whole("mypkg/cli.py", "\"colocated-test\"", "shim")
     );
     repo.write(CONFIG, &with_exempt);
     repo.commit("base: one exemption");
@@ -182,16 +188,18 @@ fn removing_an_exemption_exits_zero() {
     assert_eq!(run_exemptions(&repo, &base, CONFIG).unwrap(), 0);
 }
 
+// ---- Modifying an exemption gates -----------------------------------------
+
 #[test]
 fn adding_a_rule_to_an_existing_entry_exits_nonzero() {
-    // Lifting an *additional* rule changes the entry, so its whole-entry identity
-    // differs from base — a modification, which gates.
+    // Lifting an *additional* rule changes the entry, so its whole-entry identity differs
+    // from base — a modification, which gates. (Two whole-file rules, valid under #226.)
     let repo = TempRepo::new("py-add-rule");
     repo.write(
         CONFIG,
         &format!(
             "{COVERAGE}{}",
-            py_exempt("mypkg/cli.py", "\"colocated-test\"", "shim")
+            whole("mypkg/cli.py", "\"colocated-test\"", "shim")
         ),
     );
     repo.commit("base: lifts colocated-test only");
@@ -201,10 +209,10 @@ fn adding_a_rule_to_an_existing_entry_exits_nonzero() {
         CONFIG,
         &format!(
             "{COVERAGE}{}",
-            py_exempt("mypkg/cli.py", "\"colocated-test\", \"coverage\"", "shim")
+            whole("mypkg/cli.py", "\"colocated-test\", \"co-change\"", "shim")
         ),
     );
-    repo.commit("also lift coverage");
+    repo.commit("also lift co-change");
 
     assert_eq!(run_exemptions(&repo, &base, CONFIG).unwrap(), 1);
 }
@@ -218,7 +226,7 @@ fn modifying_an_existing_entry_exits_nonzero() {
         CONFIG,
         &format!(
             "{COVERAGE}{}",
-            py_exempt("mypkg/cli.py", "\"coverage\"", "old reason")
+            whole("mypkg/cli.py", "\"colocated-test\"", "old reason")
         ),
     );
     repo.commit("base");
@@ -228,7 +236,11 @@ fn modifying_an_existing_entry_exits_nonzero() {
         CONFIG,
         &format!(
             "{COVERAGE}{}",
-            py_exempt("mypkg/cli.py", "\"coverage\"", "a more thorough reason")
+            whole(
+                "mypkg/cli.py",
+                "\"colocated-test\"",
+                "a more thorough reason"
+            )
         ),
     );
     repo.commit("reword the reason");
@@ -237,9 +249,65 @@ fn modifying_an_existing_entry_exits_nonzero() {
 }
 
 #[test]
+fn widening_a_line_scope_exits_nonzero() {
+    // The #226 hole you can't dodge: broadening a line-scoped `coverage` exemption is a
+    // modification (the line set is part of the entry's identity), so it gates.
+    let repo = TempRepo::new("py-widen");
+    repo.write(
+        CONFIG,
+        &format!(
+            "{COVERAGE}{}",
+            scoped("mypkg/cfg.py", "\"12-13\"", "dead branch")
+        ),
+    );
+    repo.commit("base: exempt lines 12-13");
+    let base = repo.head();
+
+    repo.write(
+        CONFIG,
+        &format!(
+            "{COVERAGE}{}",
+            scoped("mypkg/cfg.py", "\"12-200\"", "dead branch")
+        ),
+    );
+    repo.commit("widen to lines 12-200");
+
+    assert_eq!(run_exemptions(&repo, &base, CONFIG).unwrap(), 1);
+}
+
+#[test]
+fn an_equivalent_line_spec_exits_zero() {
+    // Re-spelling the same lines (`[12, 13]` vs `["12-13"]`) is the same scope, not a
+    // change — the line set is range-expanded before comparison.
+    let repo = TempRepo::new("py-equiv-lines");
+    repo.write(
+        CONFIG,
+        &format!(
+            "{COVERAGE}{}",
+            scoped("mypkg/cfg.py", "12, 13", "dead branch")
+        ),
+    );
+    repo.commit("base: lines [12, 13]");
+    let base = repo.head();
+
+    repo.write(
+        CONFIG,
+        &format!(
+            "{COVERAGE}{}",
+            scoped("mypkg/cfg.py", "\"12-13\"", "dead branch")
+        ),
+    );
+    repo.commit("rewrite as range 12-13");
+
+    assert_eq!(run_exemptions(&repo, &base, CONFIG).unwrap(), 0);
+}
+
+// ---- The human greenlight -------------------------------------------------
+
+#[test]
 fn the_approved_greenlight_lets_an_added_or_changed_exemption_pass() {
-    // With the human greenlight (--approved), a newly-added exemption passes; without
-    // it, the same diff fails. This is the binary approve/not decision the label drives.
+    // With the human greenlight (--approved), a newly-added exemption passes; without it,
+    // the same diff fails. This is the binary approve/not decision the label drives.
     let repo = TempRepo::new("py-approved");
     repo.write(CONFIG, COVERAGE);
     repo.commit("base: no exemptions");
@@ -248,7 +316,7 @@ fn the_approved_greenlight_lets_an_added_or_changed_exemption_pass() {
         CONFIG,
         &format!(
             "{COVERAGE}{}",
-            py_exempt("mypkg/cli.py", "\"coverage\"", "thin launcher")
+            whole("mypkg/cli.py", "\"colocated-test\"", "shim")
         ),
     );
     repo.commit("add an exemption");
@@ -263,8 +331,8 @@ fn the_approved_greenlight_lets_an_added_or_changed_exemption_pass() {
 
 #[test]
 fn a_config_file_added_with_an_exemption_exits_nonzero() {
-    // Anti-loophole: a config that didn't exist at base can't smuggle exemptions
-    // in — an absent base config means *every* HEAD exemption is newly added.
+    // Anti-loophole: a config that didn't exist at base can't smuggle exemptions in — an
+    // absent base config means *every* HEAD exemption is newly added.
     let repo = TempRepo::new("new-config");
     repo.write("src/widget.py", "x = 1\n");
     repo.commit("base: no config file");
@@ -274,7 +342,7 @@ fn a_config_file_added_with_an_exemption_exits_nonzero() {
         CONFIG,
         &format!(
             "{COVERAGE}{}",
-            py_exempt("src/widget.py", "\"coverage\"", "generated")
+            whole("src/widget.py", "\"colocated-test\"", "generated")
         ),
     );
     repo.commit("add a config file with an exemption");
@@ -322,7 +390,7 @@ fn a_new_rust_exemption_exits_nonzero() {
     repo.write(
         CONFIG,
         "[rust]\n\n[[rust.exempt]]\npath = \"build.rs\"\n\
-         rules = [\"coverage\"]\nreason = \"generated\"\n",
+         rules = [\"coverage\"]\nlines = [\"1-3\"]\nreason = \"generated\"\n",
     );
     repo.commit("add a rust exemption");
 

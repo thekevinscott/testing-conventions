@@ -44,14 +44,15 @@ permissions:
 
 jobs:
   conventions:
-    name: Shipped reusable workflow over packages/python (zero-config)
-    # #175: consume our own shipped reusable workflow over a real package, zero-config.
-    # Default languages, no config file — every job is skipped because packages/python
-    # has no sources (#94), so the call is green; the published binary it runs is
-    # current (it auto-publishes on merge).
+    name: Shipped reusable workflow over the Python plugin source
+    # #175 / #218: consume our own shipped reusable workflow over a real package — the
+    # Python plugin source under packages/python/python. Everything is unit-tested (the
+    # pytest hook via its pluggy metadata, the coverage monkeypatch via an injected
+    # module, the version shim via a forced import fallback), so it runs zero-config with
+    # no exemptions. The published binary it runs is current (it auto-publishes on merge).
     uses: ./.github/workflows/testing-conventions.yml
     with:
-      path: packages/python
+      path: packages/python/python
 
   colocated-test:
     name: Colocated test (packages/node/src)

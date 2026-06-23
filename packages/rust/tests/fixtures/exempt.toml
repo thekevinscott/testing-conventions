@@ -1,8 +1,16 @@
-# Exemptions only — no coverage thresholds (both keys are optional).
+# Exemptions only — no coverage thresholds (both keys are optional). A whole-file
+# presence exemption and a separate line-scoped coverage exemption (#226): the two
+# don't mix in one entry — `coverage` requires `lines`, presence rejects them.
 [[python.exempt]]
 path = "src/cli.py"
-rules = ["colocated-test", "coverage"]
+rules = ["colocated-test"]
 reason = "thin launcher; logic in run()"
+
+[[python.exempt]]
+path = "src/cli.py"
+rules = ["coverage"]
+lines = ["5-6"]
+reason = "thin launcher; the forwarding lines aren't unit-covered"
 
 [[typescript.exempt]]
 path = "src/index.ts"

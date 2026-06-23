@@ -104,7 +104,15 @@ const CONFIG: &str = "testing-conventions.toml";
 const COVERAGE: &str = "[python]\ncoverage = { branch = true, fail_under = 100 }\n";
 
 const WITH_EXEMPT: &str = "[python]\ncoverage = { branch = true, fail_under = 100 }\n\n\
-     [[python.exempt]]\npath = \"mypkg/cli.py\"\nrules = [\"coverage\"]\nreason = \"thin launcher\"\n";
+     [[python.exempt]]\npath = \"mypkg/cli.py\"\nrules = [\"colocated-test\"]\nreason = \"thin launcher\"\n";
+
+// A line-scoped `coverage` exemption (#226) over lines 12-13.
+const WITH_LINES_12_13: &str = "[python]\ncoverage = { branch = true, fail_under = 100 }\n\n\
+     [[python.exempt]]\npath = \"mypkg/cfg.py\"\nrules = [\"coverage\"]\nlines = [\"12-13\"]\nreason = \"dead branch\"\n";
+
+// The same entry widened to lines 12-200 — a modification that must gate.
+const WITH_LINES_12_200: &str = "[python]\ncoverage = { branch = true, fail_under = 100 }\n\n\
+     [[python.exempt]]\npath = \"mypkg/cfg.py\"\nrules = [\"coverage\"]\nlines = [\"12-200\"]\nreason = \"dead branch\"\n";
 
 #[test]
 fn a_new_exemption_exits_nonzero_and_names_it_with_the_label_hint() {
@@ -197,6 +205,25 @@ fn the_approved_greenlight_lets_a_new_exemption_pass_with_an_audit_line() {
     assert!(
         out.contains("mypkg/cli.py") && out.contains("approved"),
         "an audit line should name the approved exemption; got: {out}"
+    );
+}
+
+#[test]
+fn widening_a_line_scope_exits_nonzero_and_names_the_lines() {
+    // The #226 anti-broadening case, end to end: widening a line-scoped coverage exemption
+    // gates, and the offending entry (with its widened lines) is named.
+    let repo = TempRepo::new("widen");
+    repo.write(CONFIG, WITH_LINES_12_13);
+    repo.commit("base: exempt lines 12-13");
+    let base = repo.head();
+    repo.write(CONFIG, WITH_LINES_12_200);
+    repo.commit("widen to 12-200");
+
+    let (code, out) = exemptions(&repo, &base, true, false);
+    assert_eq!(code, 1, "widening a line scope must gate; output: {out}");
+    assert!(
+        out.contains("mypkg/cfg.py") && out.contains("lines"),
+        "the widened entry and its lines should be named; got: {out}"
     );
 }
 

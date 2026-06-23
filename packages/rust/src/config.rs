@@ -179,6 +179,14 @@ pub enum Rule {
 }
 
 impl Rule {
+    /// Whether a `lines` list may scope this rule (#226). The measured-line rules —
+    /// `coverage` and `mutation` — judge individual lines, so an exemption can name
+    /// the exact lines it lifts. Every other rule is whole-file (presence, a lint, a
+    /// folder convention), so a `lines` key alongside it is a config error.
+    pub fn is_line_scopable(self) -> bool {
+        matches!(self, Rule::Coverage | Rule::Mutation)
+    }
+
     /// The rule's kebab-case id — the string used in a `Violation` and in a config
     /// `rules` value. Mirrors the `serde(rename_all = "kebab-case")` encoding.
     pub fn id(self) -> &'static str {
@@ -225,6 +233,86 @@ impl Rule {
     }
 }
 
+/// One element of an exemption's `lines` list (#226): a single 1-based line, or an
+/// inclusive `"start-end"` range.
+///
+/// Parses from a TOML integer (`9`) or a string range (`"12-13"`). Semantic checks
+/// (a line ≥ 1, a range's start ≤ end) live in [`Config::validate`] so the error can
+/// name the offending exemption; the deserializer only rejects what isn't a line spec
+/// at all (a non-integer, a malformed range).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineSpec {
+    /// A single line.
+    Single(u32),
+    /// An inclusive line range, `start..=end`.
+    Range(u32, u32),
+}
+
+impl LineSpec {
+    /// Parse a string spec: `"12-13"` → a range, `"9"` → a single line. The two parts
+    /// of a range are trimmed, so `"12 - 13"` is accepted. A part that isn't a
+    /// non-negative integer (or a range with more than one `-`) is an error.
+    fn parse_str(s: &str) -> Result<LineSpec, String> {
+        let parse = |part: &str| {
+            part.trim()
+                .parse::<u32>()
+                .map_err(|_| format!("`{s}` is not a line number or \"start-end\" range"))
+        };
+        match s.split_once('-') {
+            Some((start, end)) => Ok(LineSpec::Range(parse(start)?, parse(end)?)),
+            None => Ok(LineSpec::Single(parse(s)?)),
+        }
+    }
+
+    /// The lines this spec expands to, pushed into `set`.
+    fn extend_into(self, set: &mut BTreeSet<u32>) {
+        match self {
+            LineSpec::Single(n) => {
+                set.insert(n);
+            }
+            LineSpec::Range(start, end) => {
+                for n in start..=end {
+                    set.insert(n);
+                }
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for LineSpec {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct SpecVisitor;
+        impl serde::de::Visitor<'_> for SpecVisitor {
+            type Value = LineSpec;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a line number or a \"start-end\" range string")
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> std::result::Result<LineSpec, E> {
+                u32::try_from(v)
+                    .map(LineSpec::Single)
+                    .map_err(|_| E::custom(format!("line number {v} is out of range")))
+            }
+
+            // TOML integers arrive as i64; a negative line number is nonsense.
+            fn visit_i64<E: serde::de::Error>(self, v: i64) -> std::result::Result<LineSpec, E> {
+                u64::try_from(v)
+                    .map_err(|_| E::custom(format!("line number {v} must be positive")))
+                    .and_then(|v| self.visit_u64(v))
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<LineSpec, E> {
+                LineSpec::parse_str(v).map_err(E::custom)
+            }
+        }
+        deserializer.deserialize_any(SpecVisitor)
+    }
+}
+
 /// One auditable per-file exemption — a `[[<language>.exempt]]` entry.
 ///
 /// The opposite of a silent ignore-glob: an exemption is declared in the one
@@ -239,8 +327,54 @@ pub struct Exemption {
     pub path: String,
     /// Which rules the exemption lifts (`colocated-test`, `coverage`).
     pub rules: Vec<Rule>,
+    /// Lines this exemption is scoped to (#226). Empty (the default, the `lines` key
+    /// omitted) is a **whole-file** exemption — today's behavior. A non-empty list
+    /// narrows a `coverage` / `mutation` exemption to exactly those lines, guarded so
+    /// every listed line must actually be failing.
+    #[serde(default)]
+    pub lines: Vec<LineSpec>,
     /// Why the omission is deliberate — required, and never empty.
     pub reason: String,
+}
+
+impl Exemption {
+    /// The 1-based line numbers this exemption is scoped to, with ranges expanded.
+    /// Empty when the entry carries no `lines` (a whole-file exemption).
+    pub fn line_set(&self) -> BTreeSet<u32> {
+        let mut set = BTreeSet::new();
+        for spec in &self.lines {
+            spec.extend_into(&mut set);
+        }
+        set
+    }
+}
+
+/// What an exemption lifts for one file (#226): the whole file, or only specific lines.
+///
+/// The resolved counterpart of [`Exemption::lines`] — [`resolve_exempt_scoped`] turns
+/// each entry into one of these, so the `coverage` / `mutation` rules can apply a
+/// file-level omit or a line-level guard uniformly.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LineScope {
+    /// The whole file is exempt (no `lines` key) — today's behavior.
+    WholeFile,
+    /// Only these 1-based lines are exempt.
+    Lines(BTreeSet<u32>),
+}
+
+impl LineScope {
+    /// Merge two scopes for the same path: a whole-file exemption subsumes any
+    /// line-scoped one (the file is wholly lifted either way), otherwise the line sets
+    /// union. Lets two entries naming the same file for the same rule combine cleanly.
+    fn merged_with(self, other: LineScope) -> LineScope {
+        match (self, other) {
+            (LineScope::WholeFile, _) | (_, LineScope::WholeFile) => LineScope::WholeFile,
+            (LineScope::Lines(mut a), LineScope::Lines(b)) => {
+                a.extend(b);
+                LineScope::Lines(a)
+            }
+        }
+    }
 }
 
 /// Read one config file at `path` into a [`Config`], validating it on the way.
@@ -307,6 +441,51 @@ impl Config {
                         entry.path
                     );
                 }
+                // Line-scoping and whole-file exemptions don't mix (#226). The
+                // measured-line rules (`coverage` / `mutation`) **require** `lines` —
+                // an exemption may not lift a whole file from coverage or mutation, only
+                // the exact lines it can prove are failing. The whole-file rules
+                // (presence, lints) **reject** `lines`. So an entry is either all
+                // line-scopable rules with `lines`, or all whole-file rules without.
+                let has_scopable = entry.rules.iter().any(|rule| rule.is_line_scopable());
+                let has_whole_file = entry.rules.iter().any(|rule| !rule.is_line_scopable());
+                if entry.lines.is_empty() {
+                    if has_scopable {
+                        let rule = entry.rules.iter().find(|r| r.is_line_scopable()).unwrap();
+                        bail!(
+                            "[{table}].exempt entry for `{}` names `{}` but lists no `lines` — \
+                             a `coverage` / `mutation` exemption must name the exact lines it \
+                             covers (whole-file exemptions are for presence / lint rules only)",
+                            entry.path,
+                            rule.id()
+                        );
+                    }
+                } else {
+                    if has_whole_file {
+                        let rule = entry.rules.iter().find(|r| !r.is_line_scopable()).unwrap();
+                        bail!(
+                            "[{table}].exempt entry for `{}` has `lines` alongside rule \
+                             `{}` — line-scoped exemptions apply only to `coverage` and \
+                             `mutation`; move the whole-file rules to a separate entry",
+                            entry.path,
+                            rule.id()
+                        );
+                    }
+                    for spec in &entry.lines {
+                        let invalid = match spec {
+                            LineSpec::Single(n) => *n == 0,
+                            LineSpec::Range(start, end) => *start == 0 || start > end,
+                        };
+                        if invalid {
+                            bail!(
+                                "[{table}].exempt entry for `{}` has an invalid line spec — \
+                                 line numbers are 1-based and a range's start must not exceed \
+                                 its end",
+                                entry.path
+                            );
+                        }
+                    }
+                }
             }
         }
         Ok(())
@@ -325,7 +504,26 @@ pub fn resolve_exempt(
     exemptions: &[Exemption],
     rule: Rule,
 ) -> Result<BTreeSet<String>> {
-    let mut paths = BTreeSet::new();
+    Ok(resolve_exempt_scoped(root, exemptions, rule)?
+        .into_keys()
+        .collect())
+}
+
+/// Resolve the per-file exempt **scope** for `rule` (#226) — whole-file or line-scoped.
+///
+/// Like [`resolve_exempt`], a stale path is a hard error so the list can't rot. An
+/// entry with no `lines` resolves to [`LineScope::WholeFile`] (today's behavior); one
+/// with `lines` to [`LineScope::Lines`]. Two entries naming the same file for the same
+/// rule merge ([`LineScope::merged_with`]). The `coverage` / `mutation` rules read this
+/// to apply a file-level omit or a line-level guard; the file-level rules go through the
+/// [`resolve_exempt`] shim above, which keeps only the keys.
+pub fn resolve_exempt_scoped(
+    root: &Path,
+    exemptions: &[Exemption],
+    rule: Rule,
+) -> Result<std::collections::BTreeMap<String, LineScope>> {
+    let mut scopes: std::collections::BTreeMap<String, LineScope> =
+        std::collections::BTreeMap::new();
     for entry in exemptions {
         if !entry.rules.contains(&rule) {
             continue;
@@ -338,9 +536,19 @@ pub fn resolve_exempt(
                 root.display()
             );
         }
-        paths.insert(entry.path.replace('\\', "/"));
+        let key = entry.path.replace('\\', "/");
+        let scope = if entry.lines.is_empty() {
+            LineScope::WholeFile
+        } else {
+            LineScope::Lines(entry.line_set())
+        };
+        let merged = match scopes.remove(&key) {
+            Some(existing) => existing.merged_with(scope),
+            None => scope,
+        };
+        scopes.insert(key, merged);
     }
-    Ok(paths)
+    Ok(scopes)
 }
 
 #[cfg(test)]
@@ -438,15 +646,17 @@ mod tests {
 
     #[test]
     fn a_valid_exemption_parses() {
+        // A whole-file presence exemption (a launcher shim with no colocated test).
         let config = parse(
             "[python]\ncoverage = { branch = true, fail_under = 100 }\n\
-             [[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\", \"coverage\"]\n\
+             [[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\"]\n\
              reason = \"thin launcher\"\n",
         )
         .unwrap();
         let exempt = &config.python.unwrap().exempt;
         assert_eq!(exempt.len(), 1);
-        assert_eq!(exempt[0].rules, vec![Rule::ColocatedTest, Rule::Coverage]);
+        assert_eq!(exempt[0].rules, vec![Rule::ColocatedTest]);
+        assert!(exempt[0].lines.is_empty());
     }
 
     #[test]
@@ -491,6 +701,7 @@ mod tests {
         Exemption {
             path: path.to_string(),
             rules: rules.to_vec(),
+            lines: vec![],
             reason: "deliberate".to_string(),
         }
     }
@@ -521,5 +732,147 @@ mod tests {
         let exemptions = [exemption("ghost.py", &[Rule::ColocatedTest])];
         let err = resolve_exempt(&tree.0, &exemptions, Rule::ColocatedTest).unwrap_err();
         assert!(err.to_string().contains("matches no file"), "got: {err}");
+    }
+
+    // --- line-scoped exemptions (#226) ---
+
+    #[test]
+    fn line_specs_parse_from_ints_and_range_strings() {
+        // `lines = [9, 10, "12-13"]` — a TOML integer is a single line, a "start-end"
+        // string is an inclusive range.
+        let config = parse(
+            "[[python.exempt]]\npath = \"shim.py\"\nrules = [\"coverage\"]\n\
+             lines = [9, 10, \"12-13\"]\nreason = \"dead branch\"\n",
+        )
+        .unwrap();
+        let exempt = &config.python.unwrap().exempt[0];
+        assert_eq!(
+            exempt.lines,
+            vec![
+                LineSpec::Single(9),
+                LineSpec::Single(10),
+                LineSpec::Range(12, 13),
+            ]
+        );
+        // `line_set` expands the range and de-duplicates into a sorted set.
+        assert_eq!(
+            exempt.line_set().into_iter().collect::<Vec<_>>(),
+            vec![9, 10, 12, 13]
+        );
+    }
+
+    #[test]
+    fn a_coverage_exemption_without_lines_is_rejected() {
+        // `lines` is required for the measured-line rules (#226): an exemption can't
+        // lift a whole file from coverage, only the lines it can prove are uncovered.
+        let err = parse(
+            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\"]\nreason = \"gen\"\n",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("lists no `lines`"), "got: {err}");
+    }
+
+    #[test]
+    fn a_mutation_exemption_without_lines_is_rejected() {
+        let err = parse(
+            "[[rust.exempt]]\npath = \"src/lib.rs\"\nrules = [\"mutation\"]\nreason = \"eq\"\n",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("lists no `lines`"), "got: {err}");
+    }
+
+    #[test]
+    fn lines_on_a_whole_file_rule_is_rejected() {
+        // `colocated-test` is whole-file presence, so a `lines` key alongside it can't
+        // mean anything — rejected on load.
+        let err = parse(
+            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\", \"coverage\"]\n\
+             lines = [3]\nreason = \"shim\"\n",
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("line-scoped exemptions apply only"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn a_zero_line_is_rejected() {
+        let err = parse(
+            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\"]\n\
+             lines = [0]\nreason = \"x\"\n",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("invalid line spec"), "got: {err}");
+    }
+
+    #[test]
+    fn a_reversed_range_is_rejected() {
+        let err = parse(
+            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\"]\n\
+             lines = [\"13-12\"]\nreason = \"x\"\n",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("invalid line spec"), "got: {err}");
+    }
+
+    #[test]
+    fn a_non_numeric_line_spec_is_a_parse_error() {
+        // Not a line number or range at all — rejected by the deserializer.
+        assert!(parse(
+            "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\"]\n\
+             lines = [\"oops\"]\nreason = \"x\"\n",
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn resolve_scoped_distinguishes_whole_file_from_lines() {
+        // A `coverage` entry resolves to its lines; a `colocated-test` entry (whole-file
+        // presence) to the whole file.
+        let tree = TempTree::new(&["barrel.py", "scoped.py"]);
+        let exemptions = [
+            exemption("barrel.py", &[Rule::ColocatedTest]),
+            Exemption {
+                path: "scoped.py".to_string(),
+                rules: vec![Rule::Coverage],
+                lines: vec![LineSpec::Single(2), LineSpec::Range(4, 5)],
+                reason: "dead branch".to_string(),
+            },
+        ];
+        let coverage = resolve_exempt_scoped(&tree.0, &exemptions, Rule::Coverage).unwrap();
+        assert_eq!(
+            coverage["scoped.py"],
+            LineScope::Lines([2, 4, 5].into_iter().collect())
+        );
+        let presence = resolve_exempt_scoped(&tree.0, &exemptions, Rule::ColocatedTest).unwrap();
+        assert_eq!(presence["barrel.py"], LineScope::WholeFile);
+    }
+
+    #[test]
+    fn resolve_scoped_merges_two_entries_for_one_file() {
+        // Two line-scoped entries for one file union their lines; two whole-file entries
+        // stay whole-file.
+        let tree = TempTree::new(&["a.py", "b.py"]);
+        let line = |n: u32| Exemption {
+            path: "a.py".to_string(),
+            rules: vec![Rule::Mutation],
+            lines: vec![LineSpec::Single(n)],
+            reason: "equivalent mutant".to_string(),
+        };
+        let mutation = [line(3), line(7)];
+        let scopes = resolve_exempt_scoped(&tree.0, &mutation, Rule::Mutation).unwrap();
+        assert_eq!(
+            scopes["a.py"],
+            LineScope::Lines([3, 7].into_iter().collect())
+        );
+
+        let presence = [
+            exemption("b.py", &[Rule::ColocatedTest]),
+            exemption("b.py", &[Rule::ColocatedTest]),
+        ];
+        let scopes = resolve_exempt_scoped(&tree.0, &presence, Rule::ColocatedTest).unwrap();
+        assert_eq!(scopes["b.py"], LineScope::WholeFile);
     }
 }

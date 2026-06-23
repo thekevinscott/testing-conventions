@@ -1,0 +1,7 @@
+# Over-exemption (#226 determinism guard): in the killed project line 2's mutants are
+# all caught, so listing it is a hard error.
+[[python.exempt]]
+path = "calc.py"
+rules = ["mutation"]
+lines = [2]
+reason = "fixture: over-exempts a caught line"

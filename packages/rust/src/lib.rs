@@ -429,6 +429,29 @@ fn co_change_exemptions(
     config::resolve_exempt(root, config.exemptions(language), config::Rule::CoChange)
 }
 
+/// Split a resolved exempt-scope map (#226) into the whole-file paths and the
+/// line-scoped sets — the two shapes the `coverage` / `mutation` measure functions
+/// take. A [`config::LineScope::WholeFile`] becomes a path in the first vec; a
+/// [`config::LineScope::Lines`] a `path → lines` entry in the second map.
+fn split_scopes(
+    scopes: std::collections::BTreeMap<String, config::LineScope>,
+) -> (
+    Vec<String>,
+    std::collections::BTreeMap<String, std::collections::BTreeSet<u32>>,
+) {
+    let mut whole_file = Vec::new();
+    let mut line_scoped = std::collections::BTreeMap::new();
+    for (path, scope) in scopes {
+        match scope {
+            config::LineScope::WholeFile => whole_file.push(path),
+            config::LineScope::Lines(lines) => {
+                line_scoped.insert(path, lines);
+            }
+        }
+    }
+    (whole_file, line_scoped)
+}
+
 /// Run the unit-test coverage check over `root` for `language`, enforcing the
 /// floor from the config at `config_path`. Returns `0` when the floor is met,
 /// `1` otherwise.
@@ -465,13 +488,19 @@ fn run_unit_coverage(
                 fail_under: coverage.fail_under,
                 branch: coverage.branch,
             };
-            let omit: Vec<String> =
-                config::resolve_exempt(root, &python.exempt, config::Rule::Coverage)?
-                    .into_iter()
-                    .collect();
+            let (omit, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
+                root,
+                &python.exempt,
+                config::Rule::Coverage,
+            )?);
             match base {
-                Some(base) => patch_coverage::measure(root, base, thresholds, &omit)?,
-                None => coverage::measure(root, thresholds, &omit)?,
+                Some(base) => {
+                    patch_coverage::measure(root, base, thresholds, &omit, &exempt_lines)?
+                }
+                None if exempt_lines.is_empty() => coverage::measure(root, thresholds, &omit)?,
+                None => {
+                    patch_coverage::measure_line_exempt(root, thresholds, &omit, &exempt_lines)?
+                }
             }
         }
         colocated_test::Language::TypeScript => {
@@ -483,13 +512,28 @@ fn run_unit_coverage(
                 functions: coverage.functions,
                 statements: coverage.statements,
             };
-            let exclude: Vec<String> =
-                config::resolve_exempt(root, &typescript.exempt, config::Rule::Coverage)?
-                    .into_iter()
-                    .collect();
+            let (exclude, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
+                root,
+                &typescript.exempt,
+                config::Rule::Coverage,
+            )?);
             match base {
-                Some(base) => patch_coverage::measure_typescript(root, base, thresholds, &exclude)?,
-                None => coverage::measure_typescript(root, thresholds, &exclude)?,
+                Some(base) => patch_coverage::measure_typescript(
+                    root,
+                    base,
+                    thresholds,
+                    &exclude,
+                    &exempt_lines,
+                )?,
+                None if exempt_lines.is_empty() => {
+                    coverage::measure_typescript(root, thresholds, &exclude)?
+                }
+                None => patch_coverage::measure_line_exempt_typescript(
+                    root,
+                    thresholds,
+                    &exclude,
+                    &exempt_lines,
+                )?,
             }
         }
         colocated_test::Language::Rust => {
@@ -503,13 +547,24 @@ fn run_unit_coverage(
                 regions: coverage.regions,
                 lines: coverage.lines,
             };
-            let ignore: Vec<String> =
-                config::resolve_exempt(root, &rust.exempt, config::Rule::Coverage)?
-                    .into_iter()
-                    .collect();
+            let (ignore, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
+                root,
+                &rust.exempt,
+                config::Rule::Coverage,
+            )?);
             match base {
-                Some(base) => patch_coverage::measure_rust(root, base, thresholds, &ignore)?,
-                None => coverage::measure_rust(root, thresholds, &ignore)?,
+                Some(base) => {
+                    patch_coverage::measure_rust(root, base, thresholds, &ignore, &exempt_lines)?
+                }
+                None if exempt_lines.is_empty() => {
+                    coverage::measure_rust(root, thresholds, &ignore)?
+                }
+                None => patch_coverage::measure_line_exempt_rust(
+                    root,
+                    thresholds,
+                    &ignore,
+                    &exempt_lines,
+                )?,
             }
         }
     };
@@ -546,27 +601,30 @@ fn run_unit_mutation(
     let survivors = match language {
         colocated_test::Language::Rust => {
             let rust = config.rust.unwrap_or_default();
-            let exempt: Vec<String> =
-                config::resolve_exempt(root, &rust.exempt, config::Rule::Mutation)?
-                    .into_iter()
-                    .collect();
-            mutation::measure_rust(root, &exempt, base)?
+            let (exempt, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
+                root,
+                &rust.exempt,
+                config::Rule::Mutation,
+            )?);
+            mutation::measure_rust(root, &exempt, &exempt_lines, base)?
         }
         colocated_test::Language::TypeScript => {
             let typescript = config.typescript.unwrap_or_default();
-            let exempt: Vec<String> =
-                config::resolve_exempt(root, &typescript.exempt, config::Rule::Mutation)?
-                    .into_iter()
-                    .collect();
-            mutation::measure_typescript(root, &exempt, base)?
+            let (exempt, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
+                root,
+                &typescript.exempt,
+                config::Rule::Mutation,
+            )?);
+            mutation::measure_typescript(root, &exempt, &exempt_lines, base)?
         }
         colocated_test::Language::Python => {
             let python = config.python.unwrap_or_default();
-            let exempt: Vec<String> =
-                config::resolve_exempt(root, &python.exempt, config::Rule::Mutation)?
-                    .into_iter()
-                    .collect();
-            mutation::measure_python(root, &exempt, base)?
+            let (exempt, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
+                root,
+                &python.exempt,
+                config::Rule::Mutation,
+            )?);
+            mutation::measure_python(root, &exempt, &exempt_lines, base)?
         }
     };
     if survivors.is_empty() {
@@ -850,7 +908,8 @@ fn run_exemptions(base: &str, approved: bool, config_path: &Path) -> anyhow::Res
     Ok(1)
 }
 
-/// Render one added/changed exemption as `[<lang>.exempt] <path> rules = ["a", "b"]`.
+/// Render one added/changed exemption as `[<lang>.exempt] <path> rules = ["a", "b"]`,
+/// appending `lines = [...]` when the entry is line-scoped (#226).
 fn render_exemption(c: &exemptions::ChangedExemption) -> String {
     let rules = c
         .rules
@@ -858,7 +917,17 @@ fn render_exemption(c: &exemptions::ChangedExemption) -> String {
         .map(|r| format!("\"{r}\""))
         .collect::<Vec<_>>()
         .join(", ");
-    format!("[{}.exempt] {} rules = [{}]", c.language, c.path, rules)
+    let mut out = format!("[{}.exempt] {} rules = [{}]", c.language, c.path, rules);
+    if !c.lines.is_empty() {
+        let lines = c
+            .lines
+            .iter()
+            .map(|l| l.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push_str(&format!(" lines = [{lines}]"));
+    }
+    out
 }
 
 #[cfg(test)]

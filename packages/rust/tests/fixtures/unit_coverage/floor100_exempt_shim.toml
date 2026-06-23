@@ -4,4 +4,5 @@ coverage = { branch = true, fail_under = 100 }
 [[python.exempt]]
 path = "shim.py"
 rules = ["coverage"]
+lines = ["2-4"]
 reason = "thin launcher shim; its branches are exercised by the e2e suite, not units"

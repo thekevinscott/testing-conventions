@@ -135,7 +135,13 @@ fn base_scopes_the_run_to_the_changed_function() {
     repo.write("src/lib.rs", WITH_SURVIVOR);
     repo.commit("add an assertion-light is_positive");
 
-    let survivors = measure_rust(&repo.0, &[], Some(&base)).expect("cargo-mutants runs");
+    let survivors = measure_rust(
+        &repo.0,
+        &[],
+        &std::collections::BTreeMap::new(),
+        Some(&base),
+    )
+    .expect("cargo-mutants runs");
     // The added `is_positive` is in the diff and assertion-light, so its mutants
     // survive; `add` is unchanged, so it's out of scope and never mutated.
     assert!(
@@ -164,8 +170,13 @@ fn base_finds_survivors_in_a_subdir_crate() {
     repo.write("crate/src/lib.rs", WITH_SURVIVOR);
     repo.commit("add an assertion-light is_positive");
 
-    let survivors =
-        measure_rust(&repo.0.join("crate"), &[], Some(&base)).expect("cargo-mutants runs");
+    let survivors = measure_rust(
+        &repo.0.join("crate"),
+        &[],
+        &std::collections::BTreeMap::new(),
+        Some(&base),
+    )
+    .expect("cargo-mutants runs");
     assert!(
         !survivors.is_empty()
             && survivors
@@ -189,7 +200,13 @@ fn base_with_no_changes_under_the_crate_reports_no_survivors() {
     repo.write("notes.md", "before\nafter\n"); // only a non-crate file changes
     repo.commit("tweak a top-level note, not the crate");
 
-    let survivors = measure_rust(&repo.0.join("crate"), &[], Some(&base)).expect("no run needed");
+    let survivors = measure_rust(
+        &repo.0.join("crate"),
+        &[],
+        &std::collections::BTreeMap::new(),
+        Some(&base),
+    )
+    .expect("no run needed");
     assert!(
         survivors.is_empty(),
         "nothing under the crate changed, so there are no survivors; got {survivors:?}"

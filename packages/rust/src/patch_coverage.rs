@@ -63,15 +63,34 @@ pub fn measure(
     base: &str,
     thresholds: Thresholds,
     omit: &[String],
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
 ) -> Result<Outcome> {
     let mut changed = changed_lines(root, base)?;
     changed.retain(|path, _| path.ends_with(".py"));
+    lift_exempt_lines(&mut changed, exempt_lines);
     if changed.is_empty() {
         return Ok(Outcome::Pass);
     }
     let report = coverage::measure_patch_report(root, omit)?;
     let files = relative_keys(report.files, root);
     Ok(evaluate_patch(&changed, &files, thresholds))
+}
+
+/// Drop the line-scoped `coverage` exemptions (#226) from a `--base` diff's changed-line
+/// set, so a changed line that is line-exempt is lifted from the diff floor — the
+/// counterpart to a whole-file exemption dropping the file. The over-exemption guard is
+/// the whole-tree floor's job ([`measure_line_exempt`], the `unit coverage` job the
+/// reusable workflow runs alongside `--base`); the diff job can't classify a line its
+/// diff didn't touch, so here the exempt lines are simply removed.
+fn lift_exempt_lines(
+    changed: &mut BTreeMap<String, BTreeSet<u64>>,
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
+) {
+    for (file, exempt) in exempt_lines {
+        if let Some(lines) = changed.get_mut(file) {
+            lines.retain(|&line| !u32::try_from(line).is_ok_and(|line| exempt.contains(&line)));
+        }
+    }
 }
 
 /// Pure: the configured floor measured over the changed lines. Reproduces
@@ -91,36 +110,7 @@ fn evaluate_patch(
     files: &BTreeMap<String, FileCoverage>,
     thresholds: Thresholds,
 ) -> Outcome {
-    let mut covered: u64 = 0;
-    let mut total: u64 = 0;
-    for (file, lines) in changed {
-        let Some(cov) = files.get(file) else {
-            continue;
-        };
-        let executed: BTreeSet<u64> = cov.executed_lines.iter().copied().collect();
-        let missing: BTreeSet<u64> = cov.missing_lines.iter().copied().collect();
-        for &line in lines {
-            if executed.contains(&line) {
-                covered += 1;
-                total += 1;
-            } else if missing.contains(&line) {
-                total += 1;
-            }
-        }
-        if thresholds.branch {
-            for arc in &cov.executed_branches {
-                if arc_source_in(arc, lines) {
-                    covered += 1;
-                    total += 1;
-                }
-            }
-            for arc in &cov.missing_branches {
-                if arc_source_in(arc, lines) {
-                    total += 1;
-                }
-            }
-        }
-    }
+    let (covered, total) = python_ratio(changed, files, thresholds.branch);
     if total == 0 {
         return Outcome::Pass;
     }
@@ -135,6 +125,51 @@ fn evaluate_patch(
             thresholds.fail_under
         ))
     }
+}
+
+/// Pure: coverage.py's `percent_covered` numerator/denominator restricted to the lines
+/// in `selected` — (executed lines + taken branch arcs) over (executable lines + all
+/// branch arcs), counting only the selected lines and the arcs whose source is selected.
+/// Shared by the diff-scoped floor ([`evaluate_patch`], where `selected` is the changed
+/// lines) and the line-scoped exemption floor ([`measure_line_exempt`], where it's the
+/// measured lines minus the exempt ones). Over *every* measured line it reproduces the
+/// whole-tree total exactly.
+fn python_ratio(
+    selected: &BTreeMap<String, BTreeSet<u64>>,
+    files: &BTreeMap<String, FileCoverage>,
+    branch: bool,
+) -> (u64, u64) {
+    let mut covered: u64 = 0;
+    let mut total: u64 = 0;
+    for (file, lines) in selected {
+        let Some(cov) = files.get(file) else {
+            continue;
+        };
+        let executed: BTreeSet<u64> = cov.executed_lines.iter().copied().collect();
+        let missing: BTreeSet<u64> = cov.missing_lines.iter().copied().collect();
+        for &line in lines {
+            if executed.contains(&line) {
+                covered += 1;
+                total += 1;
+            } else if missing.contains(&line) {
+                total += 1;
+            }
+        }
+        if branch {
+            for arc in &cov.executed_branches {
+                if arc_source_in(arc, lines) {
+                    covered += 1;
+                    total += 1;
+                }
+            }
+            for arc in &cov.missing_branches {
+                if arc_source_in(arc, lines) {
+                    total += 1;
+                }
+            }
+        }
+    }
+    (covered, total)
 }
 
 /// Whether a branch arc's source line (the first of its `[src, dst]` pair; `dst` may
@@ -160,9 +195,11 @@ pub fn measure_typescript(
     base: &str,
     thresholds: TypeScriptThresholds,
     exclude: &[String],
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
 ) -> Result<Outcome> {
     let mut changed = changed_lines(root, base)?;
     changed.retain(|path, _| TS_EXTENSIONS.iter().any(|ext| path.ends_with(ext)));
+    lift_exempt_lines(&mut changed, exempt_lines);
     if changed.is_empty() {
         return Ok(Outcome::Pass);
     }
@@ -307,9 +344,11 @@ pub fn measure_rust(
     base: &str,
     thresholds: RustThresholds,
     ignore: &[String],
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
 ) -> Result<Outcome> {
     let mut changed = changed_lines(root, base)?;
     changed.retain(|path, _| path.ends_with(".rs"));
+    lift_exempt_lines(&mut changed, exempt_lines);
     if changed.is_empty() {
         return Ok(Outcome::Pass);
     }
@@ -511,6 +550,225 @@ fn relative_keys<V>(files: BTreeMap<String, V>, root: &Path) -> BTreeMap<String,
             (rel, value)
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Line-scoped coverage exemptions — issue #226.
+//
+// A `coverage` exemption with a `lines` list excuses only those lines from the floor,
+// not the whole file. No coverage tool excludes individual line *numbers* from the
+// outside (coverage.py / v8 / llvm-cov all do it through source pragmas, which this
+// tool can't write), so the floor is recomputed from the same per-file detail the
+// diff-scoped floor reads — the measured lines minus the exempt ones. A determinism
+// guard (the counterpart to the stale-path rule) keeps the list honest: every listed
+// line must be genuinely uncovered, and an unlisted uncovered line still fails.
+// ---------------------------------------------------------------------------
+
+/// Diff-free Python coverage floor with line-scoped exemptions (#226): measure
+/// `thresholds` over every measured line *except* the `exempt_lines`. `omit` is the
+/// whole-file `coverage` exemptions, as in [`crate::coverage::measure`]. Requires
+/// coverage.py + pytest. The line-exempt path runs only when `exempt_lines` is
+/// non-empty; otherwise the caller takes the unchanged tool-total path.
+pub fn measure_line_exempt(
+    root: &Path,
+    thresholds: Thresholds,
+    omit: &[String],
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
+) -> Result<Outcome> {
+    let report = coverage::measure_report(root, omit)?;
+    let files = relative_keys(report.files, root);
+    let detail: BTreeMap<String, (BTreeSet<u64>, BTreeSet<u64>)> = files
+        .iter()
+        .map(|(file, cov)| (file.clone(), python_measured_missed(cov, thresholds.branch)))
+        .collect();
+    let line_set = apply_line_exemptions(&detail, exempt_lines)?;
+    let (covered, total) = python_ratio(&line_set, &files, thresholds.branch);
+    Ok(floor_outcome(covered, total, thresholds.fail_under))
+}
+
+/// TypeScript twin of [`measure_line_exempt`] (#226): the four vitest metrics measured
+/// over every measured line except the `exempt_lines`. `exclude` is the whole-file
+/// `coverage` exemptions, as in [`crate::coverage::measure_typescript`]. Requires
+/// vitest + `@vitest/coverage-v8`.
+pub fn measure_line_exempt_typescript(
+    root: &Path,
+    thresholds: TypeScriptThresholds,
+    exclude: &[String],
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
+) -> Result<Outcome> {
+    let detail = relative_keys(
+        coverage::measure_patch_typescript_detail(root, exclude)?,
+        root,
+    );
+    let measured_missed: BTreeMap<String, (BTreeSet<u64>, BTreeSet<u64>)> = detail
+        .iter()
+        .map(|(file, cov)| (file.clone(), ts_measured_missed(cov)))
+        .collect();
+    let line_set = apply_line_exemptions(&measured_missed, exempt_lines)?;
+    Ok(evaluate_patch_typescript(&line_set, &detail, thresholds))
+}
+
+/// Rust twin of [`measure_line_exempt`] (#226): the `cargo llvm-cov` regions/lines
+/// metrics measured over every measured line except the `exempt_lines`. `ignore` is the
+/// whole-file `coverage` exemptions, as in [`crate::coverage::measure_rust`]. Requires
+/// `cargo-llvm-cov`.
+pub fn measure_line_exempt_rust(
+    root: &Path,
+    thresholds: RustThresholds,
+    ignore: &[String],
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
+) -> Result<Outcome> {
+    let detail = relative_keys(coverage::measure_patch_rust_detail(root, ignore)?, root);
+    let measured_missed: BTreeMap<String, (BTreeSet<u64>, BTreeSet<u64>)> = detail
+        .iter()
+        .map(|(file, cov)| (file.clone(), rust_measured_missed(cov, thresholds)))
+        .collect();
+    let line_set = apply_line_exemptions(&measured_missed, exempt_lines)?;
+    Ok(evaluate_patch_rust(&line_set, &detail, thresholds))
+}
+
+/// The whole-tree floor verdict for a recomputed `covered`/`total`, with the same
+/// message and float tolerance as the tool-total [`crate::coverage::evaluate`] — a
+/// from-detail total with the exempt lines removed is judged exactly as the tool's own.
+fn floor_outcome(covered: u64, total: u64, fail_under: u8) -> Outcome {
+    if total == 0 {
+        return Outcome::Pass;
+    }
+    let actual = 100.0 * covered as f64 / total as f64;
+    if actual + 1e-9 >= f64::from(fail_under) {
+        Outcome::Pass
+    } else {
+        Outcome::Fail(format!(
+            "coverage {actual:.2}% is below the required {fail_under}%"
+        ))
+    }
+}
+
+/// The `(measured, missed)` lines for one Python file. `measured` is every executable
+/// line (executed or missing); `missed` is what the floor counts against you — the
+/// uncovered lines, plus (under branch coverage) any line that is the source of an
+/// untaken branch arc.
+fn python_measured_missed(cov: &FileCoverage, branch: bool) -> (BTreeSet<u64>, BTreeSet<u64>) {
+    let executed: BTreeSet<u64> = cov.executed_lines.iter().copied().collect();
+    let missing: BTreeSet<u64> = cov.missing_lines.iter().copied().collect();
+    let measured: BTreeSet<u64> = executed.union(&missing).copied().collect();
+    let mut missed = missing;
+    if branch {
+        for arc in &cov.missing_branches {
+            if let Some(src) = arc.first().and_then(|&s| u64::try_from(s).ok()) {
+                if measured.contains(&src) {
+                    missed.insert(src);
+                }
+            }
+        }
+    }
+    (measured, missed)
+}
+
+/// The `(measured, missed)` lines for one TypeScript file. A unit is anchored on the
+/// lines it spans — statements over `start..=end`, branch arms and function decls on
+/// their line — and `missed` is that set restricted to the uncovered units, so a line
+/// carrying any uncovered unit is exemptable.
+fn ts_measured_missed(cov: &coverage::TsPatchCoverage) -> (BTreeSet<u64>, BTreeSet<u64>) {
+    let mut measured = BTreeSet::new();
+    let mut missed = BTreeSet::new();
+    // Each unit contributes its line(s): a statement spans `start..=end`, a branch arm
+    // and a function declaration sit on a single line. A line is `missed` when any unit
+    // on it is uncovered.
+    let units = cov
+        .statements
+        .iter()
+        .flat_map(|&(start, end, covered)| (start..=end).map(move |line| (line, covered)))
+        .chain(cov.branch_arms.iter().copied())
+        .chain(cov.functions.iter().copied());
+    for (line, covered) in units {
+        measured.insert(line);
+        if !covered {
+            missed.insert(line);
+        }
+    }
+    (measured, missed)
+}
+
+/// The `(measured, missed)` lines for one Rust file. `measured` is every line a code
+/// region spans; `missed` honors the enforced metrics — with `regions` on, any line in
+/// an uncovered region; with lines-only (`regions = None`), a line covered by regions
+/// but by no *covered* one.
+fn rust_measured_missed(
+    cov: &coverage::RustPatchCoverage,
+    thresholds: RustThresholds,
+) -> (BTreeSet<u64>, BTreeSet<u64>) {
+    let mut measured = BTreeSet::new();
+    for &(start, end, _covered) in &cov.regions {
+        for line in start..=end {
+            measured.insert(line);
+        }
+    }
+    let mut missed = BTreeSet::new();
+    for &line in &measured {
+        let mut covered_here = false;
+        let mut uncovered_region = false;
+        for &(start, end, covered) in &cov.regions {
+            if start <= line && line <= end {
+                if covered {
+                    covered_here = true;
+                } else {
+                    uncovered_region = true;
+                }
+            }
+        }
+        let is_missed = if thresholds.regions.is_some() {
+            uncovered_region
+        } else {
+            !covered_here
+        };
+        if is_missed {
+            missed.insert(line);
+        }
+    }
+    (measured, missed)
+}
+
+/// The per-file line set the floor is measured over — every measured line minus the
+/// exempt ones — after the #226 determinism guard. Each exempt line must be in its
+/// file's `missed` set (genuinely failing); a listed line that is covered, or carries
+/// no measured code, is a hard error so the exemption can't excuse working code.
+fn apply_line_exemptions(
+    detail: &BTreeMap<String, (BTreeSet<u64>, BTreeSet<u64>)>,
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
+) -> Result<BTreeMap<String, BTreeSet<u64>>> {
+    let mut over: Vec<String> = Vec::new();
+    for (file, lines) in exempt_lines {
+        let missed = detail.get(file).map(|(_, missed)| missed);
+        for &line in lines {
+            let failing = missed.is_some_and(|missed| missed.contains(&u64::from(line)));
+            if !failing {
+                over.push(format!("\n  {file}:{line}"));
+            }
+        }
+    }
+    if !over.is_empty() {
+        bail!(
+            "a line-scoped coverage exemption may only list uncovered lines, but these are \
+             covered or carry no measured code:{}",
+            over.concat()
+        );
+    }
+    let mut line_set = BTreeMap::new();
+    for (file, (measured, _)) in detail {
+        let exempt = exempt_lines.get(file);
+        let kept: BTreeSet<u64> = measured
+            .iter()
+            .copied()
+            .filter(|&line| {
+                !exempt.is_some_and(|exempt| {
+                    u32::try_from(line).is_ok_and(|line| exempt.contains(&line))
+                })
+            })
+            .collect();
+        line_set.insert(file.clone(), kept);
+    }
+    Ok(line_set)
 }
 
 #[cfg(test)]
@@ -1079,5 +1337,140 @@ mod tests {
                 if m.contains("regions 50.00% < 80%") && !m.contains("lines")),
             "got: {out:?}"
         );
+    }
+
+    // ---- line-scoped exemptions (#226) --------------------------------------
+
+    fn exempt(entries: &[(&str, &[u32])]) -> BTreeMap<String, BTreeSet<u32>> {
+        entries
+            .iter()
+            .map(|(path, lines)| (path.to_string(), lines.iter().copied().collect()))
+            .collect()
+    }
+
+    #[test]
+    fn python_measured_missed_reads_lines_and_branch_sources() {
+        // shim.py's shape: line 1 executed (the `def`), lines 2-4 the never-run body,
+        // a missing branch out of line 2. measured = every executable line; missed =
+        // the uncovered lines plus the branch source.
+        let full = cov(&[1], &[2, 3, 4], &[], &[[2, 3], [2, 4]]);
+        let (measured, missed) = python_measured_missed(&full, true);
+        assert_eq!(measured, [1, 2, 3, 4].into_iter().collect());
+        assert_eq!(missed, [2, 3, 4].into_iter().collect());
+        // With branch coverage off, a partial-branch source isn't a miss on its own.
+        let partial = cov(&[5], &[], &[], &[[5, 6]]);
+        let (_, missed_no_branch) = python_measured_missed(&partial, false);
+        assert!(missed_no_branch.is_empty());
+        let (_, missed_branch) = python_measured_missed(&partial, true);
+        assert_eq!(missed_branch, [5].into_iter().collect());
+    }
+
+    #[test]
+    fn ts_measured_missed_anchors_units_on_their_lines() {
+        // A covered statement on line 1, an uncovered one spanning 3-4, an uncovered
+        // branch arm on 1, an uncovered function decl on 6.
+        let cov = coverage::TsPatchCoverage {
+            statements: vec![(1, 1, true), (3, 4, false)],
+            branch_arms: vec![(1, false)],
+            functions: vec![(6, false)],
+        };
+        let (measured, missed) = ts_measured_missed(&cov);
+        assert_eq!(measured, [1, 3, 4, 6].into_iter().collect());
+        // Line 1 is missed via its uncovered branch arm even though its statement ran.
+        assert_eq!(missed, [1, 3, 4, 6].into_iter().collect());
+    }
+
+    #[test]
+    fn rust_measured_missed_honors_the_enforced_metrics() {
+        // An uncovered region on lines 5-6 and a covered one on line 1.
+        let cov = coverage::RustPatchCoverage {
+            regions: vec![(1, 1, true), (5, 6, false)],
+        };
+        let with_regions = RustThresholds {
+            regions: Some(100),
+            lines: 100,
+        };
+        let (measured, missed) = rust_measured_missed(&cov, with_regions);
+        assert_eq!(measured, [1, 5, 6].into_iter().collect());
+        assert_eq!(missed, [5, 6].into_iter().collect());
+        // Lines-only: a line covered by ≥1 covered region isn't a miss; an uncovered
+        // region with no covering one still is.
+        let lines_only = RustThresholds {
+            regions: None,
+            lines: 100,
+        };
+        let (_, missed_lines) = rust_measured_missed(&cov, lines_only);
+        assert_eq!(missed_lines, [5, 6].into_iter().collect());
+    }
+
+    #[test]
+    fn apply_line_exemptions_drops_listed_misses_from_the_line_set() {
+        // shim measured {1,2,3,4}, missed {2,3,4}; exempting 2-4 leaves {1}.
+        let detail = BTreeMap::from([(
+            "shim.py".to_string(),
+            (
+                [1u64, 2, 3, 4].into_iter().collect::<BTreeSet<u64>>(),
+                [2u64, 3, 4].into_iter().collect::<BTreeSet<u64>>(),
+            ),
+        )]);
+        let line_set = apply_line_exemptions(&detail, &exempt(&[("shim.py", &[2, 3, 4])])).unwrap();
+        assert_eq!(line_set["shim.py"], [1].into_iter().collect());
+    }
+
+    #[test]
+    fn apply_line_exemptions_rejects_a_covered_listed_line() {
+        // Line 1 is measured but not missed (it's covered) — over-exemption is an error.
+        let detail = BTreeMap::from([(
+            "shim.py".to_string(),
+            (
+                [1u64, 2].into_iter().collect::<BTreeSet<u64>>(),
+                [2u64].into_iter().collect::<BTreeSet<u64>>(),
+            ),
+        )]);
+        let err = apply_line_exemptions(&detail, &exempt(&[("shim.py", &[1, 2])])).unwrap_err();
+        assert!(
+            err.to_string().contains("uncovered lines") && err.to_string().contains("shim.py:1"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn apply_line_exemptions_rejects_an_unmeasured_listed_line() {
+        // A line not measured at all (a comment) can't be exempted either.
+        let detail = BTreeMap::from([(
+            "w.py".to_string(),
+            (
+                [2u64].into_iter().collect::<BTreeSet<u64>>(),
+                [2u64].into_iter().collect::<BTreeSet<u64>>(),
+            ),
+        )]);
+        let err = apply_line_exemptions(&detail, &exempt(&[("w.py", &[9])])).unwrap_err();
+        assert!(err.to_string().contains("w.py:9"), "got: {err}");
+    }
+
+    #[test]
+    fn floor_outcome_matches_the_whole_tree_message() {
+        assert_eq!(floor_outcome(7, 7, 100), Outcome::Pass);
+        let out = floor_outcome(7, 8, 100);
+        assert!(
+            matches!(&out, Outcome::Fail(m) if m == "coverage 87.50% is below the required 100%"),
+            "got: {out:?}"
+        );
+        // An all-exempt file leaves nothing to measure — vacuously a pass.
+        assert_eq!(floor_outcome(0, 0, 100), Outcome::Pass);
+    }
+
+    #[test]
+    fn lift_exempt_lines_removes_exempt_lines_from_the_diff() {
+        // The `--base` path drops a changed line that is line-exempt (lines 2-3 here),
+        // leaving the rest of the diff to be judged; an exemption for an untouched file
+        // is a no-op.
+        let mut changed = changed(&[("shim.py", &[1, 2, 3, 4]), ("core.py", &[5])]);
+        lift_exempt_lines(
+            &mut changed,
+            &exempt(&[("shim.py", &[2, 3]), ("gone.py", &[9])]),
+        );
+        assert_eq!(changed["shim.py"], [1, 4].into_iter().collect());
+        assert_eq!(changed["core.py"], [5].into_iter().collect());
     }
 }

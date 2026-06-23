@@ -19,7 +19,13 @@ fn crate_dir(name: &str) -> PathBuf {
 
 #[test]
 fn killed_reports_no_survivors() {
-    let survivors = measure_rust(&crate_dir("killed"), &[], None).expect("cargo-mutants runs");
+    let survivors = measure_rust(
+        &crate_dir("killed"),
+        &[],
+        &std::collections::BTreeMap::new(),
+        None,
+    )
+    .expect("cargo-mutants runs");
     assert!(
         survivors.is_empty(),
         "every mutant should be caught; got {survivors:?}"
@@ -28,7 +34,13 @@ fn killed_reports_no_survivors() {
 
 #[test]
 fn survivors_are_reported() {
-    let survivors = measure_rust(&crate_dir("survivors"), &[], None).expect("cargo-mutants runs");
+    let survivors = measure_rust(
+        &crate_dir("survivors"),
+        &[],
+        &std::collections::BTreeMap::new(),
+        None,
+    )
+    .expect("cargo-mutants runs");
     assert!(
         !survivors.is_empty(),
         "the assertion-light suite should leave survivors"
@@ -44,8 +56,13 @@ fn a_mutation_exemption_drops_the_survivors() {
     // Exempting the survivors' file lifts all of them — an equivalent / deliberately
     // defensive mutation, waived with a reason via `[[rust.exempt]] rules = ["mutation"]`.
     let exempt = vec!["src/lib.rs".to_string()];
-    let survivors =
-        measure_rust(&crate_dir("survivors"), &exempt, None).expect("cargo-mutants runs");
+    let survivors = measure_rust(
+        &crate_dir("survivors"),
+        &exempt,
+        &std::collections::BTreeMap::new(),
+        None,
+    )
+    .expect("cargo-mutants runs");
     assert!(
         survivors.is_empty(),
         "the exemption should drop every survivor; got {survivors:?}"

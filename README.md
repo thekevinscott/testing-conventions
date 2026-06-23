@@ -220,7 +220,7 @@ kill) make 100% unreachable, and a score isn't comparable across engines. Instea
 it's binary and diff-scoped: **no unexplained surviving mutant on changed lines**,
 with reasoned `[[<language>.exempt]]` entries for the rest.
 
-**Checked:** all three languages are available now — **Rust** (`unit mutation --language rust`, via cargo-mutants), **TypeScript** (`unit mutation --language typescript`, via Stryker), and **Python** (`unit mutation --language python`, via cosmic-ray) — a binary gate, on by default: any un-exempted survivor fails, with reasoned `[[<language>.exempt]] rules = ["mutation"]` entries the only loosening. They're at parity but **not yet wired into the reusable workflow** — turning that on across the matrix is the remaining step. See the [mutation-testing guide](https://thekevinscott.github.io/testing-conventions/guide/mutation) and [the epic](https://github.com/thekevinscott/testing-conventions/issues/199). Deterministic (a diff-scoped mutation run; any unexplained survivor on a changed line fails the build).
+**Checked:** all three languages are available now — **Rust** (`unit mutation --language rust`, via cargo-mutants), **TypeScript** (`unit mutation --language typescript`, via Stryker), and **Python** (`unit mutation --language python`, via cosmic-ray) — a binary gate, on by default: any un-exempted survivor fails, with reasoned `[[<language>.exempt]] rules = ["mutation"]` entries (naming the survivor's `lines`) the only loosening. They're at parity but **not yet wired into the reusable workflow** — turning that on across the matrix is the remaining step. See the [mutation-testing guide](https://thekevinscott.github.io/testing-conventions/guide/mutation) and [the epic](https://github.com/thekevinscott/testing-conventions/issues/199). Deterministic (a diff-scoped mutation run; any unexplained survivor on a changed line fails the build).
 
 ### Packaging
 
@@ -251,6 +251,12 @@ config-driven, never a silent ignore:
   `reason`. The whole exemption surface lives in one file, auditable in a single
   diff. A stale entry (a path that no longer exists) is a hard error, so the list
   can't rot.
+- **Line-scoped, always, for `coverage` / `mutation`.** These two rules are never
+  whole-file: an exemption carries a `lines` list (`lines = [9, 10, "12-13"]`) naming
+  the exact lines it lifts. A determinism guard checks the list — a listed line that
+  *isn't* failing is a hard error, an unlisted failing line still fails — so it's
+  exactly the failing lines. (`lines` is for these two rules only; a `lines` key on
+  `colocated-test` is rejected.)
 
 ## Configuration
 
@@ -261,11 +267,18 @@ supported):
 [python]
 coverage = { branch = true, fail_under = 100 }
 
-# A deliberate, reason-required omission (see Exemptions above):
+# A whole-file presence exemption (a launcher shim with no colocated test):
 [[python.exempt]]
 path = "mypkg/cli.py"
-rules = ["colocated-test", "coverage"]
+rules = ["colocated-test"]
 reason = "thin launcher; logic in run(), tested in run_test.py"
+
+# A line-scoped coverage/mutation exemption (`lines` required; its own entry):
+[[python.exempt]]
+path = "mypkg/config/tomlcompat.py"
+rules = ["coverage", "mutation"]
+lines = [9, 10, "12-13"]
+reason = "version-conditional tomllib/tomli import; one branch is dead on any single interpreter"
 
 [typescript]
 coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }

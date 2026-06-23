@@ -164,6 +164,17 @@ pub fn measure_patch_report(root: &Path, omit: &[String]) -> Result<CoverageRepo
     run_coverage(root, omit, true)
 }
 
+/// Run the Python unit suite under coverage.py in `root` and return the parsed report
+/// with its per-file `files` detail — measuring only the files the suite imports (no
+/// `--source=.`), exactly as the whole-tree floor [`measure`] does. The line-scoped
+/// exemption path (#226) reads this: it recomputes the floor over the measured lines
+/// minus the exempt ones, so it must see the same file set [`measure`] does (an
+/// untested-but-unimported file is out of scope for both), not the wider `--source=.`
+/// set [`measure_patch_report`] uses for the diff. `omit` is as in [`measure`].
+pub fn measure_report(root: &Path, omit: &[String]) -> Result<CoverageReport> {
+    run_coverage(root, omit, false)
+}
+
 /// A coverage.py data file under the temp dir — unique per call (so checks
 /// running in parallel don't collide) and removed on drop (so nothing leaks
 /// into the scanned tree).

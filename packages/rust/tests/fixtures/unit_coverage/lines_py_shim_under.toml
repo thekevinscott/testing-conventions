@@ -1,0 +1,10 @@
+# Under-listing (#226): exempting only lines 2-3 leaves line 4 (`return "stopped"`)
+# uncovered, so the floor still fails — you can't under-list and forget.
+[python]
+coverage = { branch = true, fail_under = 100 }
+
+[[python.exempt]]
+path = "shim.py"
+rules = ["coverage"]
+lines = ["2-3"]
+reason = "fixture: under-lists the uncovered body"

@@ -457,7 +457,75 @@ that clears the floor passes even with an uncovered changed line; they coincide 
 fails like any other). Config and `[[<lang>.exempt]] rules = ["coverage"]` waivers are
 unchanged — both scopes already share the `coverage` rule id.
 
+Makes **`coverage` / `mutation` exemptions line-scoped only** (#226). A `[[<language>.exempt]]` entry
+naming `coverage` or `mutation` must now carry a `lines` list (`lines = [9, 10, "12-13"]`) naming the
+exact lines it lifts — those rules are never whole-file. A determinism guard (the counterpart to the
+stale-path rule) keeps the list minimal: a listed line that isn't actually failing — covered, or with
+a killed mutant, or carrying no measured code — is a hard error, and an unlisted failing line still
+fails. `lines` is rejected with a whole-file rule (`colocated-test`, the lints), so the two kinds
+never share an entry. **Breaking**: a whole-file `rules = ["coverage"]` / `["mutation"]` entry, and a
+combined `["colocated-test", "coverage"]` entry, no longer load — migrate them (see **Required
+changes**). The mutation and diff-scoped coverage SDK functions gain an `exempt_lines` argument; the
+new public items `config::{LineSpec, LineScope, resolve_exempt_scoped}`, `Exemption::{lines,
+line_set}`, `coverage::measure_report`, `patch_coverage::measure_line_exempt{,_typescript,_rust}`, and
+`mutation::{evaluate_scoped, mutated_lines, MutatedLines}` land alongside.
+
 ### Required changes
+
+Migrate every whole-file `coverage` / `mutation` exemption to the line-scoped form, naming the lines
+it covers (the determinism guard tells you the exact set — a listed line that's actually covered, or
+a missed one you left out, is reported):
+
+```toml
+# Before — whole-file (no longer loads):
+[[python.exempt]]
+path = "mypkg/config/tomlcompat.py"
+rules = ["coverage", "mutation"]
+reason = "version-conditional import"
+
+# After — line-scoped:
+[[python.exempt]]
+path = "mypkg/config/tomlcompat.py"
+rules = ["coverage", "mutation"]
+lines = [9, 10, "12-13"]
+reason = "version-conditional import"
+```
+
+A combined entry that mixed a whole-file rule with a measured-line one must split in two — one
+whole-file entry, one line-scoped:
+
+```toml
+# Before — combined (no longer loads):
+[[python.exempt]]
+path = "mypkg/cli.py"
+rules = ["colocated-test", "coverage"]
+reason = "thin launcher"
+
+# After — one whole-file entry, one line-scoped:
+[[python.exempt]]
+path = "mypkg/cli.py"
+rules = ["colocated-test"]
+reason = "thin launcher"
+[[python.exempt]]
+path = "mypkg/cli.py"
+rules = ["coverage"]
+lines = ["5-6"]
+reason = "thin launcher; uncovered forwarding lines"
+```
+
+The mutation and diff-scoped coverage SDK functions gain an `exempt_lines` argument for the
+line-scoped exemptions (#226). Pass an empty map to preserve the prior behavior; build the real value
+from the `LineScope::Lines` entries of `config::resolve_exempt_scoped(root, exemptions, rule)`.
+
+| Function | Before | After |
+| --- | --- | --- |
+| `mutation::measure_rust` / `measure_typescript` / `measure_python` | `(root, exempt, base)` | `(root, exempt, exempt_lines, base)` |
+| `patch_coverage::measure` / `measure_typescript` / `measure_rust` | `(root, base, thresholds, omit)` | `(root, base, thresholds, omit, exempt_lines)` |
+
+`exempt_lines: &BTreeMap<String, BTreeSet<u32>>` maps a `root`-relative path to its exempt lines; an
+empty map is the no-op. The new whole-tree `patch_coverage::measure_line_exempt{,_typescript,_rust}`
+take the same map.
+
 
 `regions` on the Rust coverage types is now `Option<u8>` (#206), so the region check can
 be left off (the zero-config default floors lines only). Library callers that construct

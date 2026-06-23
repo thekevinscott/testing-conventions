@@ -4,4 +4,5 @@ coverage = { regions = 100, lines = 100 }
 [[rust.exempt]]
 path = "src/shim.rs"
 rules = ["coverage"]
+lines = ["6-8"]
 reason = "thin launcher shim; its region is exercised by the e2e suite, not units"

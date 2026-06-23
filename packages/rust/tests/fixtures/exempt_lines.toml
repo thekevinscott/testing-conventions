@@ -1,0 +1,12 @@
+# A line-scoped exemption (#226): `lines` narrows a `coverage` / `mutation`
+# exemption from the whole file to the exact lines it covers — the motivating
+# tomlcompat.py case from the #218 review (a version-conditional import whose
+# dead branch can't be exercised on any single interpreter).
+[python]
+coverage = { branch = true, fail_under = 100 }
+
+[[python.exempt]]
+path = "src/tomlcompat.py"
+rules = ["coverage", "mutation"]
+lines = [9, 10, "12-13"]
+reason = "version-conditional tomllib/tomli import; one branch is dead on any single interpreter"

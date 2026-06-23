@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **BREAKING: `coverage` / `mutation` exemptions are now line-scoped only** (#226). A
+  `[[<language>.exempt]]` entry naming `coverage` or `mutation` must carry a `lines` list; a
+  whole-file `rules = ["coverage"]` (or `["mutation"]`) entry — accepted before — is now rejected on
+  load, as is mixing a measured-line rule with a whole-file rule in one entry. Migrate each to the
+  line-scoped form (or split a combined entry in two). See [MIGRATIONS](./MIGRATIONS.md).
+- **BREAKING: SDK measure functions take an `exempt_lines` argument** (#226).
+  `mutation::measure_rust` / `measure_typescript` / `measure_python` and
+  `patch_coverage::measure{,_typescript,_rust}` gain a trailing
+  `exempt_lines: &BTreeMap<String, BTreeSet<u32>>`. Pass an empty map to preserve prior behavior. See
+  [MIGRATIONS](./MIGRATIONS.md).
 - **A `[<language>].coverage` table is now a partial override** (#216, parent #196). Set only the
   fields you want to change; the rest fall back to the language's default floor — so
   `[typescript].coverage` with just `branches = 90` keeps `lines`/`functions`/`statements` at 100,
@@ -25,6 +35,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Line-scoped `coverage` / `mutation` exemptions** (#226). A `coverage` or `mutation`
+  `[[<language>.exempt]]` entry now **requires** a `lines` list (`lines = [9, 10, "12-13"]` — single
+  line numbers and inclusive `"start-end"` ranges) naming the exact lines it lifts — those two rules
+  are **never whole-file**. A determinism guard rejects a listed line that isn't actually failing
+  (covered, a killed mutant, or no measured code), and an unlisted failing line still fails. `lines`
+  is rejected with a whole-file rule (`colocated-test`, the lints), so the two never share an entry. Whole-tree `unit coverage` recomputes its floor from per-line detail over the
+  measured-minus-exempt lines (no coverage tool excludes line *numbers* from the outside); `unit
+  coverage --base` lifts the exempt lines from the diff; and `unit mutation` lifts the survivors on
+  the listed lines. New public API: `config::{LineSpec, LineScope, resolve_exempt_scoped}`,
+  `Exemption::{lines, line_set}`, `coverage::measure_report`,
+  `patch_coverage::measure_line_exempt{,_typescript,_rust}`,
+  `mutation::{evaluate_scoped, mutated_lines, MutatedLines}`.
 - **`unit mutation --language python`** (#203) — the Python arm of the mutation rule, completing
   cross-language parity. Wraps [cosmic-ray](https://github.com/sixty-north/cosmic-ray): a baseline
   check guards the suite, then `init` / `exec` run the mutants and `cosmic-ray dump` is parsed for

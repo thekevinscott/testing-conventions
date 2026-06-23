@@ -1,0 +1,7 @@
+# Line-scoped mutation exemption (#226): only lines 2 and 6 (where the assertion-light
+# suite leaves survivors) are excused, not the whole file.
+[[python.exempt]]
+path = "calc.py"
+rules = ["mutation"]
+lines = [2, 6]
+reason = "fixture: the surviving mutants on these lines stand in for equivalent mutations"

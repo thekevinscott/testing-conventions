@@ -91,11 +91,16 @@ fn loads_exemptions_with_optional_coverage() {
     let config = load_config(fixture("exempt.toml")).expect("an exempt-only config should load");
     let python = config.python.expect("[python] table present");
     assert!(python.coverage.is_none(), "coverage is optional");
-    assert_eq!(python.exempt.len(), 1);
+    // A whole-file presence exemption and a separate line-scoped coverage exemption for
+    // the same file — `coverage` requires `lines`, so the two can't share one entry (#226).
+    assert_eq!(python.exempt.len(), 2);
     assert_eq!(python.exempt[0].path, "src/cli.py");
+    assert_eq!(python.exempt[0].rules, vec![Rule::ColocatedTest]);
+    assert!(python.exempt[0].lines.is_empty());
+    assert_eq!(python.exempt[1].rules, vec![Rule::Coverage]);
     assert_eq!(
-        python.exempt[0].rules,
-        vec![Rule::ColocatedTest, Rule::Coverage]
+        python.exempt[1].lines,
+        vec![testing_conventions::config::LineSpec::Range(5, 6)]
     );
     assert_eq!(
         config.typescript.expect("[typescript] table").exempt[0].rules,

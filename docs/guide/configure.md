@@ -46,7 +46,9 @@ either a colocated test or an exemption.
 
 ### Exempt a real file
 
-Add a `[[<language>.exempt]]` entry naming the rules it lifts and **why**:
+Add a `[[<language>.exempt]]` entry naming the rules it lifts and **why**. Whole-file exemptions are
+for the **presence and lint** rules — a launcher shim with no colocated test, a re-export barrel with
+no logic to isolate:
 
 ```toml
 # A launcher shim with no unit test:
@@ -54,12 +56,6 @@ Add a `[[<language>.exempt]]` entry naming the rules it lifts and **why**:
 path = "mypkg/cli.py"
 rules = ["colocated-test"]
 reason = "thin launcher; logic lives in run(), tested in run_test.py"
-
-# Generated code you don't want in the coverage number:
-[[python.exempt]]
-path = "mypkg/pb/messages.py"
-rules = ["coverage"]
-reason = "generated protobuf stubs, not hand-authored"
 
 # A re-export barrel, exempt from the colocated-test rule:
 [[typescript.exempt]]
@@ -70,12 +66,36 @@ reason = "pure re-export barrel; no logic of its own"
 
 - `path` is relative to the scanned `<PATH>`, and must point to a file that exists — a stale entry
   is a hard error, so the list can't silently rot.
-- `rules` names the checks the entry lifts (`colocated-test`, `coverage`, a mutation or lint rule).
+- `rules` names the checks the entry lifts (`colocated-test`, a mutation or lint rule). For
+  `coverage` / `mutation`, see the line-scoped form below — those are never whole-file.
 - `reason` is required; a reason-less entry is rejected when the config loads.
 
 Because every exemption lives in this one file, names its rules, and carries a reason, the whole
 exemption surface is auditable in a single diff — unlike scattered ignore comments. See
 [Reference — Exemptions](../reference/#exemptions) for the exact schema.
+
+### Exempt specific lines (`coverage` / `mutation`)
+
+`coverage` and `mutation` exemptions are never whole-file — they must carry a `lines` list naming the
+exact lines they lift:
+
+```toml
+[[python.exempt]]
+path = "mypkg/config/tomlcompat.py"
+rules = ["coverage", "mutation"]
+lines = [9, 10, "12-13"]   # single lines and inclusive "start-end" ranges
+reason = "version-conditional tomllib/tomli import; one branch is dead on any single interpreter"
+```
+
+A **determinism guard** checks the list:
+
+- A listed line that **isn't failing** (it's covered, has a killed mutant, or carries no measured
+  code) is a **hard error**.
+- A failing line that **isn't listed** fails the gate as normal.
+
+So the list is exactly the failing lines. `lines` is required with `coverage` / `mutation` and
+rejected with any whole-file rule, so the two never share an entry — a file exempt from both
+`colocated-test` and `coverage` is two entries.
 
 ## See also
 

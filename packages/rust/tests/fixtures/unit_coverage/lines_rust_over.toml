@@ -1,0 +1,10 @@
+# Over-exemption (#226 determinism guard): src/core.rs line 6 is fully covered, so
+# listing it is a hard error.
+[rust]
+coverage = { regions = 100, lines = 100 }
+
+[[rust.exempt]]
+path = "src/core.rs"
+rules = ["coverage"]
+lines = [6]
+reason = "fixture: over-exempts a covered line"

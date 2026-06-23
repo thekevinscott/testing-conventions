@@ -1,0 +1,11 @@
+# Line-scoped coverage exemption (#226): only src/shim.rs's uncovered `launch` region
+# (lines 6-8) is excused, not the whole file. core.rs is fully covered, so the crate
+# clears the 100 floor with just these lines lifted.
+[rust]
+coverage = { regions = 100, lines = 100 }
+
+[[rust.exempt]]
+path = "src/shim.rs"
+rules = ["coverage"]
+lines = ["6-8"]
+reason = "fixture: launcher region is exercised by e2e, not units"

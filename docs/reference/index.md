@@ -143,7 +143,8 @@ Because the diff is judged against the configured floor rather than an implicit 
 clears the floor passes even if it leaves a changed line uncovered (the two coincide only at a 100
 floor), and a diff below the floor fails however small it is — there is no small-diff carve-out. A
 change touching no measured line of the language passes vacuously, and a file with a `coverage`
-[exemption](#exemptions) is lifted from the diff scope just as from the whole-tree floor. An
+[exemption](#exemptions) — whole-file or [line-scoped](#line-scoped-exemptions) — is lifted from the
+diff scope just as from the whole-tree floor. An
 **added** file's new lines *are* subjects (brand-new code must be covered too). This complements
 [`unit colocated-test --base`](#unit-colocated-test): co-change enforces that a changed source and
 its colocated *test* move together, while `--base` coverage enforces that the changed *lines* are
@@ -182,15 +183,17 @@ ran but no test failed on:
   a broken suite reporting a false pass. cosmic-ray + pytest must be installed.
 
 A mutant with a `mutation` [exemption](#exemptions) on its file is dropped (an equivalent or
-deliberately-defensive mutation, with a reason). The gate is **binary, not a percentage** —
+deliberately-defensive mutation, with a reason) — or, with a [`lines`](#line-scoped-exemptions)
+list, only the survivors on the named lines. The gate is **binary, not a percentage** —
 there is no mutation-score floor (equivalent mutants make a fixed threshold unreachable, and a
 score isn't comparable across engines):
 
 - **On by default.** Any *un-exempted* surviving mutant fails the run (exit `1`, listing each
   survivor with its file, line, and mutation); a clean run exits `0`. There is no report-only mode.
 - **Exemptions are the only loosening.** A survivor confirmed equivalent or deliberately defensive
-  is lifted with a reason-required `[[<language>.exempt]] rules = ["mutation"]` entry — so a passing
-  run means every survivor was killed or explained.
+  is lifted with a reason-required `[[<language>.exempt]] rules = ["mutation"]` entry naming the
+  survivor's [`lines`](#line-scoped-exemptions) — so a passing run means every survivor was killed or
+  explained.
 
 With `--base <REF>` the gate is **diff-scoped**: only survivors on changed lines count — "no
 unexplained surviving mutant on the lines you touched." `git` must resolve `<REF>`.
@@ -433,20 +436,55 @@ For a deliberate omission, add a `[[<language>.exempt]]` entry to the config:
 ```toml
 [[python.exempt]]
 path = "mypkg/cli.py"          # relative to the scanned <PATH>
-rules = ["colocated-test", "coverage"]  # which checks this lifts
+rules = ["colocated-test"]     # which checks this lifts
 reason = "thin launcher; logic in run(), tested in run_test.py"  # required
 ```
+
+This is a **whole-file** exemption (`colocated-test` and the lints). The measured-line rules —
+`coverage` and `mutation` — are never whole-file: they require a `lines` list, in their own entry.
+See [line-scoped exemptions](#line-scoped-exemptions) below.
 
 | Field | Meaning |
 | ----- | ------- |
 | `path` | The exempt file, relative to the scanned `<PATH>`. Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
-| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
+| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, `mutation`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
+| `lines` | The lines a `coverage` / `mutation` exemption covers (see [line-scoped exemptions](#line-scoped-exemptions)). **Required** with `coverage` / `mutation`, **rejected** with any other rule. |
 | `reason` | Why the omission is deliberate. **Required**: an empty reason is rejected on load. |
 
 Because every exemption lives in the one config file, names its rules, and carries a reason,
 the project's entire exemption surface is auditable in a single diff, unlike a prose omit-list
 or a scattered set of ignore comments. A re-export barrel (`index.ts`), a launcher shim, or a
 non-empty `__init__.py` is exempted this way, not automatically.
+
+### Line-scoped exemptions
+
+Most `exempt` entries lift a rule for the **whole file**. The measured-line rules — **`coverage`**
+and **`mutation`** — never do: an exemption must carry a `lines` list naming the exact lines it covers.
+
+```toml
+[[python.exempt]]
+path = "mypkg/config/tomlcompat.py"
+rules = ["coverage", "mutation"]
+lines = [9, 10, "12-13"]   # single line numbers and inclusive "start-end" ranges
+reason = "version-conditional tomllib/tomli import; one branch is dead on any single interpreter"
+```
+
+Each element is a 1-based line number (a TOML integer) or an inclusive range (a `"start-end"`
+string). A determinism guard checks the list:
+
+- A listed line that **isn't failing** — covered (`coverage`), its mutants all caught (`mutation`),
+  or carrying no measured code — is a **hard error**.
+- A failing line that **isn't listed** fails the gate as normal.
+
+So the list is exactly the failing lines. Three rules govern `lines`:
+
+- **Required** for `coverage` / `mutation`: an entry naming either rule without `lines` is rejected
+  on load.
+- **Rejected** for every other rule (`colocated-test`, the lints): those are whole-file checks, so a
+  `lines` key alongside one is rejected. The two kinds never share an entry — a file exempt from both
+  `colocated-test` and `coverage` is two entries.
+- Under `mutation` [`--base`](#unit-mutation), a listed line outside the diff isn't mutated, so it's
+  left alone; the guard fires only on a listed line whose mutants were actually run and all caught.
 
 ## Configuration
 
@@ -460,11 +498,19 @@ configure just coverage, just exemptions, or both.
 [python]
 coverage = { branch = true, fail_under = 100 }
 
-# A deliberate, reason-required omission (see Exemptions above):
+# A whole-file presence exemption (see Exemptions above):
 [[python.exempt]]
 path = "mypkg/cli.py"
-rules = ["colocated-test", "coverage"]
+rules = ["colocated-test"]
 reason = "thin launcher; logic in run(), tested in run_test.py"
+
+# A line-scoped coverage/mutation exemption — `lines` is required, and never shares an
+# entry with a whole-file rule:
+[[python.exempt]]
+path = "mypkg/config/tomlcompat.py"
+rules = ["coverage", "mutation"]
+lines = [9, 10, "12-13"]
+reason = "version-conditional tomllib/tomli import; one branch is dead on any single interpreter"
 
 [typescript]
 coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }

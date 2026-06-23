@@ -1,0 +1,11 @@
+# Over-exemption (#226 determinism guard): line 1 (`def launch`) runs on import and is
+# covered, so listing it is a hard error — a line-scoped exemption may only name
+# uncovered lines.
+[python]
+coverage = { branch = true, fail_under = 100 }
+
+[[python.exempt]]
+path = "shim.py"
+rules = ["coverage"]
+lines = ["1-4"]
+reason = "fixture: over-exempts the covered def line"

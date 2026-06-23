@@ -609,6 +609,10 @@ so a project without `@stryker-mutator/core` (and a test-runner plugin) now fail
 the deprecated `stryker` 0.x package. Install the engine before running the rule (the reusable
 workflow already does). No API or config change.
 
+`unit coverage --language typescript` likewise no longer auto-installs vitest — it runs
+`npx --no-install vitest` and fails fast with a clear "must be installed" error when `vitest` /
+`@vitest/coverage-v8` are absent, instead of silently downloading vitest. No API or config change.
+
 `testing-conventions --help` no longer lists the private `workflow` command (#191): it
 was always undocumented and run only from our own CI, and is now `#[command(hide = true)]`.
 It still runs when invoked explicitly (hidden, not removed), and the `@v0` drift guard is

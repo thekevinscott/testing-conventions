@@ -15,6 +15,13 @@ Each entry has five sections, in order:
 
 ### Summary
 
+The wheel now declares the Python mutation/coverage engines (`cosmic-ray`, `coverage`) as runtime
+dependencies, so installing testing-conventions brings them automatically — the `unit mutation` /
+`unit coverage --language python` rules resolve the engine from the same environment instead of
+requiring a separate install. Purely additive: the bundled CLI binary is unchanged, and the test
+runner (`pytest`) is still the consumer's. Deps are unpinned so pip backtracks to an
+interpreter-compatible release across 3.9+.
+
 The wheel now ships an importable `testing_conventions` package with a pytest
 plugin (`pytest11` entry point) alongside the CLI binary, applying the
 recommended coverage floor to a local `pytest --cov` run unless the consumer has

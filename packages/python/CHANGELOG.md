@@ -7,6 +7,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **The Python mutation/coverage engines now ship with the wheel.** `cosmic-ray` and `coverage` are
+  declared as runtime dependencies, so a `pip install` / `uvx` of testing-conventions brings them and
+  `unit mutation`/`unit coverage --language python` resolve them from the same environment — no
+  separate engine install. The test runner (`pytest`) stays the consumer's, since it runs their suite.
+  Left unpinned so pip selects an interpreter-compatible release across the supported 3.9+ range.
 - A `testing_conventions` pytest plugin, shipped in the wheel and auto-loaded via
   the `pytest11` entry point. On `pip install testing-conventions` it brings the
   project's recommended coverage floor to a local `pytest --cov` run — branch

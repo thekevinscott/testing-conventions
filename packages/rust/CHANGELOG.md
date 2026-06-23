@@ -42,6 +42,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   which already invoke their binary directly. A project that relied on the implicit download must now
   install `@stryker-mutator/core` + a test-runner plugin (the rule always documented this as a
   prerequisite; the reusable workflow already installs it).
+- **`unit coverage --language typescript` no longer auto-downloads vitest.** The same `npx --yes`
+  footgun as the mutation arm: `run_vitest_coverage` shelled out to `npx --yes vitest`, silently
+  fetching vitest when it wasn't installed. It now runs `npx --no-install`, using only the project's
+  own vitest and failing fast with a clear error otherwise — parity with the coverage.py / cargo
+  llvm-cov arms.
 
 ### Added
 

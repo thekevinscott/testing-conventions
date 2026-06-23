@@ -10,6 +10,12 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "Kevin Scott", email = "me@thekevinscott.com" }]
+# The Python mutation/coverage engines ship with the package, so a `pip`/`uvx` install
+# of testing-conventions brings them — the rule resolves them from the same environment.
+# The test runner (pytest) stays the consumer's: it runs *their* suite, so it's theirs to
+# version. Left unpinned so pip backtracks to an interpreter-compatible release across the
+# supported 3.9+ range (coverage's latest needs 3.10+).
+dependencies = ["cosmic-ray", "coverage"]
 
 [project.urls]
 Repository = "https://github.com/thekevinscott/testing-conventions"

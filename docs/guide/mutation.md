@@ -25,13 +25,15 @@ ran but no test failed on), and exits non-zero if any survive. Each engine must 
 | Language | Engine | Must be installed |
 | --- | --- | --- |
 | Rust | [cargo-mutants](https://github.com/sourcefrog/cargo-mutants) | `cargo-mutants` |
-| TypeScript | [Stryker](https://stryker-mutator.io/) | `@stryker-mutator/core` + a test-runner plugin |
-| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray) | `cosmic-ray` + `pytest` |
+| TypeScript | [Stryker](https://stryker-mutator.io/) | ships with the npm package (`@stryker-mutator/core` + the vitest runner); you provide `vitest` |
+| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray) | ships with the wheel (`cosmic-ray`); you provide `pytest` |
 
-Each engine is run from your project's own install and is **never auto-downloaded**: the TypeScript
-arm invokes Stryker with `npx --no-install`, so a missing `@stryker-mutator/core` fails fast with a
-clear error instead of silently fetching the long-deprecated standalone `stryker` package. Install
-the engine (the table above) before running the rule — the reusable workflow does this for you.
+The **engine ships with testing-conventions**: an `npm install` brings Stryker, a `pip` install brings
+cosmic-ray. You only provide your own **test runner** (`vitest` / `pytest`) — it runs your suite, so
+it's yours to version. (Rust is the exception: `cargo-mutants` is a separate `cargo install`, as cargo
+has no equivalent bundling.) Each engine is run from your project's own install and is **never
+auto-downloaded** — the TypeScript arm invokes it with `npx --no-install`, so a missing engine fails
+fast with a clear error rather than silently fetching a package at runtime.
 
 The gate is **on by default and binary**: any un-exempted survivor fails the run (exit `1`, listing
 each survivor with its file, line, and mutation); a clean run exits `0`. There is no report-only mode

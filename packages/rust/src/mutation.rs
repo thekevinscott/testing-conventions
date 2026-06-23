@@ -449,18 +449,26 @@ fn run_stryker(root: &Path, mutate: Option<&[String]>) -> Result<String> {
     let mut command = Command::new("npx");
     command
         .current_dir(root)
-        .args(["--yes", "stryker", "run", "--reporters", "json"]);
+        // `--no-install`, never `--yes`: run the project's own pinned Stryker (resolved
+        // via Node's parent-dir lookup) and refuse to download anything. With `--yes`, a
+        // missing `@stryker-mutator/core` would silently fetch the long-deprecated
+        // standalone `stryker` package (renamed in 2019) and crash with MODULE_NOT_FOUND;
+        // the TS arm must fail clean like the cosmic-ray / cargo-mutants arms, which run
+        // their binary directly.
+        .args(["--no-install", "stryker", "run", "--reporters", "json"]);
     if let Some(specs) = mutate {
         command.arg("--mutate").arg(specs.join(","));
     }
     let output = command
         .env("CI", "1")
         .output()
-        .context("running `npx stryker run` (is @stryker-mutator/core installed?)")?;
+        .context("running `npx --no-install stryker run`")?;
 
     std::fs::read_to_string(&report_path).map_err(|_| {
         anyhow::anyhow!(
-            "Stryker produced no report in `{}` (did it run cleanly?):\n{}{}",
+            "Stryker produced no report in `{}`. The rule runs the project's own Stryker via \
+             `npx --no-install` and never downloads it, so `@stryker-mutator/core` (plus a \
+             test-runner plugin) must be installed in the project. Stryker output:\n{}{}",
             root.display(),
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr),

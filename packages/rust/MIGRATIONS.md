@@ -15,6 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Hardens `unit mutation --language typescript` so it never downloads a mutation engine. The TypeScript
+arm shelled out to `npx --yes stryker run`; with `--yes`, a project missing `@stryker-mutator/core`
+would silently fetch the long-deprecated standalone `stryker` package (last released as `0.x` in 2019,
+before the rename to `@stryker-mutator/core`) and crash with `MODULE_NOT_FOUND`. It now runs
+`npx --no-install`, resolving only the project's own pinned Stryker via Node's parent-dir lookup and
+failing fast with a clear error when it's absent — parity with the cosmic-ray and cargo-mutants arms,
+which invoke their binary directly. `measure_typescript`'s signature is unchanged; only its runtime
+behavior changes (see **Behavior changes without code changes**).
+
 Makes every `[<language>].coverage` table a **partial override** (#216, parent #196): missing fields
 fall back to the language's default floor instead of erroring, so a consumer sets only what they want
 to change (`[typescript].coverage] branches = 90` keeps the other three at 100; `[rust].coverage]
@@ -593,6 +602,12 @@ The `--lang` flag and its implicit `python` default are gone — a clean break, 
 a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
+
+`unit mutation --language typescript` no longer auto-installs Stryker. It runs `npx --no-install`,
+so a project without `@stryker-mutator/core` (and a test-runner plugin) now fails fast with a clear
+`Stryker produced no report … must be installed` error instead of silently downloading and running
+the deprecated `stryker` 0.x package. Install the engine before running the rule (the reusable
+workflow already does). No API or config change.
 
 `testing-conventions --help` no longer lists the private `workflow` command (#191): it
 was always undocumented and run only from our own CI, and is now `#[command(hide = true)]`.

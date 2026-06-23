@@ -44,7 +44,9 @@ fn unit_mutation_output(project: &Path) -> (i32, String) {
         .output()
         .expect("the built binary should run");
     (
-        out.status.code().expect("the process should exit with a code"),
+        out.status
+            .code()
+            .expect("the process should exit with a code"),
         String::from_utf8_lossy(&out.stderr).into_owned(),
     )
 }

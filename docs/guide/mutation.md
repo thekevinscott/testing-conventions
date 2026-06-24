@@ -20,20 +20,19 @@ testing-conventions unit mutation --language python src/       # Python
 ```
 
 The rule wraps each language's standard engine, collects every **surviving** mutant (one the suite
-ran but no test failed on), and exits non-zero if any survive. Each engine must be installed:
+ran but no test failed on), and exits non-zero if any survive.
 
-| Language | Engine | Must be installed |
+| Language | Engine package | Bundled with `testing-conventions`? |
 | --- | --- | --- |
-| Rust | [cargo-mutants](https://github.com/sourcefrog/cargo-mutants) | `cargo-mutants` |
-| TypeScript | [Stryker](https://stryker-mutator.io/) | ships with the npm package (`@stryker-mutator/core` + the vitest runner); you provide `vitest` |
-| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray) | ships with the wheel (`cosmic-ray`); you provide `pytest` |
+| TypeScript | [`@stryker-mutator/core`](https://stryker-mutator.io/) + `@stryker-mutator/vitest-runner` | Yes — npm dependencies |
+| Python | [`cosmic-ray`](https://github.com/sixty-north/cosmic-ray) | Yes — wheel dependency |
+| Rust | [`cargo-mutants`](https://github.com/sourcefrog/cargo-mutants) | No — `cargo install cargo-mutants` (cargo has no equivalent) |
 
-The **engine ships with testing-conventions**: an `npm install` brings Stryker, a `pip` install brings
-cosmic-ray. You only provide your own **test runner** (`vitest` / `pytest`) — it runs your suite, so
-it's yours to version. (Rust is the exception: `cargo-mutants` is a separate `cargo install`, as cargo
-has no equivalent bundling.) Each engine is run from your project's own install and is **never
-auto-downloaded** — the TypeScript arm invokes it with `npx --no-install`, so a missing engine fails
-fast with a clear error rather than silently fetching a package at runtime.
+The TypeScript and Python engines are declared as dependencies, so they install with the package and
+the rule resolves them from your project — it **never downloads an engine at runtime** (the TypeScript
+arm uses `npx --no-install`, which is why a missing engine fails fast instead of silently fetching the
+long-deprecated unscoped `stryker` 0.x package). You supply the **test runner** (`vitest` / `pytest`):
+it runs your own suite, so its version is yours.
 
 The gate is **on by default and binary**: any un-exempted survivor fails the run (exit `1`, listing
 each survivor with its file, line, and mutation); a clean run exits `0`. There is no report-only mode

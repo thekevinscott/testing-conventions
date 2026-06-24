@@ -16,8 +16,8 @@ Each entry has five sections, in order:
 ### Summary
 
 Declares the TypeScript mutation engine (`@stryker-mutator/core`,
-`@stryker-mutator/vitest-runner`) as runtime dependencies, so installing testing-conventions brings
-Stryker automatically — `unit mutation --language typescript` resolves it from the project's
+`@stryker-mutator/vitest-runner`) as runtime dependencies, so installing testing-conventions installs
+them automatically — `unit mutation --language typescript` resolves them from the project's
 `node_modules` instead of requiring a separate install. Purely additive: the `bin` entry and CLI
 behavior are unchanged, and the test runner (`vitest`) stays the consumer's optional peer (Stryker's
 vitest-runner peers on it). A CLI-only consumer who never runs mutation just carries the unused dep.

@@ -9,7 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **The TypeScript mutation engine now ships with the package.** `@stryker-mutator/core` and
   `@stryker-mutator/vitest-runner` are declared as runtime dependencies, so an `npm install` / `npx`
-  of testing-conventions brings Stryker and `unit mutation --language typescript` resolves it from the
+  of testing-conventions installs them, and `unit mutation --language typescript` resolves them from the
   project's `node_modules` — no separate engine install. The test runner (`vitest`) stays the
   consumer's optional peer, since it runs *their* suite and Stryker's runner plugin already peers on
   it. CLI-only consumers who don't run mutation simply carry the unused dependency.

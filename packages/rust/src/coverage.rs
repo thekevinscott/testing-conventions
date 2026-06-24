@@ -478,7 +478,11 @@ fn run_vitest_coverage(
     let mut command = Command::new("npx");
     command
         .current_dir(root)
-        .args(["--yes", "vitest", "run", "--no-cache"])
+        // `--no-install`, never `--yes`: run the project's own vitest (resolved via
+        // Node's parent-dir lookup) and refuse to download anything. With `--yes` a
+        // missing vitest would be silently fetched; the TS arm must fail clean like the
+        // coverage.py / cargo-llvm-cov arms, which invoke their binary directly.
+        .args(["--no-install", "vitest", "run", "--no-cache"])
         .args(["--coverage.enabled", "--coverage.provider=v8"])
         .arg(format!("--coverage.reporter={reporter}"))
         .arg("--coverage.all=true")
@@ -493,12 +497,15 @@ fn run_vitest_coverage(
         command.arg(format!("--coverage.exclude={path}"));
     }
     // CI=1 keeps vitest non-interactive (no watch prompt, plain output).
-    let run = command.env("CI", "1").output().context(
-        "running `npx vitest run --coverage` (are vitest and @vitest/coverage-v8 installed?)",
-    )?;
+    let run = command
+        .env("CI", "1")
+        .output()
+        .context("running `npx --no-install vitest run --coverage`")?;
     if !run.status.success() {
         bail!(
-            "the unit suite did not run cleanly under vitest in `{}`:\n{}{}",
+            "the unit suite did not run cleanly under vitest in `{}`. The rule runs the \
+             project's own vitest via `npx --no-install` and never downloads it, so `vitest` \
+             and `@vitest/coverage-v8` must be installed in the project. vitest output:\n{}{}",
             root.display(),
             String::from_utf8_lossy(&run.stdout),
             String::from_utf8_lossy(&run.stderr),

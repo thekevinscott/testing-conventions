@@ -29,6 +29,18 @@ impl Staged {
         )
     }
 
+    /// Stage a TypeScript fixture *without* the Stryker toolchain — no `node_modules`
+    /// symlink. Exercises the not-installed path: the rule must fail clean via
+    /// `npx --no-install` rather than silently download the deprecated `stryker` package.
+    pub fn typescript_without_toolchain(project: &str) -> Self {
+        Self::stage(
+            "typescript",
+            project,
+            &["index.ts", "index.test.ts", "stryker.conf.json"],
+            false,
+        )
+    }
+
     /// Stage a Python fixture (`killed` / `survivors`); cosmic-ray and pytest resolve
     /// from the ambient install, so there's no `node_modules` to link.
     pub fn python(project: &str) -> Self {

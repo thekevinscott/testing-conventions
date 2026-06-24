@@ -79,6 +79,23 @@ fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
 }
 
 #[test]
+fn a_missing_toolchain_fails_clean_without_downloading() {
+    // No `node_modules`: the coverage arm must surface a clear error via `npx
+    // --no-install` and never silently fetch vitest. Parity with the cosmic-ray /
+    // cargo-llvm-cov arms, which invoke their binary directly and fail clean when absent.
+    let dir = std::env::temp_dir().join(format!("tc-ts-cov-notoolchain-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let result = measure_typescript(&dir, MID, &[]);
+    let _ = std::fs::remove_dir_all(&dir);
+    let err = result.expect_err("a project with no vitest installed must error, not download one");
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("npx --no-install"),
+        "the error should name the no-download invocation; got: {msg}"
+    );
+}
+
+#[test]
 fn a_suite_that_cannot_run_is_an_error_not_a_silent_pass() {
     // An empty directory has no test files; vitest exits non-zero, so measuring it
     // must error rather than report a vacuous pass.

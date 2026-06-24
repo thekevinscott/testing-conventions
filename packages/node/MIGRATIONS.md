@@ -16,11 +16,13 @@ Each entry has five sections, in order:
 ### Summary
 
 Declares the TypeScript mutation engine (`@stryker-mutator/core`,
-`@stryker-mutator/vitest-runner`) as runtime dependencies, so installing testing-conventions installs
-them automatically — `unit mutation --language typescript` resolves them from the project's
-`node_modules` instead of requiring a separate install. Purely additive: the `bin` entry and CLI
+`@stryker-mutator/vitest-runner`, `^9.6.0`) as runtime dependencies, so installing testing-conventions
+installs them automatically — `unit mutation --language typescript` resolves them from the project's
+`node_modules` instead of requiring a separate install. Additive for the CLI: the `bin` entry and its
 behavior are unchanged, and the test runner (`vitest`) stays the consumer's optional peer (Stryker's
 vitest-runner peers on it). A CLI-only consumer who never runs mutation just carries the unused dep.
+The one install-time constraint: Stryker 9 requires **Node ≥20**, so the package no longer installs on
+older Node.
 
 Adds a `vitestConfig` export to the package root so consumers extend the shared
 coverage floor instead of copy-pasting it. Purely additive: the `bin` entry and
@@ -29,7 +31,8 @@ dependency, so CLI-only consumers see no new install requirement.
 
 ### Required changes
 
-None.
+None to code. Install-time: the bundled Stryker 9 requires **Node ≥20** — a consumer on an older Node
+must upgrade Node to install testing-conventions.
 
 ### Deprecations removed
 

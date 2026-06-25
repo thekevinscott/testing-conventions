@@ -1,0 +1,31 @@
+name: Move major tag (tests)
+
+# Red/green tests for the repo-only move-major-tag helper (.github/scripts/move-major-tag). The
+# forward-only tag-advance logic lives in move_major_tag.py — not inline in move-major-tag.yml —
+# so it carries integration tests (the git boundary mocked) and e2e tests (a real git repo with
+# a local remote), run with pytest. This is the gate that goes red before the logic lands and
+# green after. Mirrors detect-action.yml for the detect helper.
+
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/move-major-tag/**'
+      - '.github/workflows/move-major-tag-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: move_major_tag.py — integration + e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install pytest
+        run: python -m pip install --quiet pytest
+      - name: Integration + e2e tests
+        run: python -m pytest .github/scripts/move-major-tag/tests/ -v --import-mode=importlib

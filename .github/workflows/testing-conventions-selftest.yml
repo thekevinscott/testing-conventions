@@ -240,6 +240,45 @@ jobs:
           fi
           echo "reusable workflow invokes \`unit lint\`"
 
+  rolling-release-wired:
+    name: The major tag advances only via the gated move-major-tag workflow
+    # The red→green signal for #235. `@v0` is a moving tag, but the reusable workflow runs
+    # the *published* npm binary while its own file is frozen at the tag — so the tag must
+    # advance only AFTER that binary publishes, or a consumer gets new-workflow + old-binary
+    # (the #55 `unrecognized subcommand` stranding). Assert the invariant statically: a
+    # dedicated `move-major-tag.yml` that is publish-gated (`workflow_run` on Release) and
+    # concurrency-guarded owns the move, and `release.yml` no longer moves the tag inline.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: move-major-tag.yml is present, publish-gated, and concurrency-guarded
+        run: |
+          set -euo pipefail
+          wf=.github/workflows/move-major-tag.yml
+          if [ ! -f "$wf" ]; then
+            echo "::error::missing $wf — the major tag has no dedicated advance workflow (#235)"
+            exit 1
+          fi
+          if ! grep -q 'workflow_run:' "$wf"; then
+            echo "::error::$wf is not gated on a workflow_run (Release completion) — @v0 could advance before the binary publishes (#235)"
+            exit 1
+          fi
+          if ! grep -q 'concurrency:' "$wf"; then
+            echo "::error::$wf has no concurrency group — out-of-order tag moves are unguarded (#235)"
+            exit 1
+          fi
+          echo "move-major-tag.yml is present, publish-gated, and concurrency-guarded"
+      - name: release.yml does not move the major tag inline
+        run: |
+          set -euo pipefail
+          # The tag move lives in the gated move-major-tag.yml, never inline in the publish
+          # pipeline — `git tag -f v0` in release.yml would re-couple it and drop the gate.
+          if grep -q 'tag -f v0' .github/workflows/release.yml; then
+            echo "::error::release.yml moves @v0 inline (\`git tag -f v0\`) — the move belongs in the gated move-major-tag.yml, not the publish workflow (#235)"
+            exit 1
+          fi
+          echo "release.yml no longer moves @v0 inline"
+
   detect-routes-python:
     name: the detect action routes Python into the unit-lint matrix
     # Detection now lives in the repo-only detect action, tested by pytest (#189). This

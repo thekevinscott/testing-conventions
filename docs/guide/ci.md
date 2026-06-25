@@ -103,7 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: python -m build            # → dist/*.whl, dist/*.tar.gz
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/

@@ -55,7 +55,7 @@ name: Testing Conventions
 #       runs-on: ubuntu-latest
 #       steps:
 #         - run: python -m build            # → dist/*.whl, dist/*.tar.gz
-#         - uses: actions/upload-artifact@v4
+#         - uses: actions/upload-artifact@v7
 #           with: { name: dist, path: dist/ }
 #     conventions:
 #       needs: build
@@ -472,7 +472,7 @@ jobs:
       # committed dist/ in the consumer checkout (#186).
       - name: Download the uploaded distributions
         if: inputs.packaging_artifact != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.packaging_artifact }}
           path: _packaging_artifact

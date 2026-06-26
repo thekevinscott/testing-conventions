@@ -46,3 +46,9 @@ Two safety properties:
 The forward-only logic is a repo-only, pytest-covered helper — `.github/scripts/move-major-tag/move_major_tag.py`, behind a small git boundary so it carries integration tests (git mocked) and e2e tests (a real repo with a local remote), run by `move-major-tag-tests.yml` — exactly like the `detect` helper. The workflow YAML only wires the trigger, the checkout, and the env; it holds no logic.
 
 The wiring is guarded in CI (`rolling-release-wired` in `testing-conventions-selftest.yml`): a regression that re-introduces an inline or un-gated tag move fails the self-test.
+
+## Dogfooding the `.github/` helpers
+
+The `.github/` helper scripts are first-party Python and are held to the same conventions as the shipped packages, not waved through: `dogfood-github-helpers.yml` runs `unit colocated-test`, `unit lint`, `unit coverage`, and `integration lint` (the published binary, via `npx`) over `.github/actions/` and `.github/scripts/`. So `detect.py` and `move_major_tag.py` carry a colocated unit test, stay isolated, meet the coverage floor, and pass the mocking lint like any package source — each helper keeps its colocated unit test next to the source and its integration/e2e suites under `tests/` (uniquely named, so `unit coverage`'s pytest collects them without an import-mode flag).
+
+The scan is scoped to the helper *code* by design. `.github/selftest/**` is **excluded** — those are intentional negative fixtures (below-floor suites, surviving mutants, un-colocated reds) the rules are *meant* to fire on — and the workflow YAML has nothing to scan. Pointing the rules at the repo root instead would need a real detection exclude/ignore (the root is full of negative fixtures under `packages/**/tests/fixtures/**` and `.github/selftest/**`, plus generated trees like `packages/python`'s build-time `.rs`, cf. #206); that mechanism is its own work, not what this gate does.

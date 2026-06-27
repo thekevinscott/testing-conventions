@@ -1,0 +1,42 @@
+# Summary
+
+- **Title:** Are mutants a valid substitute for real faults in software testing?
+- **Authors:** René Just, Darioush Jalali, Laura Inozemtseva, Michael D. Ernst, Reid Holmes, Gordon Fraser
+- **URL:** https://dl.acm.org/doi/10.1145/2635868.2635929
+- **Date:** 2014
+- **Venue:** Proceedings of the 22nd ACM SIGSOFT International Symposium on Foundations of Software Engineering (FSE), ACM, pp. 654–665
+- **Source type:** (peer-reviewed conference paper — PARTIAL capture; publisher full text blocked)
+
+## What the source claims
+
+Unknown from the captured material. The publisher full text and abstract were not
+retrieved, and the Crossref record carries no abstract. Only the bibliographic metadata
+above is verified. The title is the only statement of the paper's research question
+available in the transcript; no claims, findings, or methods can be reported from this
+capture.
+
+## Method / evidence type
+
+Not captured. No abstract, body, method description, or results are present in the
+transcript.
+
+## Numbers recorded
+
+None captured. The transcript contains no abstract and no full text, so no quantitative
+results are available.
+
+## Scope, limitations, and gaps
+
+- This is a **partial capture**: the only verified information is title, authors, venue,
+  year, page range, and DOI.
+- The Crossref registry record contains **no abstract**, so even a summary of the paper's
+  claims cannot be drawn from the captured data.
+- Any description of this paper's methodology or findings would require the full text, which
+  was not obtained.
+
+## Capture status
+
+`transcript.md` is a **partial** capture (`capture_status: partial`). The publisher page
+(dl.acm.org) was blocked at fetch time (Cloudflare/paywall, per `raw.html`). Bibliographic
+metadata was obtained from the Crossref registry (api.crossref.org); the Crossref record
+contains **no abstract**. Full text and abstract were **not** captured.

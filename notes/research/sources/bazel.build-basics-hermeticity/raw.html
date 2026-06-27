@@ -1,0 +1,1956 @@
+<head>
+    <meta name="google-signin-client-id" content="157101835696-ooapojlodmuabs2do2vuhhnf90bccmoi.apps.googleusercontent.com"><meta name="google-signin-scope" content="profile email https://www.googleapis.com/auth/developerprofiles https://www.googleapis.com/auth/developerprofiles.award https://www.googleapis.com/auth/devprofiles.full_control.firstparty"><meta property="og:site_name" content="Bazel">
+    <meta property="og:type" content="website"><meta name="theme-color" content="#0c713a"><meta charset="utf-8">
+    <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+
+    <link rel="manifest" href="/_pwa/bazel/manifest.json" crossorigin="use-credentials">
+    <link rel="preconnect" href="//www.gstatic.com" crossorigin="">
+    <link rel="preconnect" href="//fonts.googleapis.com" crossorigin="">
+    <link rel="preconnect" href="//www.google-analytics.com" crossorigin=""><link rel="stylesheet" href="//fonts.googleapis.com/css?family=Roboto:300,400,400italic,500,500italic,700,700italic|Roboto+Mono:400,500,700&amp;display=swap">
+      <link rel="stylesheet" href="//fonts.googleapis.com/css2?family=Material+Icons&amp;family=Material+Symbols+Outlined&amp;display=block"><link rel="stylesheet" href="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel/css/app.css">
+      <link rel="shortcut icon" href="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel/images/favicon-prod.png">
+    <link rel="apple-touch-icon" href="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel/images/touchicon-180.png"><link rel="canonical" href="https://bazel.build/basics/hermeticity"><link rel="search" type="application/opensearchdescription+xml" title="Bazel" href="https://bazel.build/s/opensearch.xml">
+      <link rel="alternate" hreflang="en" href="https://bazel.build/basics/hermeticity"><link rel="alternate" hreflang="x-default" href="https://bazel.build/basics/hermeticity"><link rel="alternate" hreflang="ar" href="https://bazel.build/basics/hermeticity?hl=ar"><link rel="alternate" hreflang="bn" href="https://bazel.build/basics/hermeticity?hl=bn"><link rel="alternate" hreflang="zh-Hans" href="https://bazel.build/basics/hermeticity?hl=zh-cn"><link rel="alternate" hreflang="zh-Hant" href="https://bazel.build/basics/hermeticity?hl=zh-tw"><link rel="alternate" hreflang="fa" href="https://bazel.build/basics/hermeticity?hl=fa"><link rel="alternate" hreflang="he" href="https://bazel.build/basics/hermeticity?hl=he"><link rel="alternate" hreflang="hi" href="https://bazel.build/basics/hermeticity?hl=hi"><link rel="alternate" hreflang="id" href="https://bazel.build/basics/hermeticity?hl=id"><link rel="alternate" hreflang="ja" href="https://bazel.build/basics/hermeticity?hl=ja"><link rel="alternate" hreflang="ko" href="https://bazel.build/basics/hermeticity?hl=ko"><link rel="alternate" hreflang="pt-BR" href="https://bazel.build/basics/hermeticity?hl=pt-br"><link rel="alternate" hreflang="es-419" href="https://bazel.build/basics/hermeticity?hl=es-419"><link rel="alternate" hreflang="th" href="https://bazel.build/basics/hermeticity?hl=th"><link rel="alternate" hreflang="tr" href="https://bazel.build/basics/hermeticity?hl=tr"><link rel="alternate" hreflang="vi" href="https://bazel.build/basics/hermeticity?hl=vi"><link rel="alternate" hreflang="en-cn" href="https://bazel.google.cn/basics/hermeticity"><link rel="alternate" hreflang="x-default" href="https://bazel.google.cn/basics/hermeticity"><link rel="alternate" hreflang="ar-cn" href="https://bazel.google.cn/basics/hermeticity?hl=ar"><link rel="alternate" hreflang="bn-cn" href="https://bazel.google.cn/basics/hermeticity?hl=bn"><link rel="alternate" hreflang="zh-Hans-cn" href="https://bazel.google.cn/basics/hermeticity?hl=zh-cn"><link rel="alternate" hreflang="zh-Hant-cn" href="https://bazel.google.cn/basics/hermeticity?hl=zh-tw"><link rel="alternate" hreflang="fa-cn" href="https://bazel.google.cn/basics/hermeticity?hl=fa"><link rel="alternate" hreflang="he-cn" href="https://bazel.google.cn/basics/hermeticity?hl=he"><link rel="alternate" hreflang="hi-cn" href="https://bazel.google.cn/basics/hermeticity?hl=hi"><link rel="alternate" hreflang="id-cn" href="https://bazel.google.cn/basics/hermeticity?hl=id"><link rel="alternate" hreflang="ja-cn" href="https://bazel.google.cn/basics/hermeticity?hl=ja"><link rel="alternate" hreflang="ko-cn" href="https://bazel.google.cn/basics/hermeticity?hl=ko"><link rel="alternate" hreflang="pt-BR-cn" href="https://bazel.google.cn/basics/hermeticity?hl=pt-br"><link rel="alternate" hreflang="es-419-cn" href="https://bazel.google.cn/basics/hermeticity?hl=es-419"><link rel="alternate" hreflang="th-cn" href="https://bazel.google.cn/basics/hermeticity?hl=th"><link rel="alternate" hreflang="tr-cn" href="https://bazel.google.cn/basics/hermeticity?hl=tr"><link rel="alternate" hreflang="vi-cn" href="https://bazel.google.cn/basics/hermeticity?hl=vi"><title>Hermeticity &nbsp;|&nbsp; Bazel</title>
+
+<meta property="og:title" content="Hermeticity &nbsp;|&nbsp; Bazel"><meta property="og:url" content="https://bazel.build/basics/hermeticity"><meta property="og:locale" content="en"><script type="text/javascript" async="" src="https://www.googletagmanager.com/gtag/js?id=G-64EQFFKSHW&amp;l=atDataLayer&amp;cx=c&amp;gtm=4e66o1" nonce=""></script><script class="all-tenants" async="" src="//www.googletagmanager.com/gtm.js?id=GTM-NDV7K7V5&amp;l=atDataLayer" nonce=""></script><script async="" src="//www.googletagmanager.com/gtag/js?id=G-GBZW986TQ3&amp;l=gtagDataLayer" nonce=""></script><script async="" src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel/js/app_loader.js"></script><script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    
+    "headline": "Hermeticity"
+  }
+</script>
+  
+
+  
+
+  
+
+
+    <script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_app_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_app_custom_elements_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_header_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_a11y_announce_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_actions_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_analytics_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_badger_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_book_nav_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_bookmark_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_content_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_cookie_notification_bar_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_feature_tooltip_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_feedback_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_footer_linkboxes_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_footer_promos_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_footer_utility_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_heading_link_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_language_selector_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_notification_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_panel_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_progress_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_recommendations_sidebar_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_search_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_sitemask_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_snackbar_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_tabs_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_thumb_rating_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_toc_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_tooltip_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_user_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_view_release_notes_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_badge_awarded_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_dialog_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_fast_track_profile_creator_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_callout_notification_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_callout_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_mwc_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_spinner_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_dropdown_list_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_view_release_notes_dialog_module.js" nonce=""></script><script src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/js/devsite_devsite_checkbox_module.js" nonce=""></script><style type="text/css"></style></head>
+  <body class="color-scheme--light viewport--desktop tenant--bazel" template="page" theme="bazel-theme" type="article" layout="docs" display-toc="" touch="" ready="" style="--devsite-panel-height: 0px; --devsite-js-header-height: 152px;">
+  
+    <devsite-progress id="app-progress"></devsite-progress>
+  
+  
+    <a href="#main-content" class="skip-link button">
+      
+      Skip to main content
+    </a>
+    <section class="devsite-wrapper">
+      <devsite-cookie-notification-bar><!----></devsite-cookie-notification-bar>
+        <devsite-header role="banner" fixed="" top-row--height="48" bottom-row--height="104" bottom-tabs--height="48" style="--devsite-js-top-row--height: 48px; --devsite-js-bottom-row--height: 104px; --devsite-js-bottom-tabs--height: 48px;">
+  
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="devsite-header--inner" data-nosnippet="">
+  <div class="devsite-top-logo-row-wrapper-wrapper">
+    <div class="devsite-top-logo-row-wrapper">
+      <div class="devsite-top-logo-row">
+        <button type="button" id="devsite-hamburger-menu" class="devsite-header-icon-button button-flat material-icons gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Navigation menu button" aria-label="Open menu">
+        </button>
+        
+<div class="devsite-product-name-wrapper">
+
+  <a href="/" class="devsite-site-logo-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Site logo" track-type="globalNav" track-name="bazel" track-metadata-position="nav" track-metadata-eventdetail="nav">
+  
+  <picture>
+    
+    <img src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel/images/lockup.svg" class="devsite-site-logo" alt="Bazel">
+  </picture>
+  
+</a>
+
+
+
+</div>
+        <div class="devsite-top-logo-row-middle">
+          <div class="devsite-header-upper-tabs">
+            
+              
+              
+  <devsite-tabs class="upper-tabs" connected="">
+
+    <nav class="devsite-tabs-wrapper" aria-label="Upper tabs">
+      
+        
+          
+        
+      
+        
+          
+        
+      
+        
+          
+        
+      
+        
+          
+        
+      
+        
+          
+        
+      
+        
+          
+        
+      
+        
+          
+        
+      
+    <tab>
+            
+    <a href="https://bazel.build/about" class="devsite-tabs-content gc-analytics-event " track-metadata-eventdetail="https://bazel.build/about" track-type="nav" track-metadata-position="nav - about bazel" track-metadata-module="primary nav" data-category="Site-Wide Custom Events" data-label="Tab: About Bazel" track-name="about bazel">
+    About Bazel
+  
+    </a>
+    
+  
+          </tab><tab class="devsite-active">
+            
+    <a href="https://bazel.build/start" class="devsite-tabs-content gc-analytics-event " track-metadata-eventdetail="https://bazel.build/start" track-type="nav" track-metadata-position="nav - getting started" track-metadata-module="primary nav" aria-label="Getting started, selected" data-category="Site-Wide Custom Events" data-label="Tab: Getting started" track-name="getting started">
+    Getting started
+  
+    </a>
+    
+  
+          </tab><tab>
+            
+    <a href="https://bazel.build/docs" class="devsite-tabs-content gc-analytics-event " track-metadata-eventdetail="https://bazel.build/docs" track-type="nav" track-metadata-position="nav - user guide" track-metadata-module="primary nav" data-category="Site-Wide Custom Events" data-label="Tab: User guide" track-name="user guide">
+    User guide
+  
+    </a>
+    
+  
+          </tab><tab>
+            
+    <a href="https://bazel.build/reference" class="devsite-tabs-content gc-analytics-event " track-metadata-eventdetail="https://bazel.build/reference" track-type="nav" track-metadata-position="nav - reference" track-metadata-module="primary nav" data-category="Site-Wide Custom Events" data-label="Tab: Reference" track-name="reference">
+    Reference
+  
+    </a>
+    
+  
+          </tab><tab class="devsite-overflow-tab"><!---->
+          <button class="devsite-tabs-overflow-button devsite-icon devsite-icon-arrow-drop-down" aria-haspopup="menu" aria-expanded="false" id="tab-overflow-button-lulO" aria-label="Dropdown menu for Extended Navigation" aria-controls="tab-overflow-menu-CsOX"><!--?lit$544098770$-->More</button>
+          <div class="devsite-tabs-overflow-menu" hidden="" scrollbars="" role="menu" id="tab-overflow-menu-CsOX" aria-labelledby="tab-overflow-button-lulO">
+          <tab role="menuitem">
+            
+    <a href="https://bazel.build/extending" class="devsite-tabs-content gc-analytics-event " track-metadata-eventdetail="https://bazel.build/extending" track-type="nav" track-metadata-position="nav - extending" track-metadata-module="primary nav" data-category="Site-Wide Custom Events" data-label="Tab: Extending" track-name="extending">
+    Extending
+  
+    </a>
+    
+  
+          </tab><tab role="menuitem">
+            
+    <a href="https://bazel.build/community" class="devsite-tabs-content gc-analytics-event " track-metadata-eventdetail="https://bazel.build/community" track-type="nav" track-metadata-position="nav - community" track-metadata-module="primary nav" data-category="Site-Wide Custom Events" data-label="Tab: Community" track-name="community">
+    Community
+  
+    </a>
+    
+  
+          </tab><tab class="devsite-dropdown
+    
+    
+    
+    " role="menuitem">
+  
+    <a href="https://bazel.build/versions" class="devsite-tabs-content gc-analytics-event " track-metadata-eventdetail="https://bazel.build/versions" track-type="nav" track-metadata-position="nav - versioned docs" track-metadata-module="primary nav" data-category="Site-Wide Custom Events" data-label="Tab: Versioned docs" track-name="versioned docs">
+    Versioned docs
+  
+    </a>
+    
+      <button aria-haspopup="menu" aria-expanded="false" aria-label="Dropdown menu for Versioned docs" track-type="nav" track-metadata-eventdetail="https://bazel.build/versions" track-metadata-position="nav - versioned docs" track-metadata-module="primary nav" data-category="Site-Wide Custom Events" data-label="Tab: Versioned docs" track-name="versioned docs" class="devsite-tabs-dropdown-toggle devsite-icon devsite-icon-arrow-drop-down"></button>
+    
+  
+  <div class="devsite-tabs-dropdown" role="menu" aria-label="submenu" hidden="">
+    <div class="devsite-tabs-dropdown-content">
+      
+      
+        <div class="devsite-tabs-dropdown-column
+                    ">
+          
+            <ul class="devsite-tabs-dropdown-section
+                       ">
+              
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://bazel.build/versions/9.1.0" track-type="nav" track-metadata-eventdetail="https://bazel.build/versions/9.1.0" track-metadata-position="nav - versioned docs" track-metadata-module="tertiary nav" tooltip="">
+                    
+                    <div class="devsite-nav-item-title">
+                      9.1.0
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://bazel.build/versions/9.0.0" track-type="nav" track-metadata-eventdetail="https://bazel.build/versions/9.0.0" track-metadata-position="nav - versioned docs" track-metadata-module="tertiary nav" tooltip="">
+                    
+                    <div class="devsite-nav-item-title">
+                      9.0.0
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://bazel.build/versions/8.7.0" track-type="nav" track-metadata-eventdetail="https://bazel.build/versions/8.7.0" track-metadata-position="nav - versioned docs" track-metadata-module="tertiary nav" tooltip="">
+                    
+                    <div class="devsite-nav-item-title">
+                      8.7.0
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://bazel.build/versions/8.6.0" track-type="nav" track-metadata-eventdetail="https://bazel.build/versions/8.6.0" track-metadata-position="nav - versioned docs" track-metadata-module="tertiary nav" tooltip="">
+                    
+                    <div class="devsite-nav-item-title">
+                      8.6
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://bazel.build/versions/8.5.0" track-type="nav" track-metadata-eventdetail="https://bazel.build/versions/8.5.0" track-metadata-position="nav - versioned docs" track-metadata-module="tertiary nav" tooltip="">
+                    
+                    <div class="devsite-nav-item-title">
+                      8.5
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://bazel.build/versions/8.4.0" track-type="nav" track-metadata-eventdetail="https://bazel.build/versions/8.4.0" track-metadata-position="nav - versioned docs" track-metadata-module="tertiary nav" tooltip="">
+                    
+                    <div class="devsite-nav-item-title">
+                      8.4
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://bazel.build/versions/8.3.0" track-type="nav" track-metadata-eventdetail="https://bazel.build/versions/8.3.0" track-metadata-position="nav - versioned docs" track-metadata-module="tertiary nav" tooltip="">
+                    
+                    <div class="devsite-nav-item-title">
+                      8.3
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://bazel.build/versions/8.2.0" track-type="nav" track-metadata-eventdetail="https://bazel.build/versions/8.2.0" track-metadata-position="nav - versioned docs" track-metadata-module="tertiary nav" tooltip="">
+                    
+                    <div class="devsite-nav-item-title">
+                      8.2
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://bazel.build/versions/7.7.0" track-type="nav" track-metadata-eventdetail="https://bazel.build/versions/7.7.0" track-metadata-position="nav - versioned docs" track-metadata-module="tertiary nav" tooltip="">
+                    
+                    <div class="devsite-nav-item-title">
+                      7.7
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://bazel.build/versions/6.6.0" track-type="nav" track-metadata-eventdetail="https://bazel.build/versions/6.6.0" track-metadata-position="nav - versioned docs" track-metadata-module="tertiary nav" tooltip="">
+                    
+                    <div class="devsite-nav-item-title">
+                      6.6
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+        </div>
+      
+        <div class="devsite-tabs-dropdown-column
+                    ">
+          
+            <ul class="devsite-tabs-dropdown-section
+                       ">
+              
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://bazel.build/" track-type="nav" track-metadata-eventdetail="https://bazel.build/" track-metadata-position="nav - versioned docs" track-metadata-module="tertiary nav" tooltip="">
+                    
+                    <div class="devsite-nav-item-title">
+                      Nightly
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://bazel.build/versions" track-type="nav" track-metadata-eventdetail="https://bazel.build/versions" track-metadata-position="nav - versioned docs" track-metadata-module="tertiary nav" tooltip="">
+                    
+                    <div class="devsite-nav-item-title">
+                      More…
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+        </div>
+      
+    </div>
+  </div>
+</tab></div>
+        </tab></nav>
+
+  <!----></devsite-tabs>
+
+            
+           </div>
+          
+<devsite-search enable-signin="" enable-search="" enable-suggestions="" enable-query-completion="" enable-search-summaries="" project-name="Bazel" tenant-name="Bazel">
+  <form class="devsite-search-form" action="https://bazel.build/s/results" method="GET">
+    <div class="devsite-search-container">
+      <button type="button" search-open="" class="devsite-search-button devsite-header-icon-button button-flat material-icons" aria-label="Open search"></button>
+      <div class="devsite-searchbox">
+        <input aria-activedescendant="" aria-autocomplete="list" aria-label="Search" aria-expanded="false" aria-haspopup="listbox" autocomplete="off" class="devsite-search-field devsite-search-query" name="q" placeholder="Search" role="combobox" type="text" value="" aria-controls="devsite-search-popout-container-id-1">
+          <div class="devsite-search-image material-icons" aria-hidden="true">
+            
+              <svg class="devsite-search-ai-image" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <g clip-path="url(#clip0_6641_386)">
+                    <path d="M19.6 21L13.3 14.7C12.8 15.1 12.225 15.4167 11.575 15.65C10.925 15.8833 10.2333 16 9.5 16C7.68333 16 6.14167 15.375 4.875 14.125C3.625 12.8583 3 11.3167 3 9.5C3 7.68333 3.625 6.15 4.875 4.9C6.14167 3.63333 7.68333 3 9.5 3C10.0167 3 10.5167 3.05833 11 3.175C11.4833 3.275 11.9417 3.43333 12.375 3.65L10.825 5.2C10.6083 5.13333 10.3917 5.08333 10.175 5.05C9.95833 5.01667 9.73333 5 9.5 5C8.25 5 7.18333 5.44167 6.3 6.325C5.43333 7.19167 5 8.25 5 9.5C5 10.75 5.43333 11.8167 6.3 12.7C7.18333 13.5667 8.25 14 9.5 14C10.6667 14 11.6667 13.625 12.5 12.875C13.35 12.1083 13.8417 11.15 13.975 10H15.975C15.925 10.6333 15.7833 11.2333 15.55 11.8C15.3333 12.3667 15.05 12.8667 14.7 13.3L21 19.6L19.6 21ZM17.5 12C17.5 10.4667 16.9667 9.16667 15.9 8.1C14.8333 7.03333 13.5333 6.5 12 6.5C13.5333 6.5 14.8333 5.96667 15.9 4.9C16.9667 3.83333 17.5 2.53333 17.5 0.999999C17.5 2.53333 18.0333 3.83333 19.1 4.9C20.1667 5.96667 21.4667 6.5 23 6.5C21.4667 6.5 20.1667 7.03333 19.1 8.1C18.0333 9.16667 17.5 10.4667 17.5 12Z" fill="#5F6368"></path>
+                  </g>
+                <defs>
+                <clipPath id="clip0_6641_386">
+                <rect width="24" height="24" fill="white"></rect>
+                </clipPath>
+                </defs>
+              </svg>
+            
+          </div>
+          <div class="devsite-search-shortcut-icon-container" aria-hidden="true">
+            <kbd class="devsite-search-shortcut-icon">/</kbd>
+          </div>
+      </div>
+    </div>
+  <div class="devsite-popout" id="devsite-search-popout-container-id-1"><div class="devsite-popout-result devsite-suggest-results-container" devsite-hide=""></div></div></form>
+  <button type="button" search-close="" class="devsite-search-button devsite-header-icon-button button-flat material-icons" aria-label="Close search"></button>
+</devsite-search>
+
+        <div class="devsite-search-background" style="opacity: 1;"></div></div>
+
+        
+
+          
+
+          
+
+          
+
+          
+
+          
+<devsite-language-selector aria-label="Select your language preference.">
+  <ul role="presentation">
+    
+    
+    <li role="presentation">
+      <a role="menuitem" lang="en" aria-current="true" href="https://bazel.build/basics/hermeticity">English</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es-419" href="https://bazel.build/basics/hermeticity?hl=es-419">Español – América Latina</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="id" href="https://bazel.build/basics/hermeticity?hl=id">Indonesia</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt-br" href="https://bazel.build/basics/hermeticity?hl=pt-br">Português – Brasil</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="vi" href="https://bazel.build/basics/hermeticity?hl=vi">Tiếng Việt</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="tr" href="https://bazel.build/basics/hermeticity?hl=tr">Türkçe</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="he" href="https://bazel.build/basics/hermeticity?hl=he">עברית</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ar" href="https://bazel.build/basics/hermeticity?hl=ar">العربيّة</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fa" href="https://bazel.build/basics/hermeticity?hl=fa">فارسی</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="hi" href="https://bazel.build/basics/hermeticity?hl=hi">हिंदी</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="bn" href="https://bazel.build/basics/hermeticity?hl=bn">বাংলা</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="th" href="https://bazel.build/basics/hermeticity?hl=th">ภาษาไทย</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh-cn" href="https://bazel.build/basics/hermeticity?hl=zh-cn">中文 – 简体</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh-tw" href="https://bazel.build/basics/hermeticity?hl=zh-tw">中文 – 繁體</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ja" href="https://bazel.build/basics/hermeticity?hl=ja">日本語</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ko" href="https://bazel.build/basics/hermeticity?hl=ko">한국어</a>
+    </li>
+    
+  </ul>
+</devsite-language-selector>
+
+
+          
+            <a class="devsite-header-link devsite-top-button button gc-analytics-event " href="//github.com/bazelbuild/bazel/" data-category="Site-Wide Custom Events" data-label="Site header link: GitHub">
+  GitHub
+</a>
+          
+
+        
+
+        
+          <devsite-user enable-profiles="" id="devsite-user" sign-in-url="https://bazel.build/_d/signin?continue=https%3A%2F%2Fbazel.build%2Fbasics%2Fhermeticity&amp;prompt=select_account" sign-out-url="https://bazel.build/_d/signout?continue=https%3A%2F%2Fbazel.build%2Fbasics%2Fhermeticity" url="https://bazel.build/_d/signout?continue=https%3A%2F%2Fbazel.build%2Fbasics%2Fhermeticity"><div class="ogb-wrapper ogb-si"><a href="https://bazel.build/_d/signin?continue=https%3A%2F%2Fbazel.build%2Fbasics%2Fhermeticity&amp;prompt=select_account" id="devsite-signin-btn" class="devsite-user-signin button devsite-top-button" track-type="globalNav" track-name="signIn" track-metadata-eventdetail="nav" track-metadata-position="nav">
+  Sign in
+</a></div></devsite-user><div class="devsite-user-callout-container"></div>
+        
+        
+        
+      </div>
+    </div>
+  </div>
+
+
+
+  <div class="devsite-collapsible-section
+    " style="transform: translate3d(0px, 0px, 0px);">
+    <div class="devsite-header-background">
+      
+        
+          <div class="devsite-product-id-row">
+            <div class="devsite-product-description-row">
+              
+                
+                <div class="devsite-product-id">
+                  
+                  
+                  
+                    <ul class="devsite-breadcrumb-list">
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+    
+    
+      
+        
+  <a href="https://bazel.build/start" class="devsite-breadcrumb-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Lower Header" data-value="1" track-type="globalNav" track-name="breadcrumb" track-metadata-position="1" track-metadata-eventdetail="">
+    
+          Get started with Bazel quickly
+        
+  </a>
+  
+      
+    
+  </li>
+  
+</ul>
+                </div>
+                
+              
+              
+            </div>
+            
+          </div>
+          
+        
+      
+      
+        <div class="devsite-doc-set-nav-row">
+          
+          
+            
+            
+  <devsite-tabs class="lower-tabs" connected="">
+
+    <nav class="devsite-tabs-wrapper" aria-label="Lower tabs">
+      
+        
+          
+        
+      
+        
+          
+        
+      
+        
+          
+        
+      
+    <tab>
+            
+    <a href="https://bazel.build/install" class="devsite-tabs-content gc-analytics-event " track-metadata-eventdetail="https://bazel.build/install" track-type="nav" track-metadata-position="nav - install" track-metadata-module="primary nav" data-category="Site-Wide Custom Events" data-label="Tab: Install" track-name="install">
+    Install
+  
+    </a>
+    
+  
+          </tab><tab>
+            
+    <a href="https://bazel.build/start/cpp" class="devsite-tabs-content gc-analytics-event " track-metadata-eventdetail="https://bazel.build/start/cpp" track-type="nav" track-metadata-position="nav - first build tutorials" track-metadata-module="primary nav" data-category="Site-Wide Custom Events" data-label="Tab: First build tutorials" track-name="first build tutorials">
+    First build tutorials
+  
+    </a>
+    
+  
+          </tab><tab class="devsite-active">
+            
+    <a href="https://bazel.build/concepts/build-ref" class="devsite-tabs-content gc-analytics-event " track-metadata-eventdetail="https://bazel.build/concepts/build-ref" track-type="nav" track-metadata-position="nav - concepts" track-metadata-module="primary nav" aria-label="Concepts, selected" data-category="Site-Wide Custom Events" data-label="Tab: Concepts" track-name="concepts">
+    Concepts
+  
+    </a>
+    
+  
+          </tab><tab class="devsite-overflow-tab" hidden=""><!---->
+          <button class="devsite-tabs-overflow-button devsite-icon devsite-icon-arrow-drop-down" aria-haspopup="menu" aria-expanded="false" id="tab-overflow-button-aa39" aria-label="More Options" aria-controls="tab-overflow-menu-cXdF"><!--?lit$544098770$-->More</button>
+          <div class="devsite-tabs-overflow-menu" hidden="" scrollbars="" role="menu" id="tab-overflow-menu-cXdF" aria-labelledby="tab-overflow-button-aa39">
+          </div>
+        </tab></nav>
+
+  <!----></devsite-tabs>
+
+          
+          
+        </div>
+      
+    </div>
+  </div>
+
+</div>
+
+
+
+  
+
+  
+</devsite-header>
+        <div class="devsite-book-nav-bg" fixed=""></div><devsite-book-nav scrollbars="" fixed="" style="--devsite-book-nav-max-height: 425px; top: 152px;">
+          
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="devsite-book-nav-filter">
+  <span class="filter-list-icon material-icons" aria-hidden="true"></span>
+  <input type="text" placeholder="Filter" aria-label="Type to filter" role="searchbox">
+  
+  <span class="filter-clear-button hidden" data-title="Clear filter" aria-label="Clear filter" role="button" tabindex="0"></span>
+</div>
+
+<nav class="devsite-book-nav devsite-nav nocontent" data-nosnippet="" aria-label="Side menu">
+  <div class="devsite-mobile-header">
+    <button type="button" id="devsite-close-nav" class="devsite-header-icon-button button-flat material-icons gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Close navigation" aria-label="Close navigation">
+    </button>
+    <div class="devsite-product-name-wrapper">
+
+  <a href="/" class="devsite-site-logo-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Site logo" track-type="globalNav" track-name="bazel" track-metadata-position="nav" track-metadata-eventdetail="nav">
+  
+  <picture>
+    
+    <img src="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel/images/lockup.svg" class="devsite-site-logo" alt="Bazel">
+  </picture>
+  
+</a>
+
+
+</div>
+  </div>
+
+  <div class="devsite-book-nav-wrapper">
+    <div class="devsite-mobile-nav-top">
+      
+        <ul class="devsite-nav-list">
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/about" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Tab: About Bazel" track-name="about bazel" track-type="globalNav" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      About Bazel
+   </span>
+    
+  
+  </a>
+  
+
+  
+              
+            </li>
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/start" class="devsite-nav-title gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Tab: Getting started" track-name="getting started" track-type="globalNav" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      Getting started
+   </span>
+    
+  
+  </a>
+  
+
+  
+              
+                <ul class="devsite-nav-responsive-tabs">
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/install" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Tab: Install" track-name="install" track-type="globalNav" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      Install
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/start/cpp" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Tab: First build tutorials" track-name="first build tutorials" track-type="globalNav" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      First build tutorials
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/concepts/build-ref" class="devsite-nav-title gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Tab: Concepts" track-name="concepts" track-type="globalNav" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="" menu="_book">
+      Concepts
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                </ul>
+              
+            </li>
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/docs" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Tab: User guide" track-name="user guide" track-type="globalNav" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      User guide
+   </span>
+    
+  
+  </a>
+  
+
+  
+              
+            </li>
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/reference" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Tab: Reference" track-name="reference" track-type="globalNav" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      Reference
+   </span>
+    
+  
+  </a>
+  
+
+  
+              
+            </li>
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/extending" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Tab: Extending" track-name="extending" track-type="globalNav" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      Extending
+   </span>
+    
+  
+  </a>
+  
+
+  
+              
+            </li>
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/community" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Tab: Community" track-name="community" track-type="globalNav" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      Community
+   </span>
+    
+  
+  </a>
+  
+
+  
+              
+            </li>
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/versions" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Tab: Versioned docs" track-name="versioned docs" track-type="globalNav" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      Versioned docs
+   </span>
+    
+  
+  </a>
+  
+
+  
+    <ul class="devsite-nav-responsive-tabs devsite-nav-has-menu
+               ">
+      
+<li class="devsite-nav-item">
+
+  
+  <span class="devsite-nav-title" tooltip="" data-category="Site-Wide Custom Events" data-label="Tab: Versioned docs" track-name="versioned docs">
+  
+    <span class="devsite-nav-text" tooltip="" menu="Versioned docs">
+      More
+   </span>
+    
+    <span class="devsite-nav-icon material-icons" data-icon="forward" menu="Versioned docs">
+    </span>
+    
+  
+  </span>
+  
+
+</li>
+
+    </ul>
+  
+              
+            </li>
+          
+          
+    
+    
+<li class="devsite-nav-item">
+
+  
+  <a href="//github.com/bazelbuild/bazel/" class="devsite-nav-title gc-analytics-event " data-category="Site-Wide Custom Events" data-label="Responsive Tab: GitHub" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      GitHub
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+  
+          
+        </ul>
+      
+    </div>
+    
+      <div class="devsite-mobile-nav-bottom">
+        
+          
+          <ul class="devsite-nav-list" menu="_book">
+            <li class="devsite-nav-item"><a href="/concepts/build-ref" class="devsite-nav-title"><span class="devsite-nav-text" tooltip="">Workspaces,<wbr> packages,<wbr> &amp; targets</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/concepts/labels" class="devsite-nav-title"><span class="devsite-nav-text" tooltip="">Labels</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/concepts/build-files" class="devsite-nav-title"><span class="devsite-nav-text" tooltip="">BUILD files</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/concepts/dependencies" class="devsite-nav-title"><span class="devsite-nav-text" tooltip="">Dependencies</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/concepts/visibility" class="devsite-nav-title"><span class="devsite-nav-text" tooltip="">Visibility</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/concepts/platforms" class="devsite-nav-title"><span class="devsite-nav-text" tooltip="">Platforms</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/basics/hermeticity" class="devsite-nav-title devsite-nav-active" aria-current="page"><span class="devsite-nav-text" tooltip="">Hermeticity</span></a></li>
+          </ul>
+        
+        
+          
+    
+  
+    
+  
+    
+  
+    
+  
+    
+  
+    
+  
+    
+      
+      <ul class="devsite-nav-list" menu="Versioned docs" aria-label="Side menu" hidden="">
+        
+          
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/versions/9.1.0" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Responsive Tab: 9.1.0" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      9.1.0
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/versions/9.0.0" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Responsive Tab: 9.0.0" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      9.0.0
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/versions/8.7.0" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Responsive Tab: 8.7.0" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      8.7.0
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/versions/8.6.0" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Responsive Tab: 8.6" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      8.6
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/versions/8.5.0" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Responsive Tab: 8.5" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      8.5
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/versions/8.4.0" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Responsive Tab: 8.4" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      8.4
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/versions/8.3.0" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Responsive Tab: 8.3" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      8.3
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/versions/8.2.0" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Responsive Tab: 8.2" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      8.2
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/versions/7.7.0" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Responsive Tab: 7.7" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      7.7
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/versions/6.6.0" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Responsive Tab: 6.6" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      6.6
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+        
+          
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Responsive Tab: Nightly" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      Nightly
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/versions" class="devsite-nav-title gc-analytics-event
+              
+              " data-category="Site-Wide Custom Events" data-label="Responsive Tab: More…" track-type="navMenu" track-metadata-eventdetail="globalMenu" track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip="">
+      More…
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+        
+      </ul>
+    
+  
+        
+        
+          
+    
+  
+    
+  
+    
+  
+        
+      </div>
+    
+  </div>
+</nav>
+          
+        </devsite-book-nav><div class="devsite-book-nav-blur" fixed="" style="--devsite-js-book-nav-scrollbar-width: 0px;"></div><button class="devsite-book-nav-toggle" aria-haspopup="menu" fixed="" aria-label="Hide side navigation" data-title="Hide side navigation" aria-expanded="true"><span class="material-icons devsite-book-nav-toggle-icon"></span></button>
+      
+      <section id="gc-wrapper" style="margin-top: 152px;">
+        <main role="main" id="main-content" class="devsite-main-content" has-book-nav="" has-sidebar="">
+          <div class="devsite-sidebar" fixed="" style="--devsite-js-sidebar-max-height: 377px; --devsite-js-sidebar-offset: 0; --devsite-js-sidebar-max-width: 144px;">
+            <div class="devsite-sidebar-content">
+                
+                <devsite-toc class="devsite-nav devsite-toc" role="navigation" aria-label="On this page" depth="2" scrollbars="" data-nosnippet="" visible=""><ul class="devsite-nav-list"><li class="devsite-nav-item devsite-nav-heading devsite-toc-toggle"><span class="devsite-nav-title" role="heading" aria-level="2"><span class="devsite-nav-text">On this page</span></span></li><li class="devsite-nav-item"><a href="#overview" class="devsite-nav-title gc-analytics-event devsite-nav-active" data-category="Site-Wide Custom Events" data-action="click" data-label="Right nav" data-value="0" track-type="navigation" track-name="rightNav" track-metadata-position="0" track-metadata-link-destination="#overview"><span class="devsite-nav-text" tooltip="">Overview</span></a></li><li class="devsite-nav-item"><a href="#benefits" class="devsite-nav-title gc-analytics-event" data-category="Site-Wide Custom Events" data-action="click" data-label="Right nav" data-value="1" track-type="navigation" track-name="rightNav" track-metadata-position="1" track-metadata-link-destination="#benefits"><span class="devsite-nav-text" tooltip="">Benefits</span></a></li><li class="devsite-nav-item"><a href="#nonhermeticity" class="devsite-nav-title gc-analytics-event" data-category="Site-Wide Custom Events" data-action="click" data-label="Right nav" data-value="2" track-type="navigation" track-name="rightNav" track-metadata-position="2" track-metadata-link-destination="#nonhermeticity"><span class="devsite-nav-text" tooltip="">Identifying non-hermeticity</span></a></li><li class="devsite-nav-item"><a href="#troubleshooting-nonhermeticity" class="devsite-nav-title gc-analytics-event" data-category="Site-Wide Custom Events" data-action="click" data-label="Right nav" data-value="3" track-type="navigation" track-name="rightNav" track-metadata-position="3" track-metadata-link-destination="#troubleshooting-nonhermeticity"><span class="devsite-nav-text" tooltip="">Troubleshooting non-hermetic builds</span></a></li><li class="devsite-nav-item"><a href="#hermeticity-bazel" class="devsite-nav-title gc-analytics-event" data-category="Site-Wide Custom Events" data-action="click" data-label="Right nav" data-value="4" track-type="navigation" track-name="rightNav" track-metadata-position="4" track-metadata-link-destination="#hermeticity-bazel"><span class="devsite-nav-text" tooltip="">Hermeticity with Bazel</span></a></li></ul></devsite-toc>
+                <devsite-recommendations-sidebar class="nocontent devsite-nav" data-nosnippet="">
+                </devsite-recommendations-sidebar>
+            </div>
+          </div>
+          <devsite-content>
+            
+              
+
+
+
+
+
+
+
+
+
+
+<article class="devsite-article">
+  
+  
+  
+    <div class="devsite-banner devsite-banner-announcement nocontent" data-nosnippet="">
+      <div class="devsite-banner-message">
+        <div class="devsite-banner-message-text">
+          The <a href="https://docs.google.com/presentation/d/14Yjm4gghabys0WrHgTNPlsaUmEWrgrSS_IEe2FJTzQ4/preview?slide=id.p">Build Foundation</a> started enrolling founding members! Join the <a href="https://groups.linuxfoundation.org/g/build-foundation-formation/message/5">mailing list</a>, read the <a href="https://cdn.platform.linuxfoundation.org/agreements/build-foundation.pdf">participation agreement</a>, and <a href="https://enrollment.lfx.linuxfoundation.org/?project=build-foundation">enroll</a>!
+        </div>
+      </div>
+    </div>
+  
+  
+  
+
+  <div class="devsite-article-meta nocontent" role="navigation" data-nosnippet="">
+    
+    
+    <ul class="devsite-breadcrumb-list" aria-label="Breadcrumb">
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+    
+    
+      
+        
+  <a href="https://bazel.build/" class="devsite-breadcrumb-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Breadcrumbs" data-value="1" track-type="globalNav" track-name="breadcrumb" track-metadata-position="1" track-metadata-eventdetail="Bazel">
+    
+          Bazel
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://bazel.build/start" class="devsite-breadcrumb-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Breadcrumbs" data-value="2" track-type="globalNav" track-name="breadcrumb" track-metadata-position="2" track-metadata-eventdetail="">
+    
+          Getting started
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://bazel.build/concepts/build-ref" class="devsite-breadcrumb-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Breadcrumbs" data-value="3" track-type="globalNav" track-name="breadcrumb" track-metadata-position="3" track-metadata-eventdetail="">
+    
+          Concepts
+        
+  </a>
+  
+      
+    
+  </li>
+  
+</ul>
+    
+      
+    <devsite-thumb-rating position="header"><div class="devsite-thumb-rating" role="form" aria-labelledby="devsite-thumb-label-header"><div class="devsite-thumb-label" id="devsite-thumb-label-header">Was this helpful?</div><div class="devsite-thumbs"><button class="devsite-thumb devsite-thumb-up" data-title="Helpful" aria-label="Helpful"><svg class="devsite-thumb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21,7h-6.31l0.95-4.57l0.03-0.32c0-0.41-0.17-0.79-0.44-1.06L14.17,0c0,0-7.09,6.85-7.17,7H2v13h16 c0.83,0,1.54-0.5,1.84-1.22l3.02-7.05C22.95,11.5,23,11.26,23,11V9C23,7.9,22.1,7,21,7z M7,18H4V9h3V18z M21,11l-3,7H9V8l4.34-4.34 L12,9h9V11z"></path></svg></button><button class="devsite-thumb devsite-thumb-down" data-title="Not helpful" aria-label="Not helpful"><svg class="devsite-thumb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3,17h6.31l-0.95,4.57l-0.03,0.32c0,0.41,0.17,0.79,0.44,1.06L9.83,24c0,0,7.09-6.85,7.17-7h5V4H6 C5.17,4,4.46,4.5,4.16,5.22l-3.02,7.05C1.05,12.5,1,12.74,1,13v2C1,16.1,1.9,17,3,17z M17,6h3v9h-3V6z M3,13l3-7h9v10l-4.34,4.34 L12,15H3V13z"></path></svg></button></div></div></devsite-thumb-rating>
+  
+    
+  </div>
+  
+    <devsite-feedback position="header" project-name="Bazel" product-id="5052038" bucket="https-bazel-build" context="" version="t-devsite-webserver-20260623-r00-rc00.478457497532598610" data-label="Send Feedback Button" track-type="feedback" track-name="sendFeedbackLink" track-metadata-position="header" class="nocontent" data-nosnippet="" project-icon="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel/images/touchicon-180.png">
+
+  <button>
+  
+    
+    Send feedback
+  
+  </button>
+</devsite-feedback>
+  
+    <h1 class="devsite-page-title" tabindex="-1">
+      Hermeticity<devsite-actions data-nosnippet=""><devsite-feature-tooltip ack-key="AckCollectionsBookmarkTooltipDismiss" analytics-category="Site-Wide Custom Events" analytics-action-show="Callout Profile displayed" analytics-action-close="Callout Profile dismissed" analytics-label="Create Collection Callout" class="devsite-page-bookmark-tooltip nocontent inline-block" data-nosnippet="" dismiss-button="true" id="devsite-collections-dropdown" dismiss-button-text="Dismiss" close-button-text="Got it" rendered="" current-step="0" style="--devsite-popout-offset-x: 32px;">
+
+    
+    
+      <devsite-bookmark class="show"><devsite-dropdown-list aria-label="Bookmark collections drop down" role="listbox" ellipsis="" checkboxes="" fetchingitems="true" writable="" additemtext="New Collection" rendered=""><span data-label="devsite-bookmark-direct-action" data-title="Save page" class="material-icons bookmark-icon bookmark-action" slot="toggle"></span><span data-label="devsite-bookmark-direct-action" data-title="Unsave page" hidden="" class="material-icons bookmark-icon unbookmark-action toggled" slot="toggle"></span></devsite-dropdown-list></devsite-bookmark>
+    
+
+    <span slot="popout-heading">
+      
+      Stay organized with collections
+    </span>
+    <span slot="popout-contents">
+      
+      Save and categorize content based on your preferences.<wbr>
+    </span>
+  </devsite-feature-tooltip><!----></devsite-actions>
+  
+      
+    </h1>
+  <div class="devsite-page-title-meta"></div>
+  
+
+  <devsite-toc class="devsite-nav devsite-toc-embedded" depth="2" devsite-toc-embedded="" visible=""><ul class="devsite-nav-list"><li class="devsite-nav-item devsite-nav-heading devsite-toc-toggle"><span class="devsite-nav-title" role="heading" aria-level="2"><span class="devsite-nav-text">On this page</span></span><button type="button" title="Expand/collapse contents" class="devsite-nav-show-all button-transparent material-icons"></button></li><li class="devsite-nav-item" visible=""><a href="#overview" class="devsite-nav-title gc-analytics-event" data-category="Site-Wide Custom Events" data-action="click" data-label="Embedded nav" data-value="0" track-type="navigation" track-name="embeddedNav" track-metadata-position="0" track-metadata-link-destination="#overview"><span class="devsite-nav-text" tooltip="">Overview</span></a></li><li class="devsite-nav-item" visible=""><a href="#benefits" class="devsite-nav-title gc-analytics-event" data-category="Site-Wide Custom Events" data-action="click" data-label="Embedded nav" data-value="1" track-type="navigation" track-name="embeddedNav" track-metadata-position="1" track-metadata-link-destination="#benefits"><span class="devsite-nav-text" tooltip="">Benefits</span></a></li><li class="devsite-nav-item" visible=""><a href="#nonhermeticity" class="devsite-nav-title gc-analytics-event" data-category="Site-Wide Custom Events" data-action="click" data-label="Embedded nav" data-value="2" track-type="navigation" track-name="embeddedNav" track-metadata-position="2" track-metadata-link-destination="#nonhermeticity"><span class="devsite-nav-text" tooltip="">Identifying non-hermeticity</span></a></li><li class="devsite-nav-item" visible=""><a href="#troubleshooting-nonhermeticity" class="devsite-nav-title gc-analytics-event" data-category="Site-Wide Custom Events" data-action="click" data-label="Embedded nav" data-value="3" track-type="navigation" track-name="embeddedNav" track-metadata-position="3" track-metadata-link-destination="#troubleshooting-nonhermeticity"><span class="devsite-nav-text" tooltip="">Troubleshooting non-hermetic builds</span></a></li><li class="devsite-nav-item" visible=""><a href="#hermeticity-bazel" class="devsite-nav-title gc-analytics-event" data-category="Site-Wide Custom Events" data-action="click" data-label="Embedded nav" data-value="4" track-type="navigation" track-name="embeddedNav" track-metadata-position="4" track-metadata-link-destination="#hermeticity-bazel"><span class="devsite-nav-text" tooltip="">Hermeticity with Bazel</span></a></li><li class="devsite-toc-toggle"><button type="button" class="button-flat devsite-nav-more-items material-icons" track-type="navigation" track-name="embeddedNavExpand" title="Expand/collapse contents"></button></li></ul></devsite-toc>
+  
+    
+  <div class="devsite-article-body clearfix
+  ">
+
+  
+    
+    
+
+
+<style>
+  .bazel-button-bar {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+</style>
+
+<div class="bazel-button-bar">
+  <div>
+    <a class="button button-with-icon" href="https://github.com/bazelbuild/bazel/issues/new?title=%5Bbazel.build%5D+Problem+with+/basics/hermeticity&amp;template=doc_issue.yml&amp;link=https%3A%2F%2Fbazel.build/basics/hermeticity" target="_blank">
+      Report an issue<span class="material-icons icon-after" aria-hidden="true" translate="no">open_in_new</span>
+    </a>
+    
+      
+        <a class="button button-with-icon" href="https://github.com/bazelbuild/bazel/tree/master/site/en/basics/hermeticity.md" target="_blank">
+      
+        View source<span class="material-icons icon-after" aria-hidden="true" translate="no">open_in_new</span>
+      </a>
+    
+    
+      
+    
+  </div>
+
+  <div>
+    
+      <strong>Nightly</strong>
+    
+
+<!-- The lines below are updated by //scripts/docs:gen_new_toc -->
+<!-- BEGIN_VERSION_INDICATOR -->
+·
+
+<a href="/versions/9.1.0/basics/hermeticity">
+9.1</a>
+
+·
+
+<a href="/versions/9.0.0/basics/hermeticity">
+9.0</a>
+
+·
+
+<a href="/versions/8.7.0/basics/hermeticity">
+8.7</a>
+
+·
+
+<a href="/versions/8.6.0/basics/hermeticity">
+8.6</a>
+
+·
+
+<a href="/versions/8.5.0/basics/hermeticity">
+8.5</a>
+
+·
+
+<a href="/versions/8.4.0/basics/hermeticity">
+8.4</a>
+
+·
+
+<a href="/versions/8.3.0/basics/hermeticity">
+8.3</a>
+
+·
+
+<a href="/versions/8.2.0/basics/hermeticity">
+8.2</a>
+
+·
+
+<a href="/versions/8.1.0/basics/hermeticity">
+8.1</a>
+
+<!-- END_VERSION_INDICATOR -->
+  </div>
+</div>
+
+<p>This page covers hermeticity, the benefits of using hermetic builds, and
+strategies for identifying non-hermetic behavior in your builds.</p>
+
+<h2 id="overview" data-text="Overview" tabindex="-1" role="presentation"><span class="devsite-heading" role="heading" aria-level="2">Overview</span><button type="button" class="devsite-heading-link button-flat material-icons" aria-label="Copy link to this section: Overview" data-title="Copy link to this section: Overview" data-id="overview"></button></h2>
+
+<p>When given the same input source code and product configuration, a hermetic
+build system always returns the same output by isolating the build from changes
+to the host system.</p>
+
+<p>In order to isolate the build, hermetic builds are insensitive to libraries and
+other software installed on the local or remote host machine. They depend on
+specific versions of build tools, such as compilers, and dependencies, such as
+libraries. This makes the build process self-contained as it doesn't rely on
+services external to the build environment.</p>
+
+<p>The two important aspects of hermeticity are:</p>
+
+<ul>
+<li><strong>Isolation</strong>: Hermetic build systems treat tools as source code. They
+download copies of tools and manage their storage and use inside managed file
+trees. This creates isolation between the host machine and local user,
+including installed versions of languages.</li>
+<li><strong>Source identity</strong>: Hermetic build systems try to ensure the sameness of
+inputs. Code repositories, such as Git, identify sets of code mutations with a
+unique hash code. Hermetic build systems use this hash to identify changes to
+the build's input.</li>
+</ul>
+
+<h2 id="benefits" data-text="Benefits" tabindex="-1">Benefits</h2>
+
+<p>The major benefits of hermetic builds are:</p>
+
+<ul>
+<li><strong>Speed</strong>: The output of an action can be cached, and the action need not be
+run again unless inputs change.</li>
+<li><strong>Parallel execution</strong>: For given input and output, the build system can
+construct a graph of all actions to calculate efficient and parallel
+execution. The build system loads the rules and calculates an action graph
+and hash inputs to look up in the cache.</li>
+<li><strong>Multiple builds</strong>: You can build multiple hermetic builds on the same
+machine, each build using different tools and versions.</li>
+<li><strong>Reproducibility</strong>: Hermetic builds are good for troubleshooting because you
+know the exact conditions that produced the build.</li>
+</ul>
+
+<h2 id="nonhermeticity" data-text="Identifying non-hermeticity" tabindex="-1">Identifying non-hermeticity</h2>
+
+<p>If you are preparing to switch to Bazel, migration is easier if you improve
+your existing builds' hermeticity in advance. Some common sources of
+non-hermeticity in builds are:</p>
+
+<ul>
+<li>Arbitrary processing in <code translate="no" dir="ltr">.mk</code> files</li>
+<li>Actions or tooling that create files non-deterministically, usually involving
+build IDs or timestamps</li>
+<li>System binaries that differ across hosts (such as <code translate="no" dir="ltr">/usr/bin</code> binaries, absolute
+paths, system C++ compilers for native C++ rules autoconfiguration)</li>
+<li>Writing to the source tree during the build. This prevents the same source
+tree from being used for another target. The first build writes to the source
+tree, fixing the source tree for target A. Then trying to build target B may
+fail.</li>
+</ul>
+
+<h2 id="troubleshooting-nonhermeticity" data-text="Troubleshooting non-hermetic builds" tabindex="-1">Troubleshooting non-hermetic builds</h2>
+
+<p>Starting with local execution, issues that affect local cache hits reveal
+non-hermetic actions.</p>
+
+<ul>
+<li>Ensure null sequential builds: If you run <code translate="no" dir="ltr">make</code> and get a successful build,
+running the build again should not rebuild any targets. If you run each build
+step twice or on different systems, compare a hash of the file contents and
+get results that differ, the build is not reproducible.</li>
+<li>Run steps to
+<a href="/remote/cache-remote#troubleshooting-cache-hits">debug local cache hits</a>
+from a variety of potential client machines to ensure that you catch any
+cases of client environment leaking into the actions.</li>
+<li>Execute a build within a docker container that contains nothing but the
+checked-out source tree and explicit list of host tools. Build breakages and
+error messages will catch implicit system dependencies.</li>
+<li>Discover and fix hermeticity problems using
+<a href="/remote/rules#overview">remote execution rules</a>.</li>
+<li>Enable strict <a href="/docs/sandboxing">sandboxing</a>
+at the per-action level, since actions in a build can be stateful and affect
+the build or the output.</li>
+<li><a href="/remote/workspace">Workspace rules</a>
+allow developers to add dependencies to external workspaces, but they are
+rich enough to allow arbitrary processing to happen in the process. You can
+get a log of some potentially non-hermetic actions in Bazel workspace rules by
+adding the flag
+<code translate="no" dir="ltr">--experimental_workspace_rules_log_file=<var translate="no">PATH</var></code> to
+your Bazel command.</li>
+</ul>
+<aside class="note"><strong>Note:</strong><span> Make your build fully hermetic when mixing remote and local execution,
+using Bazel’s “dynamic strategy” functionality. Running Bazel inside the remote
+Docker container will enable the build to execute the same in both environments.</span></aside>
+<h2 id="hermeticity-bazel" data-text="Hermeticity with Bazel" tabindex="-1">Hermeticity with Bazel</h2>
+
+<p>For more information about how other projects have had success using hermetic
+builds with Bazel, see these  BazelCon talks:</p>
+
+<ul>
+<li><a href="https://www.youtube.com/watch?v=t_3bckhV_YI" class="external">Building Real-time Systems with Bazel</a> (SpaceX)</li>
+<li><a href="https://www.youtube.com/watch?v=_bPyEbAyC0s" class="external">Bazel Remote Execution and Remote Caching</a> (Uber and TwoSigma)</li>
+<li><a href="https://www.youtube.com/watch?v=MyuJRUwT5LI" class="external">Faster Builds With Remote Execution and Caching</a> </li>
+<li><a href="https://www.youtube.com/watch?v=rQd9Zd1ONOw" class="external">Fusing Bazel: Faster Incremental Builds</a> </li>
+<li><a href="https://www.youtube.com/watch?v=C8wHmIln--g" class="external">Remote Execution vs Local Execution</a> </li>
+<li><a href="https://www.youtube.com/watch?v=u5m7V3ZRHLA" class="external">Improving the Usability of Remote Caching</a> (IBM)</li>
+<li><a href="https://www.youtube.com/watch?v=Gh4SJuYUoQI&amp;list=PLxNYxgaZ8Rsf-7g43Z8LyXct9ax6egdSj&amp;index=4&amp;t=0s" class="external">Building Self Driving Cars with Bazel</a> (BMW)</li>
+<li><a href="https://www.youtube.com/watch?v=fjfFe98LTm8&amp;list=PLxNYxgaZ8Rsf-7g43Z8LyXct9ax6egdSj&amp;index=29" class="external">Building Self Driving Cars with Bazel + Q&amp;A</a> (GM Cruise)</li>
+</ul>
+  
+
+  
+</div>
+
+  
+    
+    
+      
+    <devsite-thumb-rating position="footer"><div class="devsite-thumb-rating" role="form" aria-labelledby="devsite-thumb-label-footer"><div class="devsite-thumb-label" id="devsite-thumb-label-footer">Was this helpful?</div><div class="devsite-thumbs"><button class="devsite-thumb devsite-thumb-up" data-title="Helpful" aria-label="Helpful"><svg class="devsite-thumb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21,7h-6.31l0.95-4.57l0.03-0.32c0-0.41-0.17-0.79-0.44-1.06L14.17,0c0,0-7.09,6.85-7.17,7H2v13h16 c0.83,0,1.54-0.5,1.84-1.22l3.02-7.05C22.95,11.5,23,11.26,23,11V9C23,7.9,22.1,7,21,7z M7,18H4V9h3V18z M21,11l-3,7H9V8l4.34-4.34 L12,9h9V11z"></path></svg></button><button class="devsite-thumb devsite-thumb-down" data-title="Not helpful" aria-label="Not helpful"><svg class="devsite-thumb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3,17h6.31l-0.95,4.57l-0.03,0.32c0,0.41,0.17,0.79,0.44,1.06L9.83,24c0,0,7.09-6.85,7.17-7h5V4H6 C5.17,4,4.46,4.5,4.16,5.22l-3.02,7.05C1.05,12.5,1,12.74,1,13v2C1,16.1,1.9,17,3,17z M17,6h3v9h-3V6z M3,13l3-7h9v10l-4.34,4.34 L12,15H3V13z"></path></svg></button></div></div></devsite-thumb-rating>
+  
+       
+         <devsite-feedback position="footer" project-name="Bazel" product-id="5052038" bucket="https-bazel-build" context="" version="t-devsite-webserver-20260623-r00-rc00.478457497532598610" data-label="Send Feedback Button" track-type="feedback" track-name="sendFeedbackLink" track-metadata-position="footer" class="nocontent" data-nosnippet="" project-icon="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel/images/touchicon-180.png">
+
+  <button>
+  
+    
+    Send feedback
+  
+  </button>
+</devsite-feedback>
+       
+    
+    
+  
+
+  <div class="devsite-floating-action-buttons"></div></article>
+
+
+<devsite-content-footer class="nocontent" data-nosnippet="">
+  <p>Except as otherwise noted, the content of this page is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 License</a>, and code samples are licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache 2.0 License</a>. For details, see the <a href="https://developers.google.com/site-policies">Google Developers Site Policies</a>. Java is a registered trademark of Oracle and/or its affiliates.</p>
+  <p>Last updated 2026-05-07 UTC.</p>
+</devsite-content-footer>
+
+
+<devsite-notification>
+</devsite-notification>
+
+
+  
+<div class="devsite-content-data">
+  
+    
+    
+    <template class="devsite-thumb-rating-feedback">
+      <devsite-feedback position="thumb-rating" project-name="Bazel" product-id="5052038" bucket="https-bazel-build" context="" version="t-devsite-webserver-20260623-r00-rc00.478457497532598610" data-label="Send Feedback Button" track-type="feedback" track-name="sendFeedbackLink" track-metadata-position="thumb-rating" class="nocontent" data-nosnippet="" project-icon="https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel/images/touchicon-180.png">
+
+  <button>
+  
+    Need to tell us more?
+  
+  </button>
+</devsite-feedback>
+    </template>
+  
+  
+    <template class="devsite-content-data-template">
+      [[["Easy to understand","easyToUnderstand","thumb-up"],["Solved my problem","solvedMyProblem","thumb-up"],["Other","otherUp","thumb-up"]],[["Missing the information I need","missingTheInformationINeed","thumb-down"],["Too complicated / too many steps","tooComplicatedTooManySteps","thumb-down"],["Out of date","outOfDate","thumb-down"],["Samples / code issue","samplesCodeIssue","thumb-down"],["Other","otherDown","thumb-down"]],["Last updated 2026-05-07 UTC."],[],[]]
+    </template>
+  
+</div>
+            
+          </devsite-content>
+        </main>
+        <devsite-footer-promos class="devsite-footer">
+          
+            
+          
+        </devsite-footer-promos>
+        <devsite-footer-linkboxes class="devsite-footer">
+          
+            
+<nav class="devsite-footer-linkboxes nocontent" aria-label="Footer links" data-nosnippet="">
+  
+  <ul class="devsite-footer-linkboxes-list">
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">About</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/community/users" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 1)">
+            
+          
+            Who's using Bazel
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/contribute/" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 2)">
+            
+          
+            Contribute
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/contribute/contribution-policy" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 3)">
+            
+          
+            Governance model
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/release" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 4)">
+            
+          
+            Release model
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/brand" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 5)">
+            
+              
+              
+            
+          
+            Brand guidelines
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Stay connected</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//blog.bazel.build" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 1)">
+            
+          
+            Blog
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//github.com/bazelbuild/bazel" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 2)">
+            
+          
+            GitHub
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//twitter.com/bazelbuild" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 3)">
+            
+          
+            Twitter
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//youtube.com/user/googleOSPO" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 4)">
+            
+              
+              
+            
+          
+            YouTube
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Support</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/help" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 1)">
+            
+          
+            Support
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//github.com/bazelbuild/bazel/issues" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 2)">
+            
+          
+            Issue tracker
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//slack.bazel.build" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 3)">
+            
+          
+            Slack
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//stackoverflow.com/questions/tagged/bazel" class="devsite-footer-linkbox-link gc-analytics-event" data-category="Site-Wide Custom Events" data-label="Footer Link (index 4)">
+            
+              
+              
+            
+          
+            Stack Overflow
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+  </ul>
+  
+</nav>
+          
+        </devsite-footer-linkboxes>
+        <devsite-footer-utility class="devsite-footer">
+          
+            
+
+<div class="devsite-footer-utility nocontent" data-nosnippet="">
+  
+
+  
+  <nav class="devsite-footer-utility-links" aria-label="Utility links">
+    
+    <ul class="devsite-footer-utility-list">
+      
+      <li class="devsite-footer-utility-item
+                 ">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event" href="//policies.google.com/terms" data-category="Site-Wide Custom Events" data-label="Footer Terms link">
+          Terms
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 ">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event" href="//policies.google.com/privacy" data-category="Site-Wide Custom Events" data-label="Footer Privacy link">
+          Privacy
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 glue-cookie-notification-bar-control">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event" href="#" data-category="Site-Wide Custom Events" data-label="Footer Manage cookies link" aria-hidden="true">
+          Manage cookies
+        </a>
+        
+      </li>
+      
+    </ul>
+    
+    
+<devsite-language-selector aria-label="Select your language preference.">
+  <ul role="presentation">
+    
+    
+    <li role="presentation">
+      <a role="menuitem" lang="en" aria-current="true" href="https://bazel.build/basics/hermeticity">English</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es-419" href="https://bazel.build/basics/hermeticity?hl=es-419">Español – América Latina</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="id" href="https://bazel.build/basics/hermeticity?hl=id">Indonesia</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt-br" href="https://bazel.build/basics/hermeticity?hl=pt-br">Português – Brasil</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="vi" href="https://bazel.build/basics/hermeticity?hl=vi">Tiếng Việt</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="tr" href="https://bazel.build/basics/hermeticity?hl=tr">Türkçe</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="he" href="https://bazel.build/basics/hermeticity?hl=he">עברית</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ar" href="https://bazel.build/basics/hermeticity?hl=ar">العربيّة</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fa" href="https://bazel.build/basics/hermeticity?hl=fa">فارسی</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="hi" href="https://bazel.build/basics/hermeticity?hl=hi">हिंदी</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="bn" href="https://bazel.build/basics/hermeticity?hl=bn">বাংলা</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="th" href="https://bazel.build/basics/hermeticity?hl=th">ภาษาไทย</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh-cn" href="https://bazel.build/basics/hermeticity?hl=zh-cn">中文 – 简体</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh-tw" href="https://bazel.build/basics/hermeticity?hl=zh-tw">中文 – 繁體</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ja" href="https://bazel.build/basics/hermeticity?hl=ja">日本語</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ko" href="https://bazel.build/basics/hermeticity?hl=ko">한국어</a>
+    </li>
+    
+  </ul>
+</devsite-language-selector>
+
+  </nav>
+</div>
+          
+        </devsite-footer-utility>
+        <devsite-panel style="height: auto;">
+          
+        </devsite-panel>
+        
+      </section>
+      </section>
+    <devsite-sitemask></devsite-sitemask>
+    <devsite-snackbar style="bottom: 0px;"></devsite-snackbar>
+    
+    <devsite-heading-link></devsite-heading-link>
+    <devsite-analytics>
+      
+        <script type="application/json" analytics="">[{&#34;dimensions&#34;: {&#34;dimension2&#34;: false, &#34;dimension1&#34;: &#34;Signed out&#34;, &#34;dimension4&#34;: &#34;en&#34;, &#34;dimension5&#34;: false, &#34;dimension3&#34;: &#34;en&#34;}, &#34;gaid&#34;: &#34;UA-61082125-3&#34;, &#34;metrics&#34;: {}, &#34;purpose&#34;: 0}]</script>
+<script type="application/json" tag-management="">{&#34;at&#34;: &#34;True&#34;, &#34;ga4&#34;: [{&#34;id&#34;: &#34;G-GBZW986TQ3&#34;, &#34;purpose&#34;: 0}], &#34;ga4p&#34;: [{&#34;id&#34;: &#34;G-GBZW986TQ3&#34;, &#34;purpose&#34;: 0}], &#34;gtm&#34;: [], &#34;parameters&#34;: {&#34;internalUser&#34;: &#34;False&#34;, &#34;language&#34;: {&#34;machineTranslated&#34;: &#34;False&#34;, &#34;requested&#34;: &#34;en&#34;, &#34;served&#34;: &#34;en&#34;}, &#34;pageType&#34;: &#34;article&#34;, &#34;projectName&#34;: &#34;Bazel&#34;, &#34;signedIn&#34;: &#34;False&#34;, &#34;tenant&#34;: &#34;bazel&#34;, &#34;recommendations&#34;: {&#34;sourcePage&#34;: &#34;&#34;, &#34;sourceType&#34;: 0, &#34;sourceRank&#34;: 0, &#34;sourceIdenticalDescriptions&#34;: 0, &#34;sourceTitleWords&#34;: 0, &#34;sourceDescriptionWords&#34;: 0, &#34;experiment&#34;: &#34;&#34;}, &#34;experiment&#34;: {&#34;ids&#34;: &#34;&#34;}}}</script>
+      
+    </devsite-analytics>
+    
+      <devsite-badger></devsite-badger>
+    
+    
+    
+    
+<script nonce="">
+  
+  (function(d,e,v,s,i,t,E){d['GoogleDevelopersObject']=i;
+    t=e.createElement(v);t.async=1;t.src=s;E=e.getElementsByTagName(v)[0];
+    E.parentNode.insertBefore(t,E);})(window, document, 'script',
+    'https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel/js/app_loader.js', '[40,"en",null,"/js/devsite_app_module.js","https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60","https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel","https://bazel-dot-devsite-v2-prod-3p.appspot.com",null,null,["/_pwa/bazel/manifest.json","https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/images/video-placeholder.svg","https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel/images/favicon-prod.png","https://www.gstatic.com/devrel-devsite/prod/v11431966d26d9f049ef61662c2b798f1cdee8af320f1ba0f77a43eee64301d60/bazel/images/lockup.svg","https://fonts.googleapis.com/css?family=Roboto:300,400,400italic,500,500italic,700,700italic|Roboto+Mono:400,500,700&display=swap"],1,null,[1,6,8,12,14,17,21,25,50,52,63,70,75,76,80,87,91,92,93,97,98,100,101,102,103,104,105,107,108,109,110,112,113,116,117,118,120,122,124,125,126,127,129,130,131,132,133,134,135,136,138,140,141,147,148,149,151,152,156,157,158,159,161,163,164,168,169,170,179,180,182,183,186,191,193,196],"AIzaSyCNm9YxQumEXwGJgTDjxoxXK6m1F-9720Q","AIzaSyCc76DZePGtoyUjqKrLdsMGk_ry7sljLbY","bazel.build","AIzaSyB9bqgQ2t11WJsOX8qNsCQ6U-w91mmqF-I","AIzaSyAdYnStPdzjcJJtQ0mvIaeaMKj7_t6J_Fg",null,null,null,["CloudShell__cloud_code_overflow_menu","DevPro__enable_vertex_credit_card","MiscFeatureFlags__enable_explicit_template_dependencies","Profiles__enable_stripe_subscription_management","MiscFeatureFlags__enable_appearance_cookies","DevPro__enable_devsite_captcha","AIStudioInteractionsToggle__interactions_are_default","Cloud__enable_cloud_shell","DevPro__enable_enterprise","Profiles__enable_completequiz_endpoint","DevPro__enable_g1_integration","Search__enable_ai_search_summaries_for_all","Search__enable_suggestions_from_borg","Cloud__enable_cloud_dlp_service","SignIn__enable_refresh_access_tokens","DevPro__enable_g1_ineligible_redirect","Profiles__enable_developer_profile_pages_as_content","OnSwitch__enable","Cloud__enable_legacy_calculator_redirect","Profiles__require_profile_eligibility_for_signin","DevPro__enable_free_benefits","MiscFeatureFlags__gdp_dashboard_reskin_enabled","Profiles__enable_auto_apply_credits","DevPro__enable_code_assist","Search__enable_ai_eligibility_checks","DevPro__enable_google_payments","Cloud__enable_free_trial_server_call","DevPro__enable_credits_banner","Search__enable_dynamic_content_confidential_banner","Search__enable_page_map","Profiles__enable_dashboard_curated_recommendations","DevPro__enable_devpro_offers","Cloud__enable_cloud_shell_fte_user_flow","Cloud__fast_free_trial","Profiles__enable_purchase_prompts","Profiles__enable_developer_profile_benefits_ui_redesign","Experiments__reqs_query_experiments","Profiles__enable_completecodelab_endpoint","MiscFeatureFlags__fix_lower_breadcrumbs","EngEduTelemetry__enable_engedu_telemetry","DevPro__enable_google_one_card","DevPro__enable_developer_subscriptions","Profiles__enable_public_developer_profiles","SignIn__enable_auto_login_multi_account","MiscFeatureFlags__enable_explain_this_code","SignIn__enable_oauth_multi_account_support","Profiles__enable_page_saving","Profiles__enable_targeted_hero","MiscFeatureFlags__developers_footer_dark_image","Profiles__enable_join_program_group_endpoint","Profiles__enable_developer_profiles_callout","Profiles__enable_user_type","Profiles__enable_recognition_badges","MiscFeatureFlags__enable_view_transitions","CloudShell__cloud_shell_button","Cloud__cache_serialized_dynamic_content","DevPro__enable_google_payments_buyflow","DevPro__enable_nvidia_credits_card","Cloud__enable_llm_concierge_chat","Cloud__enable_cloudx_experiment_ids","MiscFeatureFlags__remove_cross_domain_tracking_params","MiscFeatureFlags__developers_footer_image","Profiles__enable_callout_notifications","TpcFeatures__proxy_prod_host","MiscFeatureFlags__enable_project_variables","DevPro__enable_cloud_innovators_plus","Profiles__enable_complete_playlist_endpoint","Profiles__enable_profile_collections","DevPro__remove_eu_tax_intake_form","Concierge__enable_pushui","MiscFeatureFlags__enable_firebase_utm","MiscFeatureFlags__enable_framebox_badge_methods","Profiles__enable_playlist_community_acl","DevPro__enable_embed_profile_creation","Profiles__enable_release_notes_notifications","Concierge__enable_remove_info_panel_tags","Analytics__enable_clearcut_logging","DevPro__enable_firebase_workspaces_card","Concierge__enable_actions_menu","Profiles__enable_awarding_url","BookNav__enable_tenant_cache_key","TpcFeatures__enable_unmirrored_page_left_nav","SignIn__enable_l1_signup_flow","MiscFeatureFlags__enable_variable_operator_index_yaml","MiscFeatureFlags__enable_variable_operator","Analytics__enable_devpro_interaction_logging"],null,null,"AIzaSyA58TaKli1DculwmAmbpzLVGuWc8eCQgQc","https://developerscontentserving-pa.googleapis.com","AIzaSyDWBU60w0P9hEkr29kkksYs8Z7gvZ8u_wc","https://developerscontentsearch-pa.googleapis.com",2,4,null,"https://developerprofiles-pa.googleapis.com",[40,"bazel","Bazel","bazel.build",null,"bazel-dot-devsite-v2-prod-3p.appspot.com",null,null,[null,1,null,null,null,null,null,null,null,null,null,[1],null,null,null,null,null,null,[1],null,null,null,null,[1,1,1],[1,1,null,1,1],null,null,null,null,null,[1]],null,[56,null,null,null,null,null,"/images/lockup.svg",null,null,null,null,1,null,null,null,null,null,null,null,null,null,1,null,null,null,null,[]],[],null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,[6,7,1,18,20,22,23,29,37,39,40,43],null,[[],[1,1]],[[["UA-61082125-3"],["UA-61082125-4"],null,null,["UA-61082125-5"],null,null,[["G-GBZW986TQ3"],null,null,[["G-GBZW986TQ3",1]]],[["UA-61082125-3",1]],null,[["UA-61082125-5",1]],null,1],[[5,8],[3,4],[2,2],[1,1],[4,5]]],null,4],null,null,1,1,"https://developerscontentinsights-pa.googleapis.com","AIzaSyC11xEGtFhkmSh_iF6l_itbxnFz2GrIBOg","AIzaSyAXJ10nRF73mmdSDINgkCNX5bbd2KPcWm8","https://developers.googleapis.com",null,null,"AIzaSyCjP0KOnHfv8mwe38sfzZJMOnqE3HvrD4A",null,null,"https://developers.googleapis.com"]')
+  
+</script>
+
+    <devsite-a11y-announce aria-live="assertive" aria-atomic="true"></devsite-a11y-announce>
+  
+</body>

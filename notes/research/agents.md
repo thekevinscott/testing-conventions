@@ -34,3 +34,18 @@ opine, recommend, predict, rank, or resolve. When in doubt, report rather than j
   acceptable and encouraged as the research grows.
 - State assumptions and scope at the top. When a question is too broad to research
   cleanly, say so and propose how to narrow it — but do not answer it for the user.
+
+## Capturing sources
+
+Every link gets captured under `sources/<slug>/`, where `<slug>` is the URL with
+its scheme and trailing slash stripped and every non `[A-Za-z0-9._-]` char replaced
+by `-` (one folder per exact URL). Each folder holds:
+
+- `raw.html` (or `raw.pdf`) — the raw fetched bytes.
+- `transcript.md` — the total transcript extracted from the raw bytes.
+- `summary.md` — the organized notes extracted from the transcript, written to the
+  sourcing/"organize, don't synthesize" rules above.
+
+Use the **`fetch-url` skill** (`.claude/fetch-url/`) to do this — it triggers
+whenever a URL is provided and runs fetch → transcript → summary, falling back to
+the `agent-browser` skill when a plain fetch is blocked.

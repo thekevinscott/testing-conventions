@@ -1,0 +1,52 @@
+name: Move major tag
+
+# Advance the moving major tag `@v0` to the just-released commit — the rolling-release
+# mechanism (#235). Consumers pin `…/testing-conventions.yml@v0` and `…/actions/detect@v0`,
+# and this force-moves `@v0` forward so every consumer tracks `main` on its next run.
+#
+# Gated on a successful publish: it triggers on the `Release` workflow *completing*, not on a
+# bare push. The reusable workflow runs the *published* npm binary (`npx testing-conventions`)
+# while its own file is frozen at the tag, so advancing `@v0` ahead of the publish would point
+# consumers at a new workflow calling a binary that isn't on npm yet — the `unrecognized
+# subcommand` strand a rename caused at 0.0.7 (#55). Publishing the binary is this repo's analog
+# of committing a built `dist/`: ship the runtime first, then move the tag. Replaces the inline
+# `advance-major-tag` job from #92.
+#
+# The forward-only logic lives in the repo-only, pytest-covered helper
+# `.github/scripts/move-major-tag/move_major_tag.py` (tested by `move-major-tag-tests.yml`),
+# not inline here — so this workflow only wires the trigger, the checkout, and the env.
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+# Least privilege: only the contents:write needed to push the tag.
+permissions:
+  contents: write
+
+# Newest release wins; a stale in-flight move is cancelled before it can race the tag push.
+concurrency:
+  group: move-major-tag
+  cancel-in-progress: true
+
+jobs:
+  move-v0:
+    # Only when the Release actually published, and only on main. A failed or cancelled release
+    # leaves `@v0` where it is — never advanced ahead of a publish that did not happen.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The released commit (a workflow_run checkout defaults to the default-branch HEAD),
+          # with full history + tags so the helper's forward-only ancestry check can resolve `v0`.
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - name: Advance @v0 (forward-only) to the released commit
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          TAG: v0
+        run: python3 .github/scripts/move-major-tag/move_major_tag.py

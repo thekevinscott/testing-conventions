@@ -1,0 +1,1 @@
+{"relevant": false, "reason": "Empirical study (preprint; ICLR 2024) showing LLMs cannot intrinsically self-correct reasoning without external feedback. It concerns LLM reasoning capability, not testing-strategy effectiveness, and offers no evidence on how to test LLM-authored code."}

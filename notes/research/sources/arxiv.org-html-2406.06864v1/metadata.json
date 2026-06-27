@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Empirical primary study evaluating a testing technique (metamorphic prompt testing) on LLM-generated code (GPT-4 on HumanEval), reporting measured detection rate, false-positive rate, and ablations."}

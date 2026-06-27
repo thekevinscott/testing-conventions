@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Large-scale empirical study (arXiv preprint) across 8 LLMs and 22,374 program variants using a mutation-driven framework, measuring how LLM-generated tests degrade under code evolution (SAC/SPC) — documents failure modes and regression-awareness limits of LLM-authored tests."}

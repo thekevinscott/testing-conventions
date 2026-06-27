@@ -1,0 +1,1 @@
+{"relevant": false, "reason": "Empirical measurement study (preprint with linked ACM journal DOI) of ChatGPT's non-determinism in code generation across three benchmarks. It measures output instability of LLM code generation, not the effectiveness of any testing technique — context for why testing LLM code is hard, not evidence comparing testing strategies."}

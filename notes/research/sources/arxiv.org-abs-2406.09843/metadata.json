@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Comprehensive empirical comparison of LLM vs rule-based mutant generation on 851 real Java bugs, measuring fault-detection effectiveness and cost (non-compilability, duplication, equivalent-mutant rates) — a general SE study of mutation testing effectiveness."}

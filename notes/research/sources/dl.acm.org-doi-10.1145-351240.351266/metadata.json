@@ -1,0 +1,1 @@
+{"relevant": false, "reason": "Tool/technique paper (Claessen & Hughes, QuickCheck, ICFP 2000) introducing property-based testing for Haskell; metadata-only partial capture (no abstract/body). It presents a technique, not a comparative empirical study of testing-strategy effectiveness on LLM-authored code, so it is not evidence of an optimal strategy."}

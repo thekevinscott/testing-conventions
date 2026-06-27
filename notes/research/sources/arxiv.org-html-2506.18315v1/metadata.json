@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Empirical primary study (arXiv preprint) comparing property-based-testing-driven validation against TDD/example-based feedback for LLM code generation across multiple benchmarks and models, with measured pass@1 and repair-success-rate outcomes."}

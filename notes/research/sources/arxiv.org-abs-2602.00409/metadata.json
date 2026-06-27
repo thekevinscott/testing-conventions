@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Empirical primary study (arXiv preprint, accepted MSR 2026) mining 1.2M+ commits across 2,168 TS/JS/Python repos, measuring that coding agents add mocks to tests more than non-agents — documents a test-double/mocking practice (a testing-strategy dimension) specific to LLM/agent-authored tests."}

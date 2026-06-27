@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Empirical SE study (arXiv preprint / institutional research report) contrasting LLM test generation on open-source LevelDB vs proprietary SAP HANA (held out of training), using mutation score and compiler-feedback repair loops; documents that LLM-generated tests prioritize compilability over semantic effectiveness on unseen code."}

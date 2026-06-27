@@ -1,0 +1,1 @@
+{"relevant": false, "reason": "Empirical study, but of prompting techniques for secure code GENERATION (GPT-3/3.5/4, 150 prompts), not of a testing technique or testing strategy for LLM-authored code; security measured via weakness counts, not a test gate — context, not evidence."}

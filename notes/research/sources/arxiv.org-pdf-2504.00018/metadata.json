@@ -1,0 +1,1 @@
+{"relevant": false, "reason": "Empirical security-evaluation artifact/case study of code-execution sandboxes for untrusted LLM code (measures sandbox containment, not testing-strategy fault-detection effectiveness, and sandboxing is not among the named SE techniques)."}

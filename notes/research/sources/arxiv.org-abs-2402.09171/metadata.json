@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Empirical industrial deployment study (Meta TestGen-LLM, FSE'24) measuring effectiveness of a filtered generate-and-test strategy for LLM-generated unit tests: build/pass/coverage-gain rates and engineer acceptance."}

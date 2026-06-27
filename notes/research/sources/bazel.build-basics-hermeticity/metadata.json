@@ -1,1 +1,1 @@
-{"relevant": false, "reason": "Vendor/official documentation (Bazel hermeticity concept page) with definitions and guidance but no study, data, or measurements."}
+{"relevant": true, "reason": "Vendor documentation (Bazel) defining hermeticity — build/test isolation and reproducibility (same inputs always yield the same output) — which supplies non-empirical conceptual context for the test-isolation and reproducibility dimension of a testing strategy; it is a definition/guidance page, not empirical evidence."}

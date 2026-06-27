@@ -1,1 +1,1 @@
-{"relevant": false, "reason": "Definitional glossary entry by Martin Fowler naming the five test-double kinds; no data or experiment — context, not empirical evidence."}
+{"relevant": true, "reason": "Definitional glossary entry by Martin Fowler naming the five test-double kinds (Dummy, Fake, Stub, Spy, Mock); purely definitional with no data or experiment. Included under broad-inclusion as non-empirical terminology context for discussing mocking in an LLM-code testing strategy, not as primary evidence."}

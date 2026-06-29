@@ -55,6 +55,13 @@ name: Testing Conventions (self-test)
 #   integration-lint-new-arms-trip   drives the published command for the rust and
 #                                    typescript arms and asserts the non-zero exit on
 #                                    a violation (a `uses:` call can't assert a fail).
+#
+# build_command (#243) — a hook so a native-binding project can run the suite-executing jobs:
+#   build-command-wired   asserts the reusable workflow runs a caller-provided `build_command`
+#                         before the suite — the red→green signal for the wiring itself.
+#                         (The behavioral `build-command-clean` `uses:` job lands with the
+#                         implementation: passing an input the called workflow doesn't yet
+#                         define is a whole-run startup failure, so it can't precede it.)
 
 on:
   pull_request:
@@ -538,3 +545,25 @@ jobs:
             exit 1
           fi
           echo "e2e verify is default-on (gates on e2e_attestation)"
+
+  # ---- #243: a build_command hook so native-binding projects can run the suite jobs ----
+
+  build-command-wired:
+    name: The reusable workflow runs a build_command before the suite
+    # Red→green wiring signal for #243: the reusable workflow must run a caller-provided
+    # `build_command` step before the suite-executing jobs (unit coverage / changed-line
+    # coverage / mutation) invoke the suite — otherwise a native-binding consumer's
+    # compiled module is never built and the suite fails at import. A static grep, so it
+    # tracks the workflow file regardless of what the published binary ships; the runtime
+    # behavior is covered by `build-command-clean`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: testing-conventions.yml must wire a build_command step
+        run: |
+          set -euo pipefail
+          if ! grep -q 'inputs.build_command' .github/workflows/testing-conventions.yml; then
+            echo "::error::the reusable workflow has no \`build_command\` step — a native-binding consumer's compiled module is never built before the suite runs (#243)"
+            exit 1
+          fi
+          echo "reusable workflow wires a build_command step"

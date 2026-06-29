@@ -84,6 +84,7 @@ The [reusable-workflow](../guide/ci) input defaults, all overridable:
 | `base`               | `origin/main`              | Base ref for the diff-scoped `--base` jobs (pull requests only). |
 | `run_e2e`            | `false`                    | Forces `e2e verify` on; it is already on when an attestation is committed. |
 | `packaging_artifact` | `''`                       | A named upload artifact to inspect; when empty, packaging still runs over a discoverable `dist/`. |
+| `build_command`      | `''` (empty)               | A shell command run before the suite-executing jobs (`unit coverage`, changed-line `coverage`, `unit mutation`) invoke the suite — e.g. `uv run maturin develop` to build a native module the suite imports. Empty ⇒ no build step; the static rules and `e2e verify` never run it. |
 | `version`            | latest                     | The `testing-conventions` version to run. |
 
 ## Automatic exemptions

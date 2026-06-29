@@ -339,8 +339,9 @@ fn one_line(replacement: &str) -> String {
 /// Stryker has no native git-diff mode, so the changed lines become `--mutate
 /// <file>:<line>-<line>` ranges (line granularity, matching cargo-mutants' `--in-diff`).
 /// Without it, the project's configured `mutate` set runs. `exempt` is the file-level
-/// exempt paths and `exempt_lines` the line-scoped ones (#226). Stryker must be
-/// installed / resolvable.
+/// exempt paths and `exempt_lines` the line-scoped ones (#226). The Stryker engine is
+/// bundled with the tool and resolved from its own install tree (#239,
+/// [`resolve_stryker_bin`]); the consumer supplies only the test runner (vitest).
 pub fn measure_typescript(
     root: &Path,
     exempt: &[String],
@@ -446,34 +447,90 @@ fn run_stryker(root: &Path, mutate: Option<&[String]>) -> Result<String> {
     // Drop any stale report so a previous run's output is never mistaken for this one's.
     let _ = std::fs::remove_file(&report_path);
 
-    let mut command = Command::new("npx");
+    // Resolve the Stryker engine *bundled with the tool* — never the consumer's cwd as a
+    // first resort (#239). The engine ships as our own `@stryker-mutator/core` dependency,
+    // co-located with the binary in the npm/npx tree, so the consumer installs nothing.
+    let stryker = resolve_stryker_bin(
+        std::env::var_os(STRYKER_BIN_ENV).map(PathBuf::from),
+        std::env::current_exe().ok().as_deref(),
+        root,
+    )
+    .ok_or_else(|| {
+        anyhow::anyhow!(
+            "could not locate the Stryker engine. It ships bundled with testing-conventions \
+             (`@stryker-mutator/core`) and is resolved from the tool's own install tree; the \
+             `{STRYKER_BIN_ENV}` env var overrides the path. (The project's own test runner, \
+             vitest, is still the consumer's and must be resolvable for Stryker to drive it.)"
+        )
+    })?;
+
+    let mut command = Command::new(&stryker);
     command
         .current_dir(root)
-        // `--no-install`, never `--yes`: run the project's own pinned Stryker (resolved
-        // via Node's parent-dir lookup) and refuse to download anything. With `--yes`, a
-        // missing `@stryker-mutator/core` would silently fetch the long-deprecated
-        // standalone `stryker` package (renamed in 2019) and crash with MODULE_NOT_FOUND;
-        // the TS arm must fail clean like the cosmic-ray / cargo-mutants arms, which run
-        // their binary directly.
-        .args(["--no-install", "stryker", "run", "--reporters", "json"]);
+        .args(["run", "--reporters", "json"]);
     if let Some(specs) = mutate {
         command.arg("--mutate").arg(specs.join(","));
     }
     let output = command
         .env("CI", "1")
         .output()
-        .context("running `npx --no-install stryker run`")?;
+        .with_context(|| format!("running the bundled Stryker (`{}`)", stryker.display()))?;
 
     std::fs::read_to_string(&report_path).map_err(|_| {
         anyhow::anyhow!(
-            "Stryker produced no report in `{}`. The rule runs the project's own Stryker via \
-             `npx --no-install` and never downloads it, so `@stryker-mutator/core` (plus a \
-             test-runner plugin) must be installed in the project. Stryker output:\n{}{}",
+            "Stryker produced no report in `{}` (engine: `{}`). The project's test runner \
+             (vitest) must be resolvable for Stryker to drive a suite. Stryker output:\n{}{}",
             root.display(),
+            stryker.display(),
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr),
         )
     })
+}
+
+/// Env var naming an explicit Stryker executable, overriding the bundled-engine lookup.
+/// The rule's normal path needs no env — the engine ships with testing-conventions and is
+/// resolved from the tool's own install tree ([`resolve_stryker_bin`]). This override is
+/// the test seam (a fake engine), and an escape hatch for an unusual install layout.
+const STRYKER_BIN_ENV: &str = "TESTING_CONVENTIONS_STRYKER_BIN";
+
+/// Resolve the Stryker executable, in order: (1) an explicit `env_override` (the
+/// [`STRYKER_BIN_ENV`] path, if it points at a file); (2) the engine **bundled with the
+/// tool**, found by walking up from the running binary (`exe`) to a
+/// `node_modules/.bin/stryker` — the npm/npx layout co-locates our `@stryker-mutator/core`
+/// dependency next to the binary, so this is the transparent, consumer-installs-nothing
+/// path; (3) the consumer project's own Stryker, walking up from `root`. Pure over the
+/// filesystem and the paths it's handed, so every branch is unit-testable without a real
+/// npm install. `None` only when no engine is reachable any of those ways.
+fn resolve_stryker_bin(
+    env_override: Option<PathBuf>,
+    exe: Option<&Path>,
+    root: &Path,
+) -> Option<PathBuf> {
+    if let Some(path) = env_override {
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    if let Some(found) = exe.and_then(|exe| find_up_node_modules_bin(exe, "stryker")) {
+        return Some(found);
+    }
+    find_up_node_modules_bin(root, "stryker")
+}
+
+/// Walk up from `start` through its ancestors looking for `<dir>/node_modules/.bin/<bin>`,
+/// returning the first hit — the parent-dir lookup Node itself does to resolve an
+/// installed `.bin` shim.
+fn find_up_node_modules_bin(start: &Path, bin: &str) -> Option<PathBuf> {
+    let mut dir = Some(start);
+    while let Some(current) = dir {
+        let candidate = current.join("node_modules").join(".bin").join(bin);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        dir = current.parent();
+    }
+    None
 }
 
 /// Removes the Stryker json report on drop, pruning the `mutation/` and `reports/`
@@ -959,6 +1016,77 @@ mod tests {
         let survivors = stryker_survivors(&report);
         let exempt = vec!["src/index.ts".to_string()];
         assert!(evaluate(survivors, &exempt).is_empty());
+    }
+
+    /// A unique throwaway dir under the temp root; the caller removes it. `with_stryker`
+    /// places the engine at `<dir>/node_modules/.bin/stryker` (the hoisted top-level
+    /// location). Independent dirs (not nested) so a walk-up from one never reaches
+    /// another's engine.
+    fn scratch_dir(slug: &str, with_stryker: bool) -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "tc-resolve-stryker-{}-{}-{}",
+            slug,
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed),
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        if with_stryker {
+            let bin = dir.join("node_modules").join(".bin");
+            std::fs::create_dir_all(&bin).unwrap();
+            std::fs::write(bin.join("stryker"), b"#!/bin/sh\n").unwrap();
+        }
+        dir
+    }
+
+    #[test]
+    fn resolve_stryker_prefers_a_valid_env_override() {
+        let engine = scratch_dir("env-engine", true);
+        let empty = scratch_dir("env-empty", false);
+        let bin = engine.join("node_modules").join(".bin").join("stryker");
+        // A real override file wins outright (the project tree has no engine of its own).
+        assert_eq!(
+            resolve_stryker_bin(Some(bin.clone()), None, &empty),
+            Some(bin)
+        );
+        // A non-existent override is ignored, falling through to the other lookups.
+        assert_eq!(
+            resolve_stryker_bin(Some(empty.join("nope")), None, &empty),
+            None
+        );
+        let _ = std::fs::remove_dir_all(&engine);
+        let _ = std::fs::remove_dir_all(&empty);
+    }
+
+    #[test]
+    fn resolve_stryker_finds_the_engine_bundled_next_to_the_binary() {
+        // The npm/npx layout: the binary lives deep under `…/node_modules/@tc/<triple>/…`
+        // and the bundled engine is the hoisted top-level `node_modules/.bin/stryker`. No
+        // env, and a `root` with nothing — resolution still finds it via the exe walk-up.
+        let root = scratch_dir("exe", true);
+        let exe_dir = root.join("node_modules/@tc/triple/bin");
+        std::fs::create_dir_all(&exe_dir).unwrap();
+        let exe = exe_dir.join("testing-conventions");
+        let empty = scratch_dir("exe-empty", false);
+        let found = resolve_stryker_bin(None, Some(&exe), &empty);
+        assert_eq!(found, Some(root.join("node_modules/.bin/stryker")));
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&empty);
+    }
+
+    #[test]
+    fn resolve_stryker_falls_back_to_the_project_tree() {
+        // No env and no engine near the binary, but the consumer project pins its own.
+        let root = scratch_dir("proj", true);
+        assert_eq!(
+            resolve_stryker_bin(None, None, &root),
+            Some(root.join("node_modules/.bin/stryker"))
+        );
+        // With nothing reachable at all, resolution gives up.
+        let empty = scratch_dir("proj-empty", false);
+        assert_eq!(resolve_stryker_bin(None, None, &empty), None);
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&empty);
     }
 
     #[test]

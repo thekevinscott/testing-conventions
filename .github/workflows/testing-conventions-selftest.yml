@@ -59,9 +59,9 @@ name: Testing Conventions (self-test)
 # build_command (#243) — a hook so a native-binding project can run the suite-executing jobs:
 #   build-command-wired   asserts the reusable workflow runs a caller-provided `build_command`
 #                         before the suite — the red→green signal for the wiring itself.
-#                         (The behavioral `build-command-clean` `uses:` job lands with the
-#                         implementation: passing an input the called workflow doesn't yet
-#                         define is a whole-run startup failure, so it can't precede it.)
+#   build-command-clean   calls the reusable workflow over a fixture whose `widget.py` imports
+#                         a module produced only by the `build_command` (a maturin/napi stand-in),
+#                         so the coverage / mutation jobs pass only because the build ran first.
 
 on:
   pull_request:
@@ -567,3 +567,22 @@ jobs:
             exit 1
           fi
           echo "reusable workflow wires a build_command step"
+
+  build-command-clean:
+    name: A build_command makes the suite-executing jobs find a built module
+    # The runtime half of #243: the `build-command` fixture's `widget.py` imports
+    # `generated`, a module absent from the source tree — it stands in for a maturin/napi
+    # native module and is produced only by the `build_command`. So the coverage,
+    # changed-line coverage, and mutation jobs pass iff the workflow runs `build_command`
+    # before the suite (without it, pytest fails at import). The static colocated-test /
+    # lint jobs run without the build and never see the generated module, so they pass
+    # as-is. `base: origin/main` exercises the diff-scoped jobs over this PR-added fixture
+    # (its tests pin exact values, so every changed-line mutant is killed). The whole
+    # `uses:` call passes only because the build step is wired into the suite jobs (#243).
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["python"]'
+      path: .github/selftest/build-command
+      config: .github/selftest/build-command/testing-conventions.toml
+      build_command: cp .github/selftest/build-command/generated.py.tmpl .github/selftest/build-command/generated.py
+      base: origin/main

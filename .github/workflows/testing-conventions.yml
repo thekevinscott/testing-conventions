@@ -73,6 +73,16 @@ name: Testing Conventions
 # `languages` is a JSON array (when set) so the matrix can fan out over it directly
 # (reusable-workflow inputs can't be native lists); empty — the default — means
 # auto-detect every supported language present under `path` (#185).
+#
+# `build_command` (#243) is an optional shell step run after toolchain + dependency setup
+# and before the suite, in the same job, for the suite-executing jobs only — `unit coverage`
+# (whole-tree), `unit coverage --base` (changed-line), and `unit mutation`. A native-binding
+# project whose unit suite imports a compiled module (a maturin/PyO3 extension, a napi-rs
+# addon) needs it built first, or the suite fails at import before the gate runs; set
+# `build_command: "uv run maturin develop"` / `"pnpm build"`. Empty (the default) ⇒ no build
+# step, so pure-language callers are unaffected. The static rules (colocated-test, unit lint,
+# integration lint) only parse source, and `e2e verify` checks the attestation rather than
+# running the e2e suite, so none of those jobs build or import anything.
 
 on:
   workflow_call:
@@ -103,6 +113,10 @@ on:
         default: false
       packaging_artifact:
         description: 'Name of an uploaded build artifact (actions/upload-artifact) holding the built distributions (.whl/.tar.gz/.tgz/.crate) to check. When set, the packaging job downloads and inspects it. When empty (default), packaging still runs over a conventional dist/ found in the checkout, and is skipped only when no dist/ exists either (#186).'
+        type: string
+        default: ''
+      build_command:
+        description: 'Optional shell command run after toolchain + dependency setup and before the suite, in the same job, for the suite-executing jobs only (unit coverage, changed-line coverage, unit mutation). Use it to build a native module the suite imports — e.g. "uv run maturin develop" (Python/maturin) or "pnpm build" (TypeScript/napi). Empty (default) ⇒ no build step, so pure-language callers are unaffected. The static rules (colocated-test, unit lint, integration lint) only parse source and the e2e-verify job never runs the suite, so none of them run it (#243).'
         type: string
         default: ''
 
@@ -280,6 +294,18 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
+      # Build a caller-supplied native module before the suite imports it (#243): a
+      # PyO3/maturin or napi-rs addon the unit suite `import`s must be compiled here, in
+      # this job, or coverage fails at import. Pure-language callers leave `build_command`
+      # empty and skip this. Passed via env (not interpolated into `run`) and `eval`-ed so
+      # a full shell string — `uv run maturin develop`, `pnpm build`, `a && b` — works.
+      - if: inputs.build_command != ''
+        name: Run the build step (build_command)
+        env:
+          BUILD_COMMAND: ${{ inputs.build_command }}
+        run: |
+          set -euo pipefail
+          eval "$BUILD_COMMAND"
       - name: Check unit-test coverage
         env:
           LANGUAGE: ${{ matrix.language }}
@@ -334,6 +360,15 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
+      # Build a caller-supplied native module before the suite imports it (#243), as in the
+      # whole-tree coverage job; empty `build_command` ⇒ skipped.
+      - if: inputs.build_command != ''
+        name: Run the build step (build_command)
+        env:
+          BUILD_COMMAND: ${{ inputs.build_command }}
+        run: |
+          set -euo pipefail
+          eval "$BUILD_COMMAND"
       - name: Check changed-line coverage vs ${{ inputs.base }}
         env:
           LANGUAGE: ${{ matrix.language }}
@@ -400,6 +435,16 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-mutants
+      # Build a caller-supplied native module before the mutation engine runs the suite
+      # (#243): cosmic-ray / Stryker / cargo-mutants import the same module, so it must be
+      # compiled here too; empty `build_command` ⇒ skipped.
+      - if: inputs.build_command != ''
+        name: Run the build step (build_command)
+        env:
+          BUILD_COMMAND: ${{ inputs.build_command }}
+        run: |
+          set -euo pipefail
+          eval "$BUILD_COMMAND"
       - name: Check mutation on the lines changed vs ${{ inputs.base }}
         env:
           LANGUAGE: ${{ matrix.language }}

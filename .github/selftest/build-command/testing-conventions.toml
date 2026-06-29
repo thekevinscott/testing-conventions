@@ -1,0 +1,9 @@
+# Native-binding self-test fixture (#243): `widget.py` imports `generated`, a
+# module that does not exist in the source tree — it is produced by the
+# `build_command` the suite-executing jobs run before pytest, standing in for a
+# maturin/napi native module. Without that build step the suite fails at import
+# (the gap #243 fixes); with it, `shift` is fully exercised and clears the floor.
+# branch = false: the fixture has no branches — it exercises the build hook, not
+# branch coverage.
+[python]
+coverage = { branch = false, fail_under = 100 }

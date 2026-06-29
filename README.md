@@ -215,6 +215,12 @@ agent can't satisfy without real assertions.
 - **TypeScript:** [Stryker](https://stryker-mutator.io/) over the unit suite.
 - **Rust:** [cargo-mutants](https://github.com/sourcefrog/cargo-mutants) over the unit suite.
 
+For Python and TypeScript the engine ships **bundled** with `testing-conventions` and is resolved from
+the tool's own install tree — you install no mutation engine, only your test runner (`vitest` /
+`pytest`) ([#239](https://github.com/thekevinscott/testing-conventions/issues/239)). Rust's
+`cargo-mutants` is a standalone binary that can't be bundled the same way, so it's installed separately
+for now ([#242](https://github.com/thekevinscott/testing-conventions/issues/242)).
+
 The gate is not a score percentage — equivalent mutants (mutations no test can ever
 kill) make 100% unreachable, and a score isn't comparable across engines. Instead
 it's binary and diff-scoped: **no unexplained surviving mutant on changed lines**,

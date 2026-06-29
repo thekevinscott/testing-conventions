@@ -15,14 +15,18 @@ Each entry has five sections, in order:
 
 ### Summary
 
-Hardens `unit mutation --language typescript` so it never downloads a mutation engine. The TypeScript
-arm shelled out to `npx --yes stryker run`; with `--yes`, a project missing `@stryker-mutator/core`
-would silently fetch the long-deprecated standalone `stryker` package (last released as `0.x` in 2019,
-before the rename to `@stryker-mutator/core`) and crash with `MODULE_NOT_FOUND`. It now runs
-`npx --no-install`, resolving only the project's own pinned Stryker via Node's parent-dir lookup and
-failing fast with a clear error when it's absent — parity with the cosmic-ray and cargo-mutants arms,
-which invoke their binary directly. `measure_typescript`'s signature is unchanged; only its runtime
-behavior changes (see **Behavior changes without code changes**).
+Makes `unit mutation --language typescript` resolve the **bundled** Stryker engine from the tool's
+own install tree, so a consumer installs no engine (#239). The TS arm ran `npx --no-install stryker`
+with the working directory set to the *consumer's* project, so it searched the consumer's
+`node_modules` for an engine that actually ships bundled with testing-conventions
+(`@stryker-mutator/core`, co-located with the binary in the npm/npx tree) — and hard-errored
+(`npx canceled … ["stryker@1.0.1"]`) demanding the consumer install Stryker. It now resolves the engine
+from the binary's own tree (walking up from `current_exe()` to the co-located
+`node_modules/.bin/stryker`), falling back to the project's own Stryker if it pins one;
+`TESTING_CONVENTIONS_STRYKER_BIN` overrides the path. The consumer supplies only their test runner
+(`vitest`). `measure_typescript`'s signature is unchanged; only its runtime resolution changes (see
+**Behavior changes without code changes**). (Rust can't bundle a binary engine this way — tracked
+separately in #242.)
 
 Makes every `[<language>].coverage` table a **partial override** (#216, parent #196): missing fields
 fall back to the language's default floor instead of erroring, so a consumer sets only what they want
@@ -603,11 +607,11 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
-`unit mutation --language typescript` no longer auto-installs Stryker. It runs `npx --no-install`,
-so a project without `@stryker-mutator/core` (and a test-runner plugin) now fails fast with a clear
-`Stryker produced no report … must be installed` error instead of silently downloading and running
-the deprecated `stryker` 0.x package. Install the engine before running the rule (the reusable
-workflow already does). No API or config change.
+`unit mutation --language typescript` now resolves the Stryker engine **bundled with
+testing-conventions** from the tool's own install tree, instead of searching the consumer's project
+(#239). A project that previously had to install `@stryker-mutator/core` itself no longer does — the
+engine ships with the tool; only the test runner (`vitest`) is the consumer's. `TESTING_CONVENTIONS_STRYKER_BIN`
+overrides the engine path. No API or config change.
 
 `unit coverage --language typescript` likewise no longer auto-installs vitest — it runs
 `npx --no-install vitest` and fails fast with a clear "must be installed" error when `vitest` /

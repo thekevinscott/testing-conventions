@@ -174,13 +174,17 @@ Each language wraps its standard engine and collects every **surviving** mutant 
 ran but no test failed on:
 
 - **Rust** runs [`cargo mutants`](https://github.com/sourcefrog/cargo-mutants) and reads its
-  `outcomes.json` (`MissedMutant` outcomes). `cargo-mutants` must be installed.
+  `outcomes.json` (`MissedMutant` outcomes). cargo-mutants is installed separately (`cargo install
+  cargo-mutants`) — a binary engine can't be bundled like the others; tracked in
+  [#242](https://github.com/thekevinscott/testing-conventions/issues/242).
 - **TypeScript** runs [Stryker](https://stryker-mutator.io/) and reads its `mutation.json`
-  report (`Survived` and `NoCoverage` mutants). Stryker (`@stryker-mutator/core` and a
-  test-runner plugin) must be installed/resolvable.
+  report (`Survived` and `NoCoverage` mutants). The engine (`@stryker-mutator/core` + its vitest
+  runner) ships **bundled** with testing-conventions and is resolved from the tool's own install tree
+  (`TESTING_CONVENTIONS_STRYKER_BIN` overrides); only the test runner (`vitest`) is yours. ([#239](https://github.com/thekevinscott/testing-conventions/issues/239))
 - **Python** runs [cosmic-ray](https://github.com/sixty-north/cosmic-ray) (driving pytest) and
   reads its session via `cosmic-ray dump` (`survived` outcomes). A baseline check guards against
-  a broken suite reporting a false pass. cosmic-ray + pytest must be installed.
+  a broken suite reporting a false pass. cosmic-ray ships **bundled** in the wheel and resolves from
+  the tool's own environment; you supply only pytest. ([#239](https://github.com/thekevinscott/testing-conventions/issues/239))
 
 A mutant with a `mutation` [exemption](#exemptions) on its file is dropped (an equivalent or
 deliberately-defensive mutation, with a reason) — or, with a [`lines`](#line-scoped-exemptions)

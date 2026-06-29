@@ -368,19 +368,20 @@ jobs:
         with:
           # `--base` diffs `<base>...HEAD`, so the base ref must be reachable.
           fetch-depth: 0
-      # Like coverage, `unit mutation` shells out to the language's mutation engine, so
-      # its toolchain — and the project's own test deps — must be present. Set up per
-      # language. #56 (config-driven `check`) will eventually drive this from config.
+      # `unit mutation` runs the language's engine — but the engine ships **bundled with
+      # testing-conventions** (#239), so a consumer installs only their own test runner,
+      # never the engine. Each arm runs the distribution that carries its engine. #56
+      # (config-driven `check`) will eventually drive this from config.
+      #
+      # Python: the engine (cosmic-ray) ships bundled in the testing-conventions wheel, so
+      # `uvx` runs the wheel — which brings cosmic-ray — with the consumer's own test
+      # runner (pytest) added via `--with`. The engine is never named or installed
+      # separately; only `uv` need be present.
       - if: matrix.language == 'python'
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - if: matrix.language == 'python'
-        name: Install mutation toolchain (cosmic-ray + pytest)
-        run: python -m pip install --quiet cosmic-ray pytest
-      # TypeScript drives Stryker, which runs the project's test runner — install the
-      # project's deps (which must include @stryker-mutator/core and a runner plugin)
-      # with pnpm, the TS convention.
+        uses: astral-sh/setup-uv@v6
+      # TypeScript: Stryker is bundled with testing-conventions and resolved by the CLI
+      # from its own install tree (#239), so install only the project's deps (its test
+      # runner, e.g. vitest) with pnpm, the TS convention — not the engine.
       - if: matrix.language == 'typescript'
         uses: pnpm/action-setup@v5
         with:
@@ -392,7 +393,9 @@ jobs:
       - if: matrix.language == 'typescript'
         name: Install project dependencies (pnpm)
         run: pnpm install --frozen-lockfile
-      # Rust drives cargo-mutants over the crate.
+      # Rust drives cargo-mutants. Bundling a *binary* engine the way npm/PyPI bundle a
+      # package isn't possible, so transparent Rust provisioning is tracked separately
+      # (#242); for now the engine is installed here.
       - if: matrix.language == 'rust'
         uses: dtolnay/rust-toolchain@stable
       - if: matrix.language == 'rust'
@@ -400,7 +403,19 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-mutants
-      - name: Check mutation on the lines changed vs ${{ inputs.base }}
+      # Python runs the wheel via uvx (which carries the bundled cosmic-ray) with pytest
+      # added; TypeScript and Rust run the npm build via npx (which carries the bundled
+      # Stryker for TS).
+      - if: matrix.language == 'python'
+        name: Check mutation on the lines changed vs ${{ inputs.base }}
+        env:
+          VERSION: ${{ inputs.version }}
+          SCAN_PATH: ${{ inputs.path }}
+          CONFIG: ${{ inputs.config }}
+          BASE: ${{ inputs.base }}
+        run: uvx --with pytest "testing-conventions${VERSION:+==$VERSION}" unit mutation --language python --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
+      - if: matrix.language != 'python'
+        name: Check mutation on the lines changed vs ${{ inputs.base }}
         env:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}

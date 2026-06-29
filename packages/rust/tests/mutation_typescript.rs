@@ -55,11 +55,12 @@ fn survivors_are_reported() {
 }
 
 #[test]
-fn a_missing_toolchain_fails_clean_without_downloading() {
-    // No `node_modules`: the TS arm must surface a clear error via `npx --no-install`
-    // and never silently fetch the long-deprecated standalone `stryker` package (renamed
-    // to `@stryker-mutator/core` in 2019). Parity with the cosmic-ray / cargo-mutants
-    // arms, which invoke the binary directly and fail clean when it's absent.
+fn errors_clearly_when_no_engine_is_reachable() {
+    // #239: the engine ships bundled with the tool and is resolved from its own install
+    // tree. Here nothing is reachable — no bundle near this bare test binary, none in the
+    // project, and no `TESTING_CONVENTIONS_STRYKER_BIN` override — so the rule errors
+    // clearly (naming the bundled-engine resolution) and downloads nothing. (In production
+    // the bundle is always found via the tool's tree; this is the give-up path.)
     let project = Staged::typescript_without_toolchain("killed");
     let err = measure_typescript(
         project.path(),
@@ -67,11 +68,11 @@ fn a_missing_toolchain_fails_clean_without_downloading() {
         &std::collections::BTreeMap::new(),
         None,
     )
-    .expect_err("a project with no Stryker installed must error, not download one");
+    .expect_err("no reachable engine must error, never download one");
     let msg = format!("{err:#}");
     assert!(
-        msg.contains("npx --no-install"),
-        "the error should name the no-download invocation; got: {msg}"
+        msg.contains("could not locate the Stryker engine") && msg.contains("bundled"),
+        "the error should explain the engine is bundled and resolved from the tool's tree; got: {msg}"
     );
 }
 

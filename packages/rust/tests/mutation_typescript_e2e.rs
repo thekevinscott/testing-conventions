@@ -52,19 +52,20 @@ fn unit_mutation_output(project: &Path) -> (i32, String) {
 }
 
 #[test]
-fn missing_toolchain_fails_clean_without_downloading() {
-    // End-to-end: with no Stryker installed, the binary must fail (exit 1) with a clear
-    // error and never download the deprecated `stryker` package — it runs only the
-    // project's own pinned `@stryker-mutator/core` via `npx --no-install`.
+fn no_reachable_engine_fails_clean_without_downloading() {
+    // End-to-end (#239): when no engine is reachable — none bundled near this binary,
+    // none in the project, no override — the binary fails (exit 1) with a clear error that
+    // names the bundled-engine resolution, and downloads nothing. In production the engine
+    // ships bundled and is found via the tool's own tree; this exercises the give-up path.
     let project = Staged::typescript_without_toolchain("survivors");
     let (code, stderr) = unit_mutation_output(project.path());
     assert_eq!(
         code, 1,
-        "a missing toolchain should fail the run; stderr: {stderr}"
+        "no reachable engine should fail the run; stderr: {stderr}"
     );
     assert!(
-        stderr.contains("npx --no-install"),
-        "the error should name the no-download invocation; got: {stderr}"
+        stderr.contains("could not locate the Stryker engine") && stderr.contains("bundled"),
+        "the error should explain the engine is bundled and resolved from the tool's tree; got: {stderr}"
     );
 }
 

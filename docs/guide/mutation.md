@@ -22,17 +22,23 @@ testing-conventions unit mutation --language python src/       # Python
 The rule wraps each language's standard engine, collects every **surviving** mutant (one the suite
 ran but no test failed on), and exits non-zero if any survive.
 
-| Language | Engine package | Bundled with `testing-conventions`? |
+| Language | Engine package | How it's provided |
 | --- | --- | --- |
-| TypeScript | [`@stryker-mutator/core`](https://stryker-mutator.io/) + `@stryker-mutator/vitest-runner` | Yes — npm dependencies |
-| Python | [`cosmic-ray`](https://github.com/sixty-north/cosmic-ray) | Yes — wheel dependency |
-| Rust | [`cargo-mutants`](https://github.com/sourcefrog/cargo-mutants) | No — `cargo install cargo-mutants` (cargo has no equivalent) |
+| TypeScript | [`@stryker-mutator/core`](https://stryker-mutator.io/) + `@stryker-mutator/vitest-runner` | Bundled (npm deps); resolved from the tool's own tree |
+| Python | [`cosmic-ray`](https://github.com/sixty-north/cosmic-ray) | Bundled (wheel dep); resolved from the tool's env |
+| Rust | [`cargo-mutants`](https://github.com/sourcefrog/cargo-mutants) | Installed separately — `cargo install cargo-mutants` ([#242](https://github.com/thekevinscott/testing-conventions/issues/242)) |
 
-The TypeScript and Python engines are declared as dependencies, so they install with the package and
-the rule resolves them from your project — it **never downloads an engine at runtime** (the TypeScript
-arm uses `npx --no-install`, which is why a missing engine fails fast instead of silently fetching the
-long-deprecated unscoped `stryker` 0.x package). You supply the **test runner** (`vitest` / `pytest`):
-it runs your own suite, so its version is yours.
+**You install no mutation engine** — it ships **bundled with `testing-conventions`** and the rule
+resolves it from the tool's own install tree, never the runtime download path. For TypeScript the
+engine (`@stryker-mutator/core` + its vitest runner) is co-located with the binary in the npm/npx
+layout and resolved from there (or from your project, if you happen to pin your own); for Python the
+wheel carries `cosmic-ray` in the same environment. You supply only the **test runner**
+(`vitest` / `pytest`): it runs your own suite, so its version is yours.
+
+> **Rust is the exception (for now).** `cargo-mutants` is a standalone binary, not a package
+> dependency cargo can bundle, so the Rust arm still needs it installed (`cargo install cargo-mutants`,
+> which the [CI workflow](./ci) does for you). Bringing Rust to the same install-nothing bar is tracked
+> in [#242](https://github.com/thekevinscott/testing-conventions/issues/242).
 
 The gate is **on by default and binary**: any un-exempted survivor fails the run (exit `1`, listing
 each survivor with its file, line, and mutation); a clean run exits `0`. There is no report-only mode

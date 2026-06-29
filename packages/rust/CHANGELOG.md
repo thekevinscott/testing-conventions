@@ -33,15 +33,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   produces no mutants — now reports no survivors instead of erroring with `reading cargo-mutants
   outcomes … the run wrote none`. No API change (`measure_rust`'s signature is unchanged).
 
-- **`unit mutation --language typescript` no longer auto-downloads a deprecated package.** The TS
-  arm shelled out to `npx --yes stryker run`, which — when `@stryker-mutator/core` wasn't installed —
-  silently fetched the long-deprecated standalone `stryker` package (last published as `0.x` in 2019,
-  renamed to `@stryker-mutator/core`) and crashed with a confusing `MODULE_NOT_FOUND`. It now runs
-  `npx --no-install`, so it uses only the project's own pinned Stryker and fails fast with a clear
-  error when the engine is absent — parity with the cosmic-ray (Python) and cargo-mutants (Rust) arms,
-  which already invoke their binary directly. A project that relied on the implicit download must now
-  install `@stryker-mutator/core` + a test-runner plugin (the rule always documented this as a
-  prerequisite; the reusable workflow already installs it).
+- **`unit mutation --language typescript` resolves the bundled Stryker engine from the tool's own
+  tree, so a consumer installs no engine** (#239). The TS arm ran `npx --no-install stryker` with the
+  working directory set to the *consumer's* project, so it searched the consumer's `node_modules` for
+  an engine that actually ships **bundled with testing-conventions** (`@stryker-mutator/core`,
+  co-located with the binary in the npm/npx tree) — and hard-errored (`npx canceled … ["stryker@1.0.1"]`)
+  telling the consumer to install Stryker themselves. It now resolves the engine from the binary's own
+  install tree (walking up from `current_exe()` to the co-located `node_modules/.bin/stryker`), then
+  the project's own Stryker if it pins one; `TESTING_CONVENTIONS_STRYKER_BIN` overrides the path. The
+  consumer supplies only their test runner (`vitest`). No `measure_typescript` signature change. (Rust
+  can't bundle a binary engine the same way — tracked in #242.)
 - **`unit coverage --language typescript` no longer auto-downloads vitest.** The same `npx --yes`
   footgun as the mutation arm: `run_vitest_coverage` shelled out to `npx --yes vitest`, silently
   fetching vitest when it wasn't installed. It now runs `npx --no-install`, using only the project's

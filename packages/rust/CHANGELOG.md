@@ -50,6 +50,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Normalized mutation-result core** (#239, epic foundation). A new engine-agnostic result
+  representation — `mutation::{MutantStatus, NormalizedMutant, parse_normalized_results,
+  evaluate_normalized}` — so the gate (line-scoped exemptions + the #226 determinism guard + binary
+  pass/fail) runs over **one** schema instead of three per-engine report formats. `MutantStatus` is the
+  union of the engines' outcomes (`survived` / `killed` / `no_coverage` / `timeout` / `compile_error` /
+  `runtime_error`, `snake_case` on the wire); `survived` + `no_coverage` are survivors, the viable ones
+  feed the guard. Purely additive — nothing existing changes and the per-language arms are not yet wired
+  to it (that lands per #246–#249 as each engine gains a native-API adapter that emits this schema).
 - **Line-scoped `coverage` / `mutation` exemptions** (#226). A `coverage` or `mutation`
   `[[<language>.exempt]]` entry now **requires** a `lines` list (`lines = [9, 10, "12-13"]` — single
   line numbers and inclusive `"start-end"` ranges) naming the exact lines it lifts — those two rules

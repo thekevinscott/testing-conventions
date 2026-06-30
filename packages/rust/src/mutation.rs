@@ -211,6 +211,125 @@ pub fn evaluate_scoped(
         .collect())
 }
 
+/// A mutant's outcome, normalized across the engines (Stryker / cosmic-ray / cargo-mutants)
+/// — the union of their result vocabularies reduced to what the gate needs (#239). Each
+/// language adapter maps its native outcomes onto this so the Rust core gates on one
+/// representation instead of three per-engine report formats. The serialized form is
+/// `snake_case` (`no_coverage`, `compile_error`, …) — the wire contract adapters emit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MutantStatus {
+    /// A test ran the mutated code but none failed — a survivor.
+    Survived,
+    /// A test failed on the mutant — caught.
+    Killed,
+    /// No test exercised the mutant at all — a survivor (worse than `Survived`).
+    NoCoverage,
+    /// The mutant ran but the suite timed out — inconclusive, not a survivor (but viable).
+    Timeout,
+    /// The mutant never compiled — not a viable mutant.
+    CompileError,
+    /// The mutant errored at runtime before a test could judge it — not viable.
+    RuntimeError,
+}
+
+impl MutantStatus {
+    /// Whether this outcome is a **survivor** — a mutant the suite failed to catch
+    /// (`Survived` or `NoCoverage`). Mirrors the per-engine survivor rules.
+    fn is_survivor(self) -> bool {
+        matches!(self, MutantStatus::Survived | MutantStatus::NoCoverage)
+    }
+
+    /// Whether this came from a **viable, conclusive** mutant — one that actually ran
+    /// (`Survived` / `Killed` / `NoCoverage` / `Timeout`), not one that never compiled or
+    /// errored out. The #226 determinism guard reads this to tell an over-exemption (a
+    /// listed line whose mutants were all caught) from an out-of-scope line (no mutant there).
+    fn is_viable(self) -> bool {
+        matches!(
+            self,
+            MutantStatus::Survived
+                | MutantStatus::Killed
+                | MutantStatus::NoCoverage
+                | MutantStatus::Timeout
+        )
+    }
+}
+
+/// One mutant in the normalized result set (#239): the engine-agnostic shape every language
+/// adapter emits. Extra fields an adapter includes are ignored.
+#[derive(Debug, Clone, Deserialize)]
+pub struct NormalizedMutant {
+    /// Project-relative, `/`-separated path of the mutated file.
+    pub file: String,
+    /// The 1-based line the mutant starts on.
+    pub line: u32,
+    /// The outcome, normalized across engines.
+    pub status: MutantStatus,
+    /// The engine's mutator/operator name (e.g. `ConditionalExpression`).
+    pub mutator: String,
+    /// The replacement text, when the engine reports one — used for a readable description.
+    #[serde(default)]
+    pub replacement: Option<String>,
+}
+
+/// Parse the normalized results an engine adapter emits — a flat JSON array of
+/// [`NormalizedMutant`] (#239).
+pub fn parse_normalized_results(json: &str) -> Result<Vec<NormalizedMutant>> {
+    serde_json::from_str(json).context("parsing normalized mutation results")
+}
+
+/// Gate a normalized result set: drop the survivors lifted by a file- or line-scoped
+/// `mutation` exemption (with the #226 determinism guard), leaving the rule's findings.
+///
+/// This is the engine-agnostic core each language arm feeds once its adapter has produced
+/// [`NormalizedMutant`]s (#239) — the replacement for the per-engine `*_survivors` /
+/// `*_mutated_lines` + [`evaluate_scoped`] wiring. Survivors are `Survived` / `NoCoverage`
+/// mutants; the guard reads every *viable* mutant's `(file, line)`.
+pub fn evaluate_normalized(
+    mutants: &[NormalizedMutant],
+    whole_file: &[String],
+    line_scoped: &BTreeMap<String, BTreeSet<u32>>,
+) -> Result<Vec<Survivor>> {
+    evaluate_scoped(
+        normalized_survivors(mutants),
+        &normalized_mutated_lines(mutants),
+        whole_file,
+        line_scoped,
+    )
+}
+
+/// The surviving mutants in a normalized result set — the raw list before exemptions.
+fn normalized_survivors(mutants: &[NormalizedMutant]) -> Vec<Survivor> {
+    mutants
+        .iter()
+        .filter(|mutant| mutant.status.is_survivor())
+        .map(|mutant| Survivor {
+            file: mutant.file.clone(),
+            line: mutant.line,
+            description: describe_normalized(mutant),
+        })
+        .collect()
+}
+
+/// The `(file, line)` of every viable, conclusive mutant in a normalized result set — the
+/// input the #226 line-scoped guard in [`evaluate_scoped`] reads.
+fn normalized_mutated_lines(mutants: &[NormalizedMutant]) -> MutatedLines {
+    mutants
+        .iter()
+        .filter(|mutant| mutant.status.is_viable())
+        .map(|mutant| (mutant.file.clone(), mutant.line))
+        .collect()
+}
+
+/// A one-line description for a normalized mutant: the mutator name, plus the replacement
+/// (flattened + capped via [`one_line`]) when the engine reported one.
+fn describe_normalized(mutant: &NormalizedMutant) -> String {
+    match &mutant.replacement {
+        Some(replacement) => format!("{} (-> {})", mutant.mutator, one_line(replacement)),
+        None => mutant.mutator.clone(),
+    }
+}
+
 /// Run cargo-mutants over the crate at `root` and return its un-exempted survivors.
 ///
 /// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested (via
@@ -859,6 +978,110 @@ fn run_cargo_mutants(root: &Path, out: &Path, in_diff: Option<&Path>) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- normalized results (#239): the engine-agnostic schema + core gate ---
+
+    // A normalized result set covering every status: two survivors (Survived + NoCoverage),
+    // a caught Killed, an inconclusive-but-viable Timeout, and two unviable mutants
+    // (CompileError / RuntimeError). `snake_case` on the wire; an extra field is ignored.
+    const NORMALIZED: &str = r#"[
+        {"file": "src/a.ts", "line": 2, "status": "survived",
+         "mutator": "ConditionalExpression", "replacement": "true", "id": "ignored"},
+        {"file": "src/a.ts", "line": 5, "status": "no_coverage", "mutator": "ArithmeticOperator"},
+        {"file": "src/a.ts", "line": 9, "status": "killed",
+         "mutator": "BooleanLiteral", "replacement": "false"},
+        {"file": "src/a.ts", "line": 12, "status": "timeout", "mutator": "BlockStatement"},
+        {"file": "src/a.ts", "line": 15, "status": "compile_error", "mutator": "OptionalChaining"},
+        {"file": "src/a.ts", "line": 18, "status": "runtime_error", "mutator": "StringLiteral"}
+    ]"#;
+
+    #[test]
+    fn parses_the_normalized_schema() {
+        let mutants = parse_normalized_results(NORMALIZED).expect("valid normalized results");
+        assert_eq!(mutants.len(), 6);
+        assert_eq!(mutants[0].status, MutantStatus::Survived);
+        assert_eq!(mutants[1].status, MutantStatus::NoCoverage);
+        assert_eq!(mutants[0].replacement.as_deref(), Some("true"));
+        assert_eq!(mutants[1].replacement, None);
+    }
+
+    #[test]
+    fn normalized_survivors_are_survived_and_nocoverage_only() {
+        let mutants = parse_normalized_results(NORMALIZED).unwrap();
+        let survivors = normalized_survivors(&mutants);
+        // Survived (2) + NoCoverage (5); not killed/timeout/compile/runtime.
+        assert_eq!(survivors.len(), 2);
+        assert_eq!((survivors[0].line, survivors[1].line), (2, 5));
+        // Replacement is folded into the description when present, omitted otherwise.
+        assert!(survivors[0].description.contains("ConditionalExpression"));
+        assert!(survivors[0].description.contains("-> true"));
+        assert_eq!(survivors[1].description, "ArithmeticOperator");
+    }
+
+    #[test]
+    fn normalized_mutated_lines_collects_only_viable_mutants() {
+        let mutants = parse_normalized_results(NORMALIZED).unwrap();
+        // Survived/Killed/NoCoverage/Timeout ran; CompileError/RuntimeError never produced
+        // a viable mutant.
+        assert_eq!(
+            normalized_mutated_lines(&mutants),
+            [2u32, 5, 9, 12]
+                .into_iter()
+                .map(|line| ("src/a.ts".to_string(), line))
+                .collect()
+        );
+    }
+
+    #[test]
+    fn evaluate_normalized_reports_unexempted_survivors() {
+        let mutants = parse_normalized_results(NORMALIZED).unwrap();
+        let kept = evaluate_normalized(&mutants, &[], &BTreeMap::new()).unwrap();
+        assert_eq!(kept.len(), 2, "both survivors stand with no exemptions");
+    }
+
+    #[test]
+    fn evaluate_normalized_drops_a_whole_file_exemption() {
+        let mutants = parse_normalized_results(NORMALIZED).unwrap();
+        let kept =
+            evaluate_normalized(&mutants, &["src/a.ts".to_string()], &BTreeMap::new()).unwrap();
+        assert!(
+            kept.is_empty(),
+            "the whole-file exemption lifts both survivors"
+        );
+    }
+
+    #[test]
+    fn evaluate_normalized_drops_a_line_scoped_exemption() {
+        let mutants = parse_normalized_results(NORMALIZED).unwrap();
+        let line_scoped = BTreeMap::from([("src/a.ts".to_string(), BTreeSet::from([2u32]))]);
+        let kept = evaluate_normalized(&mutants, &[], &line_scoped).unwrap();
+        // Line 2's survivor is lifted; line 5's still stands.
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].line, 5);
+    }
+
+    #[test]
+    fn evaluate_normalized_rejects_exempting_a_caught_line() {
+        // Line 9 had only a Killed mutant (viable, no survivor) — over-exemption is an error,
+        // via the shared #226 determinism guard.
+        let mutants = parse_normalized_results(NORMALIZED).unwrap();
+        let line_scoped = BTreeMap::from([("src/a.ts".to_string(), BTreeSet::from([9u32]))]);
+        let err = evaluate_normalized(&mutants, &[], &line_scoped).unwrap_err();
+        assert!(
+            err.to_string().contains("all caught") && err.to_string().contains("src/a.ts:9"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn evaluate_normalized_leaves_an_unviable_listed_line_alone() {
+        // Line 15 had only a CompileError (no viable mutant) — neither an error nor a drop;
+        // the real survivors still stand.
+        let mutants = parse_normalized_results(NORMALIZED).unwrap();
+        let line_scoped = BTreeMap::from([("src/a.ts".to_string(), BTreeSet::from([15u32]))]);
+        let kept = evaluate_normalized(&mutants, &[], &line_scoped).unwrap();
+        assert_eq!(kept.len(), 2);
+    }
 
     // A pared `outcomes.json`: the baseline, one missed mutant, and one caught — the
     // real shape (externally-tagged `scenario`, extra fields the rule ignores).

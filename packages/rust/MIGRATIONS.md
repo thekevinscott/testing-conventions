@@ -15,6 +15,13 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Adds the normalized mutation-result core (#239) — the foundation for driving each engine through its
+own native API instead of a Rust-spawned CLI + report-file parse. New additive public surface in the
+`mutation` module: `MutantStatus`, `NormalizedMutant`, `parse_normalized_results`, and
+`evaluate_normalized` (the engine-agnostic gate: line-scoped exemptions + the #226 determinism guard
+over one schema). Nothing existing changes and no arm is wired to it yet — the per-language adapters
+and switch-over land in #246–#249. Purely additive (see **Required changes**).
+
 Hardens `unit mutation --language typescript` so it never downloads a mutation engine. The TypeScript
 arm shelled out to `npx --yes stryker run`; with `--yes`, a project missing `@stryker-mutator/core`
 would silently fetch the long-deprecated standalone `stryker` package (last released as `0.x` in 2019,

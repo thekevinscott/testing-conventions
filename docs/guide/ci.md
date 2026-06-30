@@ -60,6 +60,7 @@ published — so the workflow and the binary it calls always match. To **freeze*
 | `base`               | `origin/main`              | Base ref for the diff-scoped `--base` jobs, diffed as `<base>...HEAD`. The `*-changed` jobs run on `pull_request` only. |
 | `run_e2e`            | `false`                    | Forces the `e2e verify` job on. It is already default-on when a committed `e2e-attestation.json` is present; this runs it regardless. Needs the attestation and full history. |
 | `packaging_artifact` | `''`                       | Name of an uploaded build artifact holding your built distributions; when set, the packaging rule downloads and inspects it. When empty, packaging still runs over a conventional `dist/` in the checkout. See [Check the built distribution](#check-the-built-distribution-packaging). |
+| `build_command`      | `''`                       | A shell command run after toolchain + dependency setup and **before** the suite, in the same job, for the suite-executing jobs only (`unit coverage`, changed-line `coverage`, `unit mutation`). Use it to build a native module the suite imports. Empty (default) ⇒ no build step. See [Build a native module before the suite](#build-a-native-module-before-the-suite-build-command). |
 
 ### Diff-scoped and opt-in checks
 
@@ -86,6 +87,36 @@ opt-in via `[rust].coverage`, and branch coverage is experimental on stable, so 
 component). A project on a different
 toolchain (a non-`pnpm` package manager, or Python sources that need third-party runtime deps
 installed) should drive the CLI directly (below) until #56 makes this config-driven.
+
+### Build a native module before the suite (`build_command`)
+
+Most libraries are pure-language, so the suite-executing jobs install the toolchain and run
+the suite directly. A project whose unit suite **imports a compiled native module** — a Python
+SDK importing a Rust/PyO3 extension built with `maturin develop`, or a TypeScript SDK importing
+a napi-rs addon built with `napi build` — needs that module **built first**, or the suite fails
+at import before any rule runs.
+
+Set `build_command` to your build step. The workflow runs it after toolchain and dependency
+setup and **before the suite**, in the **same job** (so the freshly built module is importable):
+
+```yaml
+jobs:
+  conventions:
+    uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
+    with:
+      build_command: uv run maturin develop      # Python / maturin
+      # build_command: pnpm build                # TypeScript / napi
+```
+
+It runs from the repository root — the same place your own CI runs the build — so the value
+mirrors the command you already use. Empty (the default) means no build step, so pure-language
+callers are unaffected.
+
+`build_command` is wired only into the jobs that **actually execute the suite** and would import
+the module: `unit coverage` (whole-tree), changed-line `coverage --base`, and `unit mutation`.
+The static rules — `colocated-test`, `unit lint`, `integration lint` — only parse source and never
+import it, and `e2e verify` checks the committed attestation rather than running the e2e suite, so
+those jobs neither need nor run the build step.
 
 ### Check the built distribution (packaging)
 

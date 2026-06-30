@@ -7,15 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **TypeScript mutation engine adapter** (#246, part of the #239 epic). A Node adapter — one exported
-  function per file under `src/` (`run-stryker`, `to-normalized`, `normalize-status`, `parse-args`,
-  and the `mutation-cli` entry) — drives Stryker through its **Node API**
-  (`new Stryker(opts).runMutationTest()`) and maps the structured `MutantResult[]` onto the normalized
-  schema the Rust core gates on. It selects the bundled `@stryker-mutator/vitest-runner` by resolved
-  path so the unit-scoped runner runs (#240), and reads results in-process, writing them to a `--out`
-  file. The Rust binary spawns the adapter for `unit mutation --language typescript`; `bin.ts` passes
-  its `dist/` path to the binary as a `--ts-mutation-adapter` argument. Adds `@stryker-mutator/api` as
-  a devDependency (the engine's result types). The `bin` entry and package exports are unchanged.
+- **TypeScript mutation engine adapter** (#246, part of the #239 epic). `src/index.ts` exposes
+  `mutationCLI` — the async orchestrator — over one-function-per-file helpers nested under
+  `src/mutation/` (`parse-args`, `run-stryker`, `to-normalized`, `normalize-status`); the thin
+  `mutation-cli.ts` shim is the executable that runs it. The adapter drives Stryker through its
+  **Node API** (`new Stryker(opts).runMutationTest()`) and maps the structured `MutantResult[]` onto
+  the normalized schema the Rust core gates on, selecting the bundled `@stryker-mutator/vitest-runner`
+  by resolved path so the unit-scoped runner runs (#240) and reading results in-process (written to a
+  `--out` file). The Rust binary spawns the adapter for `unit mutation --language typescript`;
+  `bin.ts` passes its `dist/` path to the binary as a `--ts-mutation-adapter` argument. Adds
+  `@stryker-mutator/api` as a devDependency (the engine's result types). The `bin` entry and package
+  exports are unchanged.
 - **The TypeScript mutation engine ships with the package.** `@stryker-mutator/core` and
   `@stryker-mutator/vitest-runner` (`^9.6.0`) are declared as runtime dependencies, so installing
   testing-conventions brings them in and the adapter resolves them from the package's own tree; the

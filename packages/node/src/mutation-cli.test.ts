@@ -1,64 +1,44 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { NormalizedMutant } from './to-normalized.js';
+// The shim's one job is to run `mutationCLI` over the process arguments and map a rejected run
+// onto stderr + a non-zero exit code. Mock `mutationCLI` so both can be driven without a real run.
+const { mutationCLI } = vi.hoisted(() => ({
+  mutationCLI: vi.fn<(argv: string[]) => Promise<void>>(),
+}));
+vi.mock('./index.js', () => ({ mutationCLI }));
 
-// The entry's collaborators are `parseArgs`, `runStryker`, and `fs.writeFileSync`; mock all so
-// the behaviors this file owns — writing the JSON to a file or stdout, and reporting a failure
-// — can be driven without a real mutation run. `vi.hoisted` exposes them to the hoisted mocks.
-const { parseArgs, runStryker, writeFileSync } = vi.hoisted(() => ({
-  parseArgs: vi.fn<(argv: string[]) => { mutate?: string[]; out?: string }>(),
-  runStryker: vi.fn<(options?: { mutate?: string[] }) => Promise<NormalizedMutant[]>>(),
-  writeFileSync: vi.fn(),
-}));
-vi.mock('./parse-args.js', () => ({ parseArgs }));
-vi.mock('./run-stryker.js', () => ({ runStryker }));
-vi.mock('node:fs', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('node:fs')>()),
-  writeFileSync,
-}));
+// The shim runs its work at import time, reading `process.argv.slice(2)`; set argv, import a fresh
+// copy, then flush the microtask that the `.catch` runs on.
+async function runShim(args: string[]): Promise<void> {
+  process.argv = ['node', 'mutation-cli.js', ...args];
+  await import('./mutation-cli.js');
+  await new Promise((resolve) => setImmediate(resolve));
+}
 
 describe('mutation-cli', () => {
+  const realArgv = process.argv;
+
   afterEach(() => {
     vi.resetModules();
     vi.restoreAllMocks();
-    parseArgs.mockReset();
-    runStryker.mockReset();
-    writeFileSync.mockReset();
+    mutationCLI.mockReset();
+    process.argv = realArgv;
     process.exitCode = undefined;
   });
 
-  it('writes the normalized JSON to the --out file, passing parsed mutate ranges through', async () => {
-    const survivor: NormalizedMutant = { file: 'src/a.ts', line: 2, status: 'survived', mutator: 'X' };
-    parseArgs.mockReturnValue({ mutate: ['src/a.ts:2-4'], out: '/tmp/r.json' });
-    runStryker.mockResolvedValue([survivor]);
+  it('runs mutationCLI over the process arguments', async () => {
+    mutationCLI.mockResolvedValue();
 
-    await import('./mutation-cli.js');
-    await new Promise((resolve) => setImmediate(resolve));
+    await runShim(['--out', '/tmp/r.json']);
 
-    expect(runStryker).toHaveBeenCalledWith({ mutate: ['src/a.ts:2-4'] });
-    expect(writeFileSync).toHaveBeenCalledWith('/tmp/r.json', `${JSON.stringify([survivor])}\n`);
-  });
-
-  it('writes to stdout and runs with no mutate scope when neither flag is given', async () => {
-    parseArgs.mockReturnValue({});
-    runStryker.mockResolvedValue([]);
-    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-
-    await import('./mutation-cli.js');
-    await new Promise((resolve) => setImmediate(resolve));
-
-    expect(runStryker).toHaveBeenCalledWith({});
-    expect(write).toHaveBeenCalledWith('[]\n');
-    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(mutationCLI).toHaveBeenCalledWith(['--out', '/tmp/r.json']);
   });
 
   it('prints the message and sets a failing exit code when the run rejects', async () => {
-    parseArgs.mockReturnValue({});
-    runStryker.mockRejectedValue(new Error('boom'));
+    mutationCLI.mockRejectedValue(new Error('boom'));
     const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
-    await import('./mutation-cli.js');
-    await new Promise((resolve) => setImmediate(resolve));
+    await runShim([]);
 
     expect(write).toHaveBeenCalledWith('boom\n');
     expect(process.exitCode).toBe(1);

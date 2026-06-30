@@ -28,11 +28,12 @@ ran but no test failed on), and exits non-zero if any survive.
 | Python | [`cosmic-ray`](https://github.com/sixty-north/cosmic-ray) | Yes — wheel dependency |
 | Rust | [`cargo-mutants`](https://github.com/sourcefrog/cargo-mutants) | No — `cargo install cargo-mutants` (cargo has no equivalent) |
 
-The TypeScript and Python engines are declared as dependencies, so they install with the package and
-the rule resolves them from your project — it **never downloads an engine at runtime** (the TypeScript
-arm uses `npx --no-install`, which is why a missing engine fails fast instead of silently fetching the
-long-deprecated unscoped `stryker` 0.x package). You supply the **test runner** (`vitest` / `pytest`):
-it runs your own suite, so its version is yours.
+The TypeScript and Python engines ship **with** `testing-conventions`, and the tool drives them
+itself — TypeScript through a Node adapter bundled in the npm package that calls Stryker's own Node
+API, Python through cosmic-ray's library API. You install **nothing** engine-related and never touch
+Stryker or cosmic-ray directly: you call this CLI and get results. You supply only the **test runner**
+(`vitest` / `pytest`) — it runs your own suite, so its version is yours. (Rust is the exception:
+`cargo install cargo-mutants` yourself, since cargo has no bundled-dependency equivalent.)
 
 The gate is **on by default and binary**: any un-exempted survivor fails the run (exit `1`, listing
 each survivor with its file, line, and mutation); a clean run exits `0`. There is no report-only mode

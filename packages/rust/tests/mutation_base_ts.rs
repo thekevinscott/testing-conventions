@@ -9,14 +9,19 @@
 //! adds an assertion-light function. The diff scopes the run to the added lines, whose
 //! mutants survive — while the unchanged, well-tested `add` isn't mutated at all.
 //!
-//! The project's `node_modules` is symlinked to the fixtures' Stryker toolchain so the
-//! out-of-tree repo resolves Stryker/vitest without a second install. Requires `git` +
-//! that toolchain (`npm ci` in `tests/fixtures/unit_mutation/typescript`).
+//! The project's `node_modules` is symlinked to the fixtures' runner-only toolchain so the
+//! out-of-tree repo resolves vitest without a second install; Stryker is bundled with and
+//! driven by the Node adapter (#246), pointed at via [`common::ensure_ts_adapter_env`].
+//! Requires `git`, the built node adapter, and that toolchain (`npm ci` in
+//! `tests/fixtures/unit_mutation/typescript`).
+
+mod common;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use common::ensure_ts_adapter_env;
 use testing_conventions::mutation::measure_typescript;
 
 /// A baseline whose `add` is fully pinned by its test — no survivors.
@@ -53,7 +58,7 @@ impl TempRepo {
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
-        // Resolve Stryker/vitest from the fixtures' shared install rather than a second one.
+        // Resolve vitest from the fixtures' runner-only install rather than a second one.
         std::os::unix::fs::symlink(toolchain_node_modules(), root.join("node_modules")).unwrap();
         let repo = TempRepo(root);
         repo.write("stryker.conf.json", STRYKER_CONF);
@@ -104,6 +109,7 @@ fn git(dir: &Path, args: &[&str]) {
 
 #[test]
 fn base_scopes_the_run_to_the_changed_lines() {
+    ensure_ts_adapter_env();
     let repo = TempRepo::new("survivor");
     repo.write("index.ts", BASELINE);
     repo.write("index.test.ts", BASELINE_TEST);
@@ -139,6 +145,7 @@ fn base_scopes_the_run_to_the_changed_lines() {
 fn base_with_no_mutatable_changed_files_skips_the_run() {
     // The only change on the diff is to a test file, which is never mutated — so the
     // diff scopes to nothing and the run is skipped entirely (no survivors, no Stryker).
+    ensure_ts_adapter_env();
     let repo = TempRepo::new("notests");
     repo.write("index.ts", BASELINE);
     repo.write("index.test.ts", BASELINE_TEST);

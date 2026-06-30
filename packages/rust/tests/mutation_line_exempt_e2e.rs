@@ -11,23 +11,26 @@
 //!
 //! Red until line-scoped exemptions land: today the `lines` key is rejected by the
 //! config self-guard, so each of these exits with an "unknown field" error rather than
-//! the line-scoped behavior asserted here. Requires `cargo-mutants` (Rust), the Stryker
-//! toolchain (TypeScript), and cosmic-ray + pytest (Python).
+//! the line-scoped behavior asserted here. Requires `cargo-mutants` (Rust), the built node
+//! adapter + the fixtures' vitest (TypeScript), and cosmic-ray + pytest (Python).
 
 mod common;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use common::Staged;
+use common::{ts_adapter, Staged};
 
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unit_mutation")
 }
 
-/// Run `unit mutation --language <lang> --config <cfg> <project>` and capture output.
+/// Run `unit mutation --language <lang> --config <cfg> <project>` and capture output. The
+/// bundled TS adapter path is injected exactly as the npm launcher would (harmless for the
+/// Rust / Python arms, which don't read it).
 fn run(language: &str, project: &Path, config: &str) -> Output {
     Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .env("TESTING_CONVENTIONS_TS_MUTATION_ADAPTER", ts_adapter())
         .args(["unit", "mutation", "--language", language, "--config"])
         .arg(fixtures().join(config))
         .arg(project)

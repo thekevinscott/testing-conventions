@@ -1,6 +1,11 @@
 //! E2E tests for the TypeScript mutation rule (#202): drive the built CLI binary
 //! end-to-end (no mocks) against the fixture projects and assert the exit code.
-//! Requires the fixtures' Stryker toolchain (`npm ci` in
+//!
+//! The binary spawns the bundled Node mutation adapter (#246); in production the npm
+//! launcher injects its path, so these tests pass the freshly-built adapter via
+//! [`common::ts_adapter`] on each invocation. The fixtures are **runner-only** (vitest,
+//! no Stryker) — the consumer installs nothing Stryker-related; the tool bundles and
+//! drives it. Requires the built node adapter and the fixtures' vitest (`npm ci` in
 //! `tests/fixtures/unit_mutation/typescript`).
 //!
 //! The gate is **on by default and binary** — parity with the Rust arm: an un-exempted
@@ -15,16 +20,21 @@ mod common;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use common::Staged;
+use common::{ts_adapter, Staged};
+
+const ADAPTER_ENV: &str = "TESTING_CONVENTIONS_TS_MUTATION_ADAPTER";
 
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unit_mutation")
 }
 
-/// Exit code of `testing-conventions unit mutation --language typescript [--config <cfg>] <project>`.
+/// Exit code of `testing-conventions unit mutation --language typescript [--config <cfg>] <project>`,
+/// with the bundled adapter path injected exactly as the npm launcher would.
 fn unit_mutation_exit(project: &Path, config: Option<&str>) -> i32 {
     let mut command = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
-    command.args(["unit", "mutation", "--language", "typescript"]);
+    command
+        .env(ADAPTER_ENV, ts_adapter())
+        .args(["unit", "mutation", "--language", "typescript"]);
     if let Some(config) = config {
         command.arg("--config").arg(fixtures().join(config));
     }
@@ -36,35 +46,52 @@ fn unit_mutation_exit(project: &Path, config: Option<&str>) -> i32 {
         .expect("the process should exit with a code")
 }
 
-/// Exit code + captured stderr of `testing-conventions unit mutation --language typescript <project>`.
-fn unit_mutation_output(project: &Path) -> (i32, String) {
+#[test]
+fn run_outside_the_launcher_fails_clean() {
+    // The binary is meant to be run through the npm launcher, which sets the adapter env
+    // var. Invoked directly without it, the TS arm must fail (exit 1) with a clear error
+    // naming the var — never guess at a Node entry on disk. `env_remove` guarantees the
+    // var is unset regardless of the ambient environment.
+    let project = Staged::new("survivors");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .env_remove(ADAPTER_ENV)
         .args(["unit", "mutation", "--language", "typescript"])
-        .arg(project)
+        .arg(project.path())
         .output()
         .expect("the built binary should run");
-    (
-        out.status
-            .code()
-            .expect("the process should exit with a code"),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
-    )
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "an unset adapter path should fail the run; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains(ADAPTER_ENV),
+        "the error should name the adapter env var; got: {stderr}"
+    );
 }
 
 #[test]
-fn missing_toolchain_fails_clean_without_downloading() {
-    // End-to-end: with no Stryker installed, the binary must fail (exit 1) with a clear
-    // error and never download the deprecated `stryker` package — it runs only the
-    // project's own pinned `@stryker-mutator/core` via `npx --no-install`.
-    let project = Staged::typescript_without_toolchain("survivors");
-    let (code, stderr) = unit_mutation_output(project.path());
+fn a_broken_adapter_path_fails_clean() {
+    // The env var points at a Node entry that doesn't exist (node can't find the module):
+    // the run must fail (exit 1) with the adapter's captured output surfaced, not hang or
+    // pass. Covers the non-zero-exit path of the adapter spawn.
+    let project = Staged::new("survivors");
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .env(ADAPTER_ENV, "/nonexistent/testing-conventions-adapter.js")
+        .args(["unit", "mutation", "--language", "typescript"])
+        .arg(project.path())
+        .output()
+        .expect("the built binary should run");
+    let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(
-        code, 1,
-        "a missing toolchain should fail the run; stderr: {stderr}"
+        out.status.code(),
+        Some(1),
+        "a broken adapter path should fail the run; stderr: {stderr}"
     );
     assert!(
-        stderr.contains("npx --no-install"),
-        "the error should name the no-download invocation; got: {stderr}"
+        stderr.contains("adapter failed"),
+        "the error should report the adapter failure; got: {stderr}"
     );
 }
 

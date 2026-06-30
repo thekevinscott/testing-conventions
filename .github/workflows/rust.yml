@@ -88,6 +88,8 @@ jobs:
       # @stryker-mutator/*) so the rule can spawn `packages/node/dist/mutation-cli.js`. The
       # integration/e2e tests inject its path via TESTING_CONVENTIONS_TS_MUTATION_ADAPTER.
       - uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.0
       - name: Build the TypeScript mutation adapter
         working-directory: packages/node
         run: |

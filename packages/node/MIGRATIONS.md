@@ -15,6 +15,11 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Adds the TypeScript mutation engine adapter (#246, part of #239): `src/stryker-adapter.ts` runs Stryker
+via its Node API and normalizes `MutantResult[]` to the shared schema, selecting the bundled vitest
+runner. Additive and not yet wired into the rule (the CLI switch-over is #247); the `bin` entry and
+package exports are unchanged. Adds `@stryker-mutator/api` as a devDependency (engine result types only).
+
 Declares the TypeScript mutation engine (`@stryker-mutator/core`,
 `@stryker-mutator/vitest-runner`, `^9.6.0`) as runtime dependencies, so installing testing-conventions
 installs them automatically — `unit mutation --language typescript` resolves them from the project's

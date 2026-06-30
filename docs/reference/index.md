@@ -176,9 +176,8 @@ ran but no test failed on:
 - **Rust** runs [`cargo mutants`](https://github.com/sourcefrog/cargo-mutants) and reads its
   `outcomes.json` (`MissedMutant` outcomes). `cargo-mutants` must be installed.
 - **TypeScript** runs [Stryker](https://stryker-mutator.io/) through a Node adapter bundled in the
-  npm package — driven via Stryker's own Node API (`Survived` and `NoCoverage` mutants) — so Stryker
-  ships with the tool and you install nothing engine-related; only your own test runner (`vitest`)
-  need be present.
+  npm package — driven via Stryker's own Node API (`Survived` and `NoCoverage` mutants). The tool
+  drives Stryker; you provide the test runner (`vitest`).
 - **Python** runs [cosmic-ray](https://github.com/sixty-north/cosmic-ray) (driving pytest) and
   reads its session via `cosmic-ray dump` (`survived` outcomes). A baseline check guards against
   a broken suite reporting a false pass. cosmic-ray + pytest must be installed.

@@ -11,8 +11,8 @@
 //!
 //! The project's `node_modules` is symlinked to the fixtures' runner-only toolchain so the
 //! out-of-tree repo resolves vitest without a second install; Stryker is bundled with and
-//! driven by the Node adapter (#246), pointed at via [`common::ensure_ts_adapter_env`].
-//! Requires `git`, the built node adapter, and that toolchain (`npm ci` in
+//! driven by the Node adapter (#246), whose path ([`common::ts_adapter`]) is passed to the
+//! rule. Requires `git`, the built node adapter, and that toolchain (`npm ci` in
 //! `tests/fixtures/unit_mutation/typescript`).
 
 mod common;
@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use common::ensure_ts_adapter_env;
+use common::ts_adapter;
 use testing_conventions::mutation::measure_typescript;
 
 /// A baseline whose `add` is fully pinned by its test — no survivors.
@@ -109,7 +109,6 @@ fn git(dir: &Path, args: &[&str]) {
 
 #[test]
 fn base_scopes_the_run_to_the_changed_lines() {
-    ensure_ts_adapter_env();
     let repo = TempRepo::new("survivor");
     repo.write("index.ts", BASELINE);
     repo.write("index.test.ts", BASELINE_TEST);
@@ -124,6 +123,7 @@ fn base_scopes_the_run_to_the_changed_lines() {
         &[],
         &std::collections::BTreeMap::new(),
         Some(&base),
+        &ts_adapter(),
     )
     .expect("stryker runs");
     // The added `isPositive` (lines 5-7) is in the diff and assertion-light, so its
@@ -145,7 +145,6 @@ fn base_scopes_the_run_to_the_changed_lines() {
 fn base_with_no_mutatable_changed_files_skips_the_run() {
     // The only change on the diff is to a test file, which is never mutated — so the
     // diff scopes to nothing and the run is skipped entirely (no survivors, no Stryker).
-    ensure_ts_adapter_env();
     let repo = TempRepo::new("notests");
     repo.write("index.ts", BASELINE);
     repo.write("index.test.ts", BASELINE_TEST);
@@ -162,6 +161,7 @@ fn base_with_no_mutatable_changed_files_skips_the_run() {
         &[],
         &std::collections::BTreeMap::new(),
         Some(&base),
+        &ts_adapter(),
     )
     .expect("no run needed");
     assert!(

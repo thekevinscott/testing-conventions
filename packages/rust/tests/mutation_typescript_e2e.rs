@@ -2,10 +2,10 @@
 //! end-to-end (no mocks) against the fixture projects and assert the exit code.
 //!
 //! The binary spawns the bundled Node mutation adapter (#246); in production the npm
-//! launcher injects its path, so these tests pass the freshly-built adapter via
-//! [`common::ts_adapter`] on each invocation. The fixtures are **runner-only** (vitest,
-//! no Stryker) — the consumer installs nothing Stryker-related; the tool bundles and
-//! drives it. Requires the built node adapter and the fixtures' vitest (`npm ci` in
+//! launcher appends its path as `--ts-mutation-adapter`, so these tests pass the freshly-built
+//! adapter ([`common::ts_adapter`]) the same way on each invocation. The fixtures are
+//! **runner-only** (vitest): the tool bundles and drives Stryker; the project provides only its
+//! own test runner. Requires the built node adapter and the fixtures' vitest (`npm ci` in
 //! `tests/fixtures/unit_mutation/typescript`).
 //!
 //! The gate is **on by default and binary** — parity with the Rust arm: an un-exempted
@@ -22,19 +22,18 @@ use std::process::Command;
 
 use common::{ts_adapter, Staged};
 
-const ADAPTER_ENV: &str = "TESTING_CONVENTIONS_TS_MUTATION_ADAPTER";
-
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unit_mutation")
 }
 
 /// Exit code of `testing-conventions unit mutation --language typescript [--config <cfg>] <project>`,
-/// with the bundled adapter path injected exactly as the npm launcher would.
+/// passing the bundled adapter path as `--ts-mutation-adapter`, exactly as the npm launcher does.
 fn unit_mutation_exit(project: &Path, config: Option<&str>) -> i32 {
     let mut command = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
     command
-        .env(ADAPTER_ENV, ts_adapter())
-        .args(["unit", "mutation", "--language", "typescript"]);
+        .args(["unit", "mutation", "--language", "typescript"])
+        .arg("--ts-mutation-adapter")
+        .arg(ts_adapter());
     if let Some(config) = config {
         command.arg("--config").arg(fixtures().join(config));
     }
@@ -47,14 +46,12 @@ fn unit_mutation_exit(project: &Path, config: Option<&str>) -> i32 {
 }
 
 #[test]
-fn run_outside_the_launcher_fails_clean() {
-    // The binary is meant to be run through the npm launcher, which sets the adapter env
-    // var. Invoked directly without it, the TS arm must fail (exit 1) with a clear error
-    // naming the var — never guess at a Node entry on disk. `env_remove` guarantees the
-    // var is unset regardless of the ambient environment.
+fn run_without_the_adapter_arg_fails_clean() {
+    // The npm launcher appends `--ts-mutation-adapter`; run directly without it, the TS arm
+    // must fail (exit 1) with a clear error naming the argument — never guess at a Node entry
+    // on disk.
     let project = Staged::new("survivors");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
-        .env_remove(ADAPTER_ENV)
         .args(["unit", "mutation", "--language", "typescript"])
         .arg(project.path())
         .output()
@@ -63,23 +60,24 @@ fn run_outside_the_launcher_fails_clean() {
     assert_eq!(
         out.status.code(),
         Some(1),
-        "an unset adapter path should fail the run; stderr: {stderr}"
+        "a missing adapter argument should fail the run; stderr: {stderr}"
     );
     assert!(
-        stderr.contains(ADAPTER_ENV),
-        "the error should name the adapter env var; got: {stderr}"
+        stderr.contains("--ts-mutation-adapter"),
+        "the error should name the adapter argument; got: {stderr}"
     );
 }
 
 #[test]
 fn a_broken_adapter_path_fails_clean() {
-    // The env var points at a Node entry that doesn't exist (node can't find the module):
+    // The argument points at a Node entry that doesn't exist (node can't find the module):
     // the run must fail (exit 1) with the adapter's captured output surfaced, not hang or
     // pass. Covers the non-zero-exit path of the adapter spawn.
     let project = Staged::new("survivors");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
-        .env(ADAPTER_ENV, "/nonexistent/testing-conventions-adapter.js")
         .args(["unit", "mutation", "--language", "typescript"])
+        .arg("--ts-mutation-adapter")
+        .arg("/nonexistent/testing-conventions-adapter.js")
         .arg(project.path())
         .output()
         .expect("the built binary should run");

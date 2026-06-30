@@ -7,17 +7,15 @@
 //! test gets a pristine, isolated project and the committed fixtures are never written to.
 //!
 //! TypeScript also drives the bundled Node mutation adapter (#246): the rule spawns
-//! `packages/node/dist/mutation-cli.js`, found via the `TESTING_CONVENTIONS_TS_MUTATION_ADAPTER`
-//! env var (the npm launcher sets it in production). The integration tests point it at the
-//! freshly-built adapter via [`ensure_ts_adapter_env`]; the e2e tests pass the same path to
-//! the spawned binary.
+//! `packages/node/dist/mutation-cli.js`, whose path it receives explicitly. The integration
+//! tests pass [`ts_adapter`] straight to [`testing_conventions::mutation::measure_typescript`];
+//! the e2e tests pass it to the spawned binary as `--ts-mutation-adapter`.
 
 // Each constructor is used by only some of the mutation test binaries.
 #![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Once;
 
 /// The freshly-built TypeScript mutation adapter (`packages/node/dist/mutation-cli.js`),
 /// which the rule spawns for the TS arm (#246). `CARGO_MANIFEST_DIR` is `packages/rust`,
@@ -26,19 +24,6 @@ use std::sync::Once;
 /// both before the suite runs.
 pub fn ts_adapter() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../node/dist/mutation-cli.js")
-}
-
-/// Point the rule at the built adapter by setting `TESTING_CONVENTIONS_TS_MUTATION_ADAPTER`
-/// — the env var the npm launcher injects in production. The in-process integration tests
-/// call this before [`testing_conventions::mutation::measure_typescript`]; the e2e tests
-/// pass [`ts_adapter`] to the spawned binary instead. Set once, since every test sets the
-/// same value; `std::env`'s internal lock makes the set/read race-free across the parallel
-/// tests in this process.
-pub fn ensure_ts_adapter_env() {
-    static INIT: Once = Once::new();
-    INIT.call_once(|| {
-        std::env::set_var("TESTING_CONVENTIONS_TS_MUTATION_ADAPTER", ts_adapter());
-    });
 }
 
 /// A throwaway copy of a fixture project under `tests/fixtures/unit_mutation/<lang>`,

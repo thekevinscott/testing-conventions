@@ -8,28 +8,28 @@
 //! the code but pins nothing) reports several — the gap mutation testing exposes that
 //! coverage can't.
 //!
-//! The fixtures are **runner-only**: they install just vitest, never Stryker. That the gate
-//! still runs Stryker over them is the proof of #246 — the consumer installs nothing
-//! Stryker-related; the tool bundles and drives it. Each test runs against its own staged
-//! copy (vitest `node_modules` symlinked) so the parallel Stryker sandboxes never collide,
-//! and points the rule at the freshly-built adapter via [`common::ensure_ts_adapter_env`].
+//! The fixtures are **runner-only**: they install just vitest. That the gate still runs
+//! Stryker over them is the proof of #246 — the tool bundles and drives the engine; the
+//! project provides only its own test runner. Each test runs against its own staged copy
+//! (vitest `node_modules` symlinked) so the parallel Stryker sandboxes never collide, and
+//! passes the freshly-built adapter path ([`common::ts_adapter`]) straight to the rule.
 //! Requires the built node adapter and the fixtures' vitest (`npm ci` in
 //! `tests/fixtures/unit_mutation/typescript`).
 
 mod common;
 
-use common::{ensure_ts_adapter_env, Staged};
+use common::{ts_adapter, Staged};
 use testing_conventions::mutation::measure_typescript;
 
 #[test]
 fn killed_reports_no_survivors() {
-    ensure_ts_adapter_env();
     let project = Staged::new("killed");
     let survivors = measure_typescript(
         project.path(),
         &[],
         &std::collections::BTreeMap::new(),
         None,
+        &ts_adapter(),
     )
     .expect("stryker runs");
     assert!(
@@ -40,16 +40,16 @@ fn killed_reports_no_survivors() {
 
 #[test]
 fn survivors_are_reported() {
-    // The fixture installs only vitest — no Stryker — yet the gate runs Stryker over it via
-    // the bundled adapter and finds the assertion-light suite's survivors. That's #246: the
-    // consumer installs nothing Stryker-related.
-    ensure_ts_adapter_env();
+    // The fixture installs only vitest, yet the gate runs Stryker over it via the bundled
+    // adapter and finds the assertion-light suite's survivors. That's #246: the tool drives
+    // the engine; the project supplies only its test runner.
     let project = Staged::new("survivors");
     let survivors = measure_typescript(
         project.path(),
         &[],
         &std::collections::BTreeMap::new(),
         None,
+        &ts_adapter(),
     )
     .expect("stryker runs");
     assert!(
@@ -66,7 +66,6 @@ fn survivors_are_reported() {
 fn a_mutation_exemption_drops_the_survivors() {
     // Exempting the survivors' file lifts all of them — an equivalent / deliberately
     // defensive mutation, waived with a reason via `[[typescript.exempt]] rules = ["mutation"]`.
-    ensure_ts_adapter_env();
     let project = Staged::new("survivors");
     let exempt = vec!["index.ts".to_string()];
     let survivors = measure_typescript(
@@ -74,6 +73,7 @@ fn a_mutation_exemption_drops_the_survivors() {
         &exempt,
         &std::collections::BTreeMap::new(),
         None,
+        &ts_adapter(),
     )
     .expect("stryker runs");
     assert!(

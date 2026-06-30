@@ -2,20 +2,21 @@
 import { fileURLToPath } from 'node:url';
 import { main } from 'bin-shim';
 
-// The TypeScript `unit mutation` arm runs Stryker through the bundled Node adapter (#246):
-// the rust binary spawns `node` on it, but a Rust binary can't reliably locate a JS file in
-// the npm tree. So the Node launcher — which knows its own `dist/` — hands the binary the
-// adapter's path via this env var (the binary reads it; absent ⇒ a clear "run via the npm
-// distribution" error). `??=` leaves an explicit value in place, so tests / unusual layouts
-// can point at a different build.
-process.env.TESTING_CONVENTIONS_TS_MUTATION_ADAPTER ??= fileURLToPath(
-  new URL('./mutation-cli.js', import.meta.url),
-);
+// The TypeScript `unit mutation` arm runs Stryker through the bundled Node adapter (#246): the
+// rust binary spawns `node` on it, but a Rust binary can't reliably locate a JS file in the npm
+// tree. The Node launcher — which knows its own `dist/` — hands the binary the adapter's path as
+// an explicit `--ts-mutation-adapter` CLI argument, appended only to a `unit mutation` invocation
+// (the only command that reads it). The binary errors clearly if the arm runs without it.
+const args = process.argv.slice(2);
+const isUnitMutation = args[0] === 'unit' && args[1] === 'mutation';
+const adapter = fileURLToPath(new URL('./mutation-cli.js', import.meta.url));
+const argv = isUnitMutation ? [...args, '--ts-mutation-adapter', adapter] : args;
 
 main({
   scope: 'testing-conventions',
   binaryName: 'testing-conventions',
   from: import.meta.url,
+  argv,
   platformPackage: '@{scope}/{triple}',
   triples: {
     'linux-x64': 'x86_64-unknown-linux-gnu',

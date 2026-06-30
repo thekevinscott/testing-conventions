@@ -68,7 +68,7 @@ Some rules also run a **diff-scoped** variant on **pull requests** only (they ch
 
 - **co-change** — `unit colocated-test --base`: a source changed in the PR whose colocated test didn't change with it fails (Python, TypeScript).
 - **changed-line coverage** — `unit coverage --base`: a line changed in the PR that lands below the floor fails, no matter how small the diff (Python, TypeScript, Rust).
-- **mutation** — `unit mutation --base`: a binary gate that fails the PR on any un-exempted surviving mutant on a changed line (Python, TypeScript, Rust). Diff-scoped because whole-tree mutation is too slow to gate, so there is no whole-tree mutation job — it runs on pull requests only. The TypeScript and Python engines (Stryker / cosmic-ray) ship with the tool and it drives them itself, so you install nothing for them — only the Rust engine is yours to add (`cargo install cargo-mutants`).
+- **mutation** — `unit mutation --base`: a binary gate that fails the PR on any un-exempted surviving mutant on a changed line (Python, TypeScript, Rust). Diff-scoped because whole-tree mutation is too slow to gate, so there is no whole-tree mutation job — it runs on pull requests only. The tool drives the TypeScript and Python engines (Stryker / cosmic-ray) itself; for Rust, install the engine with `cargo install cargo-mutants`.
 
 The whole-tree colocated-test and coverage jobs run regardless; the diff-scoped jobs add the commit-scoped gate on top.
 

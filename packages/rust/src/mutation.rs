@@ -397,12 +397,15 @@ fn one_line(replacement: &str) -> String {
 /// Stryker has no native git-diff mode, so the changed lines become `--mutate
 /// <file>:<line>-<line>` ranges (line granularity, matching cargo-mutants' `--in-diff`).
 /// Without it, the project's configured `mutate` set runs. `exempt` is the file-level
-/// exempt paths and `exempt_lines` the line-scoped ones (#226).
+/// exempt paths and `exempt_lines` the line-scoped ones (#226). `adapter` is the path to
+/// the bundled Node adapter (`dist/mutation-cli.js`) — the CLI receives it from the npm
+/// launcher's `--ts-mutation-adapter` argument and hands it down explicitly.
 pub fn measure_typescript(
     root: &Path,
     exempt: &[String],
     exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
     base: Option<&str>,
+    adapter: &Path,
 ) -> Result<Vec<Survivor>> {
     let mutate = match base {
         Some(base) => {
@@ -415,43 +418,22 @@ pub fn measure_typescript(
         }
         None => None,
     };
-    let json = run_ts_adapter(root, mutate.as_deref())?;
+    let json = run_ts_adapter(root, adapter, mutate.as_deref())?;
     let mutants = parse_normalized_results(&json)?;
     evaluate_normalized(&mutants, exempt, exempt_lines)
 }
 
-/// The env var carrying the bundled TS mutation adapter's path. The npm `bin` launcher
-/// sets it to the packaged Node adapter before exec'ing this binary, so the binary never
-/// hunts the filesystem for a Node entry; the integration/e2e suites point it at the
-/// freshly-built `packages/node/dist/mutation-cli.js`.
-const TS_ADAPTER_ENV: &str = "TESTING_CONVENTIONS_TS_MUTATION_ADAPTER";
-
-/// The bundled TS mutation adapter's path, from [`TS_ADAPTER_ENV`]. Unset (or empty) is a
-/// clear error rather than a filesystem guess: this binary is meant to be run through the
-/// npm launcher, which always sets it.
-fn ts_adapter_path() -> Result<PathBuf> {
-    match std::env::var_os(TS_ADAPTER_ENV) {
-        Some(path) if !path.is_empty() => Ok(PathBuf::from(path)),
-        _ => bail!(
-            "the TypeScript mutation adapter path is unset: `{TS_ADAPTER_ENV}` must point at the \
-             bundled Node adapter. The npm `testing-conventions` launcher sets this automatically; \
-             this binary is meant to be run through that launcher, not invoked directly."
-        ),
-    }
-}
-
-/// Run the bundled TS mutation adapter over `root` and return the normalized-results JSON
+/// Run the bundled TS mutation `adapter` over `root` and return the normalized-results JSON
 /// it writes. The adapter (a Node entry shipped with the npm package) drives Stryker via
-/// its Node API and emits a [`NormalizedMutant`] array (#239) — so the consumer installs
-/// nothing and never learns Stryker exists; the npm package resolves `@stryker-mutator/*`
-/// from the tool's own tree.
+/// its Node API and emits a [`NormalizedMutant`] array (#239) — so the consumer drives the
+/// engine through this CLI alone; the npm package resolves `@stryker-mutator/*` from the
+/// tool's own tree.
 ///
 /// `mutate`, when set, scopes the run to `--mutate` line ranges. Results are written to a
 /// temp file the adapter names via `--out` (so Stryker's own stdout logging can't corrupt
 /// them), then read back. `node` and the project's own test runner must be available; a
 /// non-zero adapter exit surfaces its captured output.
-fn run_ts_adapter(root: &Path, mutate: Option<&[String]>) -> Result<String> {
-    let adapter = ts_adapter_path()?;
+fn run_ts_adapter(root: &Path, adapter: &Path, mutate: Option<&[String]>) -> Result<String> {
     let out = AdapterOut::new();
     std::fs::create_dir_all(&out.0).context("creating the mutation adapter output dir")?;
     let results = out.0.join("results.json");
@@ -459,7 +441,7 @@ fn run_ts_adapter(root: &Path, mutate: Option<&[String]>) -> Result<String> {
     let mut command = Command::new("node");
     command
         .current_dir(root)
-        .arg(&adapter)
+        .arg(adapter)
         .arg("--out")
         .arg(&results);
     if let Some(specs) = mutate {
@@ -1069,19 +1051,6 @@ mod tests {
         let report = parse_mutants_report(SAMPLE).unwrap();
         let exempt = vec!["src/elsewhere.rs".to_string()];
         assert_eq!(unexplained_survivors(&report, &exempt).len(), 1);
-    }
-
-    #[test]
-    fn ts_adapter_path_errors_when_unset() {
-        // No collaborator spawns here: with the launcher's env var unset, the TS arm must
-        // name it in a clear error rather than guess at a Node entry on disk. Hermetic —
-        // no other unit test in this binary touches the var.
-        std::env::remove_var(TS_ADAPTER_ENV);
-        let err = ts_adapter_path().unwrap_err();
-        assert!(
-            err.to_string().contains(TS_ADAPTER_ENV),
-            "the error should name the adapter env var; got: {err}"
-        );
     }
 
     #[test]

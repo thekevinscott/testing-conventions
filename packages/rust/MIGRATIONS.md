@@ -16,17 +16,14 @@ Each entry has five sections, in order:
 ### Summary
 
 Wires the TypeScript arm to drive Stryker through a **bundled Node adapter** (#246, building on the
-#239 core), so a consumer installs nothing Stryker-related. `unit mutation --language typescript`
-previously shelled out to `npx --no-install stryker run` and required the *consumer* to install
-`@stryker-mutator/core` + a test-runner plugin in their own project; it now spawns a Node adapter
-shipped with the npm package that drives Stryker via its own Node API and emits the normalized
-`NormalizedMutant` schema (#239) the gate already consumes. The consumer supplies only their own test
-runner (vitest) — exactly as cargo-mutants needs a buildable crate and cosmic-ray needs pytest. The
-adapter's path is injected via the `TESTING_CONVENTIONS_TS_MUTATION_ADAPTER` env var by the npm
-`testing-conventions` launcher; the raw binary run outside that launcher fails fast naming the var.
-Breaking on the SDK surface — the Stryker `mutation.json` report types are removed (see **Required
-changes**) — while `measure_typescript`'s signature is unchanged; only its runtime mechanism moves
-(see **Behavior changes without code changes**).
+#239 core). `unit mutation --language typescript` now spawns a Node adapter shipped with the npm
+package that drives Stryker via its own Node API and emits the normalized `NormalizedMutant` schema
+(#239) the gate consumes. The tool drives the engine; the project supplies its own test runner
+(vitest) — exactly as cargo-mutants needs a buildable crate and cosmic-ray needs pytest. The npm
+`testing-conventions` launcher passes the adapter's path to the binary as a `--ts-mutation-adapter`
+argument on a `unit mutation` invocation. Two breaking SDK changes: the Stryker `mutation.json` report
+types are removed, and `measure_typescript` takes a trailing `adapter: &Path` (see **Required
+changes**).
 
 Adds the normalized mutation-result core (#239) — the foundation for driving each engine through its
 own native API instead of a Rust-spawned CLI + report-file parse. New additive public surface in the
@@ -564,11 +561,16 @@ core (#239) — the same types the bundled adapter emits and the Rust/Python arm
 | `mutation::parse_stryker_report`, `mutation::stryker_survivors` | `mutation::parse_normalized_results` + `mutation::evaluate_normalized` |
 | `mutation::{StrykerReport, StrykerFile, StrykerMutant, StrykerLocation}` | `mutation::NormalizedMutant` |
 
-`measure_typescript`'s signature is unchanged, but it now requires the
-`TESTING_CONVENTIONS_TS_MUTATION_ADAPTER` env var to point at the bundled Node adapter
-(`packages/node/dist/mutation-cli.js`). The npm `testing-conventions` launcher sets it automatically,
-so run the rule through the published CLI rather than the raw Rust binary; an unset var is a clear
-error, not a guess.
+`measure_typescript` takes a trailing `adapter: &Path` — the path to the bundled Node adapter
+(`packages/node/dist/mutation-cli.js`):
+
+| Function | Before | After |
+| --- | --- | --- |
+| `mutation::measure_typescript` | `(root, exempt, exempt_lines, base)` | `(root, exempt, exempt_lines, base, adapter)` |
+
+On the CLI, the npm `testing-conventions` launcher passes this path as `--ts-mutation-adapter` on a
+`unit mutation` invocation; run the rule through the published CLI rather than the raw Rust binary,
+which errors clearly when the argument is absent.
 
 
 `regions` on the Rust coverage types is now `Option<u8>` (#206), so the region check can
@@ -637,14 +639,6 @@ The `--lang` flag and its implicit `python` default are gone — a clean break, 
 a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
-
-`unit mutation --language typescript` no longer resolves Stryker from the consumer's project (#246).
-It spawns the bundled Node adapter — which drives Stryker through its Node API — instead of `npx
---no-install stryker run`, so a project that previously had to install `@stryker-mutator/core` + a
-test-runner plugin now needs **only its own test runner** (vitest). The npm launcher injects the
-adapter path, so the published CLI and the reusable workflow need no consumer change. No API or
-config change (`measure_typescript`'s signature is unchanged); this supersedes the `npx --no-install`
-behavior introduced earlier in this same unreleased window.
 
 `unit coverage --language typescript` likewise no longer auto-installs vitest — it runs
 `npx --no-install vitest` and fails fast with a clear "must be installed" error when `vitest` /
@@ -744,8 +738,8 @@ emits the normalized schema the gate consumes; `killed` reports no survivors whi
 assertion-light suite) reports several; `--base` scopes the run to the changed lines; and the
 always-on gate drives the exit codes `0` / `1` / `0`. Requires the built node adapter
 (`npm ci && npm run build` in `packages/node`) and the fixtures' vitest (`npm ci` in
-`tests/fixtures/unit_mutation/typescript`); the tests inject the adapter path via
-`TESTING_CONVENTIONS_TS_MUTATION_ADAPTER`.
+`tests/fixtures/unit_mutation/typescript`); the tests pass the adapter path as
+`--ts-mutation-adapter` (and to the SDK as the trailing `adapter` argument).
 
 ```
 cd packages/rust && cargo test --lib mutation:: --test mutation_python --test mutation_python_e2e --test mutation_base_py

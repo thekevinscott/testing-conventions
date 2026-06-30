@@ -15,19 +15,19 @@ Each entry has five sections, in order:
 
 ### Summary
 
-Adds the TypeScript mutation engine adapter (#246, part of #239): `src/stryker-adapter.ts` runs Stryker
-via its Node API and normalizes `MutantResult[]` to the shared schema, selecting the bundled vitest
-runner. Additive and not yet wired into the rule (the CLI switch-over is #247); the `bin` entry and
-package exports are unchanged. Adds `@stryker-mutator/api` as a devDependency (engine result types only).
+Adds the TypeScript mutation engine adapter (#246, part of #239): a Node adapter — one exported
+function per file under `src/`, with the `mutation-cli` entry — runs Stryker via its Node API and
+normalizes `MutantResult[]` to the shared schema, selecting the bundled vitest runner. The Rust binary
+spawns it for `unit mutation --language typescript`, and `bin.ts` passes its `dist/` path to the binary
+as a `--ts-mutation-adapter` argument (appended only to a `unit mutation` invocation). Adds
+`@stryker-mutator/api` as a devDependency (engine result types only); the `bin` entry and package
+exports are unchanged.
 
-Declares the TypeScript mutation engine (`@stryker-mutator/core`,
-`@stryker-mutator/vitest-runner`, `^9.6.0`) as runtime dependencies, so installing testing-conventions
-installs them automatically — `unit mutation --language typescript` resolves them from the project's
-`node_modules` instead of requiring a separate install. Additive for the CLI: the `bin` entry and its
-behavior are unchanged, and the test runner (`vitest`) stays the consumer's optional peer (Stryker's
-vitest-runner peers on it). A CLI-only consumer who never runs mutation just carries the unused dep.
-The one install-time constraint: Stryker 9 requires **Node ≥20**, so the package no longer installs on
-older Node.
+Declares the TypeScript mutation engine (`@stryker-mutator/core`, `@stryker-mutator/vitest-runner`,
+`^9.6.0`) as runtime dependencies, so installing testing-conventions brings them in and the adapter
+resolves them from the package's own tree; the tool drives Stryker, and the consumer provides their own
+test runner (`vitest`), which stays an optional peer (Stryker's vitest-runner peers on it). The one
+install-time constraint: Stryker 9 sets the floor at **Node ≥20**.
 
 Adds a `vitestConfig` export to the package root so consumers extend the shared
 coverage floor instead of copy-pasting it. Purely additive: the `bin` entry and

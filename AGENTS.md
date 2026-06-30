@@ -47,6 +47,27 @@ is file-scoped, so a real exemption is also isolated to the smallest possible fi
 bar: the entire #218 pytest plugin ended up needing **zero** exemptions. (The deterministic form of
 "keep it minimal" would be line-scoped exemptions — #226.)
 
+## Never pass data through the environment
+
+**Do not use environment variables as a side-channel to pass data between components.** This is
+forbidden, not discouraged. If component A needs to hand a value (a path, a flag, a config) to
+component B, pass it **explicitly** — a function argument, a CLI argument, a constructor parameter.
+Never have A write `process.env.X = …` (or `std::env::set_var`) for B to read back, and never have a
+test `set_var` / `remove_var` to steer the code under test. Environment variables are a hidden,
+global, mutable channel: they make data flow invisible, couple unrelated code through a shared name,
+and break under parallelism. When the launcher needs to tell the binary where a bundled file lives,
+it passes a CLI argument — full stop. Reading genuinely external, process-wide config the OS or CI
+owns (`CI`, `PATH`, `HOME`) is fine; inventing your own env var to wire two parts of *this* project
+together is not.
+
+## Affirmative voice
+
+Write docs and user-facing text by stating what the tool **does** and what the user **provides** —
+never by listing what the user *doesn't* have to do. No "you install nothing," "you never touch X,"
+"no need to," "without having to," "fails fast instead of." The reader does not care about the absent
+burden; naming it is defensive noise that makes the simple sound complicated. State the positive fact
+and stop. ("The tool drives Stryker; you provide vitest." — not "you don't have to install Stryker.")
+
 ## Code style
 
 Internal modules in this repo are **not** underscore-prefixed — an empty `__init__.py` already says

@@ -148,6 +148,11 @@ enum UnitRule {
         /// absent means nothing is exempt (every survivor must be killed).
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
+        /// Path to the bundled TypeScript mutation adapter (`dist/mutation-cli.js`), used
+        /// only by `--language typescript`. The npm launcher appends it; hidden because a
+        /// consumer never sets it by hand.
+        #[arg(long = "ts-mutation-adapter", hide = true)]
+        ts_adapter: Option<PathBuf>,
     },
 }
 
@@ -232,7 +237,14 @@ where
                 language,
                 base,
                 config,
-            } => run_unit_mutation(&path, language, base.as_deref(), &config),
+                ts_adapter,
+            } => run_unit_mutation(
+                &path,
+                language,
+                base.as_deref(),
+                &config,
+                ts_adapter.as_deref(),
+            ),
         },
         Some(Command::Integration { rule }) => match rule {
             IntegrationRule::Lint {
@@ -565,6 +577,7 @@ fn run_unit_mutation(
     language: colocated_test::Language,
     base: Option<&str>,
     config_path: &Path,
+    ts_adapter: Option<&Path>,
 ) -> anyhow::Result<i32> {
     let config = if config_path.exists() {
         config::load_config(config_path)?
@@ -588,7 +601,16 @@ fn run_unit_mutation(
                 &typescript.exempt,
                 config::Rule::Mutation,
             )?);
-            mutation::measure_typescript(root, &exempt, &exempt_lines, base)?
+            // The npm launcher appends `--ts-mutation-adapter`; its absence means the binary
+            // was run directly, not through the published CLI.
+            let adapter = ts_adapter.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "the TypeScript mutation adapter path is required: pass \
+                     `--ts-mutation-adapter <path>`. The npm `testing-conventions` CLI appends it \
+                     automatically — run the rule through that CLI, not the raw binary."
+                )
+            })?;
+            mutation::measure_typescript(root, &exempt, &exempt_lines, base, adapter)?
         }
         colocated_test::Language::Python => {
             let python = config.python.unwrap_or_default();

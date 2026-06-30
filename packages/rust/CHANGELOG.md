@@ -23,17 +23,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `[rust].coverage` with just `regions = 90` keeps `lines = 100`. Previously every field was
   required, so a partial table errored (and `[rust].coverage` errored without `lines`). A typo'd key
   is still rejected — only *missing* keys default. No API change (the struct fields are unchanged).
-- **BREAKING: `unit mutation --language typescript` now bundles and drives Stryker; the consumer
-  installs nothing Stryker-related** (#246, epic #239). The TS arm previously shelled out to `npx
-  --no-install stryker run` and required the *consumer* to install `@stryker-mutator/core` + a
-  test-runner plugin in their own project. It now spawns a Node adapter shipped with the npm package,
+- **BREAKING: `unit mutation --language typescript` bundles and drives Stryker through a Node
+  adapter** (#246, epic #239). The TS arm now spawns a Node adapter shipped with the npm package,
   which drives Stryker through its own Node API and emits the normalized `NormalizedMutant` schema
-  (#239) the gate already consumes — so a consumer installs **nothing** Stryker-related and never
-  learns Stryker exists; they supply only their own test runner (vitest), exactly as cargo-mutants
-  needs a buildable crate and cosmic-ray needs pytest. The adapter's path is injected via the
-  `TESTING_CONVENTIONS_TS_MUTATION_ADAPTER` env var by the npm `testing-conventions` launcher; running
-  the raw binary outside that launcher fails fast naming the var. `measure_typescript`'s signature is
-  unchanged; only its runtime mechanism changes. See [MIGRATIONS](./MIGRATIONS.md).
+  (#239) the gate consumes; the tool drives the engine, and the project supplies its own test runner
+  (vitest), exactly as cargo-mutants needs a buildable crate and cosmic-ray needs pytest. The npm
+  `testing-conventions` launcher passes the adapter's path to the binary as a `--ts-mutation-adapter`
+  argument on a `unit mutation` invocation; the SDK `measure_typescript` takes it as a trailing
+  `adapter: &Path`. See [MIGRATIONS](./MIGRATIONS.md).
 
 ### Removed
 

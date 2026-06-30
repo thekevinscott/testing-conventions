@@ -26,13 +26,14 @@ fn fixtures() -> PathBuf {
 }
 
 /// Run `unit mutation --language <lang> --config <cfg> <project>` and capture output. The
-/// bundled TS adapter path is injected exactly as the npm launcher would (harmless for the
-/// Rust / Python arms, which don't read it).
+/// bundled TS adapter path is passed as `--ts-mutation-adapter` exactly as the npm launcher
+/// does (the Rust / Python arms ignore it).
 fn run(language: &str, project: &Path, config: &str) -> Output {
     Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
-        .env("TESTING_CONVENTIONS_TS_MUTATION_ADAPTER", ts_adapter())
         .args(["unit", "mutation", "--language", language, "--config"])
         .arg(fixtures().join(config))
+        .arg("--ts-mutation-adapter")
+        .arg(ts_adapter())
         .arg(project)
         .output()
         .expect("the built binary should run")

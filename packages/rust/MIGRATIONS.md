@@ -15,6 +15,16 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Wires the TypeScript arm to drive Stryker through a **bundled Node adapter** (#246, building on the
+#239 core). `unit mutation --language typescript` now spawns a Node adapter shipped with the npm
+package that drives Stryker via its own Node API and emits the normalized `NormalizedMutant` schema
+(#239) the gate consumes. The tool drives the engine; the project supplies its own test runner
+(vitest) — exactly as cargo-mutants needs a buildable crate and cosmic-ray needs pytest. The npm
+`testing-conventions` launcher passes the adapter's path to the binary as a `--ts-mutation-adapter`
+argument on a `unit mutation` invocation. Two breaking SDK changes: the Stryker `mutation.json` report
+types are removed, and `measure_typescript` takes a trailing `adapter: &Path` (see **Required
+changes**).
+
 Adds the normalized mutation-result core (#239) — the foundation for driving each engine through its
 own native API instead of a Rust-spawned CLI + report-file parse. New additive public surface in the
 `mutation` module: `MutantStatus`, `NormalizedMutant`, `parse_normalized_results`, and
@@ -550,6 +560,26 @@ from the `LineScope::Lines` entries of `config::resolve_exempt_scoped(root, exem
 empty map is the no-op. The new whole-tree `patch_coverage::measure_line_exempt{,_typescript,_rust}`
 take the same map.
 
+The Stryker `mutation.json` report types are removed (#246): the TS arm no longer parses a report
+file, so the report-parsing surface is gone. If you consumed it directly, switch to the normalized
+core (#239) — the same types the bundled adapter emits and the Rust/Python arms already feed:
+
+| Removed | Replacement |
+| --- | --- |
+| `mutation::parse_stryker_report`, `mutation::stryker_survivors` | `mutation::parse_normalized_results` + `mutation::evaluate_normalized` |
+| `mutation::{StrykerReport, StrykerFile, StrykerMutant, StrykerLocation}` | `mutation::NormalizedMutant` |
+
+`measure_typescript` takes a trailing `adapter: &Path` — the path to the bundled Node adapter
+(`packages/node/dist/mutation/main.js`):
+
+| Function | Before | After |
+| --- | --- | --- |
+| `mutation::measure_typescript` | `(root, exempt, exempt_lines, base)` | `(root, exempt, exempt_lines, base, adapter)` |
+
+On the CLI, the npm `testing-conventions` launcher passes this path as `--ts-mutation-adapter` on a
+`unit mutation` invocation; run the rule through the published CLI rather than the raw Rust binary,
+which errors clearly when the argument is absent.
+
 
 `regions` on the Rust coverage types is now `Option<u8>` (#206), so the region check can
 be left off (the zero-config default floors lines only). Library callers that construct
@@ -617,12 +647,6 @@ The `--lang` flag and its implicit `python` default are gone — a clean break, 
 a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
-
-`unit mutation --language typescript` no longer auto-installs Stryker. It runs `npx --no-install`,
-so a project without `@stryker-mutator/core` (and a test-runner plugin) now fails fast with a clear
-`Stryker produced no report … must be installed` error instead of silently downloading and running
-the deprecated `stryker` 0.x package. Install the engine before running the rule (the reusable
-workflow already does). No API or config change.
 
 `unit coverage --language typescript` likewise no longer auto-installs vitest — it runs
 `npx --no-install vitest` and fails fast with a clear "must be installed" error when `vitest` /
@@ -722,12 +746,14 @@ exit codes — `killed` `0`, `survivors` `1`, and `survivors` with a `mutation` 
 cd packages/rust && cargo test --lib mutation:: --test mutation_typescript --test mutation_typescript_e2e --test mutation_base_ts
 ```
 
-Expected: the TypeScript mutation tests pass — the pure Stryker-report parser collects `Survived` /
-`NoCoverage` mutants and feeds the shared `evaluate` core; over the fixture projects, `killed`
-reports no survivors while `survivors` (an assertion-light suite) reports several; `--base` scopes
-the run to the changed lines; and the always-on gate drives the exit codes `0` / `1` / `0`.
-Requires the fixtures' Stryker toolchain (`npm ci` in
-`tests/fixtures/unit_mutation/typescript`).
+Expected: the TypeScript mutation tests pass — the rule drives the bundled Node adapter (#246), which
+runs Stryker over the **runner-only** fixture projects (they install only vitest, never Stryker) and
+emits the normalized schema the gate consumes; `killed` reports no survivors while `survivors` (an
+assertion-light suite) reports several; `--base` scopes the run to the changed lines; and the
+always-on gate drives the exit codes `0` / `1` / `0`. Requires the built node adapter
+(`npm ci && npm run build` in `packages/node`) and the fixtures' vitest (`npm ci` in
+`tests/fixtures/unit_mutation/typescript`); the tests pass the adapter path as
+`--ts-mutation-adapter` (and to the SDK as the trailing `adapter` argument).
 
 ```
 cd packages/rust && cargo test --lib mutation:: --test mutation_python --test mutation_python_e2e --test mutation_base_py

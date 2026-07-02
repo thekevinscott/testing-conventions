@@ -6,7 +6,7 @@
   "repository": "https://github.com/thekevinscott/testing-conventions",
   "type": "module",
   "bin": {
-    "testing-conventions": "dist/bin.js"
+    "testing-conventions": "dist/bin/index.js"
   },
   "exports": {
     ".": {
@@ -50,6 +50,7 @@
     "@testing-conventions/x86_64-pc-windows-msvc": "0.0.1"
   },
   "devDependencies": {
+    "@stryker-mutator/api": "^9.6.0",
     "@types/node": "^22.9.0",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",

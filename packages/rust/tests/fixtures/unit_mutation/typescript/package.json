@@ -2,10 +2,8 @@
   "name": "tc-unit-mutation-typescript-fixtures",
   "private": true,
   "version": "0.0.0",
-  "description": "Real TypeScript projects for the `unit mutation` rule's integration/e2e tests (#202). Each subdirectory is a tiny library whose colocated vitest suite is run under Stryker; the suites are wired so `killed` catches every mutant and `survivors` (coverage-passing but assertion-light) leaves several. Installed once here (shared node_modules); the CLI runs Stryker from each project dir, which resolves this install via Node's parent lookup.",
+  "description": "Real TypeScript projects for the `unit mutation` rule's integration/e2e tests (#202). Each subdirectory is a tiny library whose colocated vitest suite is run under Stryker; the suites are wired so `killed` catches every mutant and `survivors` (coverage-passing but assertion-light) leaves several. Runner-only: each project supplies just its own test runner (vitest) — Stryker is bundled with and driven by the tool's Node adapter (#246), so a consumer installs nothing Stryker-related.",
   "devDependencies": {
-    "vitest": "3.2.6",
-    "@stryker-mutator/core": "9.6.1",
-    "@stryker-mutator/vitest-runner": "9.6.1"
+    "vitest": "3.2.6"
   }
 }

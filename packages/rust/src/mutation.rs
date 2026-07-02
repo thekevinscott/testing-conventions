@@ -370,75 +370,6 @@ pub fn measure_rust(
     )
 }
 
-/// A Stryker `mutation.json` report (the mutation-testing-elements schema), pared to
-/// the fields the rule reads. Unmodeled keys (`schemaVersion`, `thresholds`, `source`,
-/// `testFiles`, `projectRoot`, `config`, …) are ignored.
-#[derive(Debug, Clone, Deserialize)]
-pub struct StrykerReport {
-    /// Per-file mutants, keyed by project-relative, `/`-separated path.
-    pub files: BTreeMap<String, StrykerFile>,
-}
-
-/// One file's mutants in a Stryker report.
-#[derive(Debug, Clone, Deserialize)]
-pub struct StrykerFile {
-    #[serde(default)]
-    pub mutants: Vec<StrykerMutant>,
-}
-
-/// One mutant, pared to the location + status + description the rule needs. Stryker
-/// also carries `id`, `coveredBy`, `static`, `testsCompleted`, …; those are ignored.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StrykerMutant {
-    pub mutator_name: String,
-    #[serde(default)]
-    pub replacement: Option<String>,
-    pub status: String,
-    pub location: StrykerLocation,
-}
-
-/// A mutant's source location; only the start line is read (reusing [`LineCol`], whose
-/// extra `column` field Stryker also provides and serde ignores).
-#[derive(Debug, Clone, Deserialize)]
-pub struct StrykerLocation {
-    pub start: LineCol,
-}
-
-/// Parse a Stryker `mutation.json` report.
-pub fn parse_stryker_report(json: &str) -> Result<StrykerReport> {
-    serde_json::from_str(json).context("parsing Stryker mutation.json")
-}
-
-/// The surviving mutants in a Stryker report — the raw list before exemptions.
-///
-/// A survivor is a `Survived` mutant (a test ran the mutated code but none failed) or a
-/// `NoCoverage` one (no test exercised it at all — worse). `Killed` / `Timeout` are
-/// caught; `CompileError` / `RuntimeError` never produced a viable mutant; `Ignored` /
-/// `Pending` are out of scope. (Mirrors the cargo-mutants `MissedMutant`-only rule.)
-pub fn stryker_survivors(report: &StrykerReport) -> Vec<Survivor> {
-    let mut survivors = Vec::new();
-    for (file, contents) in &report.files {
-        for mutant in &contents.mutants {
-            if mutant.status != "Survived" && mutant.status != "NoCoverage" {
-                continue;
-            }
-            let description = match &mutant.replacement {
-                Some(replacement) => {
-                    format!("{} (-> {})", mutant.mutator_name, one_line(replacement))
-                }
-                None => mutant.mutator_name.clone(),
-            };
-            survivors.push(Survivor {
-                file: file.clone(),
-                line: mutant.location.start.line,
-                description,
-            });
-        }
-    }
-    survivors
-}
-
 /// Collapse a (possibly multi-line) replacement to a single trimmed line, capped, so a
 /// survivor's one-line description stays readable.
 fn one_line(replacement: &str) -> String {
@@ -451,20 +382,30 @@ fn one_line(replacement: &str) -> String {
     }
 }
 
-/// Run Stryker over the TypeScript project at `root` and return its un-exempted
-/// survivors — the TS arm of the mutation rule (#202), parity with [`measure_rust`].
+/// Run the bundled TypeScript mutation adapter over the project at `root` and return its
+/// un-exempted survivors — the TS arm of the mutation rule (#202), parity with
+/// [`measure_rust`].
+///
+/// The consumer installs **nothing** Stryker-related: the npm package ships a Node
+/// adapter that drives Stryker through its own Node API and emits the engine-agnostic
+/// [`NormalizedMutant`] schema (#239), which this gates over via [`evaluate_normalized`]
+/// — the same core the Rust and Python arms feed. Only the project's own test runner
+/// (vitest) needs to be present, exactly as cargo-mutants needs a buildable crate and
+/// cosmic-ray needs pytest.
 ///
 /// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested —
 /// Stryker has no native git-diff mode, so the changed lines become `--mutate
 /// <file>:<line>-<line>` ranges (line granularity, matching cargo-mutants' `--in-diff`).
 /// Without it, the project's configured `mutate` set runs. `exempt` is the file-level
-/// exempt paths and `exempt_lines` the line-scoped ones (#226). Stryker must be
-/// installed / resolvable.
+/// exempt paths and `exempt_lines` the line-scoped ones (#226). `adapter` is the path to
+/// the bundled Node adapter (`dist/mutation/main.js`) — the CLI receives it from the npm
+/// launcher's `--ts-mutation-adapter` argument and hands it down explicitly.
 pub fn measure_typescript(
     root: &Path,
     exempt: &[String],
     exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
     base: Option<&str>,
+    adapter: &Path,
 ) -> Result<Vec<Survivor>> {
     let mutate = match base {
         Some(base) => {
@@ -477,33 +418,74 @@ pub fn measure_typescript(
         }
         None => None,
     };
-    let json = run_stryker(root, mutate.as_deref())?;
-    let report = parse_stryker_report(&json)?;
-    evaluate_scoped(
-        stryker_survivors(&report),
-        &stryker_mutated_lines(&report),
-        exempt,
-        exempt_lines,
-    )
+    let json = run_ts_adapter(root, adapter, mutate.as_deref())?;
+    let mutants = parse_normalized_results(&json)?;
+    evaluate_normalized(&mutants, exempt, exempt_lines)
 }
 
-/// The `(file, line)` locations Stryker produced a **viable** mutant for — caught,
-/// survived, no-coverage, or timed out, but not the unviable `CompileError` /
-/// `RuntimeError` (or the skipped `Ignored` / `Pending`). The #226 guard reads this the
-/// same way as cargo-mutants' [`mutated_lines`].
-fn stryker_mutated_lines(report: &StrykerReport) -> MutatedLines {
-    let mut mutated = BTreeSet::new();
-    for (file, contents) in &report.files {
-        for mutant in &contents.mutants {
-            if matches!(
-                mutant.status.as_str(),
-                "Killed" | "Survived" | "NoCoverage" | "Timeout"
-            ) {
-                mutated.insert((file.clone(), mutant.location.start.line));
-            }
-        }
+/// Run the bundled TS mutation `adapter` over `root` and return the normalized-results JSON
+/// it writes. The adapter (a Node entry shipped with the npm package) drives Stryker via
+/// its Node API and emits a [`NormalizedMutant`] array (#239) — so the consumer drives the
+/// engine through this CLI alone; the npm package resolves `@stryker-mutator/*` from the
+/// tool's own tree.
+///
+/// `mutate`, when set, scopes the run to `--mutate` line ranges. Results are written to a
+/// temp file the adapter names via `--out` (so Stryker's own stdout logging can't corrupt
+/// them), then read back. `node` and the project's own test runner must be available; a
+/// non-zero adapter exit surfaces its captured output.
+fn run_ts_adapter(root: &Path, adapter: &Path, mutate: Option<&[String]>) -> Result<String> {
+    let out = AdapterOut::new();
+    std::fs::create_dir_all(&out.0).context("creating the mutation adapter output dir")?;
+    let results = out.0.join("results.json");
+
+    let mut command = Command::new("node");
+    command
+        .current_dir(root)
+        .arg(adapter)
+        .arg("--out")
+        .arg(&results);
+    if let Some(specs) = mutate {
+        command.arg("--mutate").arg(specs.join(","));
     }
-    mutated
+    let output = command
+        .output()
+        .context("running the TypeScript mutation adapter (is `node` installed?)")?;
+    if !output.status.success() {
+        bail!(
+            "the TypeScript mutation adapter failed in `{}`:\n{}{}",
+            root.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+    std::fs::read_to_string(&results).with_context(|| {
+        format!(
+            "reading the TypeScript mutation adapter's results from `{}`",
+            results.display()
+        )
+    })
+}
+
+/// A unique temp dir for one TS mutation adapter run's `--out` JSON, removed on drop so
+/// the scanned project stays pristine and parallel runs don't collide.
+struct AdapterOut(PathBuf);
+
+impl AdapterOut {
+    fn new() -> Self {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let name = format!(
+            "testing-conventions-ts-adapter-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed),
+        );
+        AdapterOut(std::env::temp_dir().join(name))
+    }
+}
+
+impl Drop for AdapterOut {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 /// Build the Stryker `--mutate` specs scoping a run to the `<base>...HEAD` changed
@@ -547,69 +529,6 @@ fn contiguous_runs(lines: &BTreeSet<u64>) -> Vec<(u64, u64)> {
         }
     }
     runs
-}
-
-/// Run Stryker over `root` (resolving the project's own config) with the json reporter,
-/// returning the contents of its `mutation.json`. `mutate`, when set, scopes the run to
-/// `--mutate` line ranges. The report goes to Stryker's default
-/// `reports/mutation/mutation.json`; it's read and then pruned (the file and any empty
-/// parents) so the scanned tree stays pristine and a populated `reports/` is untouched.
-///
-/// Stryker's exit code is *not* trusted to mean "no survivors": a configured
-/// `thresholds.break` makes it exit non-zero on a low score, which is exactly the
-/// survivor case the rule reports on. So the report is read whenever it exists; only a
-/// missing report (a real run failure) is fatal.
-fn run_stryker(root: &Path, mutate: Option<&[String]>) -> Result<String> {
-    let report_path = root.join("reports").join("mutation").join("mutation.json");
-    let _cleanup = ReportCleanup(report_path.clone());
-    // Drop any stale report so a previous run's output is never mistaken for this one's.
-    let _ = std::fs::remove_file(&report_path);
-
-    let mut command = Command::new("npx");
-    command
-        .current_dir(root)
-        // `--no-install`, never `--yes`: run the project's own pinned Stryker (resolved
-        // via Node's parent-dir lookup) and refuse to download anything. With `--yes`, a
-        // missing `@stryker-mutator/core` would silently fetch the long-deprecated
-        // standalone `stryker` package (renamed in 2019) and crash with MODULE_NOT_FOUND;
-        // the TS arm must fail clean like the cosmic-ray / cargo-mutants arms, which run
-        // their binary directly.
-        .args(["--no-install", "stryker", "run", "--reporters", "json"]);
-    if let Some(specs) = mutate {
-        command.arg("--mutate").arg(specs.join(","));
-    }
-    let output = command
-        .env("CI", "1")
-        .output()
-        .context("running `npx --no-install stryker run`")?;
-
-    std::fs::read_to_string(&report_path).map_err(|_| {
-        anyhow::anyhow!(
-            "Stryker produced no report in `{}`. The rule runs the project's own Stryker via \
-             `npx --no-install` and never downloads it, so `@stryker-mutator/core` (plus a \
-             test-runner plugin) must be installed in the project. Stryker output:\n{}{}",
-            root.display(),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        )
-    })
-}
-
-/// Removes the Stryker json report on drop, pruning the `mutation/` and `reports/`
-/// parents only if they're left empty — so a user's own populated `reports/` survives.
-struct ReportCleanup(PathBuf);
-
-impl Drop for ReportCleanup {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-        if let Some(mutation_dir) = self.0.parent() {
-            // `remove_dir` only succeeds on an empty dir, so populated trees are safe.
-            let _ = std::fs::remove_dir(mutation_dir);
-            if let Some(reports_dir) = mutation_dir.parent() {
-                let _ = std::fs::remove_dir(reports_dir);
-            }
-        }
-    }
 }
 
 /// One line of `cosmic-ray dump` output: a `[work_item, result]` pair. The result is
@@ -1134,56 +1053,6 @@ mod tests {
         assert_eq!(unexplained_survivors(&report, &exempt).len(), 1);
     }
 
-    // A pared Stryker `mutation.json`: one Survived, one NoCoverage, one Killed — the
-    // real shape (per-file `files` map, extra fields the rule ignores).
-    const STRYKER_SAMPLE: &str = r#"{
-        "schemaVersion": "1.0",
-        "files": {
-            "src/index.ts": {
-                "language": "typescript",
-                "source": "...",
-                "mutants": [
-                    {"id": "0", "mutatorName": "ConditionalExpression", "replacement": "true",
-                     "status": "Survived", "coveredBy": ["t0"],
-                     "location": {"start": {"line": 2, "column": 10}, "end": {"line": 2, "column": 15}}},
-                    {"id": "1", "mutatorName": "ArithmeticOperator", "replacement": "a - b",
-                     "status": "NoCoverage",
-                     "location": {"start": {"line": 5, "column": 3}, "end": {"line": 5, "column": 8}}},
-                    {"id": "2", "mutatorName": "BooleanLiteral", "replacement": "false",
-                     "status": "Killed",
-                     "location": {"start": {"line": 9, "column": 1}, "end": {"line": 9, "column": 6}}}
-                ]
-            }
-        }
-    }"#;
-
-    #[test]
-    fn parses_a_stryker_report() {
-        let report = parse_stryker_report(STRYKER_SAMPLE).expect("valid mutation.json");
-        assert_eq!(report.files["src/index.ts"].mutants.len(), 3);
-    }
-
-    #[test]
-    fn collects_survived_and_nocoverage_as_survivors() {
-        let report = parse_stryker_report(STRYKER_SAMPLE).unwrap();
-        let survivors = stryker_survivors(&report);
-        // Survived + NoCoverage are survivors; the Killed mutant is not.
-        assert_eq!(survivors.len(), 2);
-        assert!(survivors.iter().all(|s| s.file == "src/index.ts"));
-        assert_eq!(survivors[0].line, 2);
-        assert!(survivors[0].description.contains("ConditionalExpression"));
-        assert!(survivors[0].description.contains("true"));
-        assert_eq!(survivors[1].line, 5);
-    }
-
-    #[test]
-    fn evaluate_drops_exempt_files_for_either_engine() {
-        let report = parse_stryker_report(STRYKER_SAMPLE).unwrap();
-        let survivors = stryker_survivors(&report);
-        let exempt = vec!["src/index.ts".to_string()];
-        assert!(evaluate(survivors, &exempt).is_empty());
-    }
-
     #[test]
     fn is_mutatable_ts_keeps_sources_and_drops_tests_and_decls() {
         assert!(is_mutatable_ts("src/index.ts"));
@@ -1330,22 +1199,6 @@ mod tests {
         )
         .unwrap();
         assert!(kept.is_empty());
-    }
-
-    #[test]
-    fn stryker_mutated_lines_collects_every_viable_mutant() {
-        // Survived (2), NoCoverage (5), and Killed (9) all ran; nothing is unviable here.
-        let report = parse_stryker_report(STRYKER_SAMPLE).unwrap();
-        assert_eq!(
-            stryker_mutated_lines(&report),
-            [
-                ("src/index.ts".to_string(), 2),
-                ("src/index.ts".to_string(), 5),
-                ("src/index.ts".to_string(), 9),
-            ]
-            .into_iter()
-            .collect()
-        );
     }
 
     #[test]

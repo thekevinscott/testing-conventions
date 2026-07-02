@@ -23,6 +23,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `[rust].coverage` with just `regions = 90` keeps `lines = 100`. Previously every field was
   required, so a partial table errored (and `[rust].coverage` errored without `lines`). A typo'd key
   is still rejected — only *missing* keys default. No API change (the struct fields are unchanged).
+- **BREAKING: `unit mutation --language typescript` bundles and drives Stryker through a Node
+  adapter** (#246, epic #239). The TS arm now spawns a Node adapter shipped with the npm package,
+  which drives Stryker through its own Node API and emits the normalized `NormalizedMutant` schema
+  (#239) the gate consumes; the tool drives the engine, and the project supplies its own test runner
+  (vitest), exactly as cargo-mutants needs a buildable crate and cosmic-ray needs pytest. The npm
+  `testing-conventions` launcher passes the adapter's path to the binary as a `--ts-mutation-adapter`
+  argument on a `unit mutation` invocation; the SDK `measure_typescript` takes it as a trailing
+  `adapter: &Path`. See [MIGRATIONS](./MIGRATIONS.md).
+
+### Removed
+
+- **BREAKING: the Stryker `mutation.json` report types are gone** (#246). `mutation::{StrykerReport,
+  StrykerFile, StrykerMutant, StrykerLocation, parse_stryker_report, stryker_survivors}` are removed —
+  the TS arm no longer parses a Stryker report file; the bundled adapter emits the normalized schema
+  (#239) directly. Consume `parse_normalized_results` + `evaluate_normalized` instead. See
+  [MIGRATIONS](./MIGRATIONS.md).
 
 ### Fixed
 
@@ -51,7 +67,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   error when the engine is absent — parity with the cosmic-ray (Python) and cargo-mutants (Rust) arms,
   which already invoke their binary directly. A project that relied on the implicit download must now
   install `@stryker-mutator/core` + a test-runner plugin (the rule always documented this as a
-  prerequisite; the reusable workflow already installs it).
+  prerequisite; the reusable workflow already installs it). *(Superseded within this same unreleased
+  window by #246 above: the consumer no longer installs Stryker at all — the tool bundles and drives
+  it. This entry is retained only because the coverage fix below refers back to its `npx` footgun.)*
 - **`unit coverage --language typescript` no longer auto-downloads vitest.** The same `npx --yes`
   footgun as the mutation arm: `run_vitest_coverage` shelled out to `npx --yes vitest`, silently
   fetching vitest when it wasn't installed. It now runs `npx --no-install`, using only the project's

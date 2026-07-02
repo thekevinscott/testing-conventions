@@ -7,13 +7,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **The TypeScript mutation engine now ships with the package.** `@stryker-mutator/core` and
-  `@stryker-mutator/vitest-runner` (`^9.6.0`) are declared as runtime dependencies, so an
-  `npm install` / `npx` of testing-conventions installs them, and `unit mutation --language typescript`
-  resolves them from the project's `node_modules` — no separate engine install. The test runner
-  (`vitest`) stays the consumer's optional peer, since it runs *their* suite and Stryker's runner plugin
-  already peers on it. CLI-only consumers who don't run mutation simply carry the unused dependency.
-  Stryker 9 requires **Node ≥20** (its own floor); a consumer on an older Node won't be able to install.
+- **TypeScript mutation engine adapter** (#246, part of the #239 epic). Organized by folder:
+  `src/mutation/mutation-cli.ts` exposes `mutationCLI` — the async orchestrator — over
+  one-function-per-file helpers alongside it (`parse-args`, `run-stryker`, `to-normalized`,
+  `normalize-status`), and `src/mutation/main.ts` is the executable that runs it. The adapter drives Stryker through its
+  **Node API** (`new Stryker(opts).runMutationTest()`) and maps the structured `MutantResult[]` onto
+  the normalized schema the Rust core gates on, selecting the bundled `@stryker-mutator/vitest-runner`
+  by resolved path so the unit-scoped runner runs (#240) and reading results in-process (written to a
+  `--out` file). The Rust binary spawns the adapter (`dist/mutation/main.js`) for `unit mutation
+  --language typescript`; the launcher (`src/bin/index.ts`) passes its path to the binary as a
+  `--ts-mutation-adapter` argument. Adds `@stryker-mutator/api` as a devDependency (the engine's
+  result types). The `bin` entry now resolves to `dist/bin/index.js`; the package's `.` export is
+  unchanged.
+- **The TypeScript mutation engine ships with the package.** `@stryker-mutator/core` and
+  `@stryker-mutator/vitest-runner` (`^9.6.0`) are declared as runtime dependencies, so installing
+  testing-conventions brings them in and the adapter resolves them from the package's own tree; the
+  tool drives Stryker, and the consumer provides their own test runner (`vitest`), which stays an
+  optional peer since it runs *their* suite and Stryker's runner plugin peers on it. Stryker 9 sets the
+  floor at **Node ≥20**.
 - `vitestConfig`: a shared vitest base config exported from the package root
   (`import { vitestConfig } from 'testing-conventions'`). Extend it with
   `mergeConfig` to hold a consumer's local `vitest --coverage` run to the same

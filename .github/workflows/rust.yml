@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'packages/rust/**'
+      # The TypeScript mutation rule drives the bundled Node adapter (#246), exercised
+      # by this crate's integration/e2e suite — re-run when the adapter changes too.
+      - 'packages/node/**'
       - '.github/workflows/rust.yml'
       # The Build job guards the reusable workflow against CLI subcommand drift
       # (#92), so re-run when that workflow changes too.
@@ -80,8 +83,20 @@ jobs:
       # The Rust mutation rule's integration/e2e tests (#201) shell out to cargo-mutants
       # over the tiny fixture crates.
       - uses: taiki-e/install-action@cargo-mutants
-      # The TypeScript mutation rule's integration/e2e tests (#202) shell out to Stryker
-      # over the tiny fixture projects; install its toolchain so `npx stryker` resolves it.
+      # The TypeScript mutation rule (#202) drives the bundled Node adapter (#246) rather
+      # than a consumer-installed Stryker: build it (and install its deps, including
+      # @stryker-mutator/*) so the rule can spawn `packages/node/dist/mutation-cli.js`. The
+      # integration/e2e tests inject its path via TESTING_CONVENTIONS_TS_MUTATION_ADAPTER.
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.0
+      - name: Build the TypeScript mutation adapter
+        working-directory: packages/node
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm run build
+      # The fixture projects are runner-only — they install just vitest (their own test
+      # runner); Stryker comes from the adapter built above. Install so vitest resolves.
       - name: Install the TypeScript mutation fixtures' toolchain
         working-directory: packages/rust/tests/fixtures/unit_mutation/typescript
         run: npm ci

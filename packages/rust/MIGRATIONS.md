@@ -392,6 +392,14 @@ exemption lifts a source. Additive to the colocated-test command: the
 (`co-change`); nothing existing changes. `--base --language rust` is rejected (inline
 `#[cfg(test)]` units have no sibling test to go stale).
 
+Fixes `unit colocated-test --base` so an exempt package barrel can be deleted (#252). A source
+*deleted* in the `<base>...HEAD` diff is now a co-change subject only if it *had* a colocated test in
+the **base** tree — a barrel (`__init__.py`, `index.ts`) that never had a sibling test can be removed
+without a test co-changing, and needs no exemption. Before, the deletion was unsatisfiable: keeping the
+barrel's `colocated-test` exempt entry tripped the stale-path check (the file is gone in HEAD) and
+dropping it tripped co-change. Purely a bug fix — `co_change::stale_sources`'s signature is unchanged;
+only its deletion-handling runtime behavior changes (see **Behavior changes without code changes**).
+
 Finally, adds the Rust coverage arm (#37), the twin of #26 (Python) / #31 (TypeScript):
 `unit coverage --language rust [--config <CONFIG>] <PATH>` runs `cargo llvm-cov --json
 --summary-only` over the crate at `<PATH>` and enforces the `[rust].coverage` floor on the
@@ -683,6 +691,12 @@ Exemptions (#32) change runtime behavior:
   below 100% lines now **fails** where it previously had no coverage gate; lower `lines` (or omit
   it differently) with an explicit `[rust].coverage` table to restore headroom, and add a
   `regions = N` floor to opt the sub-line metric back in.
+- `unit colocated-test --base` no longer flags a *deleted* source that had no colocated test in the
+  base tree (#252): a package barrel (`__init__.py`, `index.ts`) can be removed without its
+  (nonexistent) sibling test co-changing, and without a `co-change` exemption to silence it — the
+  earlier "keep the exempt entry and the stale-path check rejects it / drop it and co-change flags it"
+  deadlock is gone. A deletion whose colocated test *did* exist in base is still flagged when that test
+  isn't removed or updated. No API or config change.
 
 ### Verification
 

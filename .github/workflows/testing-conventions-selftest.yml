@@ -237,8 +237,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install mutation toolchain (cosmic-ray + pytest)
-        run: python -m pip install --quiet cosmic-ray pytest
+      - name: Install mutation toolchain (the testing-conventions wheel + pytest)
+        # The wheel ships the adapter (#248) and brings cosmic-ray; pytest runs the suite.
+        run: python -m pip install --quiet testing-conventions pytest
       - name: A mutation-clean Python library clears `unit mutation`
         run: npx -y testing-conventions unit mutation --language python .github/selftest/mutation/python-clean
 

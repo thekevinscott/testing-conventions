@@ -187,7 +187,9 @@ ran but no test failed on:
 - **Python** runs [cosmic-ray](https://github.com/sixty-north/cosmic-ray) through a Python adapter
   bundled in the wheel — driven via cosmic-ray's `WorkDB` library API (`survived` outcomes), with a
   baseline check guarding against a broken suite reporting a false pass. The tool drives cosmic-ray;
-  you provide the test runner (`pytest`).
+  you provide the test runner (`pytest`). The adapter runs as an installed module (`python3 -m
+  testing_conventions.mutation.main`), so the environment needs the `testing-conventions` wheel — it
+  ships the adapter and brings cosmic-ray as a dependency — alongside `pytest`.
 
 A mutant with a `mutation` [exemption](#exemptions) on its file is dropped (an equivalent or
 deliberately-defensive mutation, with a reason) — or, with a [`lines`](#line-scoped-exemptions)

@@ -427,9 +427,10 @@ jobs:
       - if: matrix.language == 'typescript'
         name: Install project dependencies (pnpm)
         run: pnpm install --frozen-lockfile
-      # Rust drives cargo-mutants over the crate. The tool provisions the engine itself on
-      # first use (#242) — a pinned `cargo install` into its cache — so only the cargo
-      # toolchain is set up here; cache the provisioned engine across runs.
+      # Rust drives cargo-mutants over the crate. The provisioning binary (#242) installs
+      # the engine itself, but this workflow runs the *published* CLI, which gains that only
+      # once #242 ships — so the engine is still installed here until then. Also cache the
+      # tool's provisioning dir, which the published binary will populate post-release.
       - if: matrix.language == 'rust'
         uses: dtolnay/rust-toolchain@stable
       - if: matrix.language == 'rust'
@@ -438,6 +439,11 @@ jobs:
         with:
           path: ~/.cache/testing-conventions
           key: cargo-mutants-provision-${{ runner.os }}
+      - if: matrix.language == 'rust'
+        name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
       # Build a caller-supplied native module before the mutation engine runs the suite
       # (#243): cosmic-ray / Stryker / cargo-mutants import the same module, so it must be
       # compiled here too; empty `build_command` ⇒ skipped.

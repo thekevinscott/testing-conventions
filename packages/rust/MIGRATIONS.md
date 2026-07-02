@@ -21,9 +21,10 @@ cargo-mutants --locked --version <X>` into the tool's own cache directory and dr
 there, so a direct CLI run works with only a cargo toolchain — the same "install nothing, never name
 the engine" contract the TS/Python arms meet by resolving from the npm/wheel install. cargo has no
 library form of cargo-mutants, so the tool runs the installed binary rather than embedding it — the
-one deliberate asymmetry from the in-process TS/Python adapters. The reusable workflow's and
-selftest's `Install cargo-mutants` steps are dropped. `measure_rust`'s signature is unchanged; only
-its runtime behavior changes (see **Behavior changes without code changes**).
+one deliberate asymmetry from the in-process TS/Python adapters. (The reusable workflow and selftest
+run the *published* CLI, which gains provisioning only once this ships, so their `Install
+cargo-mutants` step stays until then and is removed in a follow-up.) `measure_rust`'s signature is
+unchanged; only its runtime behavior changes (see **Behavior changes without code changes**).
 
 Wires the Python arm to drive cosmic-ray in-process through a **bundled Python adapter** (#248,
 building on the #239 core). `unit mutation --language python` now spawns a Python adapter shipped in
@@ -687,8 +688,9 @@ cache directory (`$XDG_CACHE_HOME`/`$HOME/.cache` → `testing-conventions/cargo
 invokes the binary from there. The first run on a cold machine pays a one-time from-source compile;
 cache the directory in CI to skip it. If you install cargo-mutants yourself, the tool still uses its
 own pinned copy, so results are reproducible across environments. `measure_rust`'s signature is
-unchanged. If your pipeline installed cargo-mutants only for our reusable workflow, you can drop that
-step.
+unchanged. A direct `unit mutation --language rust` now needs only a cargo toolchain; if your own
+pipeline installed cargo-mutants solely for that direct call, you can drop the step once this release
+is out.
 
 `unit coverage --language typescript` likewise no longer auto-installs vitest — it runs
 `npx --no-install vitest` and fails fast with a clear "must be installed" error when `vitest` /

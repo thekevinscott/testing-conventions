@@ -14,8 +14,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   toolchain present — parity with the TS/Python arms, which resolve their engines from the npm/wheel
   install. cargo ships no library form of the engine, so the tool drives the installed binary (the
   one unavoidable asymmetry from the in-process TS/Python adapters, called out per the
-  cross-language-parity rule). The reusable workflow's and selftest's `Install cargo-mutants` steps are
-  removed. No SDK change — `measure_rust`'s signature is unchanged.
+  cross-language-parity rule). No SDK change — `measure_rust`'s signature is unchanged. (The reusable
+  workflow and selftest run the *published* CLI, which gains provisioning only once this ships, so
+  their `Install cargo-mutants` step stays until then; it's removed in a follow-up once the
+  provisioning binary is released.)
 - **BREAKING: `coverage` / `mutation` exemptions are now line-scoped only** (#226). A
   `[[<language>.exempt]]` entry naming `coverage` or `mutation` must carry a `lines` list; a
   whole-file `rules = ["coverage"]` (or `["mutation"]`) entry — accepted before — is now rejected on

@@ -195,12 +195,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
-      # The tool provisions cargo-mutants itself on first use (#242); cache it across runs.
+      # This runs the *published* CLI, which gains self-provisioning (#242) only once that
+      # ships — so install the engine until then, and cache the tool's provisioning dir the
+      # published binary will populate post-release.
       - name: Cache the provisioned cargo-mutants
         uses: actions/cache@v4
         with:
           path: ~/.cache/testing-conventions
           key: cargo-mutants-provision-${{ runner.os }}
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
       - name: A clean crate passes `unit mutation`
         # Every mutant is caught, so the gate clears — the green half of the signal.
         run: npx -y testing-conventions unit mutation --language rust .github/selftest/mutation/clean

@@ -93,4 +93,4 @@ jobs:
           printf '{"name":"%s","version":"0.0.1"}\n' "$pkg" > "$target/package.json"
           install -m 755 packages/rust/target/release/testing-conventions "$target/bin/testing-conventions"
       - name: Smoke (--version via node wrapper -> rust binary)
-        run: node packages/node/dist/bin.js --version
+        run: node packages/node/dist/bin/index.js --version

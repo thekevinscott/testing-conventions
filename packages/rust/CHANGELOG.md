@@ -26,6 +26,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`unit colocated-test --base` no longer makes an exempt package barrel undeletable** (#252). A
+  source *deleted* in the `<base>...HEAD` diff is now a co-change subject only if it *had* a colocated
+  test in the **base** tree — the test actually at risk of being orphaned. A file that never had a
+  sibling test (a package barrel: `__init__.py`, `index.ts`) can be removed without a test appearing
+  in the diff, so co-change no longer flags it. Before, deleting an exempt barrel was unsatisfiable:
+  keeping its `colocated-test` exempt entry tripped the stale-exempt check (the file is gone in HEAD),
+  and removing the entry — the documented move — tripped co-change. Now the barrel and its (now-stale)
+  exempt entry are both simply deleted. No API change (`co_change::stale_sources`'s signature is
+  unchanged).
+
 - **`unit mutation --language rust --base` now handles a crate nested in the git repo, and a diff
   that doesn't touch it** (#204 follow-up). The `<base>...HEAD` diff is taken `--relative` to the
   crate, so cargo-mutants' `--in-diff` matches a crate in a subdirectory (the common consumer

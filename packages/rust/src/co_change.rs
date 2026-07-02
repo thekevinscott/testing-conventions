@@ -6,7 +6,10 @@
 //! pairing, `foo.py` → `foo_test.py`, `foo.ts` → `foo.test.ts` — must also be in
 //! that diff. This catches edits and removals that leave the test silently stale.
 //! *Added* source files are not subjects: brand-new code is the coverage floor's
-//! job, not this one.
+//! job, not this one. A **deletion** is a subject only if the source *had* a
+//! colocated test in the base tree — a package barrel (`__init__.py`, `index.ts`)
+//! with no sibling test can be deleted without one appearing in the diff, so it is
+//! not flagged and needs no exemption (#252).
 //!
 //! [`stale_sources`] walks `git diff --name-status <base>...HEAD` for a
 //! [`Language`] and returns every changed source file whose colocated test did
@@ -27,11 +30,13 @@ use crate::colocated_test::Language;
 /// test did not also change — the stale-test risks — sorted for deterministic
 /// output.
 ///
-/// A source file is a subject when it was **modified** (and still holds code) or
-/// **deleted** in the diff; an **added** file is not (new code is the coverage
-/// floor's concern). A subject whose `repo`-relative path is in `exempt` is a
-/// deliberate omission and is skipped. Everything else must have its colocated
-/// test (`foo.py` → `foo_test.py`, per `language`) somewhere in the same diff.
+/// A source file is a subject when it was **modified** (and still holds code), or
+/// **deleted** while it *had* a colocated test in the base tree (the test now at
+/// risk of being orphaned); an **added** file is not (new code is the coverage
+/// floor's concern), nor is a deleted barrel that never had a sibling test (#252).
+/// A subject whose `repo`-relative path is in `exempt` is a deliberate omission and
+/// is skipped. Everything else must have its colocated test (`foo.py` →
+/// `foo_test.py`, per `language`) somewhere in the same diff.
 ///
 /// Returns an error if `git diff` fails — e.g. `base` names no resolvable ref —
 /// so an un-diffable range surfaces rather than silently passing as "clean".
@@ -54,6 +59,10 @@ pub fn stale_sources(
         if !language.tracks(path) || language.is_test(path) || language.is_support(path) {
             continue;
         }
+        let expected = language
+            .expected_test_path(path)
+            .to_string_lossy()
+            .replace('\\', "/");
         // Only an edit or a removal can leave a test stale; a brand-new source is
         // the coverage floor's concern, not this rule's.
         let is_subject = match status {
@@ -64,16 +73,18 @@ pub fn stale_sources(
                     .with_context(|| format!("reading changed source `{rel}`"))?;
                 language.has_code(&contents)
             }
-            Status::Deleted => true,
+            // A deletion is a subject only if the source *had* a colocated test in
+            // the base tree — the test now at risk of being orphaned. A source that
+            // never had a sibling test (a package barrel: `__init__.py`, `index.ts`)
+            // can be removed without a test appearing in the diff, so it is not
+            // flagged and needs no exemption to delete it (#252). HEAD can't answer
+            // this — the file is gone — so we ask `base`.
+            Status::Deleted => test_exists_in_base(repo, base, &expected)?,
             Status::Other => false,
         };
         if !is_subject || exempt.contains(rel) {
             continue;
         }
-        let expected = language
-            .expected_test_path(path)
-            .to_string_lossy()
-            .replace('\\', "/");
         if !changed.contains(expected.as_str()) {
             stale.push(path.to_path_buf());
         }
@@ -86,7 +97,8 @@ pub fn stale_sources(
 enum Status {
     /// `M` — content changed; a subject if it still holds code.
     Modified,
-    /// `D` — removed; always a subject (its test should go too).
+    /// `D` — removed; a subject only if the source had a colocated test in base
+    /// (its test should go too), never for a barrel that never had one (#252).
     Deleted,
     /// `A` (added) and the rest (`T`, …) — not a co-change subject.
     Other,
@@ -102,6 +114,26 @@ impl Status {
             _ => Status::Other,
         }
     }
+}
+
+/// `true` when `rel` (a `repo`-relative path) exists as a blob in the `base` tree.
+///
+/// Used to tell a deleted source that once had a colocated test — its test should
+/// be removed too, so a stale leftover is worth flagging — from a barrel that never
+/// had one, which can be deleted without a test co-changing (#252). Runs
+/// `git cat-file -e <base>:./<rel>`: the `./` makes git resolve the path relative to
+/// `repo` (the diff's `--relative` root), matching the paths [`changed_entries`]
+/// returns, rather than the repo's top level. A missing blob exits non-zero (→
+/// `false`); the `base` ref itself already resolved for [`changed_entries`], so a
+/// non-zero exit here means "no such path in base", not a bad ref.
+fn test_exists_in_base(repo: &Path, base: &str, rel: &str) -> Result<bool> {
+    let spec = format!("{base}:./{rel}");
+    let output = Command::new("git")
+        .current_dir(repo)
+        .args(["cat-file", "-e", &spec])
+        .output()
+        .with_context(|| format!("running `git cat-file` in `{}`", repo.display()))?;
+    Ok(output.status.success())
 }
 
 /// The status + `repo`-relative path of every file changed in `<base>...HEAD`,

@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- **`install`** (#232). Writes the testing contract into the repository's `AGENTS.md` as a
+  marker-delimited, hash-versioned block (the beads `bd init` pattern), so a coding agent learns
+  the contract before writing code. Idempotent: re-running refreshes the owned region; everything
+  outside the markers is untouched. Refuses a symlinked target; writes atomically.
+
 ### Changed
 
 - **`unit mutation --language rust` provisions cargo-mutants itself** (#242, epic #239). The Rust arm

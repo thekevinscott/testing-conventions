@@ -525,6 +525,10 @@ new public items `config::{LineSpec, LineScope, resolve_exempt_scoped}`, `Exempt
 line_set}`, `coverage::measure_report`, `patch_coverage::measure_line_exempt{,_typescript,_rust}`, and
 `mutation::{evaluate_scoped, mutated_lines, MutatedLines}` land alongside.
 
+Adds the **`install`** command (#232): writes the testing contract into the repository's
+`AGENTS.md` as a marker-delimited, hash-versioned block, idempotently. Purely additive — no
+existing command, flag, config key, or SDK item changes.
+
 ### Required changes
 
 Migrate every whole-file `coverage` / `mutation` exemption to the line-scoped form, naming the lines
@@ -1058,3 +1062,11 @@ Expected: the Rust coverage tests pass (#37) — the `above` fixture crate (ever
 exercised by colocated inline tests) clears a 100 floor, `below` (one `else` arm left uncovered)
 fails 100 but clears an 80 floor, and `exempt_cov` clears 100 once its untested `src/shim.rs` is
 omitted by a `coverage` exemption (`--ignore-filename-regex`). Requires `cargo-llvm-cov`.
+
+```
+testing-conventions install && testing-conventions install
+```
+
+Expected: the first run writes the `<!-- testing-conventions:begin … -->` block into `AGENTS.md`
+(creating the file if needed); the second run leaves the file byte-identical. Both exit `0` and
+print nothing.

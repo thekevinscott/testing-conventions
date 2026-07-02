@@ -3,7 +3,7 @@ name: Dogfood (.github helpers)
 # Hold this repo's own .github/ helper scripts to the same conventions we enforce on every
 # shipped package (#237): detect.py (the detect composite action) and move_major_tag.py (the
 # rolling-tag helper) are first-party Python with real logic, so they earn colocated tests,
-# isolation, coverage, and integration-lint like anything else.
+# isolation, coverage, integration-lint, and the diff-scoped mutation gate like anything else.
 #
 # Scoped to the helper *code* — .github/actions/ + .github/scripts/ — and deliberately NOT:
 #   - .github/selftest/**  : intentional negative fixtures (below-floor, surviving mutants,
@@ -31,20 +31,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # `unit mutation --base` diffs `<base>...HEAD`, so the base ref must be reachable.
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Install the Python unit-coverage toolchain
-        run: python -m pip install --quiet coverage pytest
+      - name: Install the Python toolchain (coverage, pytest, and the mutation adapter)
+        # The mutation arm spawns the adapter shipped in the testing-conventions wheel
+        # (`python3 -m testing_conventions.mutation.main`, #248) — installing the wheel
+        # provides it and brings cosmic-ray.
+        run: python -m pip install --quiet coverage pytest testing-conventions
       - name: Enforce the conventions on the helper scripts
         # The Python arms that apply to loose first-party scripts: a colocated unit test per
-        # source, unit-suite isolation, the coverage floor, and the integration mocking lint.
-        # (Packaging / e2e-attestation don't apply here.) Collect every failure, then fail.
+        # source, unit-suite isolation, the coverage floor, the integration mocking lint, and
+        # mutation on the changed lines — diff-scoped (`--base`) exactly like the packages'
+        # gate, since whole-tree mutation is too slow to gate. (Packaging / e2e-attestation
+        # don't apply here.) Collect every failure, then fail.
         run: |
           set -uo pipefail
           fail=0
           for dir in .github/actions .github/scripts; do
-            for rule in "unit colocated-test" "unit lint" "unit coverage" "integration lint"; do
+            for rule in "unit colocated-test" "unit lint" "unit coverage" "integration lint" "unit mutation --base origin/main"; do
               echo "::group::testing-conventions $rule --language python $dir"
               if ! npx -y testing-conventions $rule --language python "$dir"; then
                 echo "::error::\`$rule\` failed for $dir"

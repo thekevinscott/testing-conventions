@@ -1,0 +1,16 @@
+[package]
+name = "agent-context-node"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+agent-context-core = { path = "../../core" }
+napi = { version = "3.10.0", default-features = false, features = ["napi8"] }
+napi-derive = "3.5.8"
+
+[build-dependencies]
+napi-build = "2.3.2"

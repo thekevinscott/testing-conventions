@@ -1,0 +1,17 @@
+package spike:agent-context;
+
+interface tool {
+  record print-result {
+    files: list<string>,
+    text: string,
+  }
+
+  print: func(globs: list<string>, cwd: option<string>) -> result<print-result, string>;
+  write-block: func(path: string, id: string, content: string) -> result<bool, string>;
+  crash: func(mode: string) -> result<_, string>;
+  run: func(argv: list<string>) -> s32;
+}
+
+world agent-context {
+  export tool;
+}

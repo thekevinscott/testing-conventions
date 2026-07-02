@@ -1,0 +1,16 @@
+{
+  "name": "agent-context-node",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "types": "index.d.ts",
+  "bin": {
+    "agent-context-node": "bin.js"
+  },
+  "napi": {
+    "binaryName": "agent-context"
+  },
+  "scripts": {
+    "build": "napi build --platform --release"
+  }
+}

@@ -1,0 +1,12 @@
+[package]
+name = "agent-context-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+agent-context-core = { path = "../../core" }
+wit-bindgen = "0.58.0"

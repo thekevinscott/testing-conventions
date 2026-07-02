@@ -1,0 +1,10 @@
+target/
+node_modules/
+.venv/
+dist/
+*.node
+*.wasm
+__pycache__/
+bench/tree/
+bench/out/
+*.whl

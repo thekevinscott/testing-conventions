@@ -1,14 +1,15 @@
 //! Integration test for diff-scoped Python mutation — `unit mutation --language python
 //! --base` (#203).
 //!
-//! cosmic-ray has no native git-diff mode, so the wrapper scopes the run to the changed
-//! `.py` files and then filters the survivors to the `<base>...HEAD` changed lines (line
-//! granularity, matching cargo-mutants' `--in-diff` and the Stryker `--mutate` ranges of
-//! the other arms). Builds a throwaway Python project in a git repo (the codebase is the
-//! fixture, per the #3 guardrail): a fully-tested baseline, then a commit that adds an
-//! assertion-light function. The diff scopes the run to the added lines, whose mutants
-//! survive — while the unchanged, well-tested `add` isn't reported. Requires `git` +
-//! cosmic-ray + pytest.
+//! cosmic-ray has no native git-diff mode, so the run is scoped to the changed `.py` files
+//! (passed to the adapter as `--module`) and the survivors are filtered to the
+//! `<base>...HEAD` changed lines in the core (line granularity, matching cargo-mutants'
+//! `--in-diff` and the Stryker `--mutate` ranges of the other arms). Builds a throwaway
+//! Python project in a git repo (the codebase is the fixture, per the #3 guardrail): a
+//! fully-tested baseline, then a commit that adds an assertion-light function. The diff
+//! scopes the run to the added lines, whose mutants survive — while the unchanged,
+//! well-tested `add` isn't reported. Requires `git` and a `python3` with cosmic-ray + pytest
+//! installed and the source package importable (`PYTHONPATH=packages/python/python`).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

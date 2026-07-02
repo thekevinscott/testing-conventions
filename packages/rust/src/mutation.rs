@@ -39,10 +39,6 @@ pub struct Survivor {
 /// were all caught) from an out-of-scope line (no mutant there).
 pub type MutatedLines = BTreeSet<(String, u32)>;
 
-/// One mutation run's raw output: the surviving mutants and every viable mutant's
-/// location ([`MutatedLines`]).
-type RunOutcome = (Vec<Survivor>, MutatedLines);
-
 /// A cargo-mutants `outcomes.json` export, pared to what the rule reads. Unmodeled
 /// fields (`total_mutants`, `caught`, timings, …) are ignored.
 #[derive(Debug, Clone, Deserialize)]
@@ -531,118 +527,101 @@ fn contiguous_runs(lines: &BTreeSet<u64>) -> Vec<(u64, u64)> {
     runs
 }
 
-/// One line of `cosmic-ray dump` output: a `[work_item, result]` pair. The result is
-/// absent (`null`) for an un-executed work item.
-#[derive(Debug, Clone, Deserialize)]
-pub struct CosmicRayLine(pub CrWorkItem, pub Option<CrResult>);
-
-/// A cosmic-ray work item, pared to its one mutation's location. (cosmic-ray models a
-/// list of mutations per item, but the operators here produce one apiece.)
-#[derive(Debug, Clone, Deserialize)]
-pub struct CrWorkItem {
-    pub mutations: Vec<CrMutation>,
-}
-
-/// One mutation, pared to the location + operator the rule reads. cosmic-ray also
-/// carries `occurrence`, `end_pos`, `operator_args`; those are ignored.
-#[derive(Debug, Clone, Deserialize)]
-pub struct CrMutation {
-    pub module_path: String,
-    pub operator_name: String,
-    /// `[line, column]`, 1-based line.
-    pub start_pos: (u32, u32),
-    #[serde(default)]
-    pub definition_name: Option<String>,
-}
-
-/// A work item's result; only the test outcome is read (`survived` / `killed` /
-/// `incompetent`).
-#[derive(Debug, Clone, Deserialize)]
-pub struct CrResult {
-    #[serde(default)]
-    pub test_outcome: Option<String>,
-}
-
-/// Parse `cosmic-ray dump` output (JSON Lines) into the surviving mutants — the raw
-/// list before exemptions.
+/// Run the bundled Python mutation adapter over the project at `root` and return its
+/// un-exempted survivors — the Python arm of the mutation rule (#203 / #248), parity with
+/// [`measure_rust`] and [`measure_typescript`].
 ///
-/// A survivor is a work item whose result is `survived` (the suite ran the mutated code
-/// but no test failed). `killed` / `incompetent` (the mutant didn't run — e.g. a syntax
-/// error) are not survivors. (Mirrors the cargo-mutants `MissedMutant` / Stryker
-/// `Survived` rules.)
-pub fn parse_cosmic_ray_dump(dump: &str) -> Result<Vec<Survivor>> {
-    let mut survivors = Vec::new();
-    for line in dump.lines() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let CosmicRayLine(item, result) =
-            serde_json::from_str(line).context("parsing a cosmic-ray dump line")?;
-        let survived = matches!(result, Some(CrResult { test_outcome: Some(outcome) }) if outcome == "survived");
-        if !survived {
-            continue;
-        }
-        let Some(mutation) = item.mutations.first() else {
-            continue;
-        };
-        let definition = mutation.definition_name.as_deref().unwrap_or("<module>");
-        survivors.push(Survivor {
-            file: mutation.module_path.clone(),
-            line: mutation.start_pos.0,
-            description: format!("{} in {}", mutation.operator_name, definition),
-        });
-    }
-    Ok(survivors)
-}
-
-/// Run cosmic-ray over the Python project at `root` and return its un-exempted
-/// survivors — the Python arm of the mutation rule (#203), parity with [`measure_rust`]
-/// and [`measure_typescript`].
+/// The tool drives the engine: the wheel ships a Python adapter that runs cosmic-ray through
+/// its own library API (`WorkDB`) and emits the normalized [`NormalizedMutant`] schema (#239)
+/// the gate consumes. maturin (`bindings = "bin"`) ships the rust binary directly as the wheel's
+/// script — with no Python launcher to inject a path, unlike the TS arm — so the binary invokes
+/// the adapter as an installed module (`python3 -m testing_conventions.mutation.main`), resolved
+/// from the wheel's environment alongside cosmic-ray. The project supplies its own test runner
+/// (pytest), exactly as cargo-mutants needs a buildable crate and Stryker needs vitest.
 ///
-/// With `base` set, only mutants on the `<base>...HEAD` changed lines are reported:
-/// cosmic-ray has no native git-diff mode, so the run is scoped to the changed `.py`
-/// files (one session each) and the survivors are then filtered to the changed lines —
-/// line granularity, matching the other arms. Without it, the whole project's sources
-/// run (tests excluded). `exempt` is the file-level exempt paths and `exempt_lines` the
-/// line-scoped ones (#226). cosmic-ray + pytest must be installed.
+/// With `base` set, only mutants on the `<base>...HEAD` changed lines are reported: cosmic-ray
+/// has no native git-diff mode, so the run is scoped to the changed `.py` files (passed as
+/// `--module`) and the survivors are filtered to the changed lines in the core — line
+/// granularity, matching the other arms. Without it, the whole project's sources run (tests
+/// excluded). `exempt` is the file-level exempt paths and `exempt_lines` the line-scoped ones
+/// (#226).
 pub fn measure_python(
     root: &Path,
     exempt: &[String],
     exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
     base: Option<&str>,
 ) -> Result<Vec<Survivor>> {
-    let (survivors, mutated) = match base {
-        None => run_cosmic_ray(root, ".", &PY_TEST_EXCLUDES)?,
-        Some(base) => {
-            let changed = crate::patch_coverage::changed_lines(root, base)?;
-            let mut all_survivors = Vec::new();
-            let mut all_mutated = BTreeSet::new();
-            for (file, lines) in &changed {
-                if !is_mutatable_py(file) {
-                    continue;
-                }
-                // The file is a single non-test module, so no test exclusions are needed.
-                let (survivors, mutated) = run_cosmic_ray(root, file, &[])?;
-                for survivor in survivors {
-                    if lines.contains(&(survivor.line as u64)) {
-                        all_survivors.push(survivor);
-                    }
-                }
-                for (mutated_file, line) in mutated {
-                    if lines.contains(&u64::from(line)) {
-                        all_mutated.insert((mutated_file, line));
-                    }
-                }
+    let changed = match base {
+        Some(base) => Some(crate::patch_coverage::changed_lines(root, base)?),
+        None => None,
+    };
+    let modules: Vec<String> = match &changed {
+        None => Vec::new(),
+        Some(changed) => {
+            let modules: Vec<String> = changed
+                .keys()
+                .filter(|file| is_mutatable_py(file))
+                .cloned()
+                .collect();
+            // Nothing mutatable changed on the diff: no run, no survivors.
+            if modules.is_empty() {
+                return Ok(Vec::new());
             }
-            (all_survivors, all_mutated)
+            modules
         }
     };
-    evaluate_scoped(survivors, &mutated, exempt, exempt_lines)
+    let json = run_py_adapter(root, &modules)?;
+    let mut mutants = parse_normalized_results(&json)?;
+    if let Some(changed) = &changed {
+        // Diff-scoping v1 (#248): keep only mutants on the changed lines.
+        mutants.retain(|mutant| {
+            changed
+                .get(&mutant.file)
+                .is_some_and(|lines| lines.contains(&u64::from(mutant.line)))
+        });
+    }
+    evaluate_normalized(&mutants, exempt, exempt_lines)
 }
 
-/// The test/conftest globs excluded from whole-project mutation (cosmic-ray would
-/// otherwise mutate the suite itself).
-const PY_TEST_EXCLUDES: [&str; 3] = ["*_test.py", "test_*.py", "conftest.py"];
+/// Run the bundled Python mutation adapter over `root` and return the normalized-results JSON
+/// it writes. The rust binary spawns `python3 -m testing_conventions.mutation.main --out <tmp>
+/// [--module <path> ...]`; the adapter drives cosmic-ray in-process (#248) and emits a
+/// [`NormalizedMutant`] array (#239). `modules`, when non-empty, scopes the run to those source
+/// files (the `<base>...HEAD` changed ones); empty runs the whole project. Results are written
+/// to a temp file the adapter names via `--out`, then read back. `PYTHONDONTWRITEBYTECODE` keeps
+/// `__pycache__` out of the scanned tree; a non-zero adapter exit surfaces its captured output.
+fn run_py_adapter(root: &Path, modules: &[String]) -> Result<String> {
+    let out = AdapterOut::new();
+    std::fs::create_dir_all(&out.0).context("creating the mutation adapter output dir")?;
+    let results = out.0.join("results.json");
+
+    let mut command = Command::new("python3");
+    command
+        .current_dir(root)
+        .args(["-m", "testing_conventions.mutation.main", "--out"])
+        .arg(&results)
+        .env("PYTHONDONTWRITEBYTECODE", "1");
+    for module in modules {
+        command.arg("--module").arg(module);
+    }
+    let output = command
+        .output()
+        .context("running the Python mutation adapter (is `python3` installed?)")?;
+    if !output.status.success() {
+        bail!(
+            "the Python mutation adapter failed in `{}`:\n{}{}",
+            root.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+    std::fs::read_to_string(&results).with_context(|| {
+        format!(
+            "reading the Python mutation adapter's results from `{}`",
+            results.display()
+        )
+    })
+}
 
 /// Whether a changed file is a mutatable Python *source* — a `.py` that is not a test
 /// (`*_test.py` / `test_*.py`) or `conftest.py`.
@@ -652,143 +631,6 @@ fn is_mutatable_py(file: &str) -> bool {
     }
     let base = file.rsplit('/').next().unwrap_or(file);
     !(base.ends_with("_test.py") || base.starts_with("test_") || base == "conftest.py")
-}
-
-/// Run one cosmic-ray session over `module_path` (relative to `root`) and return its
-/// surviving mutants **and** the `(file, line)` set of every viable (executed) mutant
-/// — the latter for the #226 line-scoped guard. A baseline check runs first so a suite
-/// that fails *unmutated* errors rather than reporting a false "all killed". The
-/// cosmic-ray config and session DB live in an out-of-tree temp dir; cosmic-ray mutates
-/// each file in place and reverts it, so the scanned tree is left as it was.
-fn run_cosmic_ray(root: &Path, module_path: &str, excluded_modules: &[&str]) -> Result<RunOutcome> {
-    let dir = CosmicRayDir::new();
-    std::fs::create_dir_all(&dir.0).context("creating the cosmic-ray temp dir")?;
-    let config = dir.0.join("cr.toml");
-    let session = dir.0.join("session.sqlite");
-
-    let excludes = excluded_modules
-        .iter()
-        .map(|glob| format!("\"{glob}\""))
-        .collect::<Vec<_>>()
-        .join(", ");
-    std::fs::write(
-        &config,
-        format!(
-            "[cosmic-ray]\n\
-             module-path = \"{module_path}\"\n\
-             timeout = 30.0\n\
-             excluded-modules = [{excludes}]\n\
-             test-command = \"python3 -m pytest -q -p no:cacheprovider\"\n\
-             \n\
-             [cosmic-ray.distributor]\n\
-             name = \"local\"\n"
-        ),
-    )
-    .context("writing the cosmic-ray config")?;
-
-    // Baseline: the suite must pass unmutated, or every mutant would "die" on the
-    // already-failing tests and we'd report a false pass.
-    let baseline = cosmic_ray(root, &["baseline", path_str(&config)])?;
-    if !baseline.status.success() {
-        bail!(
-            "the Python unit suite did not pass unmutated in `{}` (cosmic-ray baseline failed):\n{}{}",
-            root.display(),
-            String::from_utf8_lossy(&baseline.stdout),
-            String::from_utf8_lossy(&baseline.stderr),
-        );
-    }
-
-    let init = cosmic_ray(root, &["init", path_str(&config), path_str(&session)])?;
-    if !init.status.success() {
-        bail!(
-            "cosmic-ray init failed in `{}`:\n{}{}",
-            root.display(),
-            String::from_utf8_lossy(&init.stdout),
-            String::from_utf8_lossy(&init.stderr),
-        );
-    }
-    let exec = cosmic_ray(root, &["exec", path_str(&config), path_str(&session)])?;
-    if !exec.status.success() {
-        bail!(
-            "cosmic-ray exec failed in `{}`:\n{}{}",
-            root.display(),
-            String::from_utf8_lossy(&exec.stdout),
-            String::from_utf8_lossy(&exec.stderr),
-        );
-    }
-    let dump = cosmic_ray(root, &["dump", path_str(&session)])?;
-    if !dump.status.success() {
-        bail!(
-            "cosmic-ray dump failed in `{}`:\n{}",
-            root.display(),
-            String::from_utf8_lossy(&dump.stderr),
-        );
-    }
-    let stdout = String::from_utf8_lossy(&dump.stdout);
-    Ok((
-        parse_cosmic_ray_dump(&stdout)?,
-        cosmic_ray_mutated_lines(&stdout)?,
-    ))
-}
-
-/// The `(file, line)` locations cosmic-ray ran a **viable** (executed) mutant for —
-/// `survived` or `killed`, not the `incompetent` mutants that never ran (a syntax
-/// error) or the un-executed (`null`-result) work items. The #226 guard reads this the
-/// same way as the cargo-mutants / Stryker [`mutated_lines`].
-pub fn cosmic_ray_mutated_lines(dump: &str) -> Result<MutatedLines> {
-    let mut mutated = BTreeSet::new();
-    for line in dump.lines() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let CosmicRayLine(item, result) =
-            serde_json::from_str(line).context("parsing a cosmic-ray dump line")?;
-        let outcome = result.and_then(|result| result.test_outcome);
-        if !matches!(outcome.as_deref(), Some("survived") | Some("killed")) {
-            continue;
-        }
-        if let Some(mutation) = item.mutations.first() {
-            mutated.insert((mutation.module_path.clone(), mutation.start_pos.0));
-        }
-    }
-    Ok(mutated)
-}
-
-/// Run a `cosmic-ray` subcommand in `root`, capturing its output. `PYTHONDONTWRITEBYTECODE`
-/// keeps `__pycache__` out of the scanned tree.
-fn cosmic_ray(root: &Path, args: &[&str]) -> Result<std::process::Output> {
-    Command::new("cosmic-ray")
-        .current_dir(root)
-        .args(args)
-        .env("PYTHONDONTWRITEBYTECODE", "1")
-        .output()
-        .context("running `cosmic-ray` (is it installed?)")
-}
-
-fn path_str(path: &Path) -> &str {
-    path.to_str().expect("temp path is valid UTF-8")
-}
-
-/// A unique temp dir for one cosmic-ray session's config + SQLite, removed on drop so
-/// the scanned tree stays pristine and parallel runs don't collide.
-struct CosmicRayDir(PathBuf);
-
-impl CosmicRayDir {
-    fn new() -> Self {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let name = format!(
-            "testing-conventions-cosmic-ray-{}-{}",
-            std::process::id(),
-            COUNTER.fetch_add(1, Ordering::Relaxed),
-        );
-        CosmicRayDir(std::env::temp_dir().join(name))
-    }
-}
-
-impl Drop for CosmicRayDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
 }
 
 /// A unique temp dir for one cargo-mutants run's `--output`, removed on drop so the
@@ -1079,35 +921,6 @@ mod tests {
         assert!(capped.chars().count() <= 61 && capped.ends_with('…'));
     }
 
-    // A pared `cosmic-ray dump`: each line is `[work_item, result]` — one survived
-    // comparison-operator mutant and one killed binary-operator mutant.
-    const COSMIC_RAY_DUMP: &str = concat!(
-        r#"[{"job_id":"a","mutations":[{"module_path":"calc.py","operator_name":"core/ReplaceComparisonOperator_Gt_NotEq","occurrence":0,"start_pos":[6,11],"end_pos":[6,12],"operator_args":{},"definition_name":"is_positive"}]},{"worker_outcome":"normal","test_outcome":"survived"}]"#,
-        "\n",
-        r#"[{"job_id":"b","mutations":[{"module_path":"calc.py","operator_name":"core/ReplaceBinaryOperator_Add_Div","occurrence":0,"start_pos":[2,13],"end_pos":[2,14],"operator_args":{},"definition_name":"add"}]},{"worker_outcome":"normal","test_outcome":"killed"}]"#,
-        "\n",
-    );
-
-    #[test]
-    fn collects_only_survived_cosmic_ray_mutants() {
-        let survivors = parse_cosmic_ray_dump(COSMIC_RAY_DUMP).expect("valid dump");
-        // Only the survived mutant — the killed one is not a survivor.
-        assert_eq!(survivors.len(), 1);
-        assert_eq!(survivors[0].file, "calc.py");
-        assert_eq!(survivors[0].line, 6);
-        assert!(survivors[0]
-            .description
-            .contains("ReplaceComparisonOperator"));
-        assert!(survivors[0].description.contains("is_positive"));
-    }
-
-    #[test]
-    fn an_unexecuted_cosmic_ray_item_is_not_a_survivor() {
-        // A work item with a null result (never run) must not count as a survivor.
-        let dump = r#"[{"mutations":[{"module_path":"calc.py","operator_name":"core/NumberReplacer","start_pos":[3,5],"end_pos":[3,6]}]},null]"#;
-        assert!(parse_cosmic_ray_dump(dump).unwrap().is_empty());
-    }
-
     #[test]
     fn is_mutatable_py_keeps_sources_and_drops_tests() {
         assert!(is_mutatable_py("calc.py"));
@@ -1199,17 +1012,5 @@ mod tests {
         )
         .unwrap();
         assert!(kept.is_empty());
-    }
-
-    #[test]
-    fn cosmic_ray_mutated_lines_collects_executed_mutants() {
-        // The survived (line 6) and killed (line 2) work items both ran.
-        let mutated = cosmic_ray_mutated_lines(COSMIC_RAY_DUMP).unwrap();
-        assert_eq!(
-            mutated,
-            [("calc.py".to_string(), 2), ("calc.py".to_string(), 6)]
-                .into_iter()
-                .collect()
-        );
     }
 }

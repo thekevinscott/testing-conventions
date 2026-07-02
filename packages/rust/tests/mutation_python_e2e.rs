@@ -1,6 +1,8 @@
-//! E2E tests for the Python mutation rule (#203): drive the built CLI binary
-//! end-to-end (no mocks) against the fixture projects and assert the exit code.
-//! Requires cosmic-ray + pytest on PATH.
+//! E2E tests for the Python mutation rule (#203 / #248): drive the built CLI binary
+//! end-to-end (no mocks) against the fixture projects and assert the exit code. The binary
+//! spawns the bundled Python adapter (`python3 -m testing_conventions.mutation.main`), which
+//! drives cosmic-ray in-process. Requires a `python3` with cosmic-ray + pytest installed and
+//! the source package importable (`PYTHONPATH=packages/python/python`).
 //!
 //! The gate is **on by default and binary** — parity with the Rust and TypeScript arms:
 //! an un-exempted surviving mutant fails the run, and the only way to pass with a

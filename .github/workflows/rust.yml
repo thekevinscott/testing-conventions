@@ -65,8 +65,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/rust
-      # The coverage rule's integration/e2e tests (#26) shell out to coverage.py;
-      # the Python mutation rule's tests (#203) shell out to cosmic-ray (driving pytest).
+      # The coverage rule's integration/e2e tests (#26) shell out to coverage.py; the Python
+      # mutation rule's tests (#248) drive the in-process cosmic-ray adapter via
+      # `python3 -m testing_conventions.mutation.main`, so install cosmic-ray (the adapter's
+      # engine) + pytest (the fixtures' runner). PYTHONPATH is set on the test run below so the
+      # source adapter resolves.
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -103,7 +106,12 @@ jobs:
       # `cargo llvm-cov` runs the integration + e2e suites under `tests/` (and the
       # library tests) under instrumentation, enforcing the 95% line floor over the
       # whole suite — unit tests alone don't exercise the CLI dispatch in lib.rs.
+      # PYTHONPATH points the Python mutation adapter (`python3 -m
+      # testing_conventions.mutation.main`, spawned over staged temp fixtures) at the source
+      # package; a consumer resolves it from the installed wheel's site-packages instead.
       - run: cargo llvm-cov --ignore-filename-regex 'main\.rs' --fail-under-lines 95
+        env:
+          PYTHONPATH: ${{ github.workspace }}/packages/python/python
 
   build:
     name: Build + smoke

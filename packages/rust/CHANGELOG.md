@@ -31,6 +31,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `testing-conventions` launcher passes the adapter's path to the binary as a `--ts-mutation-adapter`
   argument on a `unit mutation` invocation; the SDK `measure_typescript` takes it as a trailing
   `adapter: &Path`. See [MIGRATIONS](./MIGRATIONS.md).
+- **`unit mutation --language python` drives cosmic-ray in-process through a bundled adapter** (#248,
+  epic #239). The Python arm now spawns a Python adapter shipped in the wheel (`python3 -m
+  testing_conventions.mutation.main`) that drives cosmic-ray via its `WorkDB` library API and emits
+  the normalized `NormalizedMutant` schema (#239) the gate consumes — replacing the `cosmic-ray` CLI
+  orchestration (baseline/init/exec/dump spawns + JSONL dump parse). The tool drives the engine; the
+  project supplies its own test runner (pytest). maturin ships the binary directly as the wheel's
+  script, so — unlike the TS arm's launcher-injected path — the binary resolves the adapter as an
+  installed module (from the wheel's site-packages; the diff-scoped run passes the changed `.py`
+  files as `--module` and the core filters survivors to the changed lines). `measure_python`'s
+  signature is unchanged. See [MIGRATIONS](./MIGRATIONS.md).
 
 ### Removed
 
@@ -38,6 +48,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   StrykerFile, StrykerMutant, StrykerLocation, parse_stryker_report, stryker_survivors}` are removed —
   the TS arm no longer parses a Stryker report file; the bundled adapter emits the normalized schema
   (#239) directly. Consume `parse_normalized_results` + `evaluate_normalized` instead. See
+  [MIGRATIONS](./MIGRATIONS.md).
+- **BREAKING: the cosmic-ray `dump` types are gone** (#248). `mutation::{parse_cosmic_ray_dump,
+  cosmic_ray_mutated_lines, CosmicRayLine, CrWorkItem, CrMutation, CrResult}` are removed — the Python
+  arm no longer parses a `cosmic-ray dump`; the bundled adapter emits the normalized schema (#239)
+  directly. Consume `parse_normalized_results` + `evaluate_normalized` instead. See
   [MIGRATIONS](./MIGRATIONS.md).
 
 ### Fixed

@@ -15,6 +15,16 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Wires the Python arm to drive cosmic-ray in-process through a **bundled Python adapter** (#248,
+building on the #239 core). `unit mutation --language python` now spawns a Python adapter shipped in
+the wheel (`python3 -m testing_conventions.mutation.main`) that drives cosmic-ray via its `WorkDB`
+library API and emits the normalized `NormalizedMutant` schema (#239) the gate consumes — replacing
+the `cosmic-ray` CLI orchestration. maturin ships the rust binary directly as the wheel's script (no
+Python launcher to inject a path, unlike the TS arm), so the binary invokes the adapter as an
+installed module, resolved from the wheel's environment alongside cosmic-ray. One breaking SDK change:
+the cosmic-ray `dump` types are removed (see **Required changes**); `measure_python`'s signature is
+unchanged.
+
 Wires the TypeScript arm to drive Stryker through a **bundled Node adapter** (#246, building on the
 #239 core). `unit mutation --language typescript` now spawns a Node adapter shipped with the npm
 package that drives Stryker via its own Node API and emits the normalized `NormalizedMutant` schema
@@ -568,6 +578,19 @@ core (#239) — the same types the bundled adapter emits and the Rust/Python arm
 | --- | --- |
 | `mutation::parse_stryker_report`, `mutation::stryker_survivors` | `mutation::parse_normalized_results` + `mutation::evaluate_normalized` |
 | `mutation::{StrykerReport, StrykerFile, StrykerMutant, StrykerLocation}` | `mutation::NormalizedMutant` |
+
+The cosmic-ray `dump` types are removed the same way (#248): the Python arm no longer parses a
+`cosmic-ray dump`. Switch to the normalized core:
+
+| Removed | Replacement |
+| --- | --- |
+| `mutation::parse_cosmic_ray_dump`, `mutation::cosmic_ray_mutated_lines` | `mutation::parse_normalized_results` + `mutation::evaluate_normalized` |
+| `mutation::{CosmicRayLine, CrWorkItem, CrMutation, CrResult}` | `mutation::NormalizedMutant` |
+
+`measure_python`'s signature is unchanged; it now spawns the bundled Python adapter (`python3 -m
+testing_conventions.mutation.main`) rather than the `cosmic-ray` CLI. In production the wheel makes
+`testing_conventions` importable (site-packages); the rust integration tests set
+`PYTHONPATH=packages/python/python` for their staged fixtures.
 
 `measure_typescript` takes a trailing `adapter: &Path` — the path to the bundled Node adapter
 (`packages/node/dist/mutation/main.js`):

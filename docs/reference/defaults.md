@@ -85,6 +85,7 @@ The [reusable-workflow](../guide/ci) input defaults, all overridable:
 | `run_e2e`            | `false`                    | Forces `e2e verify` on; it is already on when an attestation is committed. |
 | `packaging_artifact` | `''`                       | A named upload artifact to inspect; when empty, packaging still runs over a discoverable `dist/`. |
 | `build_command`      | `''` (empty)               | A shell command run before the suite-executing jobs (`unit coverage`, changed-line `coverage`, `unit mutation`) invoke the suite — e.g. `uv run maturin develop` to build a native module the suite imports. Empty ⇒ no build step; the static rules and `e2e verify` never run it. |
+| `gates`              | `''` (all applicable)      | Empty runs **every applicable gate**. A JSON array (e.g. `'["colocated-test", "unit-lint", "integration-lint"]'`) runs exactly the gates it names — a named gate's diff-scoped variant rides with it, and the allowlist decides even when `run_e2e` / `packaging_artifact` is set. |
 | `version`            | latest                     | The `testing-conventions` version to run. |
 
 ## Automatic exemptions

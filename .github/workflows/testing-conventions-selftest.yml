@@ -62,6 +62,16 @@ name: Testing Conventions (self-test)
 #   build-command-clean   calls the reusable workflow over a fixture whose `widget.py` imports
 #                         a module produced only by the `build_command` (a maturin/napi stand-in),
 #                         so the coverage / mutation jobs pass only because the build ran first.
+#
+# gates (#262) — an allowlist so a consumer can run a subset of gates:
+#   gates-wired           asserts the reusable workflow scopes its jobs to a `gates` allowlist
+#                         input — the red→green signal for the wiring itself.
+#   gates-scoped-static   calls the reusable workflow over the #243 native-binding fixture with
+#                         the three static gates named and NO build_command, so the call passes
+#                         only because the suite-executing gates are skipped.
+#   gates-scoped-packaging-excluded  uploads the red wheel as `packaging_artifact` with a `gates`
+#                         allowlist that leaves packaging out, so the call passes only because
+#                         the allowlist overrides the forcing input.
 
 on:
   pull_request:
@@ -619,6 +629,31 @@ jobs:
             exit 1
           fi
           echo "reusable workflow wires a build_command step"
+
+  # ---- #262: a gates allowlist so a consumer can run a subset of gates ----
+
+  gates-wired:
+    name: The reusable workflow scopes its gates to the `gates` allowlist
+    # Red→green wiring signal for #262: the reusable workflow must offer a `gates` input
+    # restricting which gates run, or adoption is all-or-nothing — a consumer that drives
+    # the suite-executing gates (unit coverage, mutation) in its own build-capable jobs
+    # cannot adopt the workflow for the static gates, because every call also spins up
+    # coverage + mutation, which fail for lack of a build. A static grep, so it tracks the
+    # workflow file regardless of what the published binary ships; the runtime behavior is
+    # covered by the gates-scoped jobs, which land with the implementation (passing an
+    # input the called workflow does not yet define is a whole-run startup failure, so
+    # they cannot precede it — the same constraint build-command-clean documented).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: testing-conventions.yml must wire a `gates` allowlist
+        run: |
+          set -euo pipefail
+          if ! grep -q 'inputs.gates' .github/workflows/testing-conventions.yml; then
+            echo "::error::the reusable workflow has no \`gates\` input — gate selection is all-or-nothing, so a consumer that runs the suite-executing gates in its own build-capable jobs cannot adopt the workflow for the static gates (#262)"
+            exit 1
+          fi
+          echo "reusable workflow scopes its gates to the \`gates\` allowlist"
 
   build-command-clean:
     name: A build_command makes the suite-executing jobs find a built module

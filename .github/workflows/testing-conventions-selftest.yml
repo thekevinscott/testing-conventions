@@ -221,6 +221,29 @@ jobs:
           fi
           echo "survivor crate correctly tripped the mutation gate"
 
+  python-mutation-clean:
+    name: A clean Python library passes `unit mutation`
+    # #258 regression guard. `unit mutation --language python` spawns the adapter shipped in
+    # the testing-conventions *wheel* (`python3 -m testing_conventions.mutation.main`, #248),
+    # resolved from the Python environment. The published npm binary (`npx`) does not put that
+    # module on the path — the wheel must be installed alongside it. Install the same toolchain
+    # the reusable workflow's mutation job provides and drive the published command over a
+    # mutation-clean fixture: it clears the gate only when the adapter resolves. (Whole-tree,
+    # not `--base`, so the adapter always runs — a `--base` diff with no changed Python lines
+    # returns early and never spawns it, which is why this trap stayed hidden.)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install the Python mutation toolchain (wheel + pytest)
+        # The wheel ships the adapter (#248) and brings cosmic-ray; pytest runs the suite.
+        # Wheel last, matching the reusable workflow (keeps the #92 drift guard quiet).
+        run: python -m pip install --quiet pytest testing-conventions
+      - name: A mutation-clean Python library clears `unit mutation`
+        run: npx -y testing-conventions unit mutation --language python .github/selftest/mutation/python-clean
+
   mutation-wired:
     name: The reusable workflow enforces unit mutation
     # The red→green signal for #204: the reusable workflow must actually invoke

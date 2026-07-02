@@ -411,8 +411,14 @@ jobs:
         with:
           python-version: '3.12'
       - if: matrix.language == 'python'
-        name: Install mutation toolchain (cosmic-ray + pytest)
-        run: python -m pip install --quiet cosmic-ray pytest
+        name: Install the Python mutation toolchain (wheel + pytest)
+        # `unit mutation --language python` spawns the adapter shipped in the wheel
+        # (`python3 -m testing_conventions.mutation.main`, #248); installing the wheel puts
+        # that module on the path and brings cosmic-ray as a dependency. pytest runs the
+        # project's suite. (#258 — cosmic-ray alone left the adapter module unresolvable.)
+        # The wheel is named last so the subcommand-drift guard (#92) doesn't read the
+        # package that follows the binary name as a `testing-conventions` invocation.
+        run: python -m pip install --quiet pytest testing-conventions
       # TypeScript drives Stryker, which runs the project's test runner — install the
       # project's deps (which must include @stryker-mutator/core and a runner plugin)
       # with pnpm, the TS convention.

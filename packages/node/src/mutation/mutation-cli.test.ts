@@ -14,7 +14,7 @@ vi.mock('./parse-args.js', () => ({ parseArgs }));
 vi.mock('./run-stryker.js', () => ({ runStryker }));
 vi.mock('node:fs/promises', () => ({ writeFile }));
 
-import { mutationCLI } from './index.js';
+import { mutationCLI } from './mutation-cli.js';
 
 describe('mutationCLI', () => {
   afterEach(() => {

@@ -16,8 +16,8 @@ Each entry has five sections, in order:
 ### Summary
 
 Adds the TypeScript mutation engine adapter (#246, part of #239), organized by folder:
-`src/mutation/index.ts` exposes `mutationCLI` over one-function-per-file helpers alongside it, and
-`src/mutation/main.ts` is the executable. It runs Stryker via its Node API and normalizes
+`src/mutation/mutation-cli.ts` exposes `mutationCLI` over one-function-per-file helpers alongside it,
+and `src/mutation/main.ts` is the executable. It runs Stryker via its Node API and normalizes
 `MutantResult[]` to the shared schema, selecting the bundled vitest runner. The Rust binary spawns it
 (`dist/mutation/main.js`) for `unit mutation --language typescript`, and the launcher
 (`src/bin/index.ts`) passes its path to the binary as a `--ts-mutation-adapter` argument (appended

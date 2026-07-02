@@ -8,9 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - **TypeScript mutation engine adapter** (#246, part of the #239 epic). Organized by folder:
-  `src/mutation/index.ts` exposes `mutationCLI` — the async orchestrator — over one-function-per-file
-  helpers alongside it (`parse-args`, `run-stryker`, `to-normalized`, `normalize-status`), and
-  `src/mutation/main.ts` is the executable that runs it. The adapter drives Stryker through its
+  `src/mutation/mutation-cli.ts` exposes `mutationCLI` — the async orchestrator — over
+  one-function-per-file helpers alongside it (`parse-args`, `run-stryker`, `to-normalized`,
+  `normalize-status`), and `src/mutation/main.ts` is the executable that runs it. The adapter drives Stryker through its
   **Node API** (`new Stryker(opts).runMutationTest()`) and maps the structured `MutantResult[]` onto
   the normalized schema the Rust core gates on, selecting the bundled `@stryker-mutator/vitest-runner`
   by resolved path so the unit-scoped runner runs (#240) and reading results in-process (written to a

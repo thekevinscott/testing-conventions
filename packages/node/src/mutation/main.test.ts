@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const { mutationCLI } = vi.hoisted(() => ({
   mutationCLI: vi.fn<(argv: string[]) => Promise<void>>(),
 }));
-vi.mock('./index.js', () => ({ mutationCLI }));
+vi.mock('./mutation-cli.js', () => ({ mutationCLI }));
 
 // main.ts runs its work at import time, reading `process.argv.slice(2)`; set argv, import a fresh
 // copy, then flush the microtask that the `.catch` runs on.

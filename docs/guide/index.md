@@ -25,6 +25,11 @@ you're trying to do. New to the tool? Run the [drop-in](../getting-started) firs
   rolling your own steps (the *where and how to run* surface).
 - [Use the CLI directly](./cli) — install and run the rules yourself, without the workflow.
 
+## Bring your agent along
+
+- [Surface the contract to your agent](./agents) — install a managed block in `AGENTS.md` so your
+  coding agent knows the rules before it writes code, and keep it fresh from CI.
+
 ## See also
 
 - [The testing model](../explanation/): *why* the standard is shaped this way.

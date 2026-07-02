@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- **`agents install` / `agents check` / `agents remove`** (#232). A new `agents` command group
+  manages a sentinel-delimited, schema-versioned, content-hashed block in the consumer's
+  `AGENTS.md`, putting the testing contract in a coding agent's context before it writes code —
+  agent-agnostic (literal text in the file every agent loads at session start, the beads / Next.js
+  codemod pattern). `install` upserts idempotently (create / append / replace only the owned
+  region; byte-identical no-op when current), `check` is the read-only CI freshness nudge
+  (`current` / `stale` / `absent`, non-zero on stale or absent), and `remove` deletes the region
+  idempotently. Writes are atomic; a symlinked target is refused. Lives in the shared binary, so
+  Python/TypeScript/Rust get it identically.
+
 ### Changed
 
 - **`unit mutation --language rust` provisions cargo-mutants itself** (#242, epic #239). The Rust arm

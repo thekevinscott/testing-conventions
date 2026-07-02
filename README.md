@@ -287,6 +287,16 @@ coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
 coverage = { regions = 100, lines = 100 }
 ```
 
+## Surface the contract to your agent
+
+CI enforces the rules; `testing-conventions agents install` teaches them. It writes a small
+managed block into your repository's `AGENTS.md` — the few non-negotiables plus pointers to the
+full contract — so a coding agent (Claude Code, Codex, Cursor, Gemini CLI, Copilot) knows the
+discipline before it writes code. The block is sentinel-delimited and hash-versioned: re-running
+`install` is idempotent, `agents check` fails CI when the block goes stale, and `agents remove`
+takes it back out. Everything outside the markers is yours and stays byte-for-byte intact. See
+the [how-to](https://thekevinscott.github.io/testing-conventions/guide/agents).
+
 ## License
 
 Released under the [MIT License](LICENSE).

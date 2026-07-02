@@ -525,6 +525,11 @@ new public items `config::{LineSpec, LineScope, resolve_exempt_scoped}`, `Exempt
 line_set}`, `coverage::measure_report`, `patch_coverage::measure_line_exempt{,_typescript,_rust}`, and
 `mutation::{evaluate_scoped, mutated_lines, MutatedLines}` land alongside.
 
+Adds the **`agents` command group** (#232) — `agents install` / `agents check` / `agents remove`
+manage a sentinel-delimited, schema-versioned, content-hashed block in the consumer's `AGENTS.md`
+so a coding agent learns the testing contract before writing code. Purely additive: no existing
+command, flag, config key, or SDK item changes.
+
 ### Required changes
 
 Migrate every whole-file `coverage` / `mutation` exemption to the line-scoped form, naming the lines
@@ -1058,3 +1063,13 @@ Expected: the Rust coverage tests pass (#37) — the `above` fixture crate (ever
 exercised by colocated inline tests) clears a 100 floor, `below` (one `else` arm left uncovered)
 fails 100 but clears an 80 floor, and `exempt_cov` clears 100 once its untested `src/shim.rs` is
 omitted by a `coverage` exemption (`--ignore-filename-regex`). Requires `cargo-llvm-cov`.
+
+```
+cd packages/rust && cargo test --test agents --test agents_e2e
+```
+
+Expected: the `agents` tests pass (#232) — against temp files, `install` creates a missing
+`AGENTS.md`, appends to one without markers, replaces only the managed region when markers exist,
+and is a byte-identical no-op when the block is current; `check` prints `current` / `stale` /
+`absent` with exits `0` / `1` / `1`; `remove` deletes the region idempotently; and a symlinked
+target is refused (exit `1`, file untouched).

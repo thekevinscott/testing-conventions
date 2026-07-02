@@ -1,3 +1,5 @@
+import { parseArgs as parseNodeArgs } from 'node:util';
+
 /** The CLI arguments the TypeScript mutation adapter understands. */
 export interface AdapterArgs {
   /** Stryker `mutate` patterns (`--mutate a,b,...`), or `undefined` for the default set. */
@@ -7,25 +9,27 @@ export interface AdapterArgs {
 }
 
 /**
- * Parse the adapter's CLI arguments: `--mutate <a,b,...>` (comma-separated Stryker mutate
- * patterns) and `--out <path>` (where to write the normalized JSON; the rule passes a temp
- * file so Stryker's own stdout logging never corrupts the results). A flag with no following
- * value is treated as absent.
+ * Parse the adapter's CLI arguments with Node's built-in `util.parseArgs`: `--out <path>` (where
+ * to write the normalized JSON — the rule passes a temp file so Stryker's own stdout logging can't
+ * corrupt the results) and `--mutate <a,b,...>` (Stryker mutate patterns, comma-split into a list).
+ * Both are optional; the rust binary supplies the argv, so it stays a fixed, controlled shape.
  */
 export function parseArgs(argv: string[]): AdapterArgs {
-  const args: AdapterArgs = {};
+  const { values } = parseNodeArgs({
+    args: argv,
+    options: {
+      mutate: { type: 'string' },
+      out: { type: 'string' },
+    },
+    allowPositionals: true,
+  });
 
-  const mutateIdx = argv.indexOf('--mutate');
-  const mutateValue = mutateIdx === -1 ? undefined : argv[mutateIdx + 1];
-  if (mutateValue !== undefined) {
-    args.mutate = mutateValue.split(',');
+  const result: AdapterArgs = {};
+  if (values.mutate !== undefined) {
+    result.mutate = values.mutate.split(',');
   }
-
-  const outIdx = argv.indexOf('--out');
-  const outValue = outIdx === -1 ? undefined : argv[outIdx + 1];
-  if (outValue !== undefined) {
-    args.out = outValue;
+  if (values.out !== undefined) {
+    result.out = values.out;
   }
-
-  return args;
+  return result;
 }

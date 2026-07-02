@@ -53,7 +53,6 @@ export default defineConfig({
             { text: 'Run mutation testing', link: '/guide/mutation' },
             { text: 'Enforce conventions in CI', link: '/guide/ci' },
             { text: 'Use the CLI directly', link: '/guide/cli' },
-            { text: 'Surface the contract to your agent', link: '/guide/agents' },
           ],
         },
         {

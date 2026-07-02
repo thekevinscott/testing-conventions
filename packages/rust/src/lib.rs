@@ -1,3 +1,4 @@
+pub mod agents;
 pub mod co_change;
 pub mod colocated_test;
 pub mod config;
@@ -32,6 +33,15 @@ pub struct Cli {
 enum Command {
     /// Check the repository against its testing-conventions config.
     Check,
+    /// Write the testing contract into the repository's agent context file
+    /// (#232): a marker-delimited, hash-versioned block in `AGENTS.md` that a
+    /// coding agent reads before writing code. Idempotent — re-running
+    /// refreshes the owned region and touches nothing outside it.
+    Install {
+        /// The agent context file to manage.
+        #[arg(default_value = "AGENTS.md")]
+        path: PathBuf,
+    },
     /// Unit-test conventions.
     Unit {
         #[command(subcommand)]
@@ -259,6 +269,10 @@ where
             E2eCommand::Attest { command } => run_e2e_attest(&command),
             E2eCommand::Verify => run_e2e_verify(),
         },
+        Some(Command::Install { path }) => {
+            agents::install(&path)?;
+            Ok(0)
+        }
     }
 }
 

@@ -28,6 +28,12 @@ library.
 
 That's the whole setup: this one file opts your library into the full standard.
 
+## Teach your agent
+
+Run `npx testing-conventions install` to write the contract into your repo's `AGENTS.md`, so a
+coding agent knows the rules before it writes code. Re-running refreshes the block; everything
+outside its markers stays yours.
+
 ## Next
 
 From here, the [How-to Guides](./guide/) cover the common tasks — configuring a floor, exempting a

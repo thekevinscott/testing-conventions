@@ -5,7 +5,8 @@
 //! guardrail the *crates themselves* are the fixtures: `killed` (every mutant caught
 //! by an asserting test) reports no survivors, and `survivors` (an assertion-light
 //! test that runs the code but pins nothing) reports several — the gap mutation
-//! testing exposes that coverage can't. Requires `cargo-mutants`.
+//! testing exposes that coverage can't. Requires only a cargo toolchain — the tool
+//! provisions cargo-mutants itself (#242).
 
 use std::path::PathBuf;
 

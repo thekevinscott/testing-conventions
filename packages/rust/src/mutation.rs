@@ -16,8 +16,9 @@
 //! lines are tested ("no unexplained surviving mutant on the lines you touched").
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{bail, Context, Result};
@@ -331,7 +332,8 @@ fn describe_normalized(mutant: &NormalizedMutant) -> String {
 /// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested (via
 /// cargo-mutants' `--in-diff`); without it, the whole crate. `exempt` is the file-level
 /// `mutation` exempt paths and `exempt_lines` the line-scoped ones (#226), applied with
-/// the determinism guard in [`evaluate_scoped`]. `cargo-mutants` must be installed.
+/// the determinism guard in [`evaluate_scoped`]. The tool provisions cargo-mutants itself
+/// on first use ([`ensure_cargo_mutants`]) — only a cargo toolchain need be present.
 pub fn measure_rust(
     root: &Path,
     exempt: &[String],
@@ -348,7 +350,8 @@ pub fn measure_rust(
         },
         None => None,
     };
-    run_cargo_mutants(root, &out.0, diff.as_deref())?;
+    let engine = ensure_cargo_mutants()?;
+    run_cargo_mutants(&engine, root, &out.0, diff.as_deref())?;
     let outcomes = out.0.join("mutants.out").join("outcomes.json");
     // cargo-mutants writes no `outcomes.json` when a run produces no mutants (e.g. an
     // `--in-diff` that matches none of the crate's lines). `run_cargo_mutants` already
@@ -685,24 +688,122 @@ fn write_base_diff(root: &Path, base: &str, out: &MutantsOut) -> Result<Option<P
     Ok(Some(path))
 }
 
-/// Run `cargo mutants --output <out> [--in-diff <diff>]` in `root`.
+/// The cargo-mutants version the Rust arm provisions and pins to. Bumping this points the
+/// cache at a fresh version-scoped directory, so the next run installs the new release.
+const CARGO_MUTANTS_VERSION: &str = "27.1.0";
+
+/// Ensure the pinned cargo-mutants is available and return the absolute path to its binary,
+/// provisioning it on first use.
 ///
-/// cargo-mutants exits `0` when every mutant is caught and `2` when some survive (or
-/// time out / are unviable) — both are normal here, since survivors are the rule's
-/// *output*, not an error. Any other code (usage error, or a baseline that didn't
-/// build/pass) is fatal. As with the coverage run, the outer instrumentation env is
-/// stripped so a nested run (this rule's own tests under `cargo llvm-cov`) doesn't
-/// re-enter the rustc wrapper and hang.
-fn run_cargo_mutants(root: &Path, out: &Path, in_diff: Option<&Path>) -> Result<()> {
-    let mut command = Command::new("cargo");
-    command
-        .current_dir(root)
-        .arg("mutants")
-        .arg("--output")
-        .arg(out);
-    if let Some(diff) = in_diff {
-        command.arg("--in-diff").arg(diff);
+/// The consumer installs nothing and never names the engine (the #242 / #239 contract):
+/// cargo ships no library form of cargo-mutants, so — unlike the in-process TS/Python
+/// adapters — the tool runs a pinned `cargo install cargo-mutants` into its own cache
+/// directory and drives the installed binary from there. A cached binary is reused; only a
+/// cargo toolchain need be present. This is the one deliberate asymmetry from the other
+/// arms, called out per the cross-language-parity rule.
+fn ensure_cargo_mutants() -> Result<PathBuf> {
+    let root = cargo_mutants_cache_root();
+    let bin = root.join("bin").join(cargo_mutants_bin_name());
+    provision(&bin, || run_install(&root, |command| command.output()))
+}
+
+/// The cargo-mutants binary's file name (`.exe` on Windows), as `cargo install --root`
+/// lays it out under `<root>/bin/`.
+fn cargo_mutants_bin_name() -> &'static str {
+    if cfg!(windows) {
+        "cargo-mutants.exe"
+    } else {
+        "cargo-mutants"
     }
+}
+
+/// The tool-owned, version-scoped cache directory cargo-mutants is installed under, so a
+/// version bump provisions cleanly beside the old one and never clobbers a user's own
+/// `~/.cargo/bin`.
+fn cargo_mutants_cache_root() -> PathBuf {
+    cache_base()
+        .join("testing-conventions")
+        .join(format!("cargo-mutants-{CARGO_MUTANTS_VERSION}"))
+}
+
+/// The base cache directory, read from OS-owned config. Split from [`resolve_cache_base`]
+/// so the resolution logic is unit-tested without touching the process environment.
+fn cache_base() -> PathBuf {
+    resolve_cache_base(std::env::var_os("XDG_CACHE_HOME"), std::env::var_os("HOME"))
+}
+
+/// Resolve the base cache dir: `XDG_CACHE_HOME` when set and non-empty, else `$HOME/.cache`,
+/// else the temp dir. Pure over its inputs.
+fn resolve_cache_base(xdg: Option<OsString>, home: Option<OsString>) -> PathBuf {
+    if let Some(dir) = xdg.filter(|value| !value.is_empty()) {
+        return PathBuf::from(dir);
+    }
+    if let Some(dir) = home.filter(|value| !value.is_empty()) {
+        return PathBuf::from(dir).join(".cache");
+    }
+    std::env::temp_dir()
+}
+
+/// Return `bin` if it already exists, otherwise run `install` and return `bin` once it does.
+/// Pure over the filesystem plus the injected installer, so a test drives every branch with
+/// a temp path and a fake installer (no from-source compile). An installer that reports
+/// success but produces no binary is an error.
+fn provision(bin: &Path, install: impl FnOnce() -> Result<()>) -> Result<PathBuf> {
+    if bin.exists() {
+        return Ok(bin.to_path_buf());
+    }
+    install()?;
+    if !bin.exists() {
+        bail!(
+            "provisioning reported success but cargo-mutants is not at `{}`",
+            bin.display()
+        );
+    }
+    Ok(bin.to_path_buf())
+}
+
+/// The argv provisioning the pinned cargo-mutants into `root` (`cargo install cargo-mutants
+/// --locked --version <X> --root <root>`). Split from execution so a test asserts the pin
+/// and the isolated `--root` without a real install.
+fn install_argv(root: &Path) -> Vec<OsString> {
+    vec![
+        OsString::from("install"),
+        OsString::from("cargo-mutants"),
+        OsString::from("--locked"),
+        OsString::from("--version"),
+        OsString::from(CARGO_MUTANTS_VERSION),
+        OsString::from("--root"),
+        root.as_os_str().to_os_string(),
+    ]
+}
+
+/// Provision cargo-mutants into `root`, executing the built `cargo install` command with
+/// `run`. `run` is injected so a test drives the success and failure branches with a fake
+/// (no from-source compile). The coverage-instrumentation env is stripped so the compile
+/// doesn't re-enter a `cargo llvm-cov` rustc wrapper.
+fn run_install(
+    root: &Path,
+    run: impl FnOnce(&mut Command) -> std::io::Result<Output>,
+) -> Result<()> {
+    let mut command = Command::new("cargo");
+    command.args(install_argv(root));
+    strip_llvm_cov_env(&mut command);
+    let output = run(&mut command)
+        .context("provisioning cargo-mutants via `cargo install` (is cargo installed?)")?;
+    if !output.status.success() {
+        bail!(
+            "failed to provision cargo-mutants {CARGO_MUTANTS_VERSION}:\n{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+    Ok(())
+}
+
+/// Strip the outer coverage-instrumentation env from a nested cargo invocation (the
+/// cargo-mutants run, or the `cargo install` that provisions it) so it doesn't re-enter the
+/// `cargo llvm-cov` rustc wrapper and hang, as when this rule's own tests run under coverage.
+fn strip_llvm_cov_env(command: &mut Command) {
     for var in [
         "RUSTFLAGS",
         "CARGO_ENCODED_RUSTFLAGS",
@@ -721,9 +822,28 @@ fn run_cargo_mutants(root: &Path, out: &Path, in_diff: Option<&Path>) -> Result<
     ] {
         command.env_remove(var);
     }
-    let output = command
-        .output()
-        .context("running `cargo mutants` (is cargo-mutants installed?)")?;
+}
+
+/// Run `<engine> mutants --output <out> [--in-diff <diff>]` in `root`, where `engine` is the
+/// provisioned cargo-mutants binary ([`ensure_cargo_mutants`]) invoked by absolute path.
+///
+/// cargo-mutants exits `0` when every mutant is caught and `2` when some survive (or
+/// time out / are unviable) — both are normal here, since survivors are the rule's
+/// *output*, not an error. Any other code (usage error, or a baseline that didn't
+/// build/pass) is fatal. The outer instrumentation env is stripped so a nested run (this
+/// rule's own tests under `cargo llvm-cov`) doesn't re-enter the rustc wrapper and hang.
+fn run_cargo_mutants(engine: &Path, root: &Path, out: &Path, in_diff: Option<&Path>) -> Result<()> {
+    let mut command = Command::new(engine);
+    command
+        .current_dir(root)
+        .arg("mutants")
+        .arg("--output")
+        .arg(out);
+    if let Some(diff) = in_diff {
+        command.arg("--in-diff").arg(diff);
+    }
+    strip_llvm_cov_env(&mut command);
+    let output = command.output().context("running cargo-mutants")?;
     match output.status.code() {
         // 0 = all caught, 2 = some survived/timed out: both produce a report to read.
         Some(0) | Some(2) => Ok(()),
@@ -1012,5 +1132,206 @@ mod tests {
         )
         .unwrap();
         assert!(kept.is_empty());
+    }
+
+    // --- engine provisioning (#242) ---
+
+    fn unique_tmp() -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "tc-provision-test-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn provision_returns_an_existing_binary_without_installing() {
+        let tmp = unique_tmp();
+        let bin = tmp.join("bin").join("cargo-mutants");
+        std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
+        std::fs::write(&bin, b"binary").unwrap();
+        let mut installed = false;
+        let got = provision(&bin, || {
+            installed = true;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(got, bin);
+        assert!(!installed, "a present binary must not be reinstalled");
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn provision_installs_when_the_binary_is_absent() {
+        let tmp = unique_tmp();
+        let bin = tmp.join("bin").join("cargo-mutants");
+        let mut installed = false;
+        let got = provision(&bin, || {
+            installed = true;
+            std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
+            std::fs::write(&bin, b"binary").unwrap();
+            Ok(())
+        })
+        .unwrap();
+        assert!(installed, "an absent binary must be installed");
+        assert_eq!(got, bin);
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn provision_errors_when_install_produces_no_binary() {
+        let tmp = unique_tmp();
+        let bin = tmp.join("bin").join("cargo-mutants");
+        let err = provision(&bin, || Ok(())).unwrap_err();
+        assert!(
+            err.to_string().contains("cargo-mutants is not at"),
+            "got: {err}"
+        );
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn provision_propagates_an_install_failure() {
+        let tmp = unique_tmp();
+        let bin = tmp.join("bin").join("cargo-mutants");
+        let err = provision(&bin, || bail!("install blew up")).unwrap_err();
+        assert!(err.to_string().contains("install blew up"), "got: {err}");
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn resolve_cache_base_prefers_xdg_then_home_then_temp() {
+        let xdg = |s: &str| Some(OsString::from(s));
+        // XDG wins when set and non-empty.
+        assert_eq!(
+            resolve_cache_base(xdg("/xdg"), xdg("/home")),
+            PathBuf::from("/xdg")
+        );
+        // An empty XDG falls through to $HOME/.cache.
+        assert_eq!(
+            resolve_cache_base(xdg(""), xdg("/home")),
+            PathBuf::from("/home/.cache")
+        );
+        // A missing XDG likewise uses $HOME/.cache.
+        assert_eq!(
+            resolve_cache_base(None, xdg("/home")),
+            PathBuf::from("/home/.cache")
+        );
+        // Neither set → the temp dir.
+        assert_eq!(resolve_cache_base(None, None), std::env::temp_dir());
+        assert_eq!(
+            resolve_cache_base(xdg(""), Some(OsString::new())),
+            std::env::temp_dir()
+        );
+    }
+
+    #[test]
+    fn cache_root_is_absolute_and_version_scoped() {
+        let root = cargo_mutants_cache_root();
+        assert!(
+            root.ends_with(format!("cargo-mutants-{CARGO_MUTANTS_VERSION}")),
+            "version-scoped; got {root:?}"
+        );
+        assert!(
+            root.to_string_lossy().contains("testing-conventions"),
+            "tool-namespaced; got {root:?}"
+        );
+        // A real base dir (HOME/XDG in the test env) makes it absolute — not an empty path.
+        assert!(
+            root.is_absolute(),
+            "expected an absolute path; got {root:?}"
+        );
+    }
+
+    #[test]
+    fn install_argv_pins_the_version_and_isolates_the_root() {
+        let argv: Vec<String> = install_argv(Path::new("/cache/cargo-mutants-27"))
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            argv,
+            vec![
+                "install",
+                "cargo-mutants",
+                "--locked",
+                "--version",
+                CARGO_MUTANTS_VERSION,
+                "--root",
+                "/cache/cargo-mutants-27",
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    fn fake_output(code: i32, stderr: &str) -> Output {
+        use std::os::unix::process::ExitStatusExt;
+        Output {
+            status: std::process::ExitStatus::from_raw(code << 8),
+            stdout: Vec::new(),
+            stderr: stderr.as_bytes().to_vec(),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_install_succeeds_on_a_zero_exit() {
+        let mut ran = false;
+        run_install(Path::new("/cache/root"), |command| {
+            ran = true;
+            // The pinned argv reaches the runner.
+            let argv: Vec<String> = command
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect();
+            assert!(argv.contains(&CARGO_MUTANTS_VERSION.to_string()));
+            Ok(fake_output(0, ""))
+        })
+        .unwrap();
+        assert!(ran);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_install_reports_a_nonzero_exit_with_the_engine_output() {
+        let err = run_install(Path::new("/cache/root"), |_| {
+            Ok(fake_output(1, "error: could not compile cargo-mutants"))
+        })
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("failed to provision cargo-mutants")
+                && err.to_string().contains("could not compile"),
+            "got: {err}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_install_propagates_a_spawn_failure() {
+        let err = run_install(Path::new("/cache/root"), |_| {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "no cargo",
+            ))
+        })
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("is cargo installed?"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn cargo_mutants_bin_name_matches_the_platform() {
+        let name = cargo_mutants_bin_name();
+        if cfg!(windows) {
+            assert_eq!(name, "cargo-mutants.exe");
+        } else {
+            assert_eq!(name, "cargo-mutants");
+        }
     }
 }

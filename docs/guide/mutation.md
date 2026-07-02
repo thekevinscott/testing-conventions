@@ -26,13 +26,15 @@ ran but no test failed on), and exits non-zero if any survive.
 | --- | --- | --- |
 | TypeScript | [`@stryker-mutator/core`](https://stryker-mutator.io/) + `@stryker-mutator/vitest-runner` | Yes — npm dependencies |
 | Python | [`cosmic-ray`](https://github.com/sixty-north/cosmic-ray) | Yes — wheel dependency |
-| Rust | [`cargo-mutants`](https://github.com/sourcefrog/cargo-mutants) | No — `cargo install cargo-mutants` (cargo has no equivalent) |
+| Rust | [`cargo-mutants`](https://github.com/sourcefrog/cargo-mutants) | On demand — provisioned on first use |
 
-For TypeScript and Python, the tool drives the engine itself — TypeScript through a Node adapter
-bundled in the npm package that calls Stryker's own Node API, Python through cosmic-ray's library API.
-You call this CLI and get results. You provide the **test runner** (`vitest` / `pytest`), which runs
-your own suite, so its version is yours. For Rust, install the engine with `cargo install
-cargo-mutants`.
+The tool drives the engine itself in every language — TypeScript through a Node adapter bundled in
+the npm package that calls Stryker's own Node API, Python through cosmic-ray's library API, and Rust
+by provisioning cargo-mutants on first use: a pinned `cargo install` into the tool's own cache
+directory, invoked from there (cargo ships no library form of the engine, so the tool runs the binary
+it installs). You call this CLI and get results. You provide the **test runner** — `vitest` /
+`pytest`, or for Rust the cargo toolchain that builds and tests your crate — which runs your own
+suite, so its version is yours.
 
 The gate is **on by default and binary**: any un-exempted survivor fails the run (exit `1`, listing
 each survivor with its file, line, and mutation); a clean run exits `0`. There is no report-only mode

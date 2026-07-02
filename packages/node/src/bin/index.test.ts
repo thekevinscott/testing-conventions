@@ -8,11 +8,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const { main } = vi.hoisted(() => ({ main: vi.fn<(opts: MainOpts) => Promise<number>>() }));
 vi.mock('bin-shim', () => ({ main }));
 
-// Drive bin.ts with a chosen argv: it reads `process.argv.slice(2)` at import time, so set it,
-// import a fresh module copy, then flush the microtask that calls `process.exit`.
+// Drive the launcher with a chosen argv: it reads `process.argv.slice(2)` at import time, so set
+// it, import a fresh module copy, then flush the microtask that calls `process.exit`.
 async function runBin(args: string[]): Promise<void> {
-  process.argv = ['node', 'bin.js', ...args];
-  await import('./bin.js');
+  process.argv = ['node', 'index.js', ...args];
+  await import('./index.js');
   await new Promise((resolve) => setImmediate(resolve));
 }
 
@@ -67,7 +67,7 @@ describe('bin', () => {
       'src',
       '--ts-mutation-adapter',
     ]);
-    expect(argv[argv.length - 1]).toMatch(/mutation-cli\.js$/);
+    expect(argv[argv.length - 1]).toMatch(/mutation\/main\.js$/);
   });
 
   it('leaves a non-mutation invocation untouched', async () => {

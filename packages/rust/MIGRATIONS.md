@@ -562,7 +562,7 @@ core (#239) — the same types the bundled adapter emits and the Rust/Python arm
 | `mutation::{StrykerReport, StrykerFile, StrykerMutant, StrykerLocation}` | `mutation::NormalizedMutant` |
 
 `measure_typescript` takes a trailing `adapter: &Path` — the path to the bundled Node adapter
-(`packages/node/dist/mutation-cli.js`):
+(`packages/node/dist/mutation/main.js`):
 
 | Function | Before | After |
 | --- | --- | --- |

@@ -6,7 +6,7 @@
   "repository": "https://github.com/thekevinscott/testing-conventions",
   "type": "module",
   "bin": {
-    "testing-conventions": "dist/bin.js"
+    "testing-conventions": "dist/bin/index.js"
   },
   "exports": {
     ".": {

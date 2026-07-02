@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { NormalizedMutant } from './mutation/to-normalized.js';
+import type { NormalizedMutant } from './to-normalized.js';
 
 // `mutationCLI`'s collaborators are `parseArgs`, `runStryker`, and `fs/promises.writeFile`; mock
 // all so the behaviors it owns — writing the JSON to a file or stdout, passing the parsed mutate
@@ -10,8 +10,8 @@ const { parseArgs, runStryker, writeFile } = vi.hoisted(() => ({
   runStryker: vi.fn<(options?: { mutate?: string[] }) => Promise<NormalizedMutant[]>>(),
   writeFile: vi.fn<() => Promise<void>>(),
 }));
-vi.mock('./mutation/parse-args.js', () => ({ parseArgs }));
-vi.mock('./mutation/run-stryker.js', () => ({ runStryker }));
+vi.mock('./parse-args.js', () => ({ parseArgs }));
+vi.mock('./run-stryker.js', () => ({ runStryker }));
 vi.mock('node:fs/promises', () => ({ writeFile }));
 
 import { mutationCLI } from './index.js';

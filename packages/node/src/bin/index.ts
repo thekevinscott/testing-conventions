@@ -9,7 +9,7 @@ import { main } from 'bin-shim';
 // (the only command that reads it). The binary errors clearly if the arm runs without it.
 const args = process.argv.slice(2);
 const isUnitMutation = args[0] === 'unit' && args[1] === 'mutation';
-const adapter = fileURLToPath(new URL('./mutation-cli.js', import.meta.url));
+const adapter = fileURLToPath(new URL('../mutation/main.js', import.meta.url));
 const argv = isUnitMutation ? [...args, '--ts-mutation-adapter', adapter] : args;
 
 main({

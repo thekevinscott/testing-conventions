@@ -398,7 +398,7 @@ fn one_line(replacement: &str) -> String {
 /// <file>:<line>-<line>` ranges (line granularity, matching cargo-mutants' `--in-diff`).
 /// Without it, the project's configured `mutate` set runs. `exempt` is the file-level
 /// exempt paths and `exempt_lines` the line-scoped ones (#226). `adapter` is the path to
-/// the bundled Node adapter (`dist/mutation-cli.js`) — the CLI receives it from the npm
+/// the bundled Node adapter (`dist/mutation/main.js`) — the CLI receives it from the npm
 /// launcher's `--ts-mutation-adapter` argument and hands it down explicitly.
 pub fn measure_typescript(
     root: &Path,

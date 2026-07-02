@@ -1,21 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// The shim's one job is to run `mutationCLI` over the process arguments and map a rejected run
-// onto stderr + a non-zero exit code. Mock `mutationCLI` so both can be driven without a real run.
+// main.ts's one job is to run `mutationCLI` over the process arguments and map a rejected run onto
+// stderr + a non-zero exit code. Mock `mutationCLI` so both can be driven without a real run.
 const { mutationCLI } = vi.hoisted(() => ({
   mutationCLI: vi.fn<(argv: string[]) => Promise<void>>(),
 }));
 vi.mock('./index.js', () => ({ mutationCLI }));
 
-// The shim runs its work at import time, reading `process.argv.slice(2)`; set argv, import a fresh
+// main.ts runs its work at import time, reading `process.argv.slice(2)`; set argv, import a fresh
 // copy, then flush the microtask that the `.catch` runs on.
-async function runShim(args: string[]): Promise<void> {
-  process.argv = ['node', 'mutation-cli.js', ...args];
-  await import('./mutation-cli.js');
+async function runMain(args: string[]): Promise<void> {
+  process.argv = ['node', 'main.js', ...args];
+  await import('./main.js');
   await new Promise((resolve) => setImmediate(resolve));
 }
 
-describe('mutation-cli', () => {
+describe('main', () => {
   const realArgv = process.argv;
 
   afterEach(() => {
@@ -29,7 +29,7 @@ describe('mutation-cli', () => {
   it('runs mutationCLI over the process arguments', async () => {
     mutationCLI.mockResolvedValue();
 
-    await runShim(['--out', '/tmp/r.json']);
+    await runMain(['--out', '/tmp/r.json']);
 
     expect(mutationCLI).toHaveBeenCalledWith(['--out', '/tmp/r.json']);
   });
@@ -38,7 +38,7 @@ describe('mutation-cli', () => {
     mutationCLI.mockRejectedValue(new Error('boom'));
     const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
-    await runShim([]);
+    await runMain([]);
 
     expect(write).toHaveBeenCalledWith('boom\n');
     expect(process.exitCode).toBe(1);

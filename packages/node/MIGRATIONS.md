@@ -15,13 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
-Adds the TypeScript mutation engine adapter (#246, part of #239): `src/index.ts` exposes `mutationCLI`
-over one-function-per-file helpers nested under `src/mutation/`, with a thin `mutation-cli.ts` shim as
-the executable. It runs Stryker via its Node API and normalizes `MutantResult[]` to the shared schema,
-selecting the bundled vitest runner. The Rust binary spawns it for `unit mutation --language
-typescript`, and `bin.ts` passes its `dist/` path to the binary as a `--ts-mutation-adapter` argument
-(appended only to a `unit mutation` invocation). Adds `@stryker-mutator/api` as a devDependency (engine
-result types only); the `bin` entry and package exports are unchanged.
+Adds the TypeScript mutation engine adapter (#246, part of #239), organized by folder:
+`src/mutation/index.ts` exposes `mutationCLI` over one-function-per-file helpers alongside it, and
+`src/mutation/main.ts` is the executable. It runs Stryker via its Node API and normalizes
+`MutantResult[]` to the shared schema, selecting the bundled vitest runner. The Rust binary spawns it
+(`dist/mutation/main.js`) for `unit mutation --language typescript`, and the launcher
+(`src/bin/index.ts`) passes its path to the binary as a `--ts-mutation-adapter` argument (appended
+only to a `unit mutation` invocation). Adds `@stryker-mutator/api` as a devDependency (engine result
+types only). The `bin` entry now resolves to `dist/bin/index.js`; the package's `.` export is
+unchanged.
 
 Declares the TypeScript mutation engine (`@stryker-mutator/core`, `@stryker-mutator/vitest-runner`,
 `^9.6.0`) as runtime dependencies, so installing testing-conventions brings them in and the adapter

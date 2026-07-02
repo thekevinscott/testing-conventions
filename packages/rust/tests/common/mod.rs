@@ -17,13 +17,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// The freshly-built TypeScript mutation adapter (`packages/node/dist/mutation-cli.js`),
+/// The freshly-built TypeScript mutation adapter (`packages/node/dist/mutation/main.js`),
 /// which the rule spawns for the TS arm (#246). `CARGO_MANIFEST_DIR` is `packages/rust`,
 /// so the sibling node package is one level up. Requires the node package to be built
 /// (`npm run build` in `packages/node`, deps installed) — the Rust CI integration job does
 /// both before the suite runs.
 pub fn ts_adapter() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../node/dist/mutation-cli.js")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../node/dist/mutation/main.js")
 }
 
 /// A throwaway copy of a fixture project under `tests/fixtures/unit_mutation/<lang>`,

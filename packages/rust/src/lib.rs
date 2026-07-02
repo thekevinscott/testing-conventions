@@ -148,7 +148,7 @@ enum UnitRule {
         /// absent means nothing is exempt (every survivor must be killed).
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
-        /// Path to the bundled TypeScript mutation adapter (`dist/mutation-cli.js`), used
+        /// Path to the bundled TypeScript mutation adapter (`dist/mutation/main.js`), used
         /// only by `--language typescript`. The npm launcher appends it; hidden because a
         /// consumer never sets it by hand.
         #[arg(long = "ts-mutation-adapter", hide = true)]

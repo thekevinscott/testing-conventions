@@ -11,8 +11,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn killed_crate() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/unit_mutation/rust/killed")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unit_mutation/rust/killed")
 }
 
 /// Exit code of `testing-conventions unit mutation --language rust <crate>`.

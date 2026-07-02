@@ -286,6 +286,32 @@ jobs:
           fi
           echo "release.yml no longer moves @v0 inline"
 
+  github-helpers-wired:
+    name: The .github helpers are dogfooded through every Python arm
+    # Red→green wiring signal for #237's last arm: dogfood-github-helpers.yml holds the
+    # repo's own helper scripts (detect.py, move_major_tag.py) to the same rules as any
+    # shipped package. The four whole-tree arms landed with the gate (#236); this asserts
+    # the diff-scoped mutation gate (`unit mutation --base`, the rung above coverage) is
+    # invoked too — the same static-grep style as mutation-wired / diff-scoped-wired.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: dogfood-github-helpers.yml must invoke all five Python arms
+        run: |
+          set -euo pipefail
+          wf=.github/workflows/dogfood-github-helpers.yml
+          missing=0
+          grep -q 'unit colocated-test' "$wf" || missing=1
+          grep -q 'unit lint' "$wf" || missing=1
+          grep -q 'unit coverage' "$wf" || missing=1
+          grep -q 'integration lint' "$wf" || missing=1
+          grep -qE 'unit mutation .*--base' "$wf" || missing=1
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::$wf does not run every Python arm over the .github helpers — the dogfood gate (#237) must invoke unit colocated-test, unit lint, unit coverage, integration lint, and the diff-scoped unit mutation --base"
+            exit 1
+          fi
+          echo "dogfood-github-helpers.yml runs all five Python arms"
+
   detect-routes-python:
     name: the detect action routes Python into the unit-lint matrix
     # Detection now lives in the repo-only detect action, tested by pytest (#189). This

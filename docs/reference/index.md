@@ -177,8 +177,10 @@ testing-conventions unit mutation --language <rust|typescript|python> [--base <R
 Each language wraps its standard engine and collects every **surviving** mutant — one the suite
 ran but no test failed on:
 
-- **Rust** runs [`cargo mutants`](https://github.com/sourcefrog/cargo-mutants) and reads its
-  `outcomes.json` (`MissedMutant` outcomes). `cargo-mutants` must be installed.
+- **Rust** runs [`cargo-mutants`](https://github.com/sourcefrog/cargo-mutants) and reads its
+  `outcomes.json` (`MissedMutant` outcomes). The tool provisions cargo-mutants on first use — a
+  pinned `cargo install` into its own cache directory, invoked from there — and drives it; you
+  provide the cargo toolchain that builds your crate.
 - **TypeScript** runs [Stryker](https://stryker-mutator.io/) through a Node adapter bundled in the
   npm package — driven via Stryker's own Node API (`Survived` and `NoCoverage` mutants). The tool
   drives Stryker; you provide the test runner (`vitest`).

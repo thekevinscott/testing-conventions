@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **`unit mutation --language rust` provisions cargo-mutants itself** (#242, epic #239). The Rust arm
+  no longer requires cargo-mutants to be pre-installed: on first use it runs a pinned `cargo install
+  cargo-mutants --locked --version <X>` into the tool's own cache directory and invokes the binary
+  from there, so a direct `testing-conventions unit mutation --language rust` works with only a cargo
+  toolchain present — parity with the TS/Python arms, which resolve their engines from the npm/wheel
+  install. cargo ships no library form of the engine, so the tool drives the installed binary (the
+  one unavoidable asymmetry from the in-process TS/Python adapters, called out per the
+  cross-language-parity rule). The reusable workflow's and selftest's `Install cargo-mutants` steps are
+  removed. No SDK change — `measure_rust`'s signature is unchanged.
 - **BREAKING: `coverage` / `mutation` exemptions are now line-scoped only** (#226). A
   `[[<language>.exempt]]` entry naming `coverage` or `mutation` must carry a `lines` list; a
   whole-file `rules = ["coverage"]` (or `["mutation"]`) entry — accepted before — is now rejected on

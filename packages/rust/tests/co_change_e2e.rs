@@ -157,6 +157,30 @@ fn deleted_source_without_deleting_its_test_exits_nonzero() {
 }
 
 #[test]
+fn deleting_a_barrel_without_a_test_exits_zero() {
+    // #252: a package barrel with no colocated test can be deleted cleanly — the
+    // deletion can't bring a sibling test into the diff, so co-change no longer
+    // flags it (nor needs an exemption to silence it).
+    let repo = TempRepo::new("del-barrel");
+    repo.write(
+        "cli/interpret/__init__.py",
+        "\"\"\"Interpret package.\"\"\"\n",
+    );
+    repo.write("widget.py", WIDGET_PY);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+    repo.remove("cli/interpret/__init__.py");
+    repo.commit("delete the barrel");
+
+    let (code, stderr) = co_change(&repo, "python", &base, None);
+    assert_eq!(
+        code, 0,
+        "a barrel deletion with no sibling test must exit zero; stderr: {stderr}"
+    );
+}
+
+#[test]
 fn a_co_change_exemption_lifts_the_stale_source() {
     let repo = TempRepo::new("exempt");
     repo.write(

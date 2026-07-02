@@ -232,6 +232,60 @@ fn python_deleting_source_and_test_together_is_clean() {
 }
 
 #[test]
+fn python_deleting_a_barrel_without_a_test_is_clean() {
+    // A package barrel (`__init__.py`) has no colocated test, so deleting it can
+    // never bring `__init___test.py` into the diff — it must not be flagged (#252).
+    // The base tree, not HEAD, decides: the barrel had no sibling test to orphan.
+    let repo = TempRepo::new("py-del-barrel");
+    repo.write(
+        "cli/interpret/__init__.py",
+        "\"\"\"Interpret package.\"\"\"\n",
+    );
+    repo.write("widget.py", WIDGET_PY);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.remove("cli/interpret/__init__.py");
+    repo.commit("delete the barrel");
+
+    assert!(stale(&repo, &base, Language::Python).is_empty());
+}
+
+#[test]
+fn python_deleting_an_exempt_barrel_passes_base_after_dropping_its_entry() {
+    // The bug (#252): an exempt barrel was undeletable under `--base`. Keeping its
+    // `colocated-test` exempt entry made the stale-exempt scan reject it (gone in
+    // HEAD); dropping the entry — the documented move — made co-change flag the
+    // deletion. With co-change pairing against the base tree, deleting the barrel
+    // *and* its now-stale entry passes both presence and co-change in one run.
+    let repo = TempRepo::new("py-del-exempt-barrel");
+    repo.write(
+        "testing-conventions.toml",
+        "[[python.exempt]]\npath = \"cli/interpret/__init__.py\"\n\
+         rules = [\"colocated-test\"]\nreason = \"package barrel; no logic to unit-test\"\n",
+    );
+    repo.write(
+        "cli/interpret/__init__.py",
+        "\"\"\"Interpret package.\"\"\"\n",
+    );
+    repo.write("widget.py", WIDGET_PY);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    // Delete the barrel and drop its now-stale exempt entry.
+    repo.remove("cli/interpret/__init__.py");
+    repo.write("testing-conventions.toml", "");
+    repo.commit("demolish the barrel");
+
+    assert_eq!(
+        run_co_change(&repo, "python", &base, Some("testing-conventions.toml")).unwrap(),
+        0
+    );
+}
+
+#[test]
 fn python_added_source_is_not_a_subject() {
     // Brand-new code is the coverage floor's concern, not co-change's; a new
     // source with no colocated test is not flagged here.
@@ -417,6 +471,29 @@ fn typescript_modified_source_with_its_test_is_clean() {
         "import { widget } from './widget';\nit('works', () => expect(widget()).toBe(2));\n",
     );
     repo.commit("edit both");
+
+    assert!(stale(&repo, &base, Language::TypeScript).is_empty());
+}
+
+#[test]
+fn typescript_deleting_a_barrel_without_a_test_is_clean() {
+    // A `index.ts` re-export barrel has no colocated test — deleting it can't bring
+    // `index.test.ts` into the diff, so it must not be flagged (#252).
+    let repo = TempRepo::new("ts-del-barrel");
+    repo.write("cli/interpret/index.ts", "export * from './widget';\n");
+    repo.write(
+        "cli/interpret/widget.ts",
+        "export const widget = () => 1;\n",
+    );
+    repo.write(
+        "cli/interpret/widget.test.ts",
+        "import { widget } from './widget';\nit('works', () => expect(widget()).toBe(1));\n",
+    );
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.remove("cli/interpret/index.ts");
+    repo.commit("delete the barrel");
 
     assert!(stale(&repo, &base, Language::TypeScript).is_empty());
 }

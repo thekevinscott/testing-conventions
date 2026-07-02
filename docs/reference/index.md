@@ -58,8 +58,12 @@ to test) and any file listed in the config [`exempt`](#exemptions) table.
 changed in the `<base>...HEAD` diff also changed its colocated test — an edit or removal that
 leaves the test untouched lets it silently go stale. For each source file in the diff:
 
-- **modified** (and still holding code) or **deleted** → its colocated test (`foo.py` →
-  `foo_test.py`, `foo.ts` → `foo.test.ts`) must also be in the diff; otherwise the source is flagged.
+- **modified** (and still holding code) → its colocated test (`foo.py` → `foo_test.py`, `foo.ts` →
+  `foo.test.ts`) must also be in the diff; otherwise the source is flagged.
+- **deleted** → if the source *had* a colocated test in the **base** tree, that test must also be in
+  the diff (deleted or updated alongside it); otherwise the source is flagged. A source that never
+  had a sibling test — a package barrel such as `__init__.py` or `index.ts` — can be removed without
+  a test appearing in the diff, so it is **not** flagged and needs no exemption to delete it.
 - **added** → not a subject. Brand-new code is the [coverage floor](#unit-coverage)'s concern.
 
 A test file is never a co-change subject (changing a test on its own is fine), and a source with a

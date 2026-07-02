@@ -15,6 +15,14 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Adds the `testing_conventions.mutation` adapter (#248, part of #239): a Python module that drives
+cosmic-ray via its `WorkDB` library API and emits the normalized mutation-result schema the rust core
+gates on. The rust binary spawns it as `python3 -m testing_conventions.mutation.main` for `unit
+mutation --language python`, replacing the `cosmic-ray` CLI orchestration on the rust side. Purely
+additive on the wheel: the `bin` entry, the `pytest11` entry point, and the declared dependencies are
+unchanged (`cosmic-ray` was already there). `cosmic_ray` is imported lazily, so the package imports
+without the engine.
+
 The wheel now declares the Python mutation/coverage engines (`cosmic-ray`, `coverage`) as runtime
 dependencies, so installing testing-conventions brings them automatically — the `unit mutation` /
 `unit coverage --language python` rules resolve the engine from the same environment instead of

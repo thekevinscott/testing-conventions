@@ -182,9 +182,10 @@ ran but no test failed on:
 - **TypeScript** runs [Stryker](https://stryker-mutator.io/) through a Node adapter bundled in the
   npm package — driven via Stryker's own Node API (`Survived` and `NoCoverage` mutants). The tool
   drives Stryker; you provide the test runner (`vitest`).
-- **Python** runs [cosmic-ray](https://github.com/sixty-north/cosmic-ray) (driving pytest) and
-  reads its session via `cosmic-ray dump` (`survived` outcomes). A baseline check guards against
-  a broken suite reporting a false pass. cosmic-ray + pytest must be installed.
+- **Python** runs [cosmic-ray](https://github.com/sixty-north/cosmic-ray) through a Python adapter
+  bundled in the wheel — driven via cosmic-ray's `WorkDB` library API (`survived` outcomes), with a
+  baseline check guarding against a broken suite reporting a false pass. The tool drives cosmic-ray;
+  you provide the test runner (`pytest`).
 
 A mutant with a `mutation` [exemption](#exemptions) on its file is dropped (an equivalent or
 deliberately-defensive mutation, with a reason) — or, with a [`lines`](#line-scoped-exemptions)

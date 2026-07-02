@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **A `testing_conventions.mutation` adapter** (#248, epic #239). The wheel now ships a Python module
+  that drives cosmic-ray through its `WorkDB` library API (`commands.init` → `execute`, read the
+  `WorkResult`s) and emits the normalized mutation-result schema the rust core gates on — one function
+  per file (`parse_args`, `normalize`, `config`, `baseline`, `session`, `cli`, `main`), mirroring the
+  TypeScript adapter's layout. The rust binary spawns it as `python3 -m
+  testing_conventions.mutation.main` for `unit mutation --language python`: the tool drives the
+  engine, and the project supplies its own test runner (pytest). `cosmic_ray` is imported lazily so
+  the package imports without the engine. Additive — the `bin` entry and the `pytest11` entry point
+  are unchanged, and `cosmic-ray` was already a runtime dependency.
 - **The Python mutation/coverage engines now ship with the wheel.** `cosmic-ray` and `coverage` are
   declared as runtime dependencies, so a `pip install` / `uvx` of testing-conventions brings them and
   `unit mutation`/`unit coverage --language python` resolve them from the same environment — no

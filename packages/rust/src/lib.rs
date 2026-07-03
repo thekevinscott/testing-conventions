@@ -545,6 +545,8 @@ fn run_unit_coverage(
             let thresholds = coverage::RustThresholds {
                 regions: coverage.regions,
                 lines: coverage.lines,
+                functions: coverage.functions,
+                branch: coverage.branch,
             };
             let (ignore, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
                 root,

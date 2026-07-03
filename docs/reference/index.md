@@ -92,15 +92,15 @@ testing-conventions unit coverage --language <LANG> [--base <REF>] [--config <CO
 | `<PATH>`            | Directory whose unit suite is run and measured.                            |
 | `--language <LANG>` | **Required.** `python`, `typescript`, or `rust`. |
 | `--base <REF>`      | Optional. Measure the floor over the `<base>...HEAD` diff (the lines the change touched) instead of the whole tree; absent means whole-tree. See **diff-scoped coverage** below. |
-| `--config <CONFIG>` | Config file providing the thresholds and `exempt` list (default `testing-conventions.toml`). Optional for all three — if the file, or its `[<language>].coverage` table, is absent, the language's default floor is used and nothing is exempt (Rust floors `lines = 100`; `regions` is opt-in). |
+| `--config <CONFIG>` | Config file providing the thresholds and `exempt` list (default `testing-conventions.toml`). Optional for all three — if the file, or its `[<language>].coverage` table, is absent, the language's default floor is used and nothing is exempt (Rust floors `lines = 100`; `regions`, `functions`, and `branch` are opt-in). |
 
 With no `[<language>].coverage` table (or no config file at all), the check uses the language's
 **default floor** — a strict 100%: Python `branch = true, fail_under = 100`; TypeScript
 `lines = 100, branches = 100, functions = 100, statements = 100`; Rust `lines = 100`. A config table
 lowers it. This lets the [reusable workflow](../guide/ci) opt a new library into coverage with no
-config file — 100% of what you don't explicitly exempt. **Rust** floors `lines` only: `regions` is
-opt-in via `[rust].coverage`, and branch coverage is experimental on stable, so there's no branch
-component.
+config file — 100% of what you don't explicitly exempt. **Rust** floors `lines` only by default:
+`regions`, `functions`, and `branch` are opt-in via `[rust].coverage` (#267; `branch` runs under
+`--branch`, which needs a nightly toolchain).
 
 A `[<language>].coverage` table is a **partial override** — set only the fields you want to change;
 the rest keep the language's default. So `[typescript].coverage` with just `branches = 90` keeps
@@ -122,11 +122,16 @@ floor is met, `1` (naming each metric below its floor on stderr) when any isn't.
 `coverage` [exemption](#exemptions) are also excluded from the denominator.
 
 For **`rust`**, runs `cargo llvm-cov --lib --json --summary-only` over the crate at `<PATH>` and
-compares the export's **regions** and **lines** totals against `[rust].coverage` (`regions`,
-`lines`) — branch coverage is still experimental, so it isn't enforced. `--lib` scopes the run to
+compares the export's totals against `[rust].coverage`: **`lines`** (the default floor), plus three
+opt-in floors — **`regions`**, **`functions`**, and **`branch`** (#267). A `branch` floor adds
+`--branch` to the run, which needs a nightly toolchain — pin one in the crate's
+`rust-toolchain.toml` (with `llvm-tools-preview`) or set a rustup directory override (`rustup override set nightly`); on stable the run
+fails with the requirement named. A crate with no branch points clears any `branch` floor
+vacuously (an empty denominator, like the diff-scoped floors). `--lib` scopes the run to
 the unit suite — the library target with its inline `#[cfg(test)]` modules, the tool's definition
 of a Rust unit — so the floor measures the same unit-only slice Python and TypeScript measure, and
-the integration tier under `tests/` stays out of the number (#265). Exits `0` when both floors are
+the integration tier under `tests/` stays out of the number (#265). The diff-scoped variant
+(`--base`) judges regions + lines, as before. Exits `0` when both floors are
 met, `1` (naming each metric below its floor on stderr) when either isn't. `cargo-llvm-cov` must be
 installed. Files with a `coverage` [exemption](#exemptions) are dropped from the denominator via
 `--ignore-filename-regex`. Two caveats are Rust-specific: inline `#[cfg(test)]` units can't be

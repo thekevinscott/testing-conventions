@@ -1,0 +1,11 @@
+# `branchy` fixture for the branch floor (#267): the inline test exercises only
+# the high arm of `label`'s branch, so branch coverage sits at 50%. Branch
+# instrumentation needs a nightly toolchain, which the crate pins itself via
+# `rust-toolchain.toml` — the branch floor's documented requirement.
+# `[workspace]` isolates the fixture from the parent workspace.
+[package]
+name = "cov_rust_branchy"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

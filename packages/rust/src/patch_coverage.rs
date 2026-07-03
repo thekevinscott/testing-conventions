@@ -1171,6 +1171,8 @@ mod tests {
     const RUST_FLOOR_80: RustThresholds = RustThresholds {
         regions: Some(80),
         lines: 80,
+        functions: None,
+        branch: None,
     };
 
     #[test]
@@ -1220,6 +1222,8 @@ mod tests {
         let floor_70 = RustThresholds {
             regions: Some(70),
             lines: 70,
+            functions: None,
+            branch: None,
         };
         assert_eq!(
             evaluate_patch_rust(&changed(&[("w.rs", &[1, 2, 3, 4])]), &detail, floor_70),
@@ -1242,6 +1246,8 @@ mod tests {
         let lines_only = RustThresholds {
             regions: None,
             lines: 100,
+            functions: None,
+            branch: None,
         };
         assert_eq!(
             evaluate_patch_rust(&changed(&[("w.rs", &[1, 2, 3, 4])]), &detail, lines_only),
@@ -1397,6 +1403,8 @@ mod tests {
         let with_regions = RustThresholds {
             regions: Some(100),
             lines: 100,
+            functions: None,
+            branch: None,
         };
         let (measured, missed) = rust_measured_missed(&cov, with_regions);
         assert_eq!(measured, [1, 5, 6].into_iter().collect());
@@ -1406,6 +1414,8 @@ mod tests {
         let lines_only = RustThresholds {
             regions: None,
             lines: 100,
+            functions: None,
+            branch: None,
         };
         let (_, missed_lines) = rust_measured_missed(&cov, lines_only);
         assert_eq!(missed_lines, [5, 6].into_iter().collect());

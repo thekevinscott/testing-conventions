@@ -1,0 +1,5 @@
+# Branch coverage (`cargo llvm-cov --branch`) is nightly-only; the crate pins the
+# toolchain it needs, so the coverage run picks it up without any caller setup.
+[toolchain]
+channel = "nightly"
+components = ["llvm-tools-preview"]

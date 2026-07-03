@@ -99,6 +99,8 @@ fn floors(level: u8) -> RustThresholds {
     RustThresholds {
         regions: Some(level),
         lines: level,
+        functions: None,
+        branch: None,
     }
 }
 

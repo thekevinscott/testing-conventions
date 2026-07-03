@@ -195,7 +195,7 @@ real unit tests lets integration tests inflate the number.
 
 - **Python:** `pytest --cov` (coverage.py). Set `branch` and `fail_under`; omit `*_test.py`.
 - **TypeScript:** `vitest` coverage (v8/istanbul). Set the `lines` / `branches` / `functions` / `statements` thresholds; exclude `*.test.ts`.
-- **Rust:** `cargo llvm-cov --lib` — the unit suite is the library target with its inline `#[cfg(test)]` modules, so the integration tier under `tests/` stays out of the number. Default `lines = 100`. `regions` is opt-in (a finer, Rust-only metric) and branch coverage is still experimental. Inline units can't be excluded by filename; use `#[coverage(off)]` (toolchain-dependent).
+- **Rust:** `cargo llvm-cov --lib` — the unit suite is the library target with its inline `#[cfg(test)]` modules, so the integration tier under `tests/` stays out of the number. Default `lines = 100`; `regions` (a finer, Rust-only metric), `functions`, and `branch` are opt-in floors — a `branch` floor runs under `--branch`, which needs a nightly toolchain. Inline units can't be excluded by filename; use `#[coverage(off)]` (toolchain-dependent).
 
 **Diff-scoped (`--base`):** `unit coverage --base <ref>` measures the same configured floor over only the lines a `<base>...HEAD` diff changed — the slice a PR introduces — instead of the whole tree. An opt-in, additive scope of `unit coverage`: without `--base`, the whole-tree floor runs.
 

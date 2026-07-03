@@ -22,23 +22,33 @@ didn't explicitly exempt; a `[<language>].coverage` table lowers it.
 | -------------- | -------------------------------------------------------------- | --- |
 | **Python**     | `branch = true`, `fail_under = 100`                             | Strict by default — 100% of what you don't explicitly exempt. The rule honors `# pragma: no cover`, reason-required `[[python.exempt]]` entries, and the empty/comment-only auto-exemption, so trivia is excluded deliberately, not by a slack floor. |
 | **TypeScript** | `lines = 100`, `branches = 100`, `functions = 100`, `statements = 100` | Strict by default, like Python. Still four independent metrics — line coverage can read 100% while a branch lags, so each is enforced separately. |
-| **Rust**       | `lines = 100` (`regions` opt-in)                               | Strict by default, like the others — but on **lines** only. `regions` is a Rust-only sub-line metric (opt-in), and branch coverage is experimental on stable, so there's no branch component (see below). |
+| **Rust**       | `lines = 100` (`regions`, `functions`, `branch` opt-in)        | Strict by default, like the others — but on **lines** only. `regions` is a Rust-only sub-line metric, `functions` mirrors TypeScript's, and `branch` needs a nightly toolchain — all three are opt-in floors (see below). |
 
-### Rust: a line floor, no branch
+### Rust: a line floor by default; regions, functions, and branch opt in
 
 Rust defaults to `lines = 100` — the same line-level floor Python and TypeScript enforce. A
 zero-config Rust crate's coverage job runs and gates on lines (it no longer skips or errors for
-want of a `[rust].coverage` table). Two deliberate, documented asymmetries:
+want of a `[rust].coverage` table). Three opt-in floors sit alongside it (#267), each out of the
+default deliberately:
 
-- **No branch component.** Branch coverage is experimental on stable Rust / `llvm-cov`, so Rust
-  can't offer it (Python folds branch into its total; TypeScript has a `branches` metric).
 - **`regions` is opt-in.** Region coverage is a Rust-only, sub-line metric with no Python/TypeScript
-  analog and a harsher bar, so it isn't in the default. Add it (or lower `lines`) explicitly:
+  analog and a harsher bar, so it isn't in the default.
+- **`functions` is opt-in.** The functions total mirrors TypeScript's `functions` metric on the
+  stable toolchain; the default keeps Rust's floor line-shaped like Python's, so it's a
+  deliberate add.
+- **`branch` is opt-in and needs nightly.** A `branch` floor adds `--branch` to the
+  `cargo llvm-cov` run, which instruments only on a nightly toolchain — pin one in the crate's
+  `rust-toolchain.toml` (with `llvm-tools-preview`) or set a rustup directory override (`rustup override set nightly`); on stable the
+  run fails with the requirement named. That toolchain cost keeps it out of the default (Python
+  folds branch into its total; TypeScript has a `branches` metric — this closes the gap for
+  crates willing to run nightly).
 
 ```toml
 [rust]
-coverage = { lines = 90 }                  # lines only — regions stays unenforced
-# coverage = { lines = 90, regions = 90 }  # opt into the finer region floor too
+coverage = { lines = 90 }                                # lines only — the default shape
+# coverage = { lines = 90, regions = 90 }                # opt into the finer region floor
+# coverage = { lines = 90, functions = 95 }              # opt into a functions floor
+# coverage = { lines = 90, branch = 80 }                 # opt into branch (nightly toolchain)
 ```
 
 ### Mutation: a binary gate, no score floor

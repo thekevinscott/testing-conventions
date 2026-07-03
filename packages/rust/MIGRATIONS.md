@@ -15,6 +15,18 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Adds `functions` and `branch` floors to `[rust.coverage]` (#267), alongside the existing opt-in
+`regions`. `functions` gates the llvm-cov export's functions total on the stable toolchain;
+`branch` gates the branches total — the run adds `--branch`, which instruments only on a nightly
+toolchain (pin one in the crate's `rust-toolchain.toml` with `llvm-tools-preview`, or set a rustup
+directory override; on stable the run errors naming the requirement). A crate with no branch
+points clears any `branch` floor vacuously. The zero-config default (`lines = 100`) is unchanged;
+a consumer replacing a bespoke cargo-llvm-cov gate can now carry its functions/branch dimensions
+across. One breaking SDK change: the public Rust coverage structs gain fields (see **Required
+changes**). The coverage run also drops an inherited toolchain selection (`RUSTUP_TOOLCHAIN` /
+`CARGO` / `RUSTC`) so the scanned crate's own `rust-toolchain.toml` decides (see **Behavior
+changes without code changes**).
+
 Adds cargo-feature passthrough for the suite-running Rust rules (#266). The config's `[rust]`
 table takes a `features` list: `unit coverage` (whole-tree and `--base`) passes it to
 `cargo llvm-cov` as `--features`, and `unit mutation` forwards it to cargo-mutants' build/test
@@ -548,6 +560,18 @@ existing command, flag, config key, or SDK item changes.
 
 ### Required changes
 
+`config::RustCoverage` and `coverage::RustThresholds` gain `functions: Option<u8>` and
+`branch: Option<u8>`, and `coverage::LlvmCovTotals` gains `functions: LlvmCovMetric` and
+`branches: Option<LlvmCovMetric>` (#267). All three have public fields, so struct literals add
+the new fields — `None` preserves prior behavior:
+
+```rust
+// Before:
+RustThresholds { regions: Some(80), lines: 80 }
+// After:
+RustThresholds { regions: Some(80), lines: 80, functions: None, branch: None }
+```
+
 The Rust SDK measure functions take a trailing `features: &[String]` (#266) —
 `coverage::measure_rust`, `coverage::measure_patch_rust_detail`, `patch_coverage::measure_rust`,
 `patch_coverage::measure_line_exempt_rust`, and `mutation::measure_rust`. Pass `&[]` to preserve
@@ -715,6 +739,12 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`unit coverage --language rust` now resolves the toolchain from the scanned crate (#267): the
+run drops an inherited `RUSTUP_TOOLCHAIN` / `CARGO` / `RUSTC` selection, so the crate's own
+`rust-toolchain.toml` (or the rustup default / directory override) decides. When the tool is
+spawned by another cargo process (a test harness, an xtask), the spawning toolchain previously
+overrode the crate's pin; a directly-invoked run on a crate with no pin behaves as before.
+
 `unit coverage --language rust` (whole-tree and `--base`) now measures only the unit suite: the run
 passes `--lib`, so the library target's inline `#[cfg(test)]` tests produce the number and the
 integration tier under `tests/` stays out of it (#265). Reported percentages drop for any crate
@@ -808,6 +838,17 @@ Exemptions (#32) change runtime behavior:
   isn't removed or updated. No API or config change.
 
 ### Verification
+
+```
+cd packages/rust && cargo test --test coverage_metrics --test coverage_metrics_e2e
+```
+
+Expected: all pass — `functions` and `branch` parse as `[rust.coverage]` keys; the `funcs`
+fixture (a never-called function) fails a 100 `functions` floor with a threshold shortfall and
+clears a 60 floor; the `branchy` fixture (one of two branch outcomes taken, nightly pinned via
+its own `rust-toolchain.toml`) fails a 100 `branch` floor and clears a 50 floor; and a `branch`
+floor over a stable-toolchain crate errors naming the nightly requirement. Requires
+`cargo-llvm-cov`; rustup fetches the fixture's pinned nightly on first run.
 
 ```
 cd packages/rust && cargo test --test coverage_features --test coverage_features_e2e --test mutation_features_e2e

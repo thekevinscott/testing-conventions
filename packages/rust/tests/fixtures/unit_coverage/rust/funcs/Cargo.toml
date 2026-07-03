@@ -1,0 +1,10 @@
+# `funcs` fixture for the functions floor (#267): `double` is exercised by the
+# inline test, `triple` is never called — functions coverage sits at 2/3 while
+# lines stay well above a low line floor, so a `functions` floor is the metric
+# that decides. `[workspace]` isolates the fixture from the parent workspace.
+[package]
+name = "cov_rust_funcs"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

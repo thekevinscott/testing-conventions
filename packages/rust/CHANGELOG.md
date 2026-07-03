@@ -14,6 +14,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`functions` and `branch` floors on `[rust.coverage]`** (#267). Two opt-in floors join
+  `regions`: `functions` gates the export's functions total on the stable toolchain, and
+  `branch` gates the branches total — the run adds `--branch`, which instruments only on a
+  nightly toolchain (pin one in the crate's `rust-toolchain.toml` with `llvm-tools-preview`,
+  or run under `cargo +nightly`; on stable the run errors naming the requirement). A crate
+  with no branch points clears any `branch` floor vacuously. The zero-config default
+  (`lines = 100`) is unchanged. A consumer replacing a bespoke cargo-llvm-cov gate can now
+  migrate its functions/branch dimensions instead of dropping them.
 - **`[rust] features` — cargo-feature passthrough for the suite-running Rust rules** (#266).
   The config's `[rust]` table takes a `features` list that `unit coverage` (whole-tree and
   `--base`) passes to `cargo llvm-cov` as `--features`, and `unit mutation` forwards to
@@ -23,6 +31,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **BREAKING: `RustCoverage` / `RustThresholds` gain `functions` and `branch` fields** (#267).
+  Both structs have public fields, so struct literals need the two new `Option<u8>` fields
+  (`None` preserves prior behavior); `LlvmCovTotals` likewise gains `functions` and
+  `branches`. See [MIGRATIONS](./MIGRATIONS.md).
 - **BREAKING: the Rust SDK measure functions take a `features` argument** (#266).
   `coverage::measure_rust`, `patch_coverage::measure_rust` / `measure_line_exempt_rust`,
   `coverage::measure_patch_rust_detail`, and `mutation::measure_rust` gain a trailing

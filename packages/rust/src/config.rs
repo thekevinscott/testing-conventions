@@ -120,31 +120,36 @@ impl Default for TypeScriptCoverage {
 }
 
 /// `[rust].coverage`. A **partial override** — `#[serde(default)]` fills any missing
-/// field from [`RustCoverage::default`] (`lines = 100`, `regions = None`), so a table
-/// that sets only `regions` keeps `lines = 100` (#216); `deny_unknown_fields` still
-/// rejects a typo'd key. Branch coverage is experimental, so only regions/lines are
-/// configurable, and `regions` stays opt-in (`None` unless the table sets it).
+/// field from [`RustCoverage::default`] (`lines = 100`, everything else `None`), so a
+/// table that sets only `regions` keeps `lines = 100` (#216); `deny_unknown_fields`
+/// still rejects a typo'd key. Three opt-in floors sit alongside `lines` (#267):
+/// `regions` (a Rust-only sub-line metric), `functions` (the export's functions
+/// total, stable toolchain), and `branch` (adds `--branch` to the run, which
+/// instruments only on a nightly toolchain).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct RustCoverage {
     pub regions: Option<u8>,
     pub lines: u8,
+    pub functions: Option<u8>,
+    pub branch: Option<u8>,
 }
 
 /// The default Rust floor used when coverage isn't configured (#206): `lines = 100`,
-/// matching Python/TypeScript's line-level 100. Two deliberate asymmetries from the
-/// other languages, both forced by `cargo llvm-cov` on stable: there is **no branch
-/// component** (branch coverage is experimental), and **`regions` is opt-in** (a
-/// Rust-only sub-line metric, harsher than lines — `None` unless a config sets it),
-/// so the zero-config floor is lines only. As with Python/TypeScript, "100" means
-/// "100% of what you didn't explicitly exempt" — the rule honors reason-required
-/// `[[rust.exempt]]` entries. A config `[rust].coverage` table lowers the line floor
-/// or adds a `regions` floor.
+/// matching Python/TypeScript's line-level 100. The other metrics are opt-in (`None`
+/// unless a config sets them): `regions` is a Rust-only sub-line metric harsher than
+/// lines, `functions` keeps the default line-shaped like Python's, and `branch`
+/// requires a nightly toolchain (#267) — so the zero-config floor is lines only. As
+/// with Python/TypeScript, "100" means "100% of what you didn't explicitly exempt" —
+/// the rule honors reason-required `[[rust.exempt]]` entries. A config
+/// `[rust].coverage` table lowers the line floor or adds the opt-in floors.
 impl Default for RustCoverage {
     fn default() -> Self {
         Self {
             regions: None,
             lines: 100,
+            functions: None,
+            branch: None,
         }
     }
 }
@@ -630,14 +635,16 @@ mod tests {
     #[test]
     fn default_rust_coverage_is_the_strict_line_floor() {
         // The zero-config Rust floor (#206) is `lines = 100` — matching Python/TS — with
-        // `regions` opt-in (None) and no branch component, two deliberate asymmetries
-        // forced by `cargo llvm-cov` on stable. Locked here so it can't silently drift
-        // from the Defaults reference.
+        // every other metric opt-in (None): `regions` (a Rust-only sub-line metric),
+        // `functions`, and `branch` (nightly-only instrumentation, #267). Locked here
+        // so it can't silently drift from the Defaults reference.
         assert_eq!(
             RustCoverage::default(),
             RustCoverage {
                 regions: None,
                 lines: 100,
+                functions: None,
+                branch: None,
             }
         );
     }

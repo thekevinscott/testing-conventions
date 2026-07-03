@@ -45,6 +45,8 @@ fn expected_valid() -> Config {
             coverage: Some(RustCoverage {
                 regions: Some(100),
                 lines: 100,
+                functions: None,
+                branch: None,
             }),
             features: vec![],
             exempt: vec![],
@@ -159,6 +161,8 @@ fn partial_coverage_tables_inherit_defaults() {
         RustCoverage {
             regions: Some(90),
             lines: 100,
+            functions: None,
+            branch: None,
         }
     );
 }

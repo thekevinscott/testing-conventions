@@ -15,6 +15,14 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Scopes the Rust coverage floor to the unit suite (#265). `unit coverage --language rust` now runs
+`cargo llvm-cov --lib`, measuring the library target and its inline `#[cfg(test)]` modules — the
+tool's definition of a Rust unit and the same unit-only slice the Python and TypeScript arms
+measure. Before, cargo-llvm-cov's default ran every test target, so integration tests under
+`tests/` padded the number the floor gated. The diff-scoped floor (`unit coverage --base`) shares
+the run and gets the same scoping. No API change; measured percentages drop wherever the
+integration tier was doing the covering (see **Behavior changes without code changes**).
+
 Makes the Rust arm provision its engine (#242, completing the #239 epic). `unit mutation --language
 rust` no longer needs cargo-mutants pre-installed: on first use it runs a pinned `cargo install
 cargo-mutants --locked --version <X>` into the tool's own cache directory and drives the binary from
@@ -686,6 +694,14 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`unit coverage --language rust` (whole-tree and `--base`) now measures only the unit suite: the run
+passes `--lib`, so the library target's inline `#[cfg(test)]` tests produce the number and the
+integration tier under `tests/` stays out of it (#265). Reported percentages drop for any crate
+where integration tests reached code the unit suite misses — that drop is the padding the Coverage
+rule forbids, now made visible. Re-fit `[rust].coverage` to the honest unit-only number (or add
+reasoned, line-scoped `coverage` exemptions) rather than restoring the old floor. `measure_rust`'s
+signature is unchanged.
+
 `unit mutation --language rust` provisions cargo-mutants on first use instead of requiring it on
 `PATH` (#242): it runs a pinned `cargo install cargo-mutants --locked --version <X>` into the tool's
 cache directory (`$XDG_CACHE_HOME`/`$HOME/.cache` → `testing-conventions/cargo-mutants-<X>`) and
@@ -771,6 +787,15 @@ Exemptions (#32) change runtime behavior:
   isn't removed or updated. No API or config change.
 
 ### Verification
+
+```
+cd packages/rust && cargo test --test coverage_rust --test coverage_rust_e2e
+```
+
+Expected: all pass — including `integration_tests_do_not_pad_the_unit_floor` and
+`padded_exits_nonzero_against_a_100_floor`, which drive the `padded` fixture (a module covered only
+by an integration test under `tests/`) and require the 100 floor to fail on its unit-only ~70%
+regions / ~67% lines. Requires `cargo-llvm-cov`.
 
 ```
 cd packages/rust && cargo test --lib default_python_coverage_is_the_strict_floor default_typescript_coverage_is_the_strict_floor default_rust_coverage_is_the_strict_line_floor

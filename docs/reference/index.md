@@ -121,10 +121,13 @@ floor is met, `1` (naming each metric below its floor on stderr) when any isn't.
 `npx vitest`, so `vitest` and `@vitest/coverage-v8` must be installed under `<PATH>`. Files with a
 `coverage` [exemption](#exemptions) are also excluded from the denominator.
 
-For **`rust`**, runs `cargo llvm-cov --json --summary-only` over the crate at `<PATH>` and compares
-the export's **regions** and **lines** totals against `[rust].coverage` (`regions`, `lines`) —
-branch coverage is still experimental, so it isn't enforced. Exits `0` when both floors are met,
-`1` (naming each metric below its floor on stderr) when either isn't. `cargo-llvm-cov` must be
+For **`rust`**, runs `cargo llvm-cov --lib --json --summary-only` over the crate at `<PATH>` and
+compares the export's **regions** and **lines** totals against `[rust].coverage` (`regions`,
+`lines`) — branch coverage is still experimental, so it isn't enforced. `--lib` scopes the run to
+the unit suite — the library target with its inline `#[cfg(test)]` modules, the tool's definition
+of a Rust unit — so the floor measures the same unit-only slice Python and TypeScript measure, and
+the integration tier under `tests/` stays out of the number (#265). Exits `0` when both floors are
+met, `1` (naming each metric below its floor on stderr) when either isn't. `cargo-llvm-cov` must be
 installed. Files with a `coverage` [exemption](#exemptions) are dropped from the denominator via
 `--ignore-filename-regex`. Two caveats are Rust-specific: inline `#[cfg(test)]` units can't be
 excluded by filename, and `#[coverage(off)]` is still nightly, so on a stable toolchain the inline

@@ -1,7 +1,8 @@
 //! Clean: an integration test that runs first-party code (`gadget::compute`) for
 //! real and doubles nothing — so it passes `integration lint` (no first-party
-//! double to flag), and, compiled under `cargo llvm-cov`, exercises every line of
-//! `gadget` so the crate also clears the zero-config Rust coverage floor (#206).
+//! double to flag). The coverage arm measures the unit suite only (#265), so the
+//! zero-config Rust coverage floor (#206) is cleared by the crate's inline unit
+//! test, with this integration tier out of the number.
 //!
 //! (A real mockall_double `#[double]` always resolves to a first-party mock under
 //! `#[cfg(test)]`, which the lint flags — and an external concrete type has no mock

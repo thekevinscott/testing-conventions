@@ -54,6 +54,19 @@ fn below_passes_a_lower_floor() {
 }
 
 #[test]
+fn integration_tests_do_not_pad_the_unit_floor() {
+    // `padded`'s `shift` unit is exercised only by the crate's integration test
+    // (`tests/covers_shift.rs`); the floor measures the unit suite, so the crate
+    // reads ~70% regions / ~67% lines and fails 100 (#265). A run that also
+    // counted the integration target would read 100% and pass — exactly the
+    // padding the Coverage rule forbids.
+    assert!(matches!(
+        measure_rust(&crate_dir("padded"), FULL, &[]).unwrap(),
+        Outcome::Fail(_)
+    ));
+}
+
+#[test]
 fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
     // `exempt_cov` sits at ~75% only because of shim.rs (its `launch` is never
     // exercised); omitting it — the `coverage`-rule exemption the CLI resolves

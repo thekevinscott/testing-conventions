@@ -14,6 +14,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **BREAKING: `unit coverage --language rust` measures the unit suite only** (#265). The Rust arm
+  now passes `--lib` to `cargo llvm-cov`, scoping the floor to the library target and its inline
+  `#[cfg(test)]` modules — the tool's definition of a Rust unit, and the same unit-only slice the
+  Python and TypeScript arms measure. Before, cargo-llvm-cov's default ran every test target, so
+  integration tests under `tests/` padded the "unit" number. The diff-scoped floor
+  (`unit coverage --base`) shares the run, so it gets the same scoping. Reported percentages drop
+  for any crate whose integration tier reached code the unit suite misses; re-fit the
+  `[rust].coverage` floor to the honest unit-only number. See [MIGRATIONS](./MIGRATIONS.md).
 - **`unit mutation --language rust` provisions cargo-mutants itself** (#242, epic #239). The Rust arm
   no longer requires cargo-mutants to be pre-installed: on first use it runs a pinned `cargo install
   cargo-mutants --locked --version <X>` into the tool's own cache directory and invokes the binary

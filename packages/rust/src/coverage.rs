@@ -772,7 +772,7 @@ pub fn evaluate_rust(report: &LlvmCovReport, thresholds: RustThresholds) -> Outc
 /// Run the unit suite under `cargo llvm-cov` in `root` and check it against
 /// `thresholds`.
 ///
-/// Shells out to `cargo llvm-cov --json --summary-only`, omitting every path in
+/// Shells out to `cargo llvm-cov --lib --json --summary-only`, omitting every path in
 /// `ignore` from the denominator (a single `--ignore-filename-regex`), then
 /// evaluates the export. `ignore` holds the `coverage`-rule exemptions resolved
 /// from config, as `root`-relative paths. `cargo-llvm-cov` must be installed.
@@ -814,10 +814,11 @@ fn run_llvm_cov(root: &Path, ignore: &[String]) -> Result<LlvmCovReport> {
     )?)
 }
 
-/// Run `cargo llvm-cov` over the unit suite in `root` with the given coverage
+/// Run `cargo llvm-cov --lib` over the unit suite in `root` with the given coverage
 /// `format` args (`["--json", "--summary-only"]` for the whole-tree floor's totals,
 /// `["--json"]` for the diff-scoped floor's per-region detail) and return its
-/// stdout. Shared by the whole-tree floor (#37) and the diff-scoped floor (#162).
+/// stdout. Shared by the whole-tree floor (#37) and the diff-scoped floor (#162),
+/// so both measure the same unit-only slice (#265).
 ///
 /// The build goes to an out-of-tree target dir (via `CARGO_TARGET_DIR`) so the
 /// scanned crate stays pristine; the `coverage`-rule exemptions become one
@@ -830,6 +831,11 @@ fn run_cargo_llvm_cov(root: &Path, ignore: &[String], format: &[&str]) -> Result
     command
         .current_dir(root)
         .arg("llvm-cov")
+        // `--lib` scopes the run to the unit suite — the library target with its
+        // inline `#[cfg(test)]` modules, the tool's definition of a Rust unit.
+        // cargo-llvm-cov's default runs every test target, which lets the
+        // integration tier under `tests/` pad the number (#265).
+        .arg("--lib")
         .args(format)
         .env("CARGO_TARGET_DIR", &target.0);
     if let Some(regex) = ignore_filename_regex(ignore) {

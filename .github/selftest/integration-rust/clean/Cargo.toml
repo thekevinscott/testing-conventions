@@ -1,7 +1,8 @@
 # Clean self-test crate `gadget`: its integration test runs first-party code for
-# real and doubles nothing, so it passes `integration lint` and — built and run
-# under `cargo llvm-cov` for the zero-config Rust coverage floor (#206) — covers
-# every line. No deps, so `[workspace]` keeps it standalone.
+# real and doubles nothing, so it passes `integration lint`; its inline unit test
+# covers every line, so the unit suite alone clears the zero-config Rust coverage
+# floor (#206) under unit-suite scoping (#265). No deps, so `[workspace]` keeps it
+# standalone.
 [package]
 name = "gadget"
 version = "0.0.0"

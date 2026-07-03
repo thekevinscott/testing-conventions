@@ -138,10 +138,11 @@ jobs:
     name: A clean Rust library passes the reusable workflow (rust arm runs)
     # A clean Rust crate must pass the reusable workflow: the rust arm runs
     # `integration lint` and `unit lint`, and — since Rust coverage went zero-config
-    # (`lines = 100`, #206) — the crate now also enters the coverage matrix, so the
-    # fixture's integration test runs first-party for real (no double) and is fully
-    # line-covered, clearing the coverage arm too. (Rust still stays off the
-    # colocated-test matrix, which fans over the python/typescript `languages` set.)
+    # (`lines = 100`, #206) — the crate now also enters the coverage matrix. The
+    # fixture's integration test runs first-party for real (no double) for the lint,
+    # and its inline unit test covers every line, clearing the coverage arm under
+    # unit-suite scoping (#265). (Rust still stays off the colocated-test matrix,
+    # which fans over the python/typescript `languages` set.)
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["rust"]'

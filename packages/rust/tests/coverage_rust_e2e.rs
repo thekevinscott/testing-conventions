@@ -37,6 +37,13 @@ fn below_exits_zero_against_a_lower_floor() {
 }
 
 #[test]
+fn padded_exits_nonzero_against_a_100_floor() {
+    // `padded`'s `shift` unit is covered only by its integration test; the floor
+    // measures the unit suite alone, so the crate fails 100 end-to-end (#265).
+    assert_eq!(unit_coverage_exit("padded", "rust_full.toml"), 1);
+}
+
+#[test]
 fn exempt_cov_exits_zero_with_the_shim_exempted() {
     // The config exempts src/shim.rs from coverage, so the built binary omits it
     // from the denominator (via `--ignore-filename-regex`) and clears the 100

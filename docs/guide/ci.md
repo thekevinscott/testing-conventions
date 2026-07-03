@@ -83,9 +83,9 @@ suite under `coverage.py` (branch on, `*_test.py` excluded) and fails if the tot
 floor, installing `coverage` + `pytest`. For `typescript` it runs the suite under `vitest` v8
 coverage and fails below any of the four thresholds (`lines` / `branches` / `functions` /
 `statements`), installing your project's deps with `pnpm` so `vitest` + `@vitest/coverage-v8` are
-present. For `rust` it runs `cargo llvm-cov` against the `lines` floor (default `100`; `regions` is
-opt-in via `[rust].coverage`, and branch coverage is experimental on stable, so there's no branch
-component). A project on a different
+present. For `rust` it runs `cargo llvm-cov --lib` — the unit suite only — against the `lines` floor
+(default `100`; `regions` is opt-in via `[rust].coverage`, and branch coverage is experimental on
+stable, so there's no branch component). A project on a different
 toolchain (a non-`pnpm` package manager, or Python sources that need third-party runtime deps
 installed) should drive the CLI directly (below) until #56 makes this config-driven.
 

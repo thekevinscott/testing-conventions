@@ -61,6 +61,7 @@ published — so the workflow and the binary it calls always match. To **freeze*
 | `run_e2e`            | `false`                    | Forces the `e2e verify` job on. It is already default-on when a committed `e2e-attestation.json` is present; this runs it regardless. Needs the attestation and full history. |
 | `packaging_artifact` | `''`                       | Name of an uploaded build artifact holding your built distributions; when set, the packaging rule downloads and inspects it. When empty, packaging still runs over a conventional `dist/` in the checkout. See [Check the built distribution](#check-the-built-distribution-packaging). |
 | `build_command`      | `''`                       | A shell command run after toolchain + dependency setup and **before** the suite, in the same job, for the suite-executing jobs only (`unit coverage`, changed-line `coverage`, `unit mutation`). Use it to build a native module the suite imports. Empty (default) ⇒ no build step. See [Build a native module before the suite](#build-a-native-module-before-the-suite-build-command). |
+| `gates`              | `''` (all applicable)      | A JSON array naming which gates run — e.g. `'["colocated-test", "unit-lint", "integration-lint"]'`. Empty runs every applicable gate. A named gate's diff-scoped variant rides with it. See [Run a subset of gates](#run-a-subset-of-gates-gates). |
 
 ### Diff-scoped and opt-in checks
 
@@ -117,6 +118,36 @@ the module: `unit coverage` (whole-tree), changed-line `coverage --base`, and `u
 The static rules — `colocated-test`, `unit lint`, `integration lint` — only parse source and never
 import it, and `e2e verify` checks the committed attestation rather than running the e2e suite, so
 those jobs neither need nor run the build step.
+
+### Run a subset of gates (`gates`)
+
+By default the workflow runs **every applicable gate**. Pass `gates` — a JSON array of gate
+names — to run exactly the gates it names:
+
+```yaml
+jobs:
+  conventions:
+    uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
+    with:
+      gates: '["colocated-test", "unit-lint", "integration-lint"]'
+```
+
+There are seven gates: `colocated-test`, `unit-lint`, `unit-coverage`, `mutation`,
+`integration-lint`, `packaging`, and `e2e-verify`. A named gate still applies its own
+conditions — language presence, the pull-request event for the diff-scoped jobs, a discoverable
+distribution or attestation — and a gate's **diff-scoped variant rides with it**:
+`colocated-test` covers the whole-tree job and the co-change (`--base`) job, and
+`unit-coverage` covers the whole-tree and changed-line jobs. The allowlist is authoritative:
+it decides which gates run even when `run_e2e` or `packaging_artifact` is set, so a scoped
+call stays scoped.
+
+Scoping serves split setups. The static gates — `colocated-test`, `unit-lint`,
+`integration-lint` — only parse source, so they run anywhere; the suite-executing gates
+(`unit-coverage`, `mutation`) run your test suite, which a native-binding project may need to
+build in jobs of its own (say, a cross-language core whose toolchain sits beyond
+[`build_command`](#build-a-native-module-before-the-suite-build-command)). Such a repo adopts
+the reusable workflow for the static gates and keeps the suite-executing gates in its
+build-capable jobs.
 
 ### Check the built distribution (packaging)
 

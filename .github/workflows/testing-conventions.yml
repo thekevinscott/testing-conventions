@@ -83,6 +83,18 @@ name: Testing Conventions
 # step, so pure-language callers are unaffected. The static rules (colocated-test, unit lint,
 # integration lint) only parse source, and `e2e verify` checks the attestation rather than
 # running the e2e suite, so none of those jobs build or import anything.
+#
+# `gates` (#262) is an optional allowlist naming which gates run — empty (the default) runs
+# every applicable gate. The seven gate names are colocated-test, unit-lint, unit-coverage,
+# mutation, integration-lint, packaging, and e2e-verify; a named gate still applies its own
+# conditions (language presence, the PR event, a discoverable dist/attestation), and its
+# diff-scoped variant rides with it (colocated-test covers the co-change job, unit-coverage
+# the changed-line job). The allowlist is authoritative: a gate left out is skipped even when
+# its forcing input (`run_e2e`, `packaging_artifact`) is set, so a scoped call stays scoped.
+# Membership is the quoted-name test `contains(inputs.gates, '"<gate>"')` — the same check
+# detect.py's `eligible` applies to `languages` — so a consumer that must run the
+# suite-executing gates in its own build-capable jobs (a native binding whose second-language
+# core these jobs cannot build, #263) still adopts the static gates here.
 
 on:
   workflow_call:
@@ -117,6 +129,10 @@ on:
         default: ''
       build_command:
         description: 'Optional shell command run after toolchain + dependency setup and before the suite, in the same job, for the suite-executing jobs only (unit coverage, changed-line coverage, unit mutation). Use it to build a native module the suite imports — e.g. "uv run maturin develop" (Python/maturin) or "pnpm build" (TypeScript/napi). Empty (default) ⇒ no build step, so pure-language callers are unaffected. The static rules (colocated-test, unit lint, integration lint) only parse source and the e2e-verify job never runs the suite, so none of them run it (#243).'
+        type: string
+        default: ''
+      gates:
+        description: 'Optional JSON array naming which gates run, e.g. ["colocated-test", "unit-lint", "integration-lint"] (#262). Empty (the default) runs every applicable gate. Gate names: colocated-test, unit-lint, unit-coverage, mutation, integration-lint, packaging, e2e-verify. A named gate still applies its own conditions, and its diff-scoped variant rides with it (colocated-test covers the co-change job, unit-coverage the changed-line job). The allowlist is authoritative: a gate left out is skipped even when run_e2e / packaging_artifact is set.'
         type: string
         default: ''
 
@@ -165,8 +181,9 @@ jobs:
     name: Colocated test (${{ matrix.language }})
     needs: detect
     # Only the requested languages with sources present (#94); skip the job
-    # entirely when that leaves nothing.
-    if: needs.detect.outputs.languages != '[]'
+    # entirely when that leaves nothing, or when a `gates` allowlist leaves the
+    # colocated-test gate out (#262).
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && needs.detect.outputs.languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -192,8 +209,9 @@ jobs:
     # Diff-scoped co-change (#161): on a PR, a modified or deleted source whose
     # colocated test didn't co-change fails. Rust is excluded by the rule (inline
     # `#[cfg(test)]` units can't go stale), so this rides the python/typescript
-    # `languages` set. PR-only — it needs a base ref and full history.
-    if: ${{ github.event_name == 'pull_request' && needs.detect.outputs.languages != '[]' }}
+    # `languages` set. PR-only — it needs a base ref and full history. Rides the
+    # colocated-test gate: a gate's diff-scoped variant travels with it (#262).
+    if: ${{ github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && needs.detect.outputs.languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -222,8 +240,9 @@ jobs:
     # The matrix is `isolation_languages` — the requested-and-present set, which
     # (unlike `languages`) includes rust — so a requested-but-absent language is
     # skipped, not failed. #56 (config-driven `check`) will later drive which
-    # rules/languages run here.
-    if: needs.detect.outputs.isolation_languages != '[]'
+    # rules/languages run here; a `gates` allowlist that leaves unit-lint out
+    # skips the job (#262).
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"unit-lint"')) && needs.detect.outputs.isolation_languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -249,8 +268,9 @@ jobs:
     # sources present (#94), plus rust whenever a crate is here (Rust coverage is
     # zero-config now, `lines = 100` by default, #206) — so a requested-but-absent
     # language is skipped rather than erroring. #56 (config-driven `check`) will
-    # eventually drive this from the config file.
-    if: needs.detect.outputs.coverage_languages != '[]'
+    # eventually drive this from the config file. A `gates` allowlist that leaves
+    # unit-coverage out skips the job (#262).
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"unit-coverage"')) && needs.detect.outputs.coverage_languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -321,7 +341,8 @@ jobs:
     # measured over only the `<base>...HEAD` changed lines, so a changed line below
     # the floor fails no matter how small the diff. Mirrors the whole-tree
     # unit-coverage job's per-language toolchain setup; PR-only (needs the base ref).
-    if: ${{ github.event_name == 'pull_request' && needs.detect.outputs.coverage_languages != '[]' }}
+    # Rides the unit-coverage gate: a gate's diff-scoped variant travels with it (#262).
+    if: ${{ github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"unit-coverage"')) && needs.detect.outputs.coverage_languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -391,8 +412,9 @@ jobs:
     # `mutation_languages` (the coverage set; all three arms are at parity, #201/#202/#203).
     # `mutation_languages` is a new detect output, so until a release moves `@v0` to a
     # detect that emits it (this PR's own run still pins the old `@v0`), it's empty — fall
-    # back to `coverage_languages` (the identical set) so the matrix stays valid.
-    if: ${{ github.event_name == 'pull_request' && (needs.detect.outputs.mutation_languages || needs.detect.outputs.coverage_languages) != '[]' }}
+    # back to `coverage_languages` (the identical set) so the matrix stays valid. A `gates`
+    # allowlist that leaves mutation out skips the job (#262).
+    if: ${{ github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"mutation"')) && (needs.detect.outputs.mutation_languages || needs.detect.outputs.coverage_languages) != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -470,9 +492,10 @@ jobs:
     # TypeScript (#43/#75), and Rust (#44), so the matrix fans out over every
     # requested language with sources present — the `integration_lint_languages` set,
     # which adds rust on top of the colocated languages (#126). Skipped — not
-    # failed — when that set is empty. #56 (config-driven `check`) will eventually
+    # failed — when that set is empty, or when a `gates` allowlist leaves
+    # integration-lint out (#262). #56 (config-driven `check`) will eventually
     # drive which rules/languages run here.
-    if: needs.detect.outputs.integration_lint_languages != '[]'
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"integration-lint"')) && needs.detect.outputs.integration_lint_languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -497,8 +520,10 @@ jobs:
     # committed `e2e-attestation.json` is present (detected by the detect action) —
     # verify it names the latest code commit, failing (with a re-attest nudge) when the
     # code has moved on. A repo with no attestation is skipped, never failed; `run_e2e`
-    # forces the job on. Never runs the e2e suite itself.
-    if: ${{ inputs.run_e2e || needs.detect.outputs.e2e_attestation == 'true' }}
+    # forces the job on. Never runs the e2e suite itself. The `gates` allowlist is
+    # authoritative (#262): checked first, so a scoped call that leaves e2e-verify out
+    # skips the job even when `run_e2e` is set.
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"e2e-verify"')) && (inputs.run_e2e || needs.detect.outputs.e2e_attestation == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -518,8 +543,10 @@ jobs:
     # the source tree, so it doesn't ride the source matrix — but it runs by default. It
     # runs when an explicit `packaging_artifact` was uploaded OR the detect action found a
     # conventional dist/ in the checkout, and is skipped — never failed — when neither
-    # exists. Each distribution's language is inferred from its extension.
-    if: ${{ inputs.packaging_artifact != '' || needs.detect.outputs.packaging_dist == 'true' }}
+    # exists. Each distribution's language is inferred from its extension. The `gates`
+    # allowlist is authoritative (#262): checked first, so a scoped call that leaves
+    # packaging out skips the job even when `packaging_artifact` is set.
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"packaging"')) && (inputs.packaging_artifact != '' || needs.detect.outputs.packaging_dist == 'true') }}
     runs-on: ubuntu-latest
     steps:
       # Acquire the distributions one of two ways: a named upload artifact, or the

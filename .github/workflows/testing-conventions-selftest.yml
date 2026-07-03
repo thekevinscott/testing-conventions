@@ -62,6 +62,16 @@ name: Testing Conventions (self-test)
 #   build-command-clean   calls the reusable workflow over a fixture whose `widget.py` imports
 #                         a module produced only by the `build_command` (a maturin/napi stand-in),
 #                         so the coverage / mutation jobs pass only because the build ran first.
+#
+# gates (#262) — an allowlist so a consumer can run a subset of gates:
+#   gates-wired           asserts the reusable workflow scopes its jobs to a `gates` allowlist
+#                         input — the red→green signal for the wiring itself.
+#   gates-scoped-static   calls the reusable workflow over the #243 native-binding fixture with
+#                         the three static gates named and NO build_command, so the call passes
+#                         only because the suite-executing gates are skipped.
+#   gates-scoped-packaging-excluded  uploads the red wheel as `packaging_artifact` with a `gates`
+#                         allowlist that leaves packaging out, so the call passes only because
+#                         the allowlist overrides the forcing input.
 
 on:
   pull_request:
@@ -619,6 +629,76 @@ jobs:
             exit 1
           fi
           echo "reusable workflow wires a build_command step"
+
+  # ---- #262: a gates allowlist so a consumer can run a subset of gates ----
+
+  gates-wired:
+    name: The reusable workflow scopes its gates to the `gates` allowlist
+    # Red→green wiring signal for #262: the reusable workflow must offer a `gates` input
+    # restricting which gates run, or adoption is all-or-nothing — a consumer that drives
+    # the suite-executing gates (unit coverage, mutation) in its own build-capable jobs
+    # cannot adopt the workflow for the static gates, because every call also spins up
+    # coverage + mutation, which fail for lack of a build. A static grep, so it tracks the
+    # workflow file regardless of what the published binary ships; the runtime behavior is
+    # covered by the gates-scoped jobs, which land with the implementation (passing an
+    # input the called workflow does not yet define is a whole-run startup failure, so
+    # they cannot precede it — the same constraint build-command-clean documented).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: testing-conventions.yml must wire a `gates` allowlist
+        run: |
+          set -euo pipefail
+          if ! grep -q 'inputs.gates' .github/workflows/testing-conventions.yml; then
+            echo "::error::the reusable workflow has no \`gates\` input — gate selection is all-or-nothing, so a consumer that runs the suite-executing gates in its own build-capable jobs cannot adopt the workflow for the static gates (#262)"
+            exit 1
+          fi
+          echo "reusable workflow scopes its gates to the \`gates\` allowlist"
+
+  gates-scoped-static:
+    name: A gates allowlist runs the static gates and skips the suite-executing ones
+    # The runtime half of #262 — the motivating scenario itself. The #243 native-binding
+    # fixture's widget.py imports `generated`, a module produced only by a build step —
+    # and this call passes NO build_command. So the whole `uses:` call passes only
+    # because the gates allowlist skips the suite-executing gates (unit coverage,
+    # changed-line coverage, mutation): any of them running would fail at import. The
+    # three named static gates run for real over the fixture — colocated-test (plus its
+    # co-change job, which rides the gate), unit-lint, and integration-lint — and the
+    # unnamed e2e-verify gate is skipped despite this repo's committed attestation.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["python"]'
+      path: .github/selftest/build-command
+      config: .github/selftest/build-command/testing-conventions.toml
+      gates: '["colocated-test", "unit-lint", "integration-lint"]'
+
+  upload-red-dist:
+    name: Upload the red built wheel as an artifact (gates precedence)
+    # Stage the red wheel (it ships a test file, so the packaging rule FAILS on it when
+    # inspected) for gates-scoped-packaging-excluded below.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/upload-artifact@v7
+        with:
+          name: selftest-red-dist
+          path: .github/selftest/packaging/red/
+
+  gates-scoped-packaging-excluded:
+    name: The gates allowlist overrides the packaging_artifact forcing
+    # The precedence half of #262: `packaging_artifact` normally forces the packaging job
+    # on — and this artifact is the RED wheel, which fails the packaging rule when
+    # inspected. With a `gates` allowlist that leaves packaging out, the allowlist must
+    # win and the packaging job skip: the call passes only because it does. `path` points
+    # at the source-free fixture so the one named gate has nothing to run and skips too
+    # (#94) — every job but detect skips, and the run passes.
+    needs: upload-red-dist
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["python"]'
+      path: .github/selftest/no-sources
+      packaging_artifact: selftest-red-dist
+      gates: '["colocated-test"]'
 
   build-command-clean:
     name: A build_command makes the suite-executing jobs find a built module

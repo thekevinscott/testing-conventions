@@ -663,34 +663,6 @@ jobs:
           fi
           echo "reusable workflow scopes its gates to the \`gates\` allowlist"
 
-  # ---- #263: provision a Rust toolchain for a build_command that compiles a Rust core ----
-
-  rust-toolchain-wired:
-    name: The reusable workflow provisions a Rust toolchain for the build
-    # Red→green wiring signal for #263: the suite-executing jobs (unit coverage,
-    # changed-line coverage, mutation) must offer a `rust_toolchain` input that
-    # provisions cargo (with build caching) before `build_command` runs. The Python and
-    # TypeScript arms set up only their own language's toolchain, so a native binding
-    # whose build compiles a Rust core — a maturin/PyO3 extension, a napi-rs addon —
-    # has no cargo to build with: `build_command` fails before the suite ever runs, and
-    # rustup-installing inline in an eval'd string is setup logic in the wrong place,
-    # with no cache. A static grep, so it tracks the workflow file regardless of what
-    # the published binary ships; the runtime behavior is covered by
-    # rust-toolchain-clean, which lands with the implementation (passing an input the
-    # called workflow does not yet define is a whole-run startup failure, so it cannot
-    # precede the input it exercises — the constraint build-command-clean documented).
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: testing-conventions.yml must wire a `rust_toolchain` setup step
-        run: |
-          set -euo pipefail
-          if ! grep -q 'inputs.rust_toolchain' .github/workflows/testing-conventions.yml; then
-            echo "::error::the reusable workflow has no \`rust_toolchain\` input — a native binding whose build_command compiles a Rust core has no cargo in the python/typescript suite-executing jobs, so the build fails before the suite runs (#263)"
-            exit 1
-          fi
-          echo "reusable workflow provisions a Rust toolchain behind \`rust_toolchain\`"
-
   gates-scoped-static:
     name: A gates allowlist runs the static gates and skips the suite-executing ones
     # The runtime half of #262 — the motivating scenario itself. The #243 native-binding
@@ -735,6 +707,52 @@ jobs:
       path: .github/selftest/no-sources
       packaging_artifact: selftest-red-dist
       gates: '["colocated-test"]'
+
+  # ---- #263: provision a Rust toolchain for a build_command that compiles a Rust core ----
+
+  rust-toolchain-wired:
+    name: The reusable workflow provisions a Rust toolchain for the build
+    # Red→green wiring signal for #263: the suite-executing jobs (unit coverage,
+    # changed-line coverage, mutation) must offer a `rust_toolchain` input that
+    # provisions cargo (with build caching) before `build_command` runs. The Python and
+    # TypeScript arms set up only their own language's toolchain, so a native binding
+    # whose build compiles a Rust core — a maturin/PyO3 extension, a napi-rs addon —
+    # has no cargo to build with: `build_command` fails before the suite ever runs, and
+    # rustup-installing inline in an eval'd string is setup logic in the wrong place,
+    # with no cache. A static grep, so it tracks the workflow file regardless of what
+    # the published binary ships; the runtime behavior is covered by
+    # rust-toolchain-clean, which lands with the implementation (passing an input the
+    # called workflow does not yet define is a whole-run startup failure, so it cannot
+    # precede the input it exercises — the constraint build-command-clean documented).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: testing-conventions.yml must wire a `rust_toolchain` setup step
+        run: |
+          set -euo pipefail
+          if ! grep -q 'inputs.rust_toolchain' .github/workflows/testing-conventions.yml; then
+            echo "::error::the reusable workflow has no \`rust_toolchain\` input — a native binding whose build_command compiles a Rust core has no cargo in the python/typescript suite-executing jobs, so the build fails before the suite runs (#263)"
+            exit 1
+          fi
+          echo "reusable workflow provisions a Rust toolchain behind \`rust_toolchain\`"
+
+  rust-toolchain-clean:
+    name: A rust_toolchain call finds cargo before build_command
+    # The runtime half of #263: the same native-binding fixture as build-command-clean,
+    # but the build_command invokes cargo first — the stand-in for a `maturin develop` /
+    # `napi build` that compiles a Rust core. ubuntu-24.04 runners carry no preinstalled
+    # Rust, so the build — and with it every suite-executing job — succeeds only because
+    # `rust_toolchain: true` provisioned the toolchain ahead of the build step. The
+    # whole `uses:` call passing is the green signal that cargo is present (and cached)
+    # in the python arm, where only setup-python runs otherwise.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["python"]'
+      path: .github/selftest/build-command
+      config: .github/selftest/build-command/testing-conventions.toml
+      rust_toolchain: true
+      build_command: cargo --version && cp .github/selftest/build-command/generated.py.tmpl .github/selftest/build-command/generated.py
+      base: origin/main
 
   build-command-clean:
     name: A build_command makes the suite-executing jobs find a built module

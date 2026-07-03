@@ -552,17 +552,23 @@ fn run_unit_coverage(
                 config::Rule::Coverage,
             )?);
             match base {
-                Some(base) => {
-                    patch_coverage::measure_rust(root, base, thresholds, &ignore, &exempt_lines)?
-                }
+                Some(base) => patch_coverage::measure_rust(
+                    root,
+                    base,
+                    thresholds,
+                    &ignore,
+                    &exempt_lines,
+                    &rust.features,
+                )?,
                 None if exempt_lines.is_empty() => {
-                    coverage::measure_rust(root, thresholds, &ignore)?
+                    coverage::measure_rust(root, thresholds, &ignore, &rust.features)?
                 }
                 None => patch_coverage::measure_line_exempt_rust(
                     root,
                     thresholds,
                     &ignore,
                     &exempt_lines,
+                    &rust.features,
                 )?,
             }
         }
@@ -606,7 +612,7 @@ fn run_unit_mutation(
                 &rust.exempt,
                 config::Rule::Mutation,
             )?);
-            mutation::measure_rust(root, &exempt, &exempt_lines, base)?
+            mutation::measure_rust(root, &exempt, &exempt_lines, base, &rust.features)?
         }
         colocated_test::Language::TypeScript => {
             let typescript = config.typescript.unwrap_or_default();

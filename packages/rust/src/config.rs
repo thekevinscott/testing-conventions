@@ -53,6 +53,14 @@ pub struct TypeScriptConfig {
 #[serde(deny_unknown_fields)]
 pub struct RustConfig {
     pub coverage: Option<RustCoverage>,
+    /// Cargo features the suite-running Rust rules enable (#266): `unit coverage`
+    /// passes them to `cargo llvm-cov` (`--features`) and `unit mutation` forwards
+    /// them to cargo-mutants' build/test runs, so `#[cfg(feature = ...)]` code is
+    /// compiled, measured, and mutated. Cargo features are Rust's build-system
+    /// concept with no Python/TypeScript analog, so the key is deliberately
+    /// Rust-only (a documented asymmetry under the parity rule).
+    #[serde(default)]
+    pub features: Vec<String>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
 }

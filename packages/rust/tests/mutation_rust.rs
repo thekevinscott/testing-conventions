@@ -25,6 +25,7 @@ fn killed_reports_no_survivors() {
         &[],
         &std::collections::BTreeMap::new(),
         None,
+        &[],
     )
     .expect("cargo-mutants runs");
     assert!(
@@ -40,6 +41,7 @@ fn survivors_are_reported() {
         &[],
         &std::collections::BTreeMap::new(),
         None,
+        &[],
     )
     .expect("cargo-mutants runs");
     assert!(
@@ -62,6 +64,7 @@ fn a_mutation_exemption_drops_the_survivors() {
         &exempt,
         &std::collections::BTreeMap::new(),
         None,
+        &[],
     )
     .expect("cargo-mutants runs");
     assert!(

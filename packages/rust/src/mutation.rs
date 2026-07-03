@@ -339,6 +339,7 @@ pub fn measure_rust(
     exempt: &[String],
     exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
     base: Option<&str>,
+    features: &[String],
 ) -> Result<Vec<Survivor>> {
     let out = MutantsOut::new();
     let diff = match base {
@@ -351,7 +352,7 @@ pub fn measure_rust(
         None => None,
     };
     let engine = ensure_cargo_mutants()?;
-    run_cargo_mutants(&engine, root, &out.0, diff.as_deref())?;
+    run_cargo_mutants(&engine, root, &out.0, diff.as_deref(), features)?;
     let outcomes = out.0.join("mutants.out").join("outcomes.json");
     // cargo-mutants writes no `outcomes.json` when a run produces no mutants (e.g. an
     // `--in-diff` that matches none of the crate's lines). `run_cargo_mutants` already
@@ -824,15 +825,24 @@ fn strip_llvm_cov_env(command: &mut Command) {
     }
 }
 
-/// Run `<engine> mutants --output <out> [--in-diff <diff>]` in `root`, where `engine` is the
-/// provisioned cargo-mutants binary ([`ensure_cargo_mutants`]) invoked by absolute path.
+/// Run `<engine> mutants --output <out> [--in-diff <diff>] [-- --features <list>]` in `root`,
+/// where `engine` is the provisioned cargo-mutants binary ([`ensure_cargo_mutants`]) invoked
+/// by absolute path. The `[rust] features` list rides after cargo-mutants' `--` separator,
+/// which forwards it to the cargo build/test runs — so `#[cfg(feature = ...)]` code is
+/// compiled and its mutants exercised (#266).
 ///
 /// cargo-mutants exits `0` when every mutant is caught and `2` when some survive (or
 /// time out / are unviable) — both are normal here, since survivors are the rule's
 /// *output*, not an error. Any other code (usage error, or a baseline that didn't
 /// build/pass) is fatal. The outer instrumentation env is stripped so a nested run (this
 /// rule's own tests under `cargo llvm-cov`) doesn't re-enter the rustc wrapper and hang.
-fn run_cargo_mutants(engine: &Path, root: &Path, out: &Path, in_diff: Option<&Path>) -> Result<()> {
+fn run_cargo_mutants(
+    engine: &Path,
+    root: &Path,
+    out: &Path,
+    in_diff: Option<&Path>,
+    features: &[String],
+) -> Result<()> {
     let mut command = Command::new(engine);
     command
         .current_dir(root)
@@ -841,6 +851,9 @@ fn run_cargo_mutants(engine: &Path, root: &Path, out: &Path, in_diff: Option<&Pa
         .arg(out);
     if let Some(diff) = in_diff {
         command.arg("--in-diff").arg(diff);
+    }
+    if !features.is_empty() {
+        command.args(["--", "--features"]).arg(features.join(","));
     }
     strip_llvm_cov_env(&mut command);
     let output = command.output().context("running cargo-mutants")?;

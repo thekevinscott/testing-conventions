@@ -111,6 +111,7 @@ fn measure_base(repo: &TempRepo, base: &str, level: u8) -> Outcome {
         floors(level),
         &[],
         &std::collections::BTreeMap::new(),
+        &[],
     )
     .expect("measuring a readable repo should succeed")
 }
@@ -316,7 +317,8 @@ fn rust_an_unknown_base_ref_is_an_error() {
             "no-such-ref",
             floors(80),
             &[],
-            &std::collections::BTreeMap::new()
+            &std::collections::BTreeMap::new(),
+            &[]
         )
         .is_err(),
         "an unresolvable base ref must error"

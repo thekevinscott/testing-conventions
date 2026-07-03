@@ -73,9 +73,13 @@ fn the_same_functions_coverage_clears_a_lower_floor() {
 // ---- branch (nightly via the fixture's rust-toolchain.toml) ----------------
 
 #[test]
-fn a_half_taken_branch_fails_a_100_branch_floor() {
+fn the_branch_floor_gates_the_measured_branches() {
     // `branchy`'s inline test takes one of the branch's two outcomes: branch
-    // coverage is 50%, so a 100 floor fails on the measured number.
+    // coverage is 50%, so a 100 floor fails on the measured number while a 50
+    // floor clears — the floor is a real, configurable knob. One test drives
+    // both runs sequentially: the fixture's pinned nightly is auto-installed by
+    // rustup on first use, and two tests hitting that first install
+    // concurrently race and corrupt each other's downloads.
     let out = run("branchy", "rust_branch_full.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
     assert!(
@@ -83,10 +87,7 @@ fn a_half_taken_branch_fails_a_100_branch_floor() {
         "expected a floor failure, got: {}",
         stderr(&out)
     );
-}
 
-#[test]
-fn the_same_branch_coverage_clears_a_50_floor() {
     let out = run("branchy", "rust_branch_mid.toml");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
 }

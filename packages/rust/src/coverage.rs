@@ -677,13 +677,16 @@ fn istanbul_patch_detail(json: &str) -> Result<BTreeMap<String, TsPatchCoverage>
 // ---------------------------------------------------------------------------
 
 /// The `cargo llvm-cov` coverage floors, from a `[rust].coverage` table (or the
-/// zero-config default). Branch coverage is still experimental, so only regions
-/// and lines are enforced, and `regions` is opt-in — `None` skips the region check
-/// (the zero-config default floors lines only, #206).
+/// zero-config default). `lines` is always enforced; the rest are opt-in — `None`
+/// skips the check (the zero-config default floors lines only, #206). A `branch`
+/// floor adds `--branch` to the run, which instruments only on a nightly
+/// toolchain (#267).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RustThresholds {
     pub regions: Option<u8>,
     pub lines: u8,
+    pub functions: Option<u8>,
+    pub branch: Option<u8>,
 }
 
 /// A `cargo llvm-cov --json` export (LLVM's `llvm.coverage.json.export`), pared to
@@ -701,13 +704,19 @@ pub struct LlvmCovData {
     pub totals: LlvmCovTotals,
 }
 
-/// The `totals` block of an llvm-cov export — the two metrics this rule enforces.
-/// llvm-cov also reports `functions`, `instantiations`, and (experimental)
-/// `branches`, which the check ignores.
+/// The `totals` block of an llvm-cov export — the metrics this rule can enforce:
+/// regions and lines always, `functions` and (under `--branch`) `branches` when
+/// their opt-in floors are set (#267). llvm-cov also reports `instantiations` and
+/// `mcdc`, which the check ignores. `branches` is optional-with-default so an
+/// export from a run without branch instrumentation still parses (it then reads
+/// `count = 0`).
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct LlvmCovTotals {
     pub regions: LlvmCovMetric,
     pub lines: LlvmCovMetric,
+    pub functions: LlvmCovMetric,
+    #[serde(default)]
+    pub branches: Option<LlvmCovMetric>,
 }
 
 /// One metric's totals from an llvm-cov export, pared to what the check needs: the
@@ -744,13 +753,26 @@ pub fn evaluate_rust(report: &LlvmCovReport, thresholds: RustThresholds) -> Outc
             "the unit suite measured no code — check the path and that the suite runs".to_string(),
         );
     }
-    // `regions` is opt-in (#206): the zero-config default floors lines only, so the
-    // region check is skipped unless a config set a `regions` floor.
+    // `regions`, `functions`, and `branch` are opt-in (#206, #267): the zero-config
+    // default floors lines only, so each check is skipped unless a config set its
+    // floor.
     let mut checks: Vec<(&str, f64, u8)> = Vec::new();
     if let Some(regions) = thresholds.regions {
         checks.push(("regions", totals.regions.percent, regions));
     }
     checks.push(("lines", totals.lines.percent, thresholds.lines));
+    if let Some(functions) = thresholds.functions {
+        checks.push(("functions", totals.functions.percent, functions));
+    }
+    if let Some(branch) = thresholds.branch {
+        // The floor's run added `--branch` (a failed instrumentation is a run
+        // error, surfaced before this point), so a zero branch denominator here
+        // means the crate has no branch points — vacuously satisfied, mirroring
+        // the diff-scoped floors' empty-denominator rule.
+        if let Some(branches) = totals.branches.filter(|metric| metric.count > 0) {
+            checks.push(("branches", branches.percent, branch));
+        }
+    }
     let mut shortfalls = Vec::new();
     for (name, actual, required) in checks {
         // A hair of tolerance so a percent that rounds to the floor isn't failed by
@@ -783,7 +805,7 @@ pub fn measure_rust(
     ignore: &[String],
     features: &[String],
 ) -> Result<Outcome> {
-    let report = run_llvm_cov(root, ignore, features)?;
+    let report = run_llvm_cov(root, ignore, features, thresholds.branch.is_some())?;
     Ok(evaluate_rust(&report, thresholds))
 }
 
@@ -811,13 +833,20 @@ impl Drop for TargetDir {
 }
 
 /// Run cargo llvm-cov over the unit suite in `root` and return the parsed
-/// `--summary-only` export — the totals the floor checks.
-fn run_llvm_cov(root: &Path, ignore: &[String], features: &[String]) -> Result<LlvmCovReport> {
+/// `--summary-only` export — the totals the floor checks. `branch` adds
+/// `--branch` for a configured branch floor (#267).
+fn run_llvm_cov(
+    root: &Path,
+    ignore: &[String],
+    features: &[String],
+    branch: bool,
+) -> Result<LlvmCovReport> {
     parse_llvm_cov_report(&run_cargo_llvm_cov(
         root,
         ignore,
         &["--json", "--summary-only"],
         features,
+        branch,
     )?)
 }
 
@@ -838,6 +867,7 @@ fn run_cargo_llvm_cov(
     ignore: &[String],
     format: &[&str],
     features: &[String],
+    branch: bool,
 ) -> Result<String> {
     let target = TargetDir::new();
 
@@ -854,6 +884,11 @@ fn run_cargo_llvm_cov(
         .env("CARGO_TARGET_DIR", &target.0);
     if !features.is_empty() {
         command.arg("--features").arg(features.join(","));
+    }
+    if branch {
+        // A configured branch floor measures branch outcomes (#267); the flag
+        // instruments only on a nightly toolchain — the error below names that.
+        command.arg("--branch");
     }
     if let Some(regex) = ignore_filename_regex(ignore) {
         command.arg("--ignore-filename-regex").arg(regex);
@@ -881,6 +916,16 @@ fn run_cargo_llvm_cov(
         "__CARGO_LLVM_COV_RUSTC_WRAPPER",
         "__CARGO_LLVM_COV_RUSTC_WRAPPER_RUSTFLAGS",
         "__CARGO_LLVM_COV_RUSTC_WRAPPER_CRATE_NAMES",
+        // Toolchain hygiene (#267): when this tool is itself spawned by a cargo
+        // process (a test harness, an xtask), cargo/rustup export the *spawning*
+        // toolchain into the environment, and rustup gives those variables
+        // precedence over the scanned crate's own `rust-toolchain.toml`. The
+        // scanned crate's pin must decide — a branch-floor crate pins nightly
+        // there — so the inherited selection is dropped and rustup resolves
+        // fresh from the crate's directory.
+        "RUSTUP_TOOLCHAIN",
+        "CARGO",
+        "RUSTC",
     ] {
         command.env_remove(var);
     }
@@ -888,8 +933,18 @@ fn run_cargo_llvm_cov(
         .output()
         .context("running `cargo llvm-cov` (is cargo-llvm-cov installed?)")?;
     if !output.status.success() {
+        // A branch-floor run that fails is most often a stable toolchain (the
+        // `--branch` instrumentation is nightly-only), so name the requirement
+        // alongside the run's own output.
+        let hint = if branch {
+            "\n(the [rust].coverage `branch` floor runs with --branch, which requires a \
+             nightly toolchain — pin one in the crate's rust-toolchain.toml with \
+             llvm-tools-preview, or set a rustup directory override)"
+        } else {
+            ""
+        };
         bail!(
-            "the unit suite did not run cleanly under cargo llvm-cov in `{}`:\n{}{}",
+            "the unit suite did not run cleanly under cargo llvm-cov in `{}`:{hint}\n{}{}",
             root.display(),
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr),
@@ -963,7 +1018,15 @@ pub fn measure_patch_rust_detail(
     ignore: &[String],
     features: &[String],
 ) -> Result<BTreeMap<String, RustPatchCoverage>> {
-    llvm_cov_patch_detail(&run_cargo_llvm_cov(root, ignore, &["--json"], features)?)
+    // The diff-scoped floor judges regions + lines, so its run never adds
+    // `--branch` (#267).
+    llvm_cov_patch_detail(&run_cargo_llvm_cov(
+        root,
+        ignore,
+        &["--json"],
+        features,
+        false,
+    )?)
 }
 
 /// Pure: per-file [`RustPatchCoverage`] from a `cargo llvm-cov --json` export.
@@ -1355,6 +1418,34 @@ mod tests {
                 totals: LlvmCovTotals {
                     regions: rust_metric(regions),
                     lines: rust_metric(lines),
+                    functions: rust_metric(lines),
+                    branches: None,
+                },
+            }],
+        }
+    }
+
+    /// Like [`rust_report`] with explicit functions/branches metrics — the opt-in
+    /// floors' tests (#267). `branches: (count, percent)` so the vacuous
+    /// zero-denominator case is constructible.
+    fn rust_report_full(
+        regions: f64,
+        lines: f64,
+        functions: f64,
+        branches: (u64, f64),
+    ) -> LlvmCovReport {
+        let (count, percent) = branches;
+        LlvmCovReport {
+            data: vec![LlvmCovData {
+                totals: LlvmCovTotals {
+                    regions: rust_metric(regions),
+                    lines: rust_metric(lines),
+                    functions: rust_metric(functions),
+                    branches: Some(LlvmCovMetric {
+                        count,
+                        covered: count,
+                        percent,
+                    }),
                 },
             }],
         }
@@ -1363,11 +1454,67 @@ mod tests {
     const RUST_FULL: RustThresholds = RustThresholds {
         regions: Some(100),
         lines: 100,
+        functions: None,
+        branch: None,
     };
     const RUST_MID: RustThresholds = RustThresholds {
         regions: Some(80),
         lines: 85,
+        functions: None,
+        branch: None,
     };
+
+    #[test]
+    fn rust_functions_floor_fails_below_and_passes_at_its_bar() {
+        // The opt-in functions floor (#267) is judged on the export's functions
+        // total: 66.67% fails a 100 floor naming the metric, and clears 60.
+        let report = rust_report_full(100.0, 100.0, 66.67, (0, 0.0));
+        let floor = |functions| RustThresholds {
+            regions: None,
+            lines: 50,
+            functions: Some(functions),
+            branch: None,
+        };
+        assert!(matches!(
+            evaluate_rust(&report, floor(100)),
+            Outcome::Fail(message) if message.contains("functions")
+        ));
+        assert_eq!(evaluate_rust(&report, floor(60)), Outcome::Pass);
+    }
+
+    #[test]
+    fn rust_branch_floor_fails_below_and_passes_at_its_bar() {
+        // The opt-in branch floor (#267) is judged on the branches total of a
+        // `--branch` run: 50% fails a 100 floor naming the metric, and clears 50.
+        let report = rust_report_full(100.0, 100.0, 100.0, (2, 50.0));
+        let floor = |branch| RustThresholds {
+            regions: None,
+            lines: 50,
+            functions: None,
+            branch: Some(branch),
+        };
+        assert!(matches!(
+            evaluate_rust(&report, floor(100)),
+            Outcome::Fail(message) if message.contains("branches")
+        ));
+        assert_eq!(evaluate_rust(&report, floor(50)), Outcome::Pass);
+    }
+
+    #[test]
+    fn rust_a_branchless_crate_clears_any_branch_floor_vacuously() {
+        // A successful `--branch` run over a crate with no branch points reports a
+        // zero branch denominator — vacuously satisfied, mirroring the diff-scoped
+        // floors' empty-denominator rule (a failed instrumentation is a run error,
+        // never a zero count here).
+        let report = rust_report_full(100.0, 100.0, 100.0, (0, 0.0));
+        let floor = RustThresholds {
+            regions: None,
+            lines: 50,
+            functions: None,
+            branch: Some(100),
+        };
+        assert_eq!(evaluate_rust(&report, floor), Outcome::Pass);
+    }
 
     #[test]
     fn rust_passes_when_both_metrics_meet_their_floor() {
@@ -1406,6 +1553,8 @@ mod tests {
         let thresholds = RustThresholds {
             regions: None,
             lines: 100,
+            functions: None,
+            branch: None,
         };
         assert_eq!(
             evaluate_rust(&rust_report(40.0, 100.0), thresholds),
@@ -1419,6 +1568,8 @@ mod tests {
         let thresholds = RustThresholds {
             regions: None,
             lines: 100,
+            functions: None,
+            branch: None,
         };
         let outcome = evaluate_rust(&rust_report(100.0, 80.0), thresholds);
         assert!(
@@ -1451,6 +1602,8 @@ mod tests {
                 totals: LlvmCovTotals {
                     regions: nothing,
                     lines: nothing,
+                    functions: nothing,
+                    branches: None,
                 },
             }],
         };

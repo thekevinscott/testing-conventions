@@ -38,7 +38,7 @@ default deliberately:
   deliberate add.
 - **`branch` is opt-in and needs nightly.** A `branch` floor adds `--branch` to the
   `cargo llvm-cov` run, which instruments only on a nightly toolchain — pin one in the crate's
-  `rust-toolchain.toml` (with `llvm-tools-preview`) or run under `cargo +nightly`; on stable the
+  `rust-toolchain.toml` (with `llvm-tools-preview`) or set a rustup directory override (`rustup override set nightly`); on stable the
   run fails with the requirement named. That toolchain cost keeps it out of the default (Python
   folds branch into its total; TypeScript has a `branches` metric — this closes the gap for
   crates willing to run nightly).

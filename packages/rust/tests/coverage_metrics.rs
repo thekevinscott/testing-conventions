@@ -17,23 +17,31 @@ fn fixtures() -> PathBuf {
 #[test]
 fn a_functions_floor_is_part_of_the_config_schema() {
     // `[rust] coverage = { lines = 50, functions = 100 }` parses — the loader's
-    // self-guard knows the key.
-    let config = load_config(fixtures().join("rust_functions_full.toml"));
-    assert!(
-        config.is_ok(),
-        "expected the `functions` floor to parse, got: {:#}",
-        config.unwrap_err()
-    );
+    // self-guard knows the key — and carries the floor.
+    let config = load_config(fixtures().join("rust_functions_full.toml"))
+        .expect("the `functions` floor should parse");
+    let coverage = config
+        .rust
+        .expect("the [rust] table should load")
+        .coverage
+        .expect("the coverage table should load");
+    assert_eq!(coverage.functions, Some(100));
+    assert_eq!(coverage.lines, 50);
+    assert_eq!(coverage.branch, None);
 }
 
 #[test]
 fn a_branch_floor_is_part_of_the_config_schema() {
     // `[rust] coverage = { lines = 50, branch = 100 }` parses — the loader's
-    // self-guard knows the key.
-    let config = load_config(fixtures().join("rust_branch_full.toml"));
-    assert!(
-        config.is_ok(),
-        "expected the `branch` floor to parse, got: {:#}",
-        config.unwrap_err()
-    );
+    // self-guard knows the key — and carries the floor.
+    let config = load_config(fixtures().join("rust_branch_full.toml"))
+        .expect("the `branch` floor should parse");
+    let coverage = config
+        .rust
+        .expect("the [rust] table should load")
+        .coverage
+        .expect("the coverage table should load");
+    assert_eq!(coverage.branch, Some(100));
+    assert_eq!(coverage.lines, 50);
+    assert_eq!(coverage.functions, None);
 }

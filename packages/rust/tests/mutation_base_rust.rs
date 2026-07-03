@@ -140,6 +140,7 @@ fn base_scopes_the_run_to_the_changed_function() {
         &[],
         &std::collections::BTreeMap::new(),
         Some(&base),
+        &[],
     )
     .expect("cargo-mutants runs");
     // The added `is_positive` is in the diff and assertion-light, so its mutants
@@ -175,6 +176,7 @@ fn base_finds_survivors_in_a_subdir_crate() {
         &[],
         &std::collections::BTreeMap::new(),
         Some(&base),
+        &[],
     )
     .expect("cargo-mutants runs");
     assert!(
@@ -205,6 +207,7 @@ fn base_with_no_changes_under_the_crate_reports_no_survivors() {
         &[],
         &std::collections::BTreeMap::new(),
         Some(&base),
+        &[],
     )
     .expect("no run needed");
     assert!(

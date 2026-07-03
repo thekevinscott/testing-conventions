@@ -30,7 +30,7 @@ const MID: RustThresholds = RustThresholds {
 #[test]
 fn above_passes_a_100_floor() {
     assert_eq!(
-        measure_rust(&crate_dir("above"), FULL, &[]).unwrap(),
+        measure_rust(&crate_dir("above"), FULL, &[], &[]).unwrap(),
         Outcome::Pass
     );
 }
@@ -38,7 +38,7 @@ fn above_passes_a_100_floor() {
 #[test]
 fn below_fails_a_100_floor() {
     assert!(matches!(
-        measure_rust(&crate_dir("below"), FULL, &[]).unwrap(),
+        measure_rust(&crate_dir("below"), FULL, &[], &[]).unwrap(),
         Outcome::Fail(_)
     ));
 }
@@ -48,7 +48,7 @@ fn below_passes_a_lower_floor() {
     // `below` is ~88% regions / ~87% lines — under 100 (the uncovered `else` arm)
     // but comfortably over an 80 floor, so the floor is a real, configurable knob.
     assert_eq!(
-        measure_rust(&crate_dir("below"), MID, &[]).unwrap(),
+        measure_rust(&crate_dir("below"), MID, &[], &[]).unwrap(),
         Outcome::Pass
     );
 }
@@ -61,7 +61,7 @@ fn integration_tests_do_not_pad_the_unit_floor() {
     // counted the integration target would read 100% and pass — exactly the
     // padding the Coverage rule forbids.
     assert!(matches!(
-        measure_rust(&crate_dir("padded"), FULL, &[]).unwrap(),
+        measure_rust(&crate_dir("padded"), FULL, &[], &[]).unwrap(),
         Outcome::Fail(_)
     ));
 }
@@ -73,7 +73,13 @@ fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
     // from config — leaves core.rs, fully covered, to clear 100. Without the
     // exemption this crate fails the floor (#32).
     assert_eq!(
-        measure_rust(&crate_dir("exempt_cov"), FULL, &["src/shim.rs".to_string()]).unwrap(),
+        measure_rust(
+            &crate_dir("exempt_cov"),
+            FULL,
+            &["src/shim.rs".to_string()],
+            &[]
+        )
+        .unwrap(),
         Outcome::Pass
     );
 }
@@ -84,7 +90,7 @@ fn a_suite_that_cannot_run_is_an_error_not_a_silent_pass() {
     // measuring it must error rather than report a vacuous pass.
     let empty = std::env::temp_dir().join(format!("tc-rust-empty-{}", std::process::id()));
     std::fs::create_dir_all(&empty).unwrap();
-    let result = measure_rust(&empty, MID, &[]);
+    let result = measure_rust(&empty, MID, &[], &[]);
     let _ = std::fs::remove_dir_all(&empty);
     assert!(result.is_err());
 }

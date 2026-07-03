@@ -775,9 +775,15 @@ pub fn evaluate_rust(report: &LlvmCovReport, thresholds: RustThresholds) -> Outc
 /// Shells out to `cargo llvm-cov --lib --json --summary-only`, omitting every path in
 /// `ignore` from the denominator (a single `--ignore-filename-regex`), then
 /// evaluates the export. `ignore` holds the `coverage`-rule exemptions resolved
-/// from config, as `root`-relative paths. `cargo-llvm-cov` must be installed.
-pub fn measure_rust(root: &Path, thresholds: RustThresholds, ignore: &[String]) -> Result<Outcome> {
-    let report = run_llvm_cov(root, ignore)?;
+/// from config, as `root`-relative paths; `features` the `[rust] features` list to
+/// enable on the run (#266). `cargo-llvm-cov` must be installed.
+pub fn measure_rust(
+    root: &Path,
+    thresholds: RustThresholds,
+    ignore: &[String],
+    features: &[String],
+) -> Result<Outcome> {
+    let report = run_llvm_cov(root, ignore, features)?;
     Ok(evaluate_rust(&report, thresholds))
 }
 
@@ -806,11 +812,12 @@ impl Drop for TargetDir {
 
 /// Run cargo llvm-cov over the unit suite in `root` and return the parsed
 /// `--summary-only` export — the totals the floor checks.
-fn run_llvm_cov(root: &Path, ignore: &[String]) -> Result<LlvmCovReport> {
+fn run_llvm_cov(root: &Path, ignore: &[String], features: &[String]) -> Result<LlvmCovReport> {
     parse_llvm_cov_report(&run_cargo_llvm_cov(
         root,
         ignore,
         &["--json", "--summary-only"],
+        features,
     )?)
 }
 
@@ -822,9 +829,16 @@ fn run_llvm_cov(root: &Path, ignore: &[String]) -> Result<LlvmCovReport> {
 ///
 /// The build goes to an out-of-tree target dir (via `CARGO_TARGET_DIR`) so the
 /// scanned crate stays pristine; the `coverage`-rule exemptions become one
-/// `--ignore-filename-regex`; and the outer run's instrumentation env is stripped
-/// for nested-run hygiene (the loop below explains why).
-fn run_cargo_llvm_cov(root: &Path, ignore: &[String], format: &[&str]) -> Result<String> {
+/// `--ignore-filename-regex`; the `[rust] features` list is enabled on the run so
+/// `#[cfg(feature = ...)]` code is compiled and measured (#266); and the outer
+/// run's instrumentation env is stripped for nested-run hygiene (the loop below
+/// explains why).
+fn run_cargo_llvm_cov(
+    root: &Path,
+    ignore: &[String],
+    format: &[&str],
+    features: &[String],
+) -> Result<String> {
     let target = TargetDir::new();
 
     let mut command = Command::new("cargo");
@@ -838,6 +852,9 @@ fn run_cargo_llvm_cov(root: &Path, ignore: &[String], format: &[&str]) -> Result
         .arg("--lib")
         .args(format)
         .env("CARGO_TARGET_DIR", &target.0);
+    if !features.is_empty() {
+        command.arg("--features").arg(features.join(","));
+    }
     if let Some(regex) = ignore_filename_regex(ignore) {
         command.arg("--ignore-filename-regex").arg(regex);
     }
@@ -944,8 +961,9 @@ struct LlvmCovFunction {
 pub fn measure_patch_rust_detail(
     root: &Path,
     ignore: &[String],
+    features: &[String],
 ) -> Result<BTreeMap<String, RustPatchCoverage>> {
-    llvm_cov_patch_detail(&run_cargo_llvm_cov(root, ignore, &["--json"])?)
+    llvm_cov_patch_detail(&run_cargo_llvm_cov(root, ignore, &["--json"], features)?)
 }
 
 /// Pure: per-file [`RustPatchCoverage`] from a `cargo llvm-cov --json` export.

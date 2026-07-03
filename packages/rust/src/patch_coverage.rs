@@ -345,6 +345,7 @@ pub fn measure_rust(
     thresholds: RustThresholds,
     ignore: &[String],
     exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
+    features: &[String],
 ) -> Result<Outcome> {
     let mut changed = changed_lines(root, base)?;
     changed.retain(|path, _| path.ends_with(".rs"));
@@ -352,7 +353,10 @@ pub fn measure_rust(
     if changed.is_empty() {
         return Ok(Outcome::Pass);
     }
-    let detail = relative_keys(coverage::measure_patch_rust_detail(root, ignore)?, root);
+    let detail = relative_keys(
+        coverage::measure_patch_rust_detail(root, ignore, features)?,
+        root,
+    );
     Ok(evaluate_patch_rust(&changed, &detail, thresholds))
 }
 
@@ -617,8 +621,12 @@ pub fn measure_line_exempt_rust(
     thresholds: RustThresholds,
     ignore: &[String],
     exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
+    features: &[String],
 ) -> Result<Outcome> {
-    let detail = relative_keys(coverage::measure_patch_rust_detail(root, ignore)?, root);
+    let detail = relative_keys(
+        coverage::measure_patch_rust_detail(root, ignore, features)?,
+        root,
+    );
     let measured_missed: BTreeMap<String, (BTreeSet<u64>, BTreeSet<u64>)> = detail
         .iter()
         .map(|(file, cov)| (file.clone(), rust_measured_missed(cov, thresholds)))

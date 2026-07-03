@@ -15,6 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Adds cargo-feature passthrough for the suite-running Rust rules (#266). The config's `[rust]`
+table takes a `features` list: `unit coverage` (whole-tree and `--base`) passes it to
+`cargo llvm-cov` as `--features`, and `unit mutation` forwards it to cargo-mutants' build/test
+runs — so `#[cfg(feature = ...)]` code is compiled, measured, and mutated instead of silently
+compiled out of both. One breaking SDK change: the Rust measure functions gain a trailing
+`features` argument (see **Required changes**). Cargo features are Rust's build-system concept
+with no Python/TypeScript analog, so the key is deliberately Rust-only — a documented asymmetry
+under the parity rule.
+
 Scopes the Rust coverage floor to the unit suite (#265). `unit coverage --language rust` now runs
 `cargo llvm-cov --lib`, measuring the library target and its inline `#[cfg(test)]` modules — the
 tool's definition of a Rust unit and the same unit-only slice the Python and TypeScript arms
@@ -539,6 +548,18 @@ existing command, flag, config key, or SDK item changes.
 
 ### Required changes
 
+The Rust SDK measure functions take a trailing `features: &[String]` (#266) —
+`coverage::measure_rust`, `coverage::measure_patch_rust_detail`, `patch_coverage::measure_rust`,
+`patch_coverage::measure_line_exempt_rust`, and `mutation::measure_rust`. Pass `&[]` to preserve
+prior behavior, or the crate's `[rust] features` list to enable them on the run:
+
+```rust
+// Before:
+coverage::measure_rust(&root, thresholds, &ignore)?;
+// After:
+coverage::measure_rust(&root, thresholds, &ignore, &[])?;
+```
+
 Migrate every whole-file `coverage` / `mutation` exemption to the line-scoped form, naming the lines
 it covers (the determinism guard tells you the exact set — a listed line that's actually covered, or
 a missed one you left out, is reported):
@@ -787,6 +808,16 @@ Exemptions (#32) change runtime behavior:
   isn't removed or updated. No API or config change.
 
 ### Verification
+
+```
+cd packages/rust && cargo test --test coverage_features --test coverage_features_e2e --test mutation_features_e2e
+```
+
+Expected: all pass — `[rust] features` parses (with and without a `coverage` table), the `gated`
+fixture (feature module fully covered inline) clears a 100 floor with the feature enabled from
+config, `gated_untested` fails it with a threshold shortfall over the now-measured module, and
+`gated_killed` clears the mutation gate because the feature reaches cargo-mutants' build/test
+runs. Requires `cargo-llvm-cov` and a cargo toolchain (cargo-mutants is provisioned by the tool).
 
 ```
 cd packages/rust && cargo test --test coverage_rust --test coverage_rust_e2e

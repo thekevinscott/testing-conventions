@@ -284,6 +284,9 @@ reason = "version-conditional tomllib/tomli import; one branch is dead on any si
 coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
 
 [rust]
+# Cargo features the suite-running Rust rules enable, so `#[cfg(feature = ...)]`
+# code is compiled, measured, and mutated:
+features = ["cli"]
 coverage = { regions = 100, lines = 100 }
 ```
 

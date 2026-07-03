@@ -12,8 +12,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the contract before writing code. Idempotent: re-running refreshes the owned region; everything
   outside the markers is untouched. Refuses a symlinked target; writes atomically.
 
+### Added
+
+- **`[rust] features` — cargo-feature passthrough for the suite-running Rust rules** (#266).
+  The config's `[rust]` table takes a `features` list that `unit coverage` (whole-tree and
+  `--base`) passes to `cargo llvm-cov` as `--features`, and `unit mutation` forwards to
+  cargo-mutants' build/test runs — so `#[cfg(feature = ...)]` code is compiled, measured, and
+  mutated. Cargo features are Rust's build-system concept with no Python/TypeScript analog, so
+  the key is deliberately Rust-only (a documented asymmetry under the parity rule).
+
 ### Changed
 
+- **BREAKING: the Rust SDK measure functions take a `features` argument** (#266).
+  `coverage::measure_rust`, `patch_coverage::measure_rust` / `measure_line_exempt_rust`,
+  `coverage::measure_patch_rust_detail`, and `mutation::measure_rust` gain a trailing
+  `features: &[String]`. Pass `&[]` to preserve prior behavior. See
+  [MIGRATIONS](./MIGRATIONS.md).
 - **BREAKING: `unit coverage --language rust` measures the unit suite only** (#265). The Rust arm
   now passes `--lib` to `cargo llvm-cov`, scoping the floor to the library target and its inline
   `#[cfg(test)]` modules — the tool's definition of a Rust unit, and the same unit-only slice the

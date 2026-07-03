@@ -46,6 +46,7 @@ fn expected_valid() -> Config {
                 regions: Some(100),
                 lines: 100,
             }),
+            features: vec![],
             exempt: vec![],
         }),
     }

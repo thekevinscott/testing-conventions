@@ -62,6 +62,7 @@ published — so the workflow and the binary it calls always match. To **freeze*
 | `packaging_artifact` | `''`                       | Name of an uploaded build artifact holding your built distributions; when set, the packaging rule downloads and inspects it. When empty, packaging still runs over a conventional `dist/` in the checkout. See [Check the built distribution](#check-the-built-distribution-packaging). |
 | `build_command`      | `''`                       | A shell command run after toolchain + dependency setup and **before** the suite, in the same job, for the suite-executing jobs only (`unit coverage`, changed-line `coverage`, `unit mutation`). Use it to build a native module the suite imports. Empty (default) ⇒ no build step. See [Build a native module before the suite](#build-a-native-module-before-the-suite-build-command). |
 | `gates`              | `''` (all applicable)      | A JSON array naming which gates run — e.g. `'["colocated-test", "unit-lint", "integration-lint"]'`. Empty runs every applicable gate. A named gate's diff-scoped variant rides with it. See [Run a subset of gates](#run-a-subset-of-gates-gates). |
+| `rust_toolchain`     | `false`                    | Provisions a stable Rust toolchain, with build caching, in the suite-executing jobs before `build_command` runs — for a native binding whose build compiles a Rust core (maturin/PyO3, napi-rs). See [Provision a Rust toolchain for the build](#provision-a-rust-toolchain-for-the-build-rust_toolchain). |
 
 ### Diff-scoped and opt-in checks
 
@@ -118,6 +119,31 @@ the module: `unit coverage` (whole-tree), changed-line `coverage --base`, and `u
 The static rules — `colocated-test`, `unit lint`, `integration lint` — only parse source and never
 import it, and `e2e verify` checks the committed attestation rather than running the e2e suite, so
 those jobs neither need nor run the build step.
+
+### Provision a Rust toolchain for the build (`rust_toolchain`)
+
+A native module often compiles a **second-language core**: a maturin/PyO3 extension or a
+napi-rs addon builds a Rust crate, so its `build_command` runs `cargo`. Each suite-executing
+job sets up its own matrix language's toolchain — the Python arm gets Python, the TypeScript
+arm gets Node — so the Rust compiler that build needs is a separate concern. Set
+`rust_toolchain: true` to provision a **stable Rust toolchain** in those jobs, with the build
+**cached across runs** (the cargo registry and the crate's `target/`), before `build_command`
+runs:
+
+```yaml
+jobs:
+  conventions:
+    uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
+    with:
+      rust_toolchain: true
+      build_command: uv run maturin develop      # compiles the Rust core, needs cargo
+```
+
+It applies to the same three suite-executing jobs `build_command` runs in (`unit coverage`,
+changed-line `coverage --base`, `unit mutation`); the `rust` matrix arm always carries its own
+toolchain, so the input adds cargo to the Python and TypeScript arms and adds the build cache
+everywhere. Caching keys off your `Cargo.lock`, and the toolchain is the same `stable` the
+`rust` coverage and mutation arms use.
 
 ### Run a subset of gates (`gates`)
 

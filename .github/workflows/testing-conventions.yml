@@ -95,6 +95,13 @@ name: Testing Conventions
 # detect.py's `eligible` applies to `languages` — so a consumer that must run the
 # suite-executing gates in its own build-capable jobs (a native binding whose second-language
 # core these jobs cannot build, #263) still adopts the static gates here.
+#
+# `rust_toolchain` (#263) provisions a stable Rust toolchain — with a cargo registry +
+# target cache — in the suite-executing jobs, before `build_command` runs. A native binding
+# whose build compiles a Rust core (a maturin/PyO3 extension, a napi-rs addon) needs cargo in
+# the *python/typescript* arms, which otherwise set up only their own language's toolchain;
+# the rust arm always carries its own. `false` (the default) adds nothing, so pure-language
+# callers are unaffected.
 
 on:
   workflow_call:
@@ -135,6 +142,10 @@ on:
         description: 'Optional JSON array naming which gates run, e.g. ["colocated-test", "unit-lint", "integration-lint"] (#262). Empty (the default) runs every applicable gate. Gate names: colocated-test, unit-lint, unit-coverage, mutation, integration-lint, packaging, e2e-verify. A named gate still applies its own conditions, and its diff-scoped variant rides with it (colocated-test covers the co-change job, unit-coverage the changed-line job). The allowlist is authoritative: a gate left out is skipped even when run_e2e / packaging_artifact is set.'
         type: string
         default: ''
+      rust_toolchain:
+        description: 'Provision a stable Rust toolchain (with a cargo registry + target cache) in the suite-executing jobs, before build_command runs — for a native binding whose build compiles a Rust core (a maturin/PyO3 extension, a napi-rs addon). The rust matrix arm always carries its own toolchain; this adds cargo to the python/typescript arms. false (the default) adds nothing (#263).'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -314,6 +325,23 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
+      # Provision cargo for a build_command that compiles a Rust core (#263): a
+      # maturin/PyO3 or napi-rs build needs the Rust toolchain in the python/typescript
+      # arms too — the rust arm already set its own up above — plus a cargo registry +
+      # target cache so the core isn't recompiled from scratch every run.
+      - if: inputs.rust_toolchain && matrix.language != 'rust'
+        uses: dtolnay/rust-toolchain@stable
+      - if: inputs.rust_toolchain
+        name: Cache the Rust build (cargo registry + target)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            rust-toolchain-build-${{ runner.os }}-
       # Build a caller-supplied native module before the suite imports it (#243): a
       # PyO3/maturin or napi-rs addon the unit suite `import`s must be compiled here, in
       # this job, or coverage fails at import. Pure-language callers leave `build_command`
@@ -381,6 +409,21 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
+      # Provision cargo (+ cache) for a build_command that compiles a Rust core (#263),
+      # as in the whole-tree coverage job; `rust_toolchain: false` ⇒ skipped.
+      - if: inputs.rust_toolchain && matrix.language != 'rust'
+        uses: dtolnay/rust-toolchain@stable
+      - if: inputs.rust_toolchain
+        name: Cache the Rust build (cargo registry + target)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            rust-toolchain-build-${{ runner.os }}-
       # Build a caller-supplied native module before the suite imports it (#243), as in the
       # whole-tree coverage job; empty `build_command` ⇒ skipped.
       - if: inputs.build_command != ''
@@ -466,6 +509,22 @@ jobs:
         with:
           path: ~/.cache/testing-conventions
           key: cargo-mutants-provision-${{ runner.os }}
+      # Provision cargo (+ cache) for a build_command that compiles a Rust core (#263),
+      # as in the coverage jobs — the rust arm set its own toolchain up above;
+      # `rust_toolchain: false` ⇒ skipped.
+      - if: inputs.rust_toolchain && matrix.language != 'rust'
+        uses: dtolnay/rust-toolchain@stable
+      - if: inputs.rust_toolchain
+        name: Cache the Rust build (cargo registry + target)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            rust-toolchain-build-${{ runner.os }}-
       # Build a caller-supplied native module before the mutation engine runs the suite
       # (#243): cosmic-ray / Stryker / cargo-mutants import the same module, so it must be
       # compiled here too; empty `build_command` ⇒ skipped.

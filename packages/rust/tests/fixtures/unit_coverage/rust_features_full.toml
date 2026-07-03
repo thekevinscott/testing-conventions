@@ -1,0 +1,3 @@
+[rust]
+features = ["boost"]
+coverage = { regions = 100, lines = 100 }

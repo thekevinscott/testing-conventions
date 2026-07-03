@@ -1,0 +1,15 @@
+# Fixture crate `mut_gated_killed` for cargo-feature passthrough (#266): `boost`
+# is behind the `boost` feature, and its colocated test asserts the real result,
+# so every mutant is caught — but only when the mutation run enables the feature
+# via `[rust] features = ["boost"]`. A run that left the feature off would
+# compile the module out, its tests would never execute, and its mutants would
+# survive unexercised. `[workspace]` keeps it standalone.
+[package]
+name = "mut_gated_killed"
+version = "0.0.0"
+edition = "2021"
+
+[features]
+boost = []
+
+[workspace]

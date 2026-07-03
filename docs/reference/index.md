@@ -131,9 +131,10 @@ met, `1` (naming each metric below its floor on stderr) when either isn't. `carg
 installed. Files with a `coverage` [exemption](#exemptions) are dropped from the denominator via
 `--ignore-filename-regex`. Two caveats are Rust-specific: inline `#[cfg(test)]` units can't be
 excluded by filename, and `#[coverage(off)]` is still nightly, so on a stable toolchain the inline
-test code is measured alongside the source. Like Python / TypeScript, Rust is zero-config: with no
-`[rust].coverage` table it uses the default `lines = 100` floor (`regions` opt-in, no branch
-component) rather than erroring (#206).
+test code is measured alongside the source. A `[rust] features` list is enabled on the run
+(`--features`), so `#[cfg(feature = ...)]` code is compiled and measured (#266). Like Python /
+TypeScript, Rust is zero-config: with no `[rust].coverage` table it uses the default `lines = 100`
+floor (`regions` opt-in, no branch component) rather than erroring (#206).
 
 #### `--base`: diff-scoped coverage
 
@@ -183,7 +184,9 @@ ran but no test failed on:
 - **Rust** runs [`cargo-mutants`](https://github.com/sourcefrog/cargo-mutants) and reads its
   `outcomes.json` (`MissedMutant` outcomes). The tool provisions cargo-mutants on first use — a
   pinned `cargo install` into its own cache directory, invoked from there — and drives it; you
-  provide the cargo toolchain that builds your crate.
+  provide the cargo toolchain that builds your crate. A `[rust] features` list is forwarded to
+  the build/test runs, so mutants of `#[cfg(feature = ...)]` code are compiled and exercised
+  (#266).
 - **TypeScript** runs [Stryker](https://stryker-mutator.io/) through a Node adapter bundled in the
   npm package — driven via Stryker's own Node API (`Survived` and `NoCoverage` mutants). The tool
   drives Stryker; you provide the test runner (`vitest`).
@@ -528,9 +531,20 @@ reason = "version-conditional tomllib/tomli import; one branch is dead on any si
 coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
 
 [rust]
+# Cargo features the suite-running Rust rules enable, so `#[cfg(feature = ...)]`
+# code is compiled, measured, and mutated:
+features = ["cli"]
 coverage = { regions = 100, lines = 100 }
 ```
 
 `[python].coverage` is consumed by `unit coverage` and the `exempt` lists by both rules; the
 other coverage tables are accepted but not yet enforced (their rules are forthcoming). Each
 package's `MIGRATIONS.md` carries the public-API upgrade history.
+
+The `[rust]` table also takes **`features`** (#266), a list of cargo features both suite-running
+Rust rules enable: `unit coverage` (whole-tree and `--base`) passes it to `cargo llvm-cov` as
+`--features`, and `unit mutation` forwards it to cargo-mutants' build/test runs. Feature-gated
+code (`#[cfg(feature = ...)]`) is then compiled into the run — measured by the floor, and its
+mutants exercised by the gated module's own tests. Cargo features are Rust's build-system
+concept with no Python/TypeScript analog, so the key is deliberately Rust-only — a documented
+asymmetry under the [parity rule](../explanation/#parity-over-cleverness).

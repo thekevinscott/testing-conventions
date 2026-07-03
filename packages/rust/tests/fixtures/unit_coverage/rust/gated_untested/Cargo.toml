@@ -1,0 +1,16 @@
+# `gated_untested` fixture for cargo-feature passthrough (#266): the `boost`
+# module is behind the `boost` feature and carries no tests. With
+# `[rust] features = ["boost"]` in config, the coverage run compiles and
+# measures the module, whose uncovered regions and lines fail a 100 floor —
+# a run that left the feature off would compile the module out and report a
+# green floor over a tree that silently excludes it.
+# `[workspace]` isolates the fixture from the parent cargo workspace.
+[package]
+name = "cov_rust_gated_untested"
+version = "0.0.0"
+edition = "2021"
+
+[features]
+boost = []
+
+[workspace]

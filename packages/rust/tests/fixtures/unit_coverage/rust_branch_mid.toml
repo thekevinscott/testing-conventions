@@ -1,0 +1,2 @@
+[rust]
+coverage = { lines = 50, branch = 50 }

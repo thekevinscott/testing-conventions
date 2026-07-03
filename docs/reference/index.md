@@ -122,11 +122,16 @@ floor is met, `1` (naming each metric below its floor on stderr) when any isn't.
 `coverage` [exemption](#exemptions) are also excluded from the denominator.
 
 For **`rust`**, runs `cargo llvm-cov --lib --json --summary-only` over the crate at `<PATH>` and
-compares the export's **regions** and **lines** totals against `[rust].coverage` (`regions`,
-`lines`) — branch coverage is still experimental, so it isn't enforced. `--lib` scopes the run to
+compares the export's totals against `[rust].coverage`: **`lines`** (the default floor), plus three
+opt-in floors — **`regions`**, **`functions`**, and **`branch`** (#267). A `branch` floor adds
+`--branch` to the run, which needs a nightly toolchain — pin one in the crate's
+`rust-toolchain.toml` (with `llvm-tools-preview`) or run under `cargo +nightly`; on stable the run
+fails with the requirement named. A crate with no branch points clears any `branch` floor
+vacuously (an empty denominator, like the diff-scoped floors). `--lib` scopes the run to
 the unit suite — the library target with its inline `#[cfg(test)]` modules, the tool's definition
 of a Rust unit — so the floor measures the same unit-only slice Python and TypeScript measure, and
-the integration tier under `tests/` stays out of the number (#265). Exits `0` when both floors are
+the integration tier under `tests/` stays out of the number (#265). The diff-scoped variant
+(`--base`) judges regions + lines, as before. Exits `0` when both floors are
 met, `1` (naming each metric below its floor on stderr) when either isn't. `cargo-llvm-cov` must be
 installed. Files with a `coverage` [exemption](#exemptions) are dropped from the denominator via
 `--ignore-filename-regex`. Two caveats are Rust-specific: inline `#[cfg(test)]` units can't be

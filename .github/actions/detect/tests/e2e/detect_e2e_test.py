@@ -70,6 +70,14 @@ def test_e2e_auto_detects_a_rust_crate(run_detect):
     assert out["coverage_languages"] == '["rust"]'
 
 
+def test_e2e_rust_crate_enters_the_colocated_test_matrix(run_detect):
+    # #274: the whole-tree colocated-test matrix carries rust (inline `#[cfg(test)]`
+    # presence, #40); the co-change matrix (`languages`) stays python/typescript.
+    out = run_detect(sources={"Cargo.toml": '[package]\nname = "x"\n', "src/lib.rs": "pub fn f() {}\n"})
+    assert out["colocated_test_languages"] == '["rust"]'
+    assert out["languages"] == "[]"
+
+
 def test_e2e_cargo_without_rust_source_is_not_a_crate(run_detect):
     out = run_detect(sources={"Cargo.toml": '[package]\nname = "x"\n'})
     assert out["coverage_languages"] == "[]"

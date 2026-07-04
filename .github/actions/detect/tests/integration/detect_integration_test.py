@@ -50,6 +50,24 @@ def test_rust_crate_routes_into_the_with_rust_sets(fs):
     assert out["coverage_languages"] == '["rust"]'
 
 
+def test_rust_crate_enters_the_colocated_test_matrix(fs):
+    # #274: the CLI ships the rust presence arm (inline `#[cfg(test)]`, #40), so the
+    # whole-tree colocated-test job fans out over rust too. Co-change stays on the
+    # file-paired `languages` set — rust units are inline, so a sibling test can't
+    # go stale.
+    fs["rust_crate"] = True
+    out = detect.compute_outputs('["rust"]', scan_root="/repo")
+    assert out["colocated_test_languages"] == '["rust"]'
+    assert out["languages"] == "[]"
+
+
+def test_colocated_test_matrix_lists_rust_after_the_file_paired_languages(fs):
+    fs["python"] = True
+    fs["rust_crate"] = True
+    out = detect.compute_outputs("", scan_root="/repo")
+    assert out["colocated_test_languages"] == '["python","rust"]'
+
+
 def test_restrictor_excludes_an_unnamed_language(fs):
     fs["python"] = True
     fs["rust_crate"] = True

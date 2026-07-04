@@ -80,6 +80,18 @@ name: Testing Conventions (self-test)
 #                         `build_command` that invokes cargo before producing the module the
 #                         suite imports, so the call passes only because cargo was provisioned
 #                         ahead of the build (ubuntu-24.04 runners carry no preinstalled Rust).
+#
+# rust colocated-test (#274) — the presence arm fans over rust:
+#   colocated-rust-wired  asserts the whole-tree colocated-test job fans out over the
+#                         rust-inclusive `colocated_test_languages` matrix — the red→green
+#                         signal for the wiring itself. Co-change stays python/typescript
+#                         (rust units are inline, so a sibling test can't go stale).
+#   colocated-rust-red    drives the published `unit colocated-test --language rust` on a
+#                         crate whose bodied `fn` has no inline `#[cfg(test)]` module and
+#                         asserts the non-zero exit (a `uses:` call can't assert a fail).
+#                         The clean runtime path rides the existing `["rust"]` fixtures
+#                         (integration-lint-rust, isolation-clean, coverage-rust-clean),
+#                         whose sources all carry inline tests.
 
 on:
   pull_request:
@@ -773,3 +785,47 @@ jobs:
       config: .github/selftest/build-command/testing-conventions.toml
       build_command: cp .github/selftest/build-command/generated.py.tmpl .github/selftest/build-command/generated.py
       base: origin/main
+
+  # ---- #274: the whole-tree colocated-test job fans out over rust ----
+
+  colocated-rust-wired:
+    name: The reusable workflow fans colocated-test over rust
+    # Red→green wiring signal for #274: the whole-tree colocated-test job's matrix must
+    # include rust (via detect's rust-inclusive `colocated_test_languages` set), or the
+    # shipped rust presence arm (#40, inline `#[cfg(test)]`) isn't enforced on the @v0
+    # path — a rust source file with zero inline tests sails through, though the docs
+    # state the check runs for all three languages. Co-change stays on the
+    # python/typescript `languages` set (rust units are inline, so a sibling test can't
+    # go stale). A static grep, so it tracks the workflow file regardless of what the
+    # published binary ships; the fail path is covered by colocated-rust-red, and the
+    # clean path rides the existing `["rust"]` fixture calls.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: testing-conventions.yml must fan colocated-test over rust
+        run: |
+          set -euo pipefail
+          if ! grep -q 'colocated_test_languages' .github/workflows/testing-conventions.yml; then
+            echo "::error::the reusable workflow's colocated-test job does not fan out over rust (no \`colocated_test_languages\` matrix) — the shipped rust presence arm (#40) is not enforced on the @v0 path (#274)"
+            exit 1
+          fi
+          echo "reusable workflow fans colocated-test over rust"
+
+  colocated-rust-red:
+    name: A crate with an untested fn trips the rust colocated-test arm
+    # The fail path for #274: a `uses:` call that fails would fail the whole run, so
+    # drive the published `unit colocated-test --language rust` directly — the exact
+    # invocation the workflow's rust arm runs — on a crate whose bodied `fn` has no
+    # inline `#[cfg(test)]` module, and assert the non-zero exit that fails a
+    # consumer's build.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: A bodied fn with no inline test module must fail `unit colocated-test`
+        run: |
+          if npx -y testing-conventions unit colocated-test --language rust \
+            .github/selftest/colocated-rust/red; then
+            echo "::error::expected the orphan crate to fail the rust colocated-test arm, but it passed"
+            exit 1
+          fi
+          echo "orphan crate correctly tripped the rust colocated-test arm"

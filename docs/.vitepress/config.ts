@@ -31,42 +31,44 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: 'Getting Started', link: '/getting-started' },
-      { text: 'How-to Guides', link: '/guide/' },
-      { text: 'Reference', link: '/reference/' },
+      { text: 'Monorepo', link: '/monorepo' },
+      { text: 'Configure', link: '/guide/configure' },
+      { text: 'Reference', link: '/reference/workflow' },
       { text: 'Explanation', link: '/explanation/' },
     ],
     sidebar: {
       '/': [
         {
-          text: 'Tutorial',
+          text: 'Tutorials',
           items: [
             { text: 'Getting Started', link: '/getting-started' },
+            { text: 'Adopt on a monorepo', link: '/monorepo' },
           ],
         },
         {
           text: 'How-to Guides',
           items: [
-            { text: 'Overview', link: '/guide/' },
             { text: 'Configure the rules', link: '/guide/configure' },
-            { text: 'Extend the defaults', link: '/guide/extending' },
-            { text: 'Isolate tests', link: '/guide/isolation' },
-            { text: 'Run mutation testing', link: '/guide/mutation' },
-            { text: 'Enforce conventions in CI', link: '/guide/ci' },
-            { text: 'Use the CLI directly', link: '/guide/cli' },
           ],
         },
         {
           text: 'Reference',
           items: [
-            { text: 'API', link: '/reference/' },
-            { text: 'Defaults', link: '/reference/defaults' },
+            { text: 'Workflow', link: '/reference/workflow' },
+            { text: 'Configuration', link: '/reference/config' },
           ],
         },
         {
           text: 'Explanation',
           items: [
             { text: 'The testing model', link: '/explanation/' },
-            { text: 'Why mutation testing', link: '/explanation/mutation' },
+            { text: 'Colocated tests', link: '/explanation/colocated-test' },
+            { text: 'Coverage', link: '/explanation/coverage' },
+            { text: 'Mutation', link: '/explanation/mutation' },
+            { text: 'Isolation', link: '/explanation/isolation' },
+            { text: 'Packaging', link: '/explanation/packaging' },
+            { text: 'E2E attestation', link: '/explanation/e2e' },
+            { text: 'Scoping and exemptions', link: '/explanation/scoping' },
           ],
         },
       ],

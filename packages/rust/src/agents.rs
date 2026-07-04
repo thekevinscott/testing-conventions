@@ -15,8 +15,8 @@ const BEGIN_OPEN: &str = "<!-- testing-conventions:begin ";
 const END_MARKER: &str = "<!-- testing-conventions:end -->";
 
 /// The managed region's content — the few non-negotiables plus pointers to
-/// the canonical contract and the CLI. Thin on purpose: the consumer's file
-/// is theirs; the full contract lives on the docs site.
+/// the docs site and the machine-readable contract. Thin on purpose: the
+/// consumer's file is theirs; the full contract lives on the docs site.
 const TEMPLATE: &str = "\
 ## Testing conventions
 
@@ -28,7 +28,6 @@ This repository enforces [testing-conventions](https://thekevinscott.github.io/t
 - Ship each capability at parity across Python, TypeScript, and Rust.
 - An exemption carries a written reason showing the isolation techniques you tried; near-zero is the bar.
 
-Run the rules locally with the CLI: https://thekevinscott.github.io/testing-conventions/guide/cli
 Machine-readable contract: https://thekevinscott.github.io/testing-conventions/llms.txt
 ";
 

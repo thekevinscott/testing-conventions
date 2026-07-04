@@ -44,7 +44,7 @@ def test_explicit_python_only(fs):
 def test_rust_crate_routes_into_the_with_rust_sets(fs):
     fs["rust_crate"] = True
     out = detect.compute_outputs('["rust"]', scan_root="/repo")
-    assert out["languages"] == "[]"  # rust is not a colocated-test language
+    assert out["languages"] == "[]"  # the co-change matrix stays python/typescript
     assert out["integration_lint_languages"] == '["rust"]'
     assert out["isolation_languages"] == '["rust"]'
     assert out["coverage_languages"] == '["rust"]'

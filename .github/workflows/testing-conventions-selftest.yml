@@ -161,8 +161,11 @@ jobs:
     # (`lines = 100`, #206) — the crate now also enters the coverage matrix. The
     # fixture's integration test runs first-party for real (no double) for the lint,
     # and its inline unit test covers every line, clearing the coverage arm under
-    # unit-suite scoping (#265). (Rust still stays off the colocated-test matrix,
-    # which fans over the python/typescript `languages` set.)
+    # unit-suite scoping (#265). Rust rides the whole-tree colocated-test matrix too
+    # (#274) — the inline test satisfies the presence arm. (On this PR's own runs the
+    # detect action is still fetched at the old `@v0`, which omits
+    # `colocated_test_languages`, so the job falls back to the python/typescript set
+    # and skips rust until a release advances the tag — the #204 pattern.)
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["rust"]'

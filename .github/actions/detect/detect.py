@@ -93,9 +93,11 @@ def compute_outputs(
 ) -> dict[str, str]:
     """The detected sets, as `name -> value` strings for GITHUB_OUTPUT.
 
-    `languages` (python/typescript present) drives colocated-test + coverage; the lint/isolation
-    and coverage sets add Rust whenever a crate is present — Rust coverage is zero-config now
-    (`lines = 100` by default, #206), so it no longer waits for a configured floor.
+    `languages` (python/typescript present) drives the co-change job — rust units are inline
+    `#[cfg(test)]` modules, so a sibling test can't go stale and co-change doesn't apply. The
+    whole-tree colocated-test set and the lint/isolation and coverage sets add Rust whenever a
+    crate is present — the rust presence arm checks the inline module (#40/#274), and Rust
+    coverage is zero-config now (`lines = 100` by default, #206), so neither waits for config.
     `packaging_dist` / `e2e_attestation` (looked for at `repo_root`, the checkout root) let the
     packaging and e2e-verify jobs run by default and skip — never fail — when absent (#186).
     """
@@ -110,6 +112,9 @@ def compute_outputs(
     repo = Path(repo_root)
     return {
         "languages": _to_json(present),
+        # Whole-tree colocated-test (#274): the file-paired languages plus rust — the rust
+        # arm checks inline `#[cfg(test)]` presence (#40), so a crate rides the matrix too.
+        "colocated_test_languages": _to_json(with_rust),
         "integration_lint_languages": _to_json(with_rust),
         "isolation_languages": _to_json(with_rust),
         "coverage_languages": _to_json(with_rust),

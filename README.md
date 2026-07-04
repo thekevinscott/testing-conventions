@@ -11,22 +11,22 @@ Every rule is a CLI command that fails CI on a violation.
 
 **Unit**
 
-- [`unit colocated-test`](https://thekevinscott.github.io/testing-conventions/reference/#unit-colocated-test) — every source file has a colocated, matching-named unit test (Python, TypeScript, Rust); with `--base`, a source changed in the diff must also change its colocated test (co-change; Python, TypeScript; [#33](https://github.com/thekevinscott/testing-conventions/issues/33)).
-- [`unit coverage`](https://thekevinscott.github.io/testing-conventions/reference/#unit-coverage) — enforce a coverage floor on the unit suite (Python, TypeScript, Rust); with `--base`, the same floor is measured over the changed lines of a `<base>...HEAD` diff instead of the whole tree ([#162](https://github.com/thekevinscott/testing-conventions/issues/162)).
-- [`unit lint`](https://thekevinscott.github.io/testing-conventions/reference/#unit-lint) — a unit test mocks every collaborator: no out-of-module calls or imports (Rust); no un-mocked first-party or external collaborators (Python, TypeScript); typed mocks (TypeScript).
-- [`unit mutation`](https://thekevinscott.github.io/testing-conventions/guide/mutation) — every line a change touches is *verified*, not just executed: mutation testing breaks the code and requires a test to fail. The gate is binary and diff-scoped — no unexplained surviving mutant on the diff — not a score percentage (Python, TypeScript, Rust; wired into the reusable workflow as a diff-scoped, PR-only job, [#204](https://github.com/thekevinscott/testing-conventions/issues/204)).
+- [`unit colocated-test`](https://thekevinscott.github.io/testing-conventions/explanation/colocated-test) — every source file has a colocated, matching-named unit test (Python, TypeScript, Rust); with `--base`, a source changed in the diff must also change its colocated test (co-change; Python, TypeScript; [#33](https://github.com/thekevinscott/testing-conventions/issues/33)).
+- [`unit coverage`](https://thekevinscott.github.io/testing-conventions/explanation/coverage) — enforce a coverage floor on the unit suite (Python, TypeScript, Rust); with `--base`, the same floor is measured over the changed lines of a `<base>...HEAD` diff instead of the whole tree ([#162](https://github.com/thekevinscott/testing-conventions/issues/162)).
+- [`unit lint`](https://thekevinscott.github.io/testing-conventions/explanation/isolation) — a unit test mocks every collaborator: no out-of-module calls or imports (Rust); no un-mocked first-party or external collaborators (Python, TypeScript); typed mocks (TypeScript).
+- [`unit mutation`](https://thekevinscott.github.io/testing-conventions/explanation/mutation) — every line a change touches is *verified*, not just executed: mutation testing breaks the code and requires a test to fail. The gate is binary and diff-scoped — no unexplained surviving mutant on the diff — not a score percentage (Python, TypeScript, Rust; wired into the reusable workflow as a diff-scoped, PR-only job, [#204](https://github.com/thekevinscott/testing-conventions/issues/204)).
 
 **Integration**
 
-- [`integration lint`](https://thekevinscott.github.io/testing-conventions/reference/#integration-lint) — integration tests run first-party code for real: no first-party mock, double, or patch (Python, TypeScript, Rust); plus Python mock-mechanism hygiene (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`).
+- [`integration lint`](https://thekevinscott.github.io/testing-conventions/explanation/isolation) — integration tests run first-party code for real: no first-party mock, double, or patch (Python, TypeScript, Rust); plus Python mock-mechanism hygiene (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`).
 
 **Packaging**
 
-- [`packaging`](https://thekevinscott.github.io/testing-conventions/reference/#packaging) — test files never ship in the built artifact (wheel, sdist, npm tarball, crate).
+- [`packaging`](https://thekevinscott.github.io/testing-conventions/explanation/packaging) — test files never ship in the built artifact (wheel, sdist, npm tarball, crate).
 
 **E2E**
 
-- [`e2e attest`](https://thekevinscott.github.io/testing-conventions/reference/#e2e-attest) / [`e2e verify`](https://thekevinscott.github.io/testing-conventions/reference/#e2e-verify) — `attest` runs the e2e suite locally and records the commit it ran against; `verify` checks that receipt in CI and never runs e2e.
+- [`e2e attest`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) / [`e2e verify`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) — `attest` runs the e2e suite locally and records the commit it ran against; `verify` checks that receipt in CI and never runs e2e.
 <!-- #endregion rules -->
 
 ## The three kinds of tests
@@ -220,7 +220,7 @@ kill) make 100% unreachable, and a score isn't comparable across engines. Instea
 it's binary and diff-scoped: **no unexplained surviving mutant on changed lines**,
 with reasoned `[[<language>.exempt]]` entries for the rest.
 
-**Checked:** all three languages are available now — **Rust** (`unit mutation --language rust`, via cargo-mutants), **TypeScript** (`unit mutation --language typescript`, via Stryker), and **Python** (`unit mutation --language python`, via cosmic-ray) — a binary gate, on by default: any un-exempted survivor fails, with reasoned `[[<language>.exempt]] rules = ["mutation"]` entries (naming the survivor's `lines`) the only loosening. They're at parity and **wired into the reusable workflow** as a diff-scoped, PR-only job across the matrix ([#204](https://github.com/thekevinscott/testing-conventions/issues/204)). See the [mutation-testing guide](https://thekevinscott.github.io/testing-conventions/guide/mutation). Deterministic (a diff-scoped mutation run; any unexplained survivor on a changed line fails the build).
+**Checked:** all three languages are available now — **Rust** (`unit mutation --language rust`, via cargo-mutants), **TypeScript** (`unit mutation --language typescript`, via Stryker), and **Python** (`unit mutation --language python`, via cosmic-ray) — a binary gate, on by default: any un-exempted survivor fails, with reasoned `[[<language>.exempt]] rules = ["mutation"]` entries (naming the survivor's `lines`) the only loosening. They're at parity and **wired into the reusable workflow** as a diff-scoped, PR-only job across the matrix ([#204](https://github.com/thekevinscott/testing-conventions/issues/204)). See the [mutation explanation](https://thekevinscott.github.io/testing-conventions/explanation/mutation). Deterministic (a diff-scoped mutation run; any unexplained survivor on a changed line fails the build).
 
 ### Packaging
 

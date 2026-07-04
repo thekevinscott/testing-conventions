@@ -1,13 +1,14 @@
 ---
-description: Why mutation testing is the verification rung coverage can't reach, and why the gate is binary, not a score.
+description: Why mutation testing is the verification rung coverage can't reach, why the gate is binary, not a score, and the engines that run it.
 ---
 
-# Why mutation testing
+# Mutation
 
 Coverage tells you which lines your tests *ran*. **Mutation testing** tells you whether your tests
-would *notice if those lines were wrong* — the question coverage can't answer. It's the verification
-rung above the [coverage floor](./#the-unit-ladder-exist-run-verify). To actually run it, see
-[Run mutation testing](../guide/mutation).
+would *notice if those lines were wrong* — the question coverage can't answer. It's the
+verification rung above the [coverage floor](./coverage): the top of the
+[unit ladder](./#the-unit-ladder-exist-run-verify). The [workflow](../reference/workflow) runs it
+on every pull request, diff-scoped to the changed lines.
 
 ## Coverage runs your code; mutation checks your tests
 
@@ -75,11 +76,26 @@ So the gate isn't a percentage. It's **binary and diff-scoped**:
 
 > **No unexplained surviving mutant on the lines a change touched.**
 
-A survivor you've confirmed is equivalent or deliberately defensive gets a reasoned
-[exemption](../guide/configure#exempt-a-file) — the same mechanism every other rule uses; every other survivor
-must be killed. It's the mutation analog of the coverage philosophy — *"zero survivors except what
-you exempted with a reason"*, not *"hit a number you can't reach"* — and it ports cleanly across
-languages, where a score does not.
+A survivor you've confirmed is equivalent or deliberately defensive gets a reasoned, line-scoped
+[exemption](../guide/configure#exempt-specific-lines-coverage-mutation) — the same mechanism every
+other check uses; every other survivor must be killed. It's the mutation analog of the coverage
+philosophy — *"zero survivors except what you exempted with a reason"*, not *"hit a number you
+can't reach"* — and it ports cleanly across languages, where a score does not. Diff-scoping is
+what makes a binary gate tractable: whole-tree mutation is too slow to gate, so the job runs on
+pull requests only, over the `<base>...HEAD` changed lines.
+
+## The engines
+
+Each language wraps its standard engine; the tool drives the engine, and you provide the test
+runner that runs your own suite:
+
+| Language | Engine | You provide |
+| --- | --- | --- |
+| TypeScript | [Stryker](https://stryker-mutator.io/), driven via its Node API by an adapter bundled in the npm package | `vitest` |
+| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray), driven via its library API by an adapter bundled in the wheel, with a baseline check guarding against a broken suite reporting a false pass | `pytest` |
+| Rust | [cargo-mutants](https://github.com/sourcefrog/cargo-mutants), provisioned on first use (a pinned `cargo install` into the tool's own cache) and run from there | the cargo toolchain that builds and tests your crate |
+
+A run lists each survivor with its file, line, and mutation, and fails on any un-exempted one.
 
 ## Why it matters for agents
 
@@ -91,7 +107,7 @@ optimizer.
 
 ## Where it fits
 
-Mutation is the third rung of the [unit ladder](./#the-unit-ladder-exist-run-verify), measuring the
-same colocated unit suite the other rules already do. Because it re-runs that suite many times, it
-rewards exactly what `unit lint` and the coverage floor already enforce: fast, deterministic,
-isolated unit tests. A suite that passes those is already mutation-ready.
+Mutation measures the same colocated unit suite the other checks already do. Because it re-runs
+that suite many times, it rewards exactly what [isolation](./isolation) and the coverage floor
+already enforce: fast, deterministic, isolated unit tests. A suite that passes those is already
+mutation-ready.

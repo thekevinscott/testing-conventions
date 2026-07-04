@@ -1,14 +1,14 @@
 ---
-description: Tune what the rules require in testing-conventions.toml — relax a coverage floor or exempt a file with a required reason.
+description: Respond to a red check in testing-conventions.toml — relax a coverage floor or exempt a file or line with a required reason.
 ---
 
 # Configure the rules
 
-This is the **what-to-enforce** surface: a single `testing-conventions.toml` at your repo root tunes
-what the rules require — coverage floors and per-file exemptions. (For *where and how* a CI run is
-scoped, that's the [workflow inputs](./ci); to make your *local* test runner match, see
-[Extend the defaults](./extending).) Reach for this file when a strict default is wrong for your
-project; anything you don't set keeps its default.
+When a check goes red, there are two responses: fix the code, or record a deliberate omission
+here. A single `testing-conventions.toml` at your repo root (or per package, in a
+[monorepo](../monorepo)) tunes what the rules require — coverage floors and reason-required
+exemptions. Anything you don't set keeps its strict default; the
+[configuration reference](../reference/config) carries every key.
 
 ## Relax a coverage floor
 
@@ -28,14 +28,14 @@ coverage = { regions = 90 }    # lines stays at 100
 
 A `[<language>].coverage` table is a **partial override** — set only the fields you want to move and
 the rest keep their default. (A typo'd key is still rejected; only *missing* keys fall back.) See
-[Reference — Configuration](../reference/#configuration) for every key and
-[Defaults](../reference/defaults) for the baseline.
+[Reference — coverage keys](../reference/config#coverage) for every key and default, and
+[Why a 100% floor](../explanation/coverage) before you lower one.
 
 ## Exempt a file
 
 Some files genuinely shouldn't be tested — a launcher shim, a re-export barrel, generated code. A
 blocking gate needs that escape hatch, but here it's **explicit and reason-required**, never a
-silent ignore.
+silent ignore — see [Scoping and exemptions](../explanation/scoping) for the design.
 
 ### Empty files need no exemption
 
@@ -64,7 +64,7 @@ rules = ["colocated-test"]
 reason = "pure re-export barrel; no logic of its own"
 ```
 
-- `path` is relative to the scanned `<PATH>`, and must point to a file that exists — a stale entry
+- `path` is relative to the scanned `path`, and must point to a file that exists — a stale entry
   is a hard error, so the list can't silently rot.
 - `rules` names the checks the entry lifts (`colocated-test`, a mutation or lint rule). For
   `coverage` / `mutation`, see the line-scoped form below — those are never whole-file.
@@ -72,7 +72,7 @@ reason = "pure re-export barrel; no logic of its own"
 
 Because every exemption lives in this one file, names its rules, and carries a reason, the whole
 exemption surface is auditable in a single diff — unlike scattered ignore comments. See
-[Reference — Exemptions](../reference/#exemptions) for the exact schema.
+[Reference — Exemptions](../reference/config#exemptions) for the exact schema.
 
 ### Exempt specific lines (`coverage` / `mutation`)
 
@@ -99,6 +99,5 @@ rejected with any whole-file rule, so the two never share an entry — a file ex
 
 ## See also
 
-- [Reference — Configuration](../reference/#configuration): every key and the full schema.
-- [Extend the defaults](./extending): reuse our shared test config locally.
-- [The testing model — exemptions](../explanation/#exemptions-a-gate-needs-a-door): why a blocking gate needs a reasoned escape hatch.
+- [Reference — Configuration](../reference/config): every key and the full schema.
+- [Scoping and exemptions](../explanation/scoping): why a blocking gate needs a reasoned door.

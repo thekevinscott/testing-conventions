@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed
+
+- **`install` block points at the reorganized docs** (#353). The managed `AGENTS.md` block's tail
+  links the docs site and the machine-readable contract (`llms.txt`); the pointer to the removed
+  CLI guide page is gone. Re-running `install` refreshes an existing block in place (the begin
+  marker's content hash advances with the content).
+
 ### Added
 
 - **`install`** (#232). Writes the testing contract into the repository's `AGENTS.md` as a

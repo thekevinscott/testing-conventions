@@ -15,6 +15,11 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Repoints the `install` template at the reorganized docs (#353): the managed `AGENTS.md` block's
+tail drops the link to the removed CLI guide page and keeps the docs-site and machine-readable
+contract (`llms.txt`) pointers. No API change; re-running `install` rewrites an existing block to
+the new content (see **Behavior changes without code changes**).
+
 Adds `functions` and `branch` floors to `[rust.coverage]` (#267), alongside the existing opt-in
 `regions`. `functions` gates the llvm-cov export's functions total on the stable toolchain;
 `branch` gates the branches total — the run adds `--branch`, which instruments only on a nightly
@@ -739,6 +744,10 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`install` writes a refreshed managed block (#353): the region's content hash changes, so the next
+run on a repo carrying the old block rewrites the owned region in place — the tail now carries the
+docs-site and `llms.txt` pointers only. Content outside the markers is untouched, as before.
+
 `unit coverage --language rust` now resolves the toolchain from the scanned crate (#267): the
 run drops an inherited `RUSTUP_TOOLCHAIN` / `CARGO` / `RUSTC` selection, so the crate's own
 `rust-toolchain.toml` (or the rustup default / directory override) decides. When the tool is
@@ -838,6 +847,14 @@ Exemptions (#32) change runtime behavior:
   isn't removed or updated. No API or config change.
 
 ### Verification
+
+```
+cd packages/rust && cargo test --test install --test install_e2e
+```
+
+Expected: all pass — the block `install` writes links the docs root and `llms.txt` and carries no
+link to the removed CLI guide page, and a re-run over a stale block refreshes the owned region and
+leaves consumer content untouched.
 
 ```
 cd packages/rust && cargo test --test coverage_metrics --test coverage_metrics_e2e

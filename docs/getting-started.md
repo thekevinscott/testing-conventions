@@ -86,8 +86,9 @@ you fix the code, or record a reasoned exemption in
 ## Teach your agent
 
 Run `npx testing-conventions install` to write the contract into your repo's `AGENTS.md`, so a
-coding agent knows the rules before it writes code. Re-running refreshes the block; everything
-outside its markers stays yours.
+coding agent knows the rules before it writes code. The managed block carries the contract's
+non-negotiables and points at this site and its machine-readable digest (`llms.txt`). Re-running
+refreshes the block; everything outside its markers stays yours.
 
 ## Next
 

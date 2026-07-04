@@ -18,8 +18,11 @@ inputs:
 
 outputs:
   languages:
-    description: 'JSON array of present python/typescript languages (the colocated-test / coverage matrix).'
+    description: 'JSON array of present python/typescript languages (the co-change matrix — rust units are inline, so co-change does not apply).'
     value: ${{ steps.scan.outputs.languages }}
+  colocated_test_languages:
+    description: 'Present languages plus rust when a crate is present (the whole-tree colocated-test matrix — the rust arm checks inline `#[cfg(test)]` presence, #274).'
+    value: ${{ steps.scan.outputs.colocated_test_languages }}
   integration_lint_languages:
     description: 'Present languages plus rust (the integration-lint matrix).'
     value: ${{ steps.scan.outputs.integration_lint_languages }}

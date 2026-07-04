@@ -37,7 +37,7 @@ offending files in the log. Each links to its explanation page.
 
 | Check | Runs | Notes |
 | --- | --- | --- |
-| [`unit colocated-test`](../explanation/colocated-test) | always | Plus the diff-scoped co-change (`--base`) job on pull requests (Python, TypeScript). |
+| [`unit colocated-test`](../explanation/colocated-test) | always | Python, TypeScript, and Rust (inline `#[cfg(test)]` presence). Plus the diff-scoped co-change (`--base`) job on pull requests, for Python and TypeScript — Rust units are inline, so a sibling test can't go stale and co-change doesn't apply. |
 | [`unit coverage`](../explanation/coverage) | always | The language's [default floor](./config#coverage), plus the changed-line (`--base`) job on pull requests. |
 | [`unit lint`](../explanation/isolation) | always | Python, TypeScript, Rust. |
 | [`integration lint`](../explanation/isolation) | always | Python, TypeScript, Rust. |

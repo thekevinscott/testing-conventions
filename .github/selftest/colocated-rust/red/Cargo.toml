@@ -1,0 +1,10 @@
+# Red self-test crate `orphan`: `src/lib.rs` defines a bodied function with no inline
+# `#[cfg(test)]` module — the orphan the rust colocated-test presence arm (#40) must
+# flag once the reusable workflow fans the check over rust (#274). No deps, so
+# `[workspace]` keeps it standalone.
+[package]
+name = "orphan"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

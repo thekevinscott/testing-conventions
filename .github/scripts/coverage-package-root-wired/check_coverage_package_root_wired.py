@@ -79,7 +79,7 @@ def find_missing_wiring(text: str) -> Optional[str]:
 
 
 def main(argv: list[str]) -> int:
-    path = Path(argv[1]) if len(argv) > 1 else Path(DEFAULT_WORKFLOW)
+    path = Path(argv[1]) if argv[1:] else Path(DEFAULT_WORKFLOW)
     text = path.read_text()
     missing = find_missing_wiring(text)
     if missing is not None:

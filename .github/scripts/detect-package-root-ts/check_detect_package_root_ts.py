@@ -26,45 +26,54 @@ EXPECTED_CONFIG = ".github/selftest/monorepo/packages/ts/testing-conventions.tom
 def evaluate(
     package_root: str, ts_package_manager: str, provision_rust: str, config: str
 ) -> Optional[str]:
-    """Return an error message if any detect output is wrong, else None.
+    """Return an error message for the first wrong detect output, else None.
 
-    Pure: takes the four detect outputs as plain strings and compares each against the value
-    package-root discovery is required to produce for the TS fixture.
+    Pure: pairs each of the four detect outputs with the value package-root discovery must
+    produce for the TS fixture, and returns that pair's message on the first mismatch.
     """
-    if package_root != EXPECTED_PACKAGE_ROOT:
-        return (
+    checks = (
+        (
+            package_root,
+            EXPECTED_PACKAGE_ROOT,
             "expected the ts fixture's own directory as package_root, "
-            f"got {package_root}"
-        )
-    if ts_package_manager != EXPECTED_TS_PACKAGE_MANAGER:
-        return (
+            f"got {package_root}",
+        ),
+        (
+            ts_package_manager,
+            EXPECTED_TS_PACKAGE_MANAGER,
             "expected ts_package_manager=npm (package-lock.json, no packageManager field), "
-            f"got {ts_package_manager}"
-        )
-    if provision_rust != EXPECTED_PROVISION_RUST:
-        return (
+            f"got {ts_package_manager}",
+        ),
+        (
+            provision_rust,
+            EXPECTED_PROVISION_RUST,
             "expected provision_rust=false (no Cargo.toml/maturin/napi), "
-            f"got {provision_rust}"
-        )
-    if config != EXPECTED_CONFIG:
-        return (
+            f"got {provision_rust}",
+        ),
+        (
+            config,
+            EXPECTED_CONFIG,
             "expected the ts fixture's own testing-conventions.toml as config, "
-            f"got {config}"
-        )
+            f"got {config}",
+        ),
+    )
+    for actual, expected, message in checks:
+        if actual != expected:
+            return message
     return None
 
 
-def main(argv: list[str]) -> int:
-    args = argv[1:]
-    if len(args) != 4:
+def main(argv: list) -> int:
+    try:
+        package_root, ts_package_manager, provision_rust, config = argv[1:]
+    except ValueError:
         print(
             "::error::usage: check_detect_package_root_ts.py "
             "<package_root> <ts_package_manager> <provision_rust> <config>"
         )
         return 1
-    package_root, ts_package_manager, provision_rust, config = args
     error = evaluate(package_root, ts_package_manager, provision_rust, config)
-    if error is not None:
+    if error:
         print(f"::error::{error}")
         return 1
     print(

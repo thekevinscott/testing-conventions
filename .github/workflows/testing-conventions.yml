@@ -359,11 +359,11 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'pip'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'pip'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
         name: Install coverage toolchain (coverage.py + pytest)
         run: python -m pip install --quiet coverage pytest
       # A package root whose pyproject.toml carries a [project] table (python_env ==
@@ -371,11 +371,11 @@ jobs:
       # installs them AND builds/installs the project itself, so a maturin package's
       # native module compiles right here (cargo already provisioned above) — zero
       # config, no build_command / rust_toolchain needed.
-      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'uv'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
         uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.12'
-      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'uv'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
         name: Provision the project environment (uv)
         working-directory: ${{ needs.detect.outputs.package_root }}
         run: |
@@ -387,7 +387,7 @@ jobs:
       # manager (pnpm or npm, #277) and the install location (the package root, #278)
       # are both derived from the package's own manifest/lockfile, so a
       # per-package-lockfile monorepo package installs correctly with no config.
-      - if: matrix.language == 'typescript' && needs.detect.outputs.ts_package_manager == 'pnpm'
+      - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
         with:
           version: 10.33.0
@@ -399,7 +399,7 @@ jobs:
         name: Install project dependencies
         working-directory: ${{ needs.detect.outputs.package_root }}
         env:
-          PM: ${{ needs.detect.outputs.ts_package_manager }}
+          PM: ${{ needs.detect.outputs.ts_package_manager || 'pnpm' }}
         run: |
           set -euo pipefail
           if [ "$PM" = "pnpm" ]; then pnpm install --frozen-lockfile; else npm ci; fi
@@ -474,21 +474,21 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'pip'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'pip'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
         name: Install coverage toolchain (coverage.py + pytest)
         run: python -m pip install --quiet coverage pytest
       # A package root with a [project] table (python_env == 'uv', #277): `uv sync`
       # installs the project's own dependencies and builds/installs the project
       # itself, as in the whole-tree coverage job.
-      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'uv'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
         uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.12'
-      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'uv'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
         name: Provision the project environment (uv)
         working-directory: ${{ needs.detect.outputs.package_root }}
         run: |
@@ -496,7 +496,7 @@ jobs:
           uv sync
           uv pip install coverage pytest
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-      - if: matrix.language == 'typescript' && needs.detect.outputs.ts_package_manager == 'pnpm'
+      - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
         with:
           version: 10.33.0
@@ -508,7 +508,7 @@ jobs:
         name: Install project dependencies
         working-directory: ${{ needs.detect.outputs.package_root }}
         env:
-          PM: ${{ needs.detect.outputs.ts_package_manager }}
+          PM: ${{ needs.detect.outputs.ts_package_manager || 'pnpm' }}
         run: |
           set -euo pipefail
           if [ "$PM" = "pnpm" ]; then pnpm install --frozen-lockfile; else npm ci; fi

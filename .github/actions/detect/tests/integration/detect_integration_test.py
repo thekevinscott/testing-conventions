@@ -30,11 +30,17 @@ def fs():
         "python_env": "pip",
         "provision_rust": "false",
         "config": "testing-conventions.toml",
+        "attestation_roots_seen": [],
     }
+
+    def has_attestation(root):
+        state["attestation_roots_seen"].append(root)
+        return state["attestation"]
+
     with patch.object(detect, "has_source", lambda root, language: state[language]), \
             patch.object(detect, "has_rust_crate", lambda root: state["rust_crate"]), \
             patch.object(detect, "has_dist", lambda root: state["dist"]), \
-            patch.object(detect, "has_attestation", lambda root: state["attestation"]), \
+            patch.object(detect, "has_attestation", has_attestation), \
             patch.object(detect, "derive_package_root", lambda scan_root, repo_root: state["package_root"]), \
             patch.object(detect, "ts_package_manager", lambda root: state["ts_package_manager"]), \
             patch.object(detect, "python_env", lambda root: state["python_env"]), \
@@ -129,3 +135,13 @@ def test_config_output_is_wired_from_derive_config(fs):
     fs["config"] = "packages/ts/testing-conventions.toml"
     out = detect.compute_outputs("", scan_root="/repo/packages/ts/src", repo_root="/repo")
     assert out["config"] == "packages/ts/testing-conventions.toml"
+
+
+def test_attestation_is_looked_up_at_the_package_root_not_the_repo_root(fs):
+    # #281: `has_attestation` is called with `package_root`, not the checkout root — the
+    # fixture's `has_attestation` records every root it receives, proving the wiring.
+    fs["package_root"] = Path("/repo/packages/x")
+    fs["attestation"] = True
+    out = detect.compute_outputs("", scan_root="/repo/packages/x/src", repo_root="/repo")
+    assert fs["attestation_roots_seen"] == [Path("/repo/packages/x")]
+    assert out["e2e_attestation"] == "true"

@@ -104,3 +104,72 @@ fn verify_exits_nonzero_with_the_attest_hint_when_stale() {
         "the failure should hint to re-run attest; got: {stderr}"
     );
 }
+
+// --- #281: `e2e verify <path>` behaves identically to running with cwd
+// `<path>` — proven end-to-end by spawning the built binary with cwd fixed at
+// the *repo root* while the path argument names the package subdirectory
+// carrying the attestation. Before the CLI grows the `path` argument, passing
+// an extra positional here is a clap usage error (non-zero exit, no
+// attestation-shaped message), so these start red.
+
+#[test]
+fn verify_with_path_argument_exits_zero_when_the_package_attestation_is_fresh() {
+    let repo = TempRepo::new();
+    let package_rel = "packages/widget";
+    std::fs::create_dir_all(repo.0.join(package_rel)).unwrap();
+    // The package needs its own code commit before an attestation of it can be
+    // fresh — a never-committed directory has no code history the `.`
+    // pathspec (scoped to the package's cwd) can find.
+    repo.commit_code(&format!("{package_rel}/widget.rs"), "pub fn widget() {}\n");
+    // Attest scoped to the package subdirectory (cwd = the package).
+    assert_eq!(
+        run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]).0,
+        0,
+        "attest should record the run"
+    );
+    // Verify from the repo root, naming the package via the new positional
+    // argument — this must behave identically to running with cwd = package.
+    let (code, _) = run_cli(&repo.0, &["e2e", "verify", package_rel]);
+    assert_eq!(
+        code, 0,
+        "a fresh package-scoped attestation should pass verify via the path argument"
+    );
+}
+
+#[test]
+fn verify_with_path_argument_exits_nonzero_when_the_package_attestation_is_stale() {
+    let repo = TempRepo::new();
+    let package_rel = "packages/widget";
+    std::fs::create_dir_all(repo.0.join(package_rel)).unwrap();
+    repo.commit_code(&format!("{package_rel}/widget.rs"), "pub fn widget() {}\n");
+    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
+    // Move the package's code on without re-attesting.
+    repo.commit_code(
+        &format!("{package_rel}/widget2.rs"),
+        "pub fn widget2() {}\n",
+    );
+
+    let (code, stderr) = run_cli(&repo.0, &["e2e", "verify", package_rel]);
+    assert_ne!(
+        code, 0,
+        "a stale package-scoped attestation should fail verify via the path argument"
+    );
+    assert!(
+        stderr.contains("attest"),
+        "the failure should hint to re-run attest; got: {stderr}"
+    );
+}
+
+#[test]
+fn verify_with_no_argument_is_unchanged_from_today() {
+    // Regression guard: `e2e verify` with no argument stays byte-identical —
+    // the default `.` resolves against cwd, exactly like the pre-#281 behavior
+    // covered above.
+    let repo = TempRepo::new();
+    run_cli(&repo.0, &["e2e", "attest", "true"]);
+    let (code, _) = run_cli(&repo.0, &["e2e", "verify"]);
+    assert_eq!(
+        code, 0,
+        "a fresh attestation at cwd should still pass with no argument"
+    );
+}

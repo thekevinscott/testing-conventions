@@ -40,6 +40,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and provisioning now also fire automatically when the package manifest declares a Rust-compiling
   build (`needs.detect.outputs.provision_rust`), with `rust_toolchain` remaining as a manual
   override. See [MIGRATIONS](./MIGRATIONS.md).
+- **`e2e verify [path]`** (#281). `e2e verify` takes an optional directory argument (default: the
+  current directory) whose committed `e2e-attestation.json` is checked — `testing-conventions e2e
+  verify packages/widget` behaves identically to running `e2e verify` with `packages/widget` as
+  the current directory, so a monorepo package's attestation can be verified without a `cd`. No
+  argument is byte-identical to today. `detect`'s `e2e_attestation` flag (internal to this repo's
+  own CI, not shipped) moves with it: it now looks for the attestation at the package root rather
+  than the checkout root.
+
 - **`install`** (#232). Writes the testing contract into the repository's `AGENTS.md` as a
   marker-delimited, hash-versioned block (the beads `bd init` pattern), so a coding agent learns
   the contract before writing code. Idempotent: re-running refreshes the owned region; everything

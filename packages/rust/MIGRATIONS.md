@@ -1001,9 +1001,15 @@ from today), and `e2e verify packages/widget` run from the repo root behaves ide
 running `e2e verify` with `packages/widget` as the current directory (fresh/stale/missing).
 Includes the `#294` cases: a commit outside `--scope` but inside `path` doesn't trip staleness, a
 commit inside `--scope` still does, and omitting `--scope` stays byte-identical to `#281`'s
-whole-`path` freshness walk. The reusable workflow doesn't pass `--scope` yet — that's a follow-up
-PR once this release publishes the flag (see AGENTS.md, "Two-step rollout for workflow-consumed CLI
-changes").
+whole-`path` freshness walk.
+
+```
+grep -n -- '--scope' .github/workflows/testing-conventions.yml
+```
+
+Expected: a match in the `e2e-verify` job's `run:` line. No Rust API change is measured by this
+grep (workflow-only wiring); the `e2e::verify_scoped` behavior itself is covered by the test file
+above.
 
 ```
 cd packages/rust && cargo test --test install --test install_e2e

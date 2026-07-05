@@ -617,7 +617,11 @@ jobs:
       - name: Verify the e2e attestation is current
         env:
           VERSION: ${{ inputs.version }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" e2e verify
+          PACKAGE_ROOT: ${{ needs.detect.outputs.package_root }}
+        # `<path>` scopes attestation discovery to the package root (#281), matching
+        # `detect`'s package-scoped `e2e_attestation` flag above — requires a CLI new
+        # enough to accept the argument (published after #281 lands and `@v0` moves).
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" e2e verify "$PACKAGE_ROOT"
 
   packaging:
     name: Packaging (no test files in the built artifact)

@@ -23,10 +23,18 @@ name: Dogfood
 #                   file-based rule.
 #   e2e-verify    — dogfoods the e2e attestation nudge (#71): packages/node carries a
 #                   tests/e2e suite and a committed e2e-attestation.json, and CI runs
-#                   `e2e verify` to confirm the attestation names the package's latest
-#                   code commit. Kept a direct, package-scoped call (cwd =
-#                   packages/node) because the attestation lives in that subdir, not
-#                   the repo root the reusable workflow's e2e-verify job checks.
+#                   the reusable workflow's own `e2e-verify` job, scoped to `packages/node`
+#                   via `path` — the in-repo whole-hog proof for this gate (#281). Before
+#                   #281 this had to be a bespoke job (build the CLI from source, `cd
+#                   packages/node`) because the reusable workflow's e2e-verify job could
+#                   only check the checkout root, not a package subdirectory. NOTE: the
+#                   reusable job runs the *published* `testing-conventions` binary via
+#                   `npx`, and the `e2e verify <path>` argument only exists once a release
+#                   carries #281 — so right after #281 merges (before the next release
+#                   publishes it and `@v0` moves), this job runs the old binary against
+#                   the new workflow's `<path>` argument and fails with an unrecognized-
+#                   argument error until that release goes out (see internals/repo.md,
+#                   "Self-test and the `@v0` path").
 
 on:
   pull_request:
@@ -65,24 +73,11 @@ jobs:
 
   e2e-verify:
     name: E2E attestation (packages/node)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          # `e2e verify` finds packages/node's latest code commit via `git log`,
-          # so it needs full history — a shallow clone would miss it whenever
-          # HEAD itself doesn't touch the package.
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: packages/rust
-      - name: Build the CLI from source
-        run: cargo build --release --bin testing-conventions
-        working-directory: packages/rust
-      # cwd = packages/node, so verify is scoped to that package: it passes only
-      # when the committed e2e-attestation.json names the package's latest code
-      # commit, and nudges to re-attest (exit 1) when the code has moved on.
-      - name: Verify the e2e attestation is current
-        run: ../rust/target/release/testing-conventions e2e verify
-        working-directory: packages/node
+    # #281: the shipped reusable workflow's own e2e-verify job, scoped to packages/node
+    # via `path` and to just this gate via `gates` — replaces the old bespoke
+    # build-from-source job now that the reusable workflow's e2e-verify job accepts a
+    # package subdirectory instead of only the checkout root.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      path: packages/node
+      gates: '["e2e-verify"]'

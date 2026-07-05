@@ -110,6 +110,29 @@ it passes a CLI argument — full stop. Reading genuinely external, process-wide
 owns (`CI`, `PATH`, `HOME`) is fine; inventing your own env var to wire two parts of *this* project
 together is not.
 
+## Logic lives in scripts, not workflow YAML
+
+**A workflow's `run:` step holds no logic** — it wires a trigger, a checkout, and env, then invokes
+a standalone, colocated-tested script. Any assertion, parse, or multi-line decision (`grep`/`awk`
+wiring checks, output validation, red-path exit-code checks) belongs in a `.github/scripts/<name>/`
+module with its own unit test, run as `run: python3 .github/scripts/<name>/check_<name>.py`.
+
+Two reasons this is a rule, not a preference:
+
+- **A script carries tests; an inline block carries none.** Logic in YAML is untested prose,
+  exercised only by a full CI run. Under `.github/scripts/`, `dogfood-github-helpers.yml` already
+  holds it to the shipped bar — colocated test, isolation, the coverage floor, integration-lint,
+  and diff-scoped mutation — so a script earns real coverage for free.
+- **GitHub templates `run:` text for `${{ }}` before the shell sees it.** A literal
+  `${{ inputs.path }}` embedded in a `grep` pattern gets evaluated (and stripped) by that
+  templating, silently breaking the check. A file the workflow *invokes* is never templated, so
+  extracting to a script sidesteps the whole class (#301, #302).
+
+Follow the `move-major-tag` (`move_major_tag.py` + colocated unit test + `tests/`) and
+`check_e2e_verify_scope_wired` precedents for structure. Passing a value from a step to a script is
+a CLI argument (`… check.py "${{ steps.detect.outputs.package_root }}"`), never an env
+side-channel — see **Never pass data through the environment**.
+
 ## Affirmative voice
 
 Write docs and user-facing text by stating what the tool **does** and what the user **provides** —

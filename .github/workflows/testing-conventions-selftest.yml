@@ -704,13 +704,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml must wire a build_command step
-        run: |
-          set -euo pipefail
-          if ! grep -q 'needs.detect.outputs.build_command' .github/workflows/testing-conventions.yml; then
-            echo "::error::the reusable workflow has no derived \`build_command\` step — a native-binding consumer's compiled module is never built before the suite runs (#243/#289)"
-            exit 1
-          fi
-          echo "reusable workflow wires a build_command step"
+        run: python3 .github/scripts/build-command-wired/check_build_command_wired.py
 
   # ---- #262: a gates allowlist so a consumer can run a subset of gates ----
 
@@ -729,13 +723,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml must wire a `gates` allowlist
-        run: |
-          set -euo pipefail
-          if ! grep -q 'inputs.gates' .github/workflows/testing-conventions.yml; then
-            echo "::error::the reusable workflow has no \`gates\` input — gate selection is all-or-nothing, so a consumer that runs the suite-executing gates in its own build-capable jobs cannot adopt the workflow for the static gates (#262)"
-            exit 1
-          fi
-          echo "reusable workflow scopes its gates to the \`gates\` allowlist"
+        run: python3 .github/scripts/gates-wired/check_gates_wired.py
 
   gates-scoped-static:
     name: A gates allowlist runs the static gates and skips the suite-executing ones
@@ -802,13 +790,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml must wire a `rust_toolchain` setup step
-        run: |
-          set -euo pipefail
-          if ! grep -q 'inputs.rust_toolchain' .github/workflows/testing-conventions.yml; then
-            echo "::error::the reusable workflow has no \`rust_toolchain\` input — a native binding whose build_command compiles a Rust core has no cargo in the python/typescript suite-executing jobs, so the build fails before the suite runs (#263)"
-            exit 1
-          fi
-          echo "reusable workflow provisions a Rust toolchain behind \`rust_toolchain\`"
+        run: python3 .github/scripts/rust-toolchain-wired/check_rust_toolchain_wired.py
 
   rust-toolchain-clean:
     name: A rust_toolchain call finds cargo before build_command

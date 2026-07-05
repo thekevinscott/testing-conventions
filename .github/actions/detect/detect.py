@@ -25,6 +25,7 @@ import json
 import os
 import tomllib
 from pathlib import Path
+from typing import Optional
 
 # Source globs per language. Rust is a crate (a Cargo.toml or any *.rs), detected separately.
 _SOURCE_GLOBS: dict[str, tuple[str, ...]] = {
@@ -130,12 +131,14 @@ def derive_package_root(scan_root: Path, repo_root: Path) -> Path:
     """
     scan_root = scan_root.resolve()
     repo_root = repo_root.resolve()
-    candidates = [scan_root]
-    current = scan_root
-    while current != repo_root and current.parent != current:
-        current = current.parent
-        candidates.append(current)
-    if repo_root not in candidates:
+    candidates = []
+    for ancestor in [scan_root, *scan_root.parents]:
+        candidates.append(ancestor)
+        if ancestor == repo_root:
+            break
+    else:
+        # The walk never reached repo_root (scan_root isn't under it): fall back to checking
+        # repo_root itself, without crossing its boundary outward.
         candidates.append(repo_root)
     for candidate in candidates:
         if has_manifest(candidate):
@@ -143,11 +146,11 @@ def derive_package_root(scan_root: Path, repo_root: Path) -> Path:
     return repo_root
 
 
-def _package_manager_from_field(value: str) -> str | None:
+def _package_manager_from_field(value: str) -> Optional[str]:
     """The manager name from a `package.json` `packageManager` value like `pnpm@8.6.0`, or
     `None` when the field is empty.
     """
-    return value.split("@", 1)[0] if value else None
+    return value.partition("@")[0] if value else None
 
 
 def ts_package_manager(package_root: Path) -> str:

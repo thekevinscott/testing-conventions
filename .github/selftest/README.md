@@ -49,3 +49,20 @@ end to end.
 `testing-conventions.toml` with the `[python].coverage` floor for that run. The
 self-test drives the *published* `testing-conventions` binary (what consumers get via
 `npx`), so these fixtures track the released surface rather than this branch's source.
+
+- `monorepo/` — a per-package-lockfile monorepo with **no manifest or lockfile at its own
+  root** ([#277](https://github.com/thekevinscott/testing-conventions/issues/277)),
+  mirroring the shape a real consumer hit (dirsql PR #410):
+  - `packages/ts/` — an npm package (its own `package.json` + `package-lock.json`, no
+    `packageManager` field) with a colocated vitest suite.
+  - `packages/py/` — a uv-managed package (`pyproject.toml` with a `[project]` table and
+    a real third-party dependency, plus `uv.lock`) with a colocated pytest suite.
+
+  Each package also carries its own `testing-conventions.toml` at its package root.
+  `detect-package-root-ts` / `detect-package-root-py` drive the *local* detect action
+  (not the `@v0`-pinned one the reusable workflow's `detect` job uses) to prove
+  `package_root` / `ts_package_manager` / `python_env` / `provision_rust` / `config`
+  resolve correctly for each package — including that each package's own config file
+  is discovered with no `config` input — so, like `detect-routes-python`, they aren't
+  blocked by the `@v0` rolling-release lag. The gate fixes that consume these outputs
+  (#278–#281) drive this same fixture through real per-package `uses:` calls.

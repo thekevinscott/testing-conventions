@@ -25,11 +25,21 @@ def fs():
         "rust_crate": False,
         "dist": False,
         "attestation": False,
+        "package_root": Path("/repo"),
+        "ts_package_manager": "pnpm",
+        "python_env": "pip",
+        "provision_rust": "false",
+        "config": "testing-conventions.toml",
     }
     with patch.object(detect, "has_source", lambda root, language: state[language]), \
             patch.object(detect, "has_rust_crate", lambda root: state["rust_crate"]), \
             patch.object(detect, "has_dist", lambda root: state["dist"]), \
-            patch.object(detect, "has_attestation", lambda root: state["attestation"]):
+            patch.object(detect, "has_attestation", lambda root: state["attestation"]), \
+            patch.object(detect, "derive_package_root", lambda scan_root, repo_root: state["package_root"]), \
+            patch.object(detect, "ts_package_manager", lambda root: state["ts_package_manager"]), \
+            patch.object(detect, "python_env", lambda root: state["python_env"]), \
+            patch.object(detect, "provision_rust", lambda root: state["provision_rust"]), \
+            patch.object(detect, "derive_config", lambda package_root_rel, config_input: state["config"]):
         yield state
 
 
@@ -95,3 +105,27 @@ def test_packaging_dist_and_attestation_absent(fs):
     out = detect.compute_outputs("", scan_root="/repo")
     assert out["packaging_dist"] == "false"
     assert out["e2e_attestation"] == "false"
+
+
+def test_monorepo_outputs_wired_from_the_package_root(fs):
+    fs["package_root"] = Path("/repo/packages/ts")
+    fs["ts_package_manager"] = "npm"
+    fs["python_env"] = "uv"
+    fs["provision_rust"] = "true"
+    out = detect.compute_outputs("", scan_root="/repo/packages/ts/src", repo_root="/repo")
+    assert out["package_root"] == "packages/ts"
+    assert out["ts_package_manager"] == "npm"
+    assert out["python_env"] == "uv"
+    assert out["provision_rust"] == "true"
+
+
+def test_package_root_relative_is_dot_when_it_is_the_repo_root(fs):
+    fs["package_root"] = Path("/repo")
+    out = detect.compute_outputs("", scan_root="/repo/src", repo_root="/repo")
+    assert out["package_root"] == "."
+
+
+def test_config_output_is_wired_from_derive_config(fs):
+    fs["config"] = "packages/ts/testing-conventions.toml"
+    out = detect.compute_outputs("", scan_root="/repo/packages/ts/src", repo_root="/repo")
+    assert out["config"] == "packages/ts/testing-conventions.toml"

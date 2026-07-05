@@ -31,6 +31,8 @@ fn expected_valid() -> Config {
                 fail_under: 100,
             }),
             exempt: vec![],
+            build_command: None,
+            reason: String::new(),
         }),
         typescript: Some(TypeScriptConfig {
             coverage: Some(TypeScriptCoverage {
@@ -135,10 +137,14 @@ fn loads_a_python_build_command_with_a_reason() {
     // #289: `[python].build_command` (plus a required `reason`) is a valid config key. The
     // binary never runs it — detect derives it and the workflow's jobs do — but the schema
     // must accept it, since `deny_unknown_fields` otherwise rejects a consumer's config.
-    assert!(
-        load_config(fixture("python_build_command.toml")).is_ok(),
-        "a [python].build_command with a reason should load once the schema accepts it"
+    let config = load_config(fixture("python_build_command.toml"))
+        .expect("a [python].build_command with a reason should load");
+    let python = config.python.expect("[python] table present");
+    assert_eq!(
+        python.build_command.as_deref(),
+        Some("uv run maturin develop")
     );
+    assert!(!python.reason.trim().is_empty(), "the reason must survive");
 }
 
 #[test]

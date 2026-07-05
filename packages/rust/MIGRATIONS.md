@@ -28,10 +28,22 @@ and now also auto-fires when the package manifest itself declares a Rust-compili
 `Cargo.toml`, a maturin `pyproject.toml` backend, a napi `package.json` key) — `rust_toolchain`
 remains as a manual override for a build no manifest field expresses — and caches `target` under
 the package root. No Rust-arm change to `mutation` itself — cargo-mutants already runs from the
-scan root and cargo walks up to the crate. One breaking change to a documented workflow input:
-`build_command` now runs at the package root instead of the checkout root (see **Required
-changes**). A single-package pnpm/pip consumer with no Rust build declared in its manifest is
-unaffected (see **Behavior changes without code changes**).
+scan root and cargo walks up to the crate. The build hook itself moves off the `uses:` call in the
+same release (#289, below), so the migration is to the `[python] build_command` config key rather
+than a repositioned input. A single-package pnpm/pip consumer with no Rust build declared in its
+manifest is unaffected (see **Behavior changes without code changes**).
+
+Moves the `build_command` escape hatch from a reusable-workflow input to a **`[python]
+build_command` config key** (#289). The `build_command` *workflow input* is removed; a Python
+package whose suite imports a compiled module now declares the build in its own
+`testing-conventions.toml` as `[python] build_command`, with a required `reason` (validated
+non-empty on load). `detect` reads it from the config discovered at the package root and emits a
+`build_command` output; the `unit-coverage`, `coverage-changed`, and `mutation` jobs run
+`needs.detect.outputs.build_command` at the package root. Breaking for a consumer setting
+`build_command:` on the `uses:` call, and — because `[python] build_command` is a new public field
+on `config::PythonConfig` — one breaking SDK change (see **Required changes**). Python-only,
+matching the analysis that TypeScript's npm `prepare` / `postinstall` and Rust's `build.rs` are
+manifest-native build hooks that never needed the input.
 
 Adds an optional directory argument to **`e2e verify [path]`** (#281): `path` defaults to the
 current directory, so a no-argument call is byte-identical to today. Passing a package
@@ -589,21 +601,40 @@ existing command, flag, config key, or SDK item changes.
 
 ### Required changes
 
-The reusable workflow's `build_command` input (`unit-coverage`, `coverage-changed`, and — unchanged
-— `unit mutation`) now runs at `needs.detect.outputs.package_root` instead of the checkout root
-(#278). Delete any leading `cd ... &&` your command used to smuggle in:
+`config::PythonConfig` gains `build_command: Option<String>` and `reason: String` (#289). Both
+carry serde defaults, so a `testing-conventions.toml` without them parses unchanged; but a struct
+literal must add the fields — `None` / `String::new()` preserve prior behavior:
 
-```yaml
-# Before:
-build_command: cd packages/python && uv run maturin develop
-# After:
-build_command: uv run maturin develop
+```rust
+// Before:
+PythonConfig { coverage: Some(cov), exempt: vec![] }
+// After:
+PythonConfig { coverage: Some(cov), exempt: vec![], build_command: None, reason: String::new() }
 ```
 
-Most callers can delete the `build_command` (and `rust_toolchain`) input entirely once their
-manifest declares the build: a `pyproject.toml` with a maturin `build-system.build-backend`, or a
-`package.json` with a `napi` key / `@napi-rs/cli` devDependency, now builds and provisions cargo
-automatically (see **Behavior changes without code changes**).
+The reusable workflow's `build_command` **input is removed** (#289); a consumer setting it on the
+`uses:` call moves that shell command into the package's own `testing-conventions.toml` as `[python]
+build_command`, with a required `reason`. It runs at the derived package root (#278), so delete any
+leading `cd ... &&` the input smuggled in:
+
+```yaml
+# Before — on the uses: call:
+    with:
+      build_command: cd packages/python && uv run maturin develop
+```
+
+```toml
+# After — in packages/python/testing-conventions.toml:
+[python]
+build_command = "uv run maturin develop"
+reason = "maturin's PEP 517 backend builds the wheel but exposes no pre-build shell hook"
+```
+
+Most callers need neither the key nor the `rust_toolchain` input once their manifest declares the
+build: a `pyproject.toml` with a maturin `build-system.build-backend`, or a `package.json` with a
+`napi` key / `@napi-rs/cli` devDependency, now builds and provisions cargo automatically (see
+**Behavior changes without code changes**). Reach for `[python] build_command` only for a Python
+build the manifest can't express.
 
 `config::RustCoverage` and `coverage::RustThresholds` gain `functions: Option<u8>` and
 `branch: Option<u8>`, and `coverage::LlvmCovTotals` gains `functions: LlvmCovMetric` and

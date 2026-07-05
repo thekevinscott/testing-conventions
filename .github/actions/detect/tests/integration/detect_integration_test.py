@@ -159,6 +159,17 @@ def test_config_output_is_wired_from_derive_config(fs):
     assert out["config"] == "packages/ts/testing-conventions.toml"
 
 
+# --- #289: the [python].build_command escape hatch is emitted as an output ---
+
+
+def test_build_command_output_is_emitted(fs):
+    # compute_outputs emits a `build_command` output (derived from the package's own
+    # testing-conventions.toml, discovered at the package root like `config`). The workflow's
+    # suite-executing jobs read it instead of the removed `build_command` input.
+    out = detect.compute_outputs("", scan_root="/repo")
+    assert "build_command" in out
+
+
 def test_attestation_is_looked_up_at_the_package_root_not_the_repo_root(fs):
     # #281: `has_attestation` is called with `package_root`, not the checkout root — the
     # fixture's `has_attestation` records every root it receives, proving the wiring.

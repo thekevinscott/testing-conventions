@@ -24,8 +24,7 @@ jobs:
 | `config`             | `testing-conventions.toml` | The [config file](./config) supplying floors and exemptions. Discovery order: an explicit non-default value is used verbatim; otherwise a `testing-conventions.toml` at the derived [package root](../monorepo) wins if present, else the repo-root default. Absent (no file at any of those locations) means every check runs on its default. |
 | `base`               | `origin/main`              | Base ref for the diff-scoped `--base` jobs, diffed as `<base>...HEAD`. The diff-scoped jobs run on `pull_request` only. |
 | `version`            | latest                     | `testing-conventions` version to install (e.g. `0.1.0`). |
-| `build_command`      | `''` (no build step)       | An [escape hatch](../monorepo#escape-hatches): a shell command run at the derived package root, after toolchain and dependency setup and **before** the suite, in the suite-executing jobs only (`unit coverage`, changed-line coverage, `unit mutation`) — for a build the package manifest can't express. `unit coverage` / changed-line coverage auto-build a maturin (`uv sync`) or napi (`prepare` script) package from its manifest with no input set; set this only when that auto-derivation doesn't cover your build. The static checks parse source and never run it. |
-| `rust_toolchain`     | `false`                    | An [escape hatch](../monorepo#escape-hatches): `true` forces a stable Rust toolchain, with build caching (the cargo registry and `target/` under the package root, keyed off `Cargo.lock`), in the suite-executing jobs before `build_command` runs. `unit coverage` / changed-line coverage / `unit mutation` already auto-provision it when the package root's manifest declares a Rust-compiling build (a `Cargo.toml`, a maturin backend, a napi key — detect's `provision_rust`); set this by hand only for a build the manifest doesn't express. The `rust` matrix arm always carries its own toolchain. |
+| `rust_toolchain`     | `false`                    | An [escape hatch](../monorepo#escape-hatches): `true` forces a stable Rust toolchain, with build caching (the cargo registry and `target/` under the package root, keyed off `Cargo.lock`), in the suite-executing jobs before the derived [`[python] build_command`](./config#python-build_command) runs. `unit coverage` / changed-line coverage / `unit mutation` already auto-provision it when the package root's manifest declares a Rust-compiling build (a `Cargo.toml`, a maturin backend, a napi key — detect's `provision_rust`); set this by hand only for a build the manifest doesn't express. The `rust` matrix arm always carries its own toolchain. |
 | `packaging_artifact` | `''`                       | Name of an uploaded build artifact holding built distributions; when set, the packaging check downloads and inspects it. When empty, packaging runs over a conventional `dist/` at the derived package root (`.` for a single-package repo — see [Adopt on a monorepo](../monorepo)). An artifact holding no recognized distribution fails the job. |
 | `run_e2e`            | `false`                    | Forces the `e2e verify` job on. It is already on when a committed `e2e-attestation.json` is present. Needs the attestation and full history. |
 | `gates`              | `''` (all applicable)      | An [escape hatch](../monorepo#escape-hatches): a JSON array naming which checks run (`colocated-test`, `unit-lint`, `unit-coverage`, `mutation`, `integration-lint`, `packaging`, `e2e-verify`), for the rare package where one genuinely cannot run. Empty runs every applicable check. A named check's diff-scoped variant rides with it, and the allowlist is authoritative even when `run_e2e` / `packaging_artifact` is set. |
@@ -59,6 +58,13 @@ dependencies (must include `@stryker-mutator/core` and a runner plugin) install 
 installs `pytest` + the `testing-conventions` wheel globally for a `pip`-only project, or runs
 `uv sync` and installs both into the project's own `.venv` for a `uv`-managed one, so cosmic-ray's
 spawned pytest can import the project's dependencies and the adapter together.
+
+A Python package whose suite imports a compiled module builds it first via a
+[`[python] build_command`](./config#python-build_command) in its own `testing-conventions.toml`,
+discovered at the package root like the config file itself. The suite-executing jobs run that
+command after toolchain and dependency setup and before the suite; the static checks parse source,
+so they run no build. TypeScript and Rust need no key — an npm `prepare` / `postinstall` script and
+Cargo's `build.rs` build their compiled modules during dependency install.
 
 ## Versioning: `@v0` is a moving tag
 

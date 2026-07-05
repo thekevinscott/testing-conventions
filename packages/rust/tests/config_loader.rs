@@ -131,6 +131,35 @@ fn rejects_an_exemption_with_a_blank_reason_self_guard() {
 }
 
 #[test]
+fn loads_a_python_build_command_with_a_reason() {
+    // #289: `[python].build_command` (plus a required `reason`) is a valid config key. The
+    // binary never runs it — detect derives it and the workflow's jobs do — but the schema
+    // must accept it, since `deny_unknown_fields` otherwise rejects a consumer's config.
+    assert!(
+        load_config(fixture("python_build_command.toml")).is_ok(),
+        "a [python].build_command with a reason should load once the schema accepts it"
+    );
+}
+
+#[test]
+fn rejects_a_python_build_command_with_a_blank_reason_self_guard() {
+    // The reason is required — an unreasoned escape hatch can never be a silent pass,
+    // mirroring the exemption-reason bar.
+    assert!(
+        load_config(fixture("python_build_command_blank_reason.toml")).is_err(),
+        "a [python].build_command with a blank reason must be rejected (self-guard)"
+    );
+}
+
+#[test]
+fn rejects_a_python_build_command_with_no_reason_self_guard() {
+    assert!(
+        load_config(fixture("python_build_command_no_reason.toml")).is_err(),
+        "a [python].build_command with no reason must be rejected (self-guard)"
+    );
+}
+
+#[test]
 fn partial_coverage_tables_inherit_defaults() {
     // Each table sets only one field; the rest fall back to the language's default
     // floor (#216). Previously a partial table errored on the required fields.

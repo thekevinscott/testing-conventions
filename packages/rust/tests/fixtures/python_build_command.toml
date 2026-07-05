@@ -1,0 +1,5 @@
+# #289: a Python-only build escape hatch declared in the package's own config, with a
+# required reason. Must load.
+[python]
+build_command = "uv run maturin develop"
+reason = "maturin's PEP 517 backend builds the wheel but exposes no pre-build shell hook"

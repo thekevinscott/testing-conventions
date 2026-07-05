@@ -1,0 +1,4 @@
+# #289: a build_command with a blank reason — rejected on load, the exemption-reason bar.
+[python]
+build_command = "uv run maturin develop"
+reason = "   "

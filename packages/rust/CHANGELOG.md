@@ -36,6 +36,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   exemptions. A previously-affected consumer's reported percentage goes *up*; an unaffected one
   (no config file inside the scanned tree) is unchanged. No API or config change.
 
+- **`build_command` moves from a `uses:`-call input to a `[python] build_command` config key**
+  (#289). The reusable workflow's `build_command` *workflow input* is **removed**; the escape hatch
+  now lives in the package's own `testing-conventions.toml` as `[python] build_command`, carrying a
+  required `reason` (validated non-empty on load, the exemption-reason bar). `detect` reads it from
+  the config discovered at the package root and emits a `build_command` output; the `unit-coverage`,
+  `coverage-changed`, and `mutation` jobs run `needs.detect.outputs.build_command` instead of
+  `inputs.build_command`. **Breaking** for a consumer currently setting `build_command:` on the
+  `uses:` call (see `packages/rust/MIGRATIONS.md`). The key is Python-only: TypeScript's npm
+  `prepare` / `postinstall` and Rust's `build.rs` are manifest-native build hooks, so they never
+  needed the input. A consumer with no `[python] build_command` is unaffected — its absence means no
+  build step, byte-identical to the old empty `build_command: ''` default.
+
 - **`packaging` discovers `dist/` at the derived package root, not the checkout root** (#280).
   A per-package `uses:` call now inspects its own package's `dist/`; a repo-root `dist/` counts
   only for a call whose derived package root IS the repo root. Every single-package consumer's
@@ -71,6 +83,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and provisioning now also fire automatically when the package manifest declares a Rust-compiling
   build (`needs.detect.outputs.provision_rust`), with `rust_toolchain` remaining as a manual
   override. See [MIGRATIONS](./MIGRATIONS.md).
+
+- **`[python] build_command` config key** (#289). The `[python]` table takes a `build_command`
+  shell command — run by the suite-executing jobs after toolchain and dependency setup and before
+  the suite, for a Python package whose unit suite imports a compiled module (a maturin/PyO3
+  extension) — plus a required `reason` explaining why the manifest can't express the build. An
+  empty or missing reason is rejected on load, mirroring the exemption-reason bar. Python-only: an
+  npm `prepare` / `postinstall` script and Cargo's `build.rs` already cover TypeScript and Rust.
+
 - **`e2e verify [path]`** (#281). `e2e verify` takes an optional directory argument (default: the
   current directory) whose committed `e2e-attestation.json` is checked — `testing-conventions e2e
   verify packages/widget` behaves identically to running `e2e verify` with `packages/widget` as

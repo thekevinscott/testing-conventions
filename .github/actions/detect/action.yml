@@ -15,6 +15,10 @@ inputs:
     description: 'Directory scanned recursively for sources.'
     required: false
     default: 'src'
+  config:
+    description: 'Config file passed to `--config`; the default is refined to a package-root testing-conventions.toml when one exists there (#277).'
+    required: false
+    default: 'testing-conventions.toml'
 
 outputs:
   languages:
@@ -41,6 +45,21 @@ outputs:
   e2e_attestation:
     description: 'true when a committed e2e-attestation.json sits at the checkout root.'
     value: ${{ steps.scan.outputs.e2e_attestation }}
+  package_root:
+    description: 'The derived package root (#277): the nearest directory at-or-above `path` holding a package.json / pyproject.toml / Cargo.toml, else the checkout root (`.`).'
+    value: ${{ steps.scan.outputs.package_root }}
+  ts_package_manager:
+    description: 'The TypeScript package manager at `package_root`: its packageManager field, else pnpm/npm by lockfile, else pnpm.'
+    value: ${{ steps.scan.outputs.ts_package_manager }}
+  python_env:
+    description: 'The Python environment model at `package_root`: uv when pyproject.toml declares a [project] table, else pip.'
+    value: ${{ steps.scan.outputs.python_env }}
+  provision_rust:
+    description: 'true when the package_root manifest declares a Rust-compiling build (a Cargo.toml, a maturin build-backend, or a napi config) — lets the suite jobs provision cargo with no `rust_toolchain` input.'
+    value: ${{ steps.scan.outputs.provision_rust }}
+  config:
+    description: 'The config file to pass to `--config` (#277): the `config` input verbatim unless it is the default, in which case a package-root testing-conventions.toml wins if present.'
+    value: ${{ steps.scan.outputs.config }}
 
 runs:
   using: composite
@@ -50,6 +69,7 @@ runs:
       env:
         LANGUAGES: ${{ inputs.languages }}
         SCAN_PATH: ${{ inputs.path }}
+        CONFIG: ${{ inputs.config }}
       # `$GITHUB_ACTION_PATH` is this action's directory, so detect.py is found whether the
       # action is used locally (./.github/actions/detect) or by a consumer (owner/repo@ref).
       run: python3 "$GITHUB_ACTION_PATH/detect.py"

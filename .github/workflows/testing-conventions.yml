@@ -184,6 +184,17 @@ jobs:
       # jobs gate on these so they run by default and skip (never fail) when absent.
       packaging_dist: ${{ steps.scan.outputs.packaging_dist }}
       e2e_attestation: ${{ steps.scan.outputs.e2e_attestation }}
+      # The monorepo primitive (#277): everything a suite-executing job needs to install,
+      # build, and run at the right directory, derived from `path` and the package's own
+      # manifest rather than a second, consumer-facing scoping input.
+      package_root: ${{ steps.scan.outputs.package_root }}
+      ts_package_manager: ${{ steps.scan.outputs.ts_package_manager }}
+      python_env: ${{ steps.scan.outputs.python_env }}
+      provision_rust: ${{ steps.scan.outputs.provision_rust }}
+      # The config file every job's `--config` should receive (#277): `inputs.config`
+      # verbatim unless it's the default, in which case a package-root
+      # testing-conventions.toml wins if present — so a per-package call stops naming it.
+      config: ${{ steps.scan.outputs.config }}
     steps:
       - uses: actions/checkout@v6
       - id: scan
@@ -194,6 +205,7 @@ jobs:
         with:
           languages: ${{ inputs.languages }}
           path: ${{ inputs.path }}
+          config: ${{ inputs.config }}
 
   colocated-test:
     name: Colocated test (${{ matrix.language }})
@@ -223,7 +235,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           # Forward the config so `exempt` entries apply to the whole-tree check,
           # matching every other job (lint / coverage / co-change / mutation).
-          CONFIG: ${{ inputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   colocated-test-changed:
@@ -250,7 +262,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          CONFIG: ${{ inputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config }}
           BASE: ${{ inputs.base }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
 
@@ -280,7 +292,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          CONFIG: ${{ inputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   unit-coverage:
@@ -371,7 +383,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          CONFIG: ${{ inputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit coverage --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   coverage-changed:
@@ -450,7 +462,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          CONFIG: ${{ inputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config }}
           BASE: ${{ inputs.base }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit coverage --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
 
@@ -552,7 +564,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          CONFIG: ${{ inputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config }}
           BASE: ${{ inputs.base }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit mutation --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
 
@@ -581,7 +593,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          CONFIG: ${{ inputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" integration lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   e2e-verify:

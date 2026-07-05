@@ -14,7 +14,8 @@ deterministically.
 
 The mechanism is a pair:
 
-- **`e2e attest`** — the write half, run locally (by you or your agent) from the repository root:
+- **`e2e attest`** — the write half, run locally (by you or your agent) from the repository root
+  (or a package's own root, in a monorepo):
 
   ```sh
   testing-conventions e2e attest 'pnpm run e2e'
@@ -26,10 +27,13 @@ The mechanism is a pair:
   can't name its own SHA. It writes regardless of the command's exit code: the record is that the
   suite **ran**, and the honest result is part of the record.
 
-- **`e2e verify`** — the CI half, run by the [workflow](../reference/workflow). It reads the
-  committed attestation and passes only when its recorded SHA equals the **latest code commit**
-  (the newest commit that changed any path other than the attestation itself). It never runs the
-  suite and never inspects the recorded exit code: presence and freshness only.
+- **`e2e verify [path]`** — the CI half, run by the [workflow](../reference/workflow). It reads the
+  committed attestation at `path` (default: the current directory) and passes only when its
+  recorded SHA equals the **latest code commit** under `path` (the newest commit that changed any
+  path other than the attestation itself). It never runs the suite and never inspects the recorded
+  exit code: presence and freshness only. In a monorepo, `path` names the package — `e2e verify
+  packages/widget` behaves exactly like running `e2e verify` with `packages/widget` as the current
+  directory (#281).
 
 Push new code without re-attesting, and the recorded SHA no longer names the latest code commit —
 `verify` fails with a message naming the fix (re-run `attest`). That staleness is the whole nudge:
@@ -45,5 +49,6 @@ the guarantee CI *can* make: this code was exercised against the real world, by 
 look at the result.
 
 In the workflow the check is **verify-if-present**: it runs whenever a committed
-`e2e-attestation.json` sits at the repo root, and is skipped, never failed, otherwise — so a
-library without an e2e suite adopts the [drop-in](../getting-started) unchanged.
+`e2e-attestation.json` sits at the [package root](../monorepo) — the repo root for a
+single-package repo, a package's own root in a monorepo — and is skipped, never failed,
+otherwise — so a library without an e2e suite adopts the [drop-in](../getting-started) unchanged.

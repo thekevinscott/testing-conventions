@@ -39,14 +39,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Stage a fixture (rust crate under path; dist/ + attestation at the root)
+      - name: Stage a fixture (rust crate under path; dist/ at the root, attestation at the package root)
         run: |
           set -euo pipefail
           mkdir -p detect-fixture/src dist
           printf '[package]\nname = "x"\n' > detect-fixture/Cargo.toml
           echo 'pub fn f() {}' > detect-fixture/src/lib.rs
           : > dist/x-0.1.0-py3-none-any.whl
-          echo '{}' > e2e-attestation.json
+          echo '{}' > detect-fixture/e2e-attestation.json
       - id: detect
         uses: ./.github/actions/detect
         with:

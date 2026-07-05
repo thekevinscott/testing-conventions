@@ -308,3 +308,45 @@ def test_e2e_config_explicit_override_wins_verbatim(run_detect):
     # A caller-provided non-default value passes through unchanged even though a
     # package-root file exists, since the explicit override always wins.
     assert out["config"] == "custom.toml"
+
+
+# --- #281: e2e-verify attestation discovery scoped to the package root ---
+
+
+def test_e2e_attestation_at_the_package_root_is_detected(run_detect):
+    out = run_detect(
+        scan_path="packages/x/src",
+        root_files={
+            "packages/x/package.json": "{}",
+            "packages/x/src/widget.ts": "export const x = 1;\n",
+            "packages/x/e2e-attestation.json": "{}",
+        },
+    )
+    assert out["e2e_attestation"] == "true"
+
+
+def test_e2e_attestation_at_the_repo_root_is_not_detected_for_a_nested_package(run_detect):
+    # The attestation moved from repo-root lookup to package-root lookup (#281): a
+    # repo-root attestation no longer counts for a scan scoped to a nested package.
+    out = run_detect(
+        scan_path="packages/x/src",
+        root_files={
+            "packages/x/package.json": "{}",
+            "packages/x/src/widget.ts": "export const x = 1;\n",
+            "e2e-attestation.json": "{}",
+        },
+    )
+    assert out["e2e_attestation"] == "false"
+
+
+def test_e2e_attestation_at_the_repo_root_is_still_detected_for_a_single_package_repo(run_detect):
+    # Regression guard: a single-package repo (no manifest above `scan_path`) still
+    # derives `package_root == repo_root`, so a repo-root attestation is unchanged.
+    out = run_detect(
+        scan_path="src",
+        root_files={
+            "src/widget.py": "x = 1\n",
+            "e2e-attestation.json": "{}",
+        },
+    )
+    assert out["e2e_attestation"] == "true"

@@ -129,3 +129,19 @@ def test_config_output_is_wired_from_derive_config(fs):
     fs["config"] = "packages/ts/testing-conventions.toml"
     out = detect.compute_outputs("", scan_root="/repo/packages/ts/src", repo_root="/repo")
     assert out["config"] == "packages/ts/testing-conventions.toml"
+
+
+def test_attestation_is_looked_up_at_the_package_root_not_the_repo_root(fs):
+    # #281: `has_attestation` is called with `package_root`, not the checkout root — a
+    # record of exactly which root each call received proves the wiring, since the fixture's
+    # lambda otherwise ignores its argument.
+    fs["package_root"] = Path("/repo/packages/x")
+    seen_roots = []
+    with patch.object(
+        detect,
+        "has_attestation",
+        lambda root: seen_roots.append(root) or True,
+    ):
+        out = detect.compute_outputs("", scan_root="/repo/packages/x/src", repo_root="/repo")
+    assert seen_roots == [Path("/repo/packages/x")]
+    assert out["e2e_attestation"] == "true"

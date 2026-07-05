@@ -79,6 +79,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   own CI, not shipped) moves with it: it now looks for the attestation at the package root rather
   than the checkout root.
 
+- **`e2e verify [path] --scope <dir>`** (#294). `e2e verify` takes an optional `--scope` flag
+  narrowing the "latest code commit" freshness walk to `<dir>`, independently of `path` (where the
+  attestation file lives) — default (omitted) is `path` itself, byte-identical to today. A new
+  `e2e::verify_scoped(repo, scope)` function backs it; `e2e::verify(repo)` is now defined as
+  `verify_scoped(repo, repo)`. Lets a caller whose attestation sits at a package root that also
+  holds `tests/`, docs, or config outside its actual source directory scope freshness to just that
+  source directory, instead of the whole package root.
+
 - **`install`** (#232). Writes the testing contract into the repository's `AGENTS.md` as a
   marker-delimited, hash-versioned block (the beads `bd init` pattern), so a coding agent learns
   the contract before writing code. Idempotent: re-running refreshes the owned region; everything

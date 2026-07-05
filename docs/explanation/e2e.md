@@ -27,13 +27,17 @@ The mechanism is a pair:
   can't name its own SHA. It writes regardless of the command's exit code: the record is that the
   suite **ran**, and the honest result is part of the record.
 
-- **`e2e verify [path]`** — the CI half, run by the [workflow](../reference/workflow). It reads the
-  committed attestation at `path` (default: the current directory) and passes only when its
-  recorded SHA equals the **latest code commit** under `path` (the newest commit that changed any
-  path other than the attestation itself). It never runs the suite and never inspects the recorded
-  exit code: presence and freshness only. In a monorepo, `path` names the package — `e2e verify
-  packages/widget` behaves exactly like running `e2e verify` with `packages/widget` as the current
-  directory (#281).
+- **`e2e verify [path] [--scope <dir>]`** — the CI half, run by the [workflow](../reference/workflow).
+  It reads the committed attestation at `path` (default: the current directory) and passes only
+  when its recorded SHA equals the **latest code commit** under `--scope` (default: `path` itself)
+  — the newest commit that changed any path other than the attestation itself. It never runs the
+  suite and never inspects the recorded exit code: presence and freshness only. In a monorepo,
+  `path` names the package — `e2e verify packages/widget` behaves exactly like running `e2e verify`
+  with `packages/widget` as the current directory (#281). `--scope` narrows what counts as code
+  independently of where the attestation lives (#294): the reusable workflow passes the package's
+  own root for `path` (a manifest's natural home for its attestation) but the caller's own `path`
+  input for `--scope`, so a commit touching the package's `tests/`, docs, or config — outside what
+  the caller actually scoped their call to — doesn't trip a false-stale.
 
 Push new code without re-attesting, and the recorded SHA no longer names the latest code commit —
 `verify` fails with a message naming the fix (re-run `attest`). That staleness is the whole nudge:

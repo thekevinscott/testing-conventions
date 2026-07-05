@@ -39,6 +39,12 @@ subdirectory scopes attestation discovery to it, matching `e2e verify` run with 
 cwd — needed so a monorepo package's attestation can be verified without a `cd`. Purely additive;
 no existing invocation changes behavior (see **Required changes**).
 
+Adds an optional `--scope <dir>` flag to **`e2e verify [path]`** (#294), decoupling where the
+attestation file lives (`path`) from what counts as code for its freshness check (`--scope`,
+default: `path` itself). Omitting it is byte-identical to today. The library gains
+`e2e::verify_scoped(repo, scope)`; `e2e::verify(repo)` is unchanged in signature and now defined
+as `verify_scoped(repo, repo)`. Purely additive; no existing invocation changes behavior.
+
 Repoints the `install` template at the reorganized docs (#353): the managed `AGENTS.md` block's
 tail drops the link to the removed CLI guide page and keeps the docs-site and machine-readable
 contract (`llms.txt`) pointers. No API change; re-running `install` rewrites an existing block to
@@ -962,6 +968,17 @@ cd packages/rust && cargo test --test e2e_verify --test e2e_verify_e2e
 Expected: all pass — `e2e verify` with no argument still checks the current directory (unchanged
 from today), and `e2e verify packages/widget` run from the repo root behaves identically to
 running `e2e verify` with `packages/widget` as the current directory (fresh/stale/missing).
+Includes the `#294` cases: a commit outside `--scope` but inside `path` doesn't trip staleness, a
+commit inside `--scope` still does, and omitting `--scope` stays byte-identical to `#281`'s
+whole-`path` freshness walk.
+
+```
+grep -n -- '--scope' .github/workflows/testing-conventions.yml
+```
+
+Expected: a match in the `e2e-verify` job's `run:` line. No Rust API change is measured by this
+grep (workflow-only wiring); the `e2e::verify_scoped` behavior itself is covered by the test file
+above.
 
 ```
 cd packages/rust && cargo test --test install --test install_e2e

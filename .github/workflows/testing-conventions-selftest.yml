@@ -197,24 +197,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Rust — a first-party `#[double]` must fail integration lint
-        run: |
-          if npx -y testing-conventions integration lint --language rust \
-            .github/selftest/integration-rust/red; then
-            echo "::error::expected the red Rust crate to fail integration lint, but it passed"
-            exit 1
-          fi
-          echo "red Rust crate correctly tripped integration lint"
-      - name: TypeScript — a first-party `vi.mock` must fail integration lint
-        run: |
-          if npx -y testing-conventions integration lint --language typescript \
-            .github/selftest/integration-typescript/red; then
-            echo "::error::expected the red TypeScript suite to fail integration lint, but it passed"
-            exit 1
-          fi
-          echo "red TypeScript suite correctly tripped integration lint"
-      - name: TypeScript — a clean integration suite passes
-        run: npx -y testing-conventions integration lint --language typescript .github/selftest/integration-typescript/clean
+      - name: The rust/typescript integration-lint arms trip on a violation and pass when clean
+        # The assertion (drive each published invocation, then pass/fail on its exit code) is a
+        # tested, colocated script (.github/scripts/, epic #302 / #309) rather than inline bash.
+        run: python3 .github/scripts/integration-lint-new-arms-trip/check_integration_lint_new_arms_trip.py
 
   below-floor:
     name: Below-floor suite trips the coverage gate
@@ -227,18 +213,10 @@ jobs:
       - name: Install coverage toolchain (coverage.py + pytest)
         run: python -m pip install --quiet coverage pytest
       - name: A sub-floor suite must fail `unit coverage`
-        # The same invocation the reusable workflow's unit-coverage job runs. The
-        # non-zero exit is what fails a consumer's build, so assert it here: this
-        # job stays green precisely when the gate correctly trips.
-        run: |
-          if npx -y testing-conventions unit coverage \
-            --language python \
-            --config .github/selftest/below-floor/testing-conventions.toml \
-            .github/selftest/below-floor; then
-            echo "::error::expected the below-floor suite to fail the coverage gate, but it passed"
-            exit 1
-          fi
-          echo "below-floor suite correctly tripped the coverage gate"
+        # The same invocation the reusable workflow's unit-coverage job runs; the non-zero exit is
+        # what fails a consumer's build. The assertion is a tested, colocated script
+        # (.github/scripts/, epic #302 / #309) rather than inline bash.
+        run: python3 .github/scripts/below-floor/check_below_floor.py
 
   mutation-gate:
     name: An un-exempted survivor trips the mutation gate
@@ -253,19 +231,11 @@ jobs:
         with:
           path: ~/.cache/testing-conventions
           key: cargo-mutants-provision-${{ runner.os }}
-      - name: A clean crate passes `unit mutation`
-        # Every mutant is caught, so the gate clears — the green half of the signal.
-        run: npx -y testing-conventions unit mutation --language rust .github/selftest/mutation/clean
-      - name: A crate with an un-exempted survivor must fail `unit mutation`
-        # The same invocation the reusable workflow's mutation job runs. The non-zero
-        # exit is what fails a consumer's build, so assert it here: this job stays green
-        # precisely when the gate correctly trips on a surviving mutant.
-        run: |
-          if npx -y testing-conventions unit mutation --language rust .github/selftest/mutation/survivor; then
-            echo "::error::expected the survivor crate to fail the mutation gate, but it passed"
-            exit 1
-          fi
-          echo "survivor crate correctly tripped the mutation gate"
+      - name: A clean crate passes and a survivor crate trips `unit mutation`
+        # The clean crate must pass (every mutant caught) and the survivor crate must fail (a
+        # surviving mutant) — the same invocations the reusable workflow's mutation job runs. The
+        # assertion is a tested, colocated script (.github/scripts/, epic #302 / #309).
+        run: python3 .github/scripts/mutation-gate/check_mutation_gate.py
 
   python-mutation-clean:
     name: A clean Python library passes `unit mutation`
@@ -288,7 +258,9 @@ jobs:
         # Wheel last, matching the reusable workflow (keeps the #92 drift guard quiet).
         run: python -m pip install --quiet pytest testing-conventions
       - name: A mutation-clean Python library clears `unit mutation`
-        run: npx -y testing-conventions unit mutation --language python .github/selftest/mutation/python-clean
+        # The zero exit proves the wheel-shipped adapter resolves (#258). The assertion is a tested,
+        # colocated script (.github/scripts/, epic #302 / #309) rather than inline bash.
+        run: python3 .github/scripts/python-mutation-clean/check_python_mutation_clean.py
 
   mutation-wired:
     name: The reusable workflow enforces unit mutation
@@ -434,14 +406,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: A crate with an out-of-module unit-test call must fail `unit lint`
-        run: |
-          if npx -y testing-conventions unit lint \
-            --language rust \
-            .github/selftest/isolation/rust-red; then
-            echo "::error::expected the un-isolated crate to fail the lint check, but it passed"
-            exit 1
-          fi
-          echo "un-isolated crate correctly tripped the lint check"
+        # The assertion (drive the published `unit lint`, then pass/fail on its non-zero exit) is a
+        # tested, colocated script (.github/scripts/, epic #302 / #309) rather than inline bash.
+        run: python3 .github/scripts/isolation-red/check_isolation_red.py
 
   upload-clean-dist:
     name: Upload the clean built wheel as an artifact
@@ -478,14 +445,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: A wheel that ships a `*_test.py` must fail `packaging`
-        run: |
-          if npx -y testing-conventions packaging \
-            .github/selftest/packaging/red/widget-0.1.0-py3-none-any.whl \
-            --language python; then
-            echo "::error::expected the red wheel to fail the packaging check, but it passed"
-            exit 1
-          fi
-          echo "red wheel correctly tripped the packaging check"
+        # The assertion (drive the published `packaging`, then pass/fail on its non-zero exit) is a
+        # tested, colocated script (.github/scripts/, epic #302 / #309) rather than inline bash.
+        run: python3 .github/scripts/packaging-red/check_packaging_red.py
 
   # ---- Epic #170: realign the workflow with the CLI surface (one rule = one job) ----
 
@@ -537,15 +499,9 @@ jobs:
         with:
           tool: cargo-llvm-cov
       - name: A sub-floor crate must fail `unit coverage --language rust`
-        run: |
-          if npx -y testing-conventions unit coverage \
-            --language rust \
-            --config .github/selftest/coverage-rust/below/testing-conventions.toml \
-            .github/selftest/coverage-rust/below; then
-            echo "::error::expected the below-floor crate to fail the rust coverage gate, but it passed"
-            exit 1
-          fi
-          echo "below-floor crate correctly tripped the rust coverage gate"
+        # The assertion (drive the published `unit coverage --language rust`, then pass/fail on its
+        # non-zero exit) is a tested, colocated script (.github/scripts/, epic #302 / #309).
+        run: python3 .github/scripts/coverage-rust-red/check_coverage_rust_red.py
 
   diff-scoped-wired:
     name: The reusable workflow runs the diff-scoped --base checks
@@ -1072,14 +1028,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: A per-package dist/ shipping a test file must fail packaging
-        run: |
-          if npx -y testing-conventions packaging \
-            .github/selftest/packaging-package-root/red/dist/packaging-package-root-fixture-0.0.0.tgz \
-            --language typescript; then
-            echo "::error::expected the red per-package dist/ tarball to fail the packaging check, but it passed"
-            exit 1
-          fi
-          echo "red per-package dist/ tarball correctly tripped the packaging check"
+        # The assertion (drive the published `packaging` on the per-package tarball, then pass/fail
+        # on its non-zero exit) is a tested, colocated script (.github/scripts/, epic #302 / #309).
+        run: python3 .github/scripts/packaging-package-root-red/check_packaging_package_root_red.py
   # ---- #279: the mutation job installs and builds from the derived package root ----
 
   mutation-package-root-wired:

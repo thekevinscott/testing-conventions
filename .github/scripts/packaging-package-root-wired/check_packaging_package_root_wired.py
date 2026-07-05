@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 WIRING = "needs.detect.outputs.package_root"
 DEFAULT_WORKFLOW = ".github/workflows/testing-conventions.yml"
@@ -29,7 +30,7 @@ ERROR = (
 SUCCESS = "reusable workflow's packaging job reads the derived package_root"
 
 
-def find_missing_wiring(text: str) -> str | None:
+def find_missing_wiring(text: str) -> Optional[str]:
     """Return the error message when the workflow lacks the wiring reference, else None."""
     if WIRING in text:
         return None

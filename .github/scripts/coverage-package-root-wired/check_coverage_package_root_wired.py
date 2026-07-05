@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 WIRING = "needs.detect.outputs.package_root"
 DEFAULT_WORKFLOW = ".github/workflows/testing-conventions.yml"
@@ -68,7 +69,7 @@ def extract_job_block(text: str, start_header: str, end_header: str) -> str:
     return "\n".join(block)
 
 
-def find_missing_wiring(text: str) -> str | None:
+def find_missing_wiring(text: str) -> Optional[str]:
     """Return the error message for the first coverage job missing the wiring, else None."""
     for start, end, error, _success in _JOBS:
         block = extract_job_block(text, start, end)

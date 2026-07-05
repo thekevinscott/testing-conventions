@@ -40,7 +40,7 @@ outputs:
     description: 'The `unit mutation` matrix (#204): the same set as coverage_languages, now that all three arms are at parity.'
     value: ${{ steps.scan.outputs.mutation_languages }}
   packaging_dist:
-    description: 'true when a conventional dist/ holding a built distribution is discoverable in the checkout.'
+    description: 'true when a conventional dist/ holding a built distribution is discoverable at the derived package_root (#280).'
     value: ${{ steps.scan.outputs.packaging_dist }}
   e2e_attestation:
     description: 'true when a committed e2e-attestation.json sits at the checkout root.'

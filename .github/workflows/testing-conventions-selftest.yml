@@ -30,6 +30,17 @@ name: Testing Conventions (self-test)
 #   packaging-red    drives the published `packaging` command on a committed wheel
 #                    that ships a `*_test.py` and asserts a non-zero exit.
 #
+# packaging-package-root (#280) — dist/ discovery moves from the checkout root to the derived
+# package root, so a per-package `uses:` call finds its own `dist/` with no build/upload step:
+#   packaging-package-root-wired  asserts the packaging job reads `needs.detect.outputs.package_root`
+#                                  — the red→green signal for the wiring itself.
+#   packaging-package-root-clean  a `path`-scoped call over a fixture package with its own
+#                                  committed `dist/` passes with no `packaging_artifact` — the
+#                                  acceptance scenario itself.
+#   packaging-package-root-red    drives the published `packaging` command on the sibling
+#                                  fixture package's committed `dist/` tarball (ships a test
+#                                  file) and asserts a non-zero exit.
+#
 # unit lint (#125; renamed from `unit isolation` in #160) — wired for Python, TypeScript,
 # and Rust. The published binary (what `npx` pulls) now ships Python isolation too, so
 # `detect` routes it into the lint matrix (#146); the `clean` / `absent-language-skipped`
@@ -892,6 +903,64 @@ jobs:
           # input — the call above passes only `languages`/`path`.
           [ "$CONFIG" = ".github/selftest/monorepo/packages/py/testing-conventions.toml" ] || { echo "::error::expected the py fixture's own testing-conventions.toml as config, got $CONFIG"; exit 1; }
 
+  # ---- #280: packaging discovers dist/ at the derived package root, not the checkout root ----
+  #
+  # `.github/selftest/packaging-package-root/` carries its own `clean/` and `red/` packages
+  # (regenerate with `python .github/selftest/packaging-package-root/make_fixtures.py`), each a
+  # standalone package root (its own `package.json`) with a committed `dist/` — proving the
+  # packaging job now finds a per-package `dist/` with no `packaging_artifact` upload, the
+  # configuration this epic exists to remove.
+
+  packaging-package-root-wired:
+    name: The reusable workflow's packaging job is wired to the derived package_root
+    # Red→green wiring signal for #280: the packaging job must read
+    # `needs.detect.outputs.package_root`, or a per-package `dist/` the detect action found is
+    # never passed to the check step — it keeps looking at the checkout root's `dist/`. A static
+    # grep, so it tracks the workflow file regardless of what the published binary ships; the
+    # runtime behavior is covered by packaging-package-root-clean / -red below.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: testing-conventions.yml's packaging job must reference package_root
+        run: |
+          set -euo pipefail
+          if ! grep -q 'needs.detect.outputs.package_root' .github/workflows/testing-conventions.yml; then
+            echo "::error::the reusable workflow's packaging job does not reference needs.detect.outputs.package_root — a per-package dist/ is never discovered, only a checkout-root one (#280)"
+            exit 1
+          fi
+          echo "reusable workflow's packaging job reads the derived package_root"
+
+  packaging-package-root-clean:
+    name: A per-package dist/ passes the packaging check with no packaging_artifact
+    # The runtime half of #280, and the acceptance scenario itself: `clean/` is its own package
+    # root (a `package.json` sitting there) with a committed `clean/dist/` — no build job, no
+    # upload-artifact, no `packaging_artifact` input, just `path` naming the package. The whole
+    # call must pass. `gates` scopes the call to packaging alone (this fixture carries no
+    # source, so every other gate's matrix is empty and would skip regardless — this just keeps
+    # the job fast and its intent explicit).
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      path: .github/selftest/packaging-package-root/clean
+      gates: '["packaging"]'
+
+  packaging-package-root-red:
+    name: A per-package dist/ shipping a test file trips the packaging check
+    # The fail path for #280: a `uses:` call that fails would fail the whole run (the same
+    # constraint `packaging-red` documents), so drive the published `packaging` command
+    # directly on the committed tarball at `red/dist/` — the exact artifact a per-package
+    # `uses:` call would now discover and inspect at that package's derived root.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: A per-package dist/ shipping a test file must fail packaging
+        run: |
+          if npx -y testing-conventions packaging \
+            .github/selftest/packaging-package-root/red/dist/packaging-package-root-fixture-0.0.0.tgz \
+            --language typescript; then
+            echo "::error::expected the red per-package dist/ tarball to fail the packaging check, but it passed"
+            exit 1
+          fi
+          echo "red per-package dist/ tarball correctly tripped the packaging check"
   # ---- #279: the mutation job installs and builds from the derived package root ----
 
   mutation-package-root-wired:

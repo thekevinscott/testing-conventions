@@ -239,10 +239,12 @@ def compute_outputs(
     whole-tree colocated-test set and the lint/isolation and coverage sets add Rust whenever a
     crate is present — the rust presence arm checks the inline module (#40/#274), and Rust
     coverage is zero-config now (`lines = 100` by default, #206), so neither waits for config.
-    `packaging_dist` (looked for at `repo_root`, the checkout root) and `e2e_attestation`
-    (looked for at `package_root`, #281 — a monorepo package's own attestation, not the
-    checkout root) let the packaging and e2e-verify jobs run by default and skip — never
-    fail — when absent (#186).
+    `packaging_dist` is looked for at the derived `package_root` (#280) — a per-package `uses:`
+    call inspects only its own package's `dist/`; a repo-root `dist/` counts only when the
+    derived package root IS the repo root, which every current single-package consumer's is.
+    `e2e_attestation` is likewise looked for at `package_root` (#281) — a monorepo package
+    carries its own attestation, exactly like `e2e verify <path>` checks it. Either lets the
+    packaging and e2e-verify jobs run by default and skip — never fail — when absent (#186).
     `package_root` / `ts_package_manager` / `python_env` / `provision_rust` / `config` (#277)
     are the monorepo primitive: everything a suite-executing job needs to install, build, run,
     and configure at the right directory, derived from `scan_root` and the nearest manifest
@@ -273,7 +275,7 @@ def compute_outputs(
         # `unit mutation` (#204): the same set as coverage — present python/typescript plus
         # rust when a crate is here — now that all three arms are at parity (#201/#202/#203).
         "mutation_languages": _to_json(with_rust),
-        "packaging_dist": "true" if has_dist(repo) else "false",
+        "packaging_dist": "true" if has_dist(package_root) else "false",
         # #281: scoped to the package root, not the checkout root — a monorepo package
         # carries its own attestation, exactly like `e2e verify <path>` checks it.
         "e2e_attestation": "true" if has_attestation(package_root) else "false",

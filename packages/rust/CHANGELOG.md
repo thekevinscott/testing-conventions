@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **`packaging` discovers `dist/` at the derived package root, not the checkout root** (#280).
+  A per-package `uses:` call now inspects its own package's `dist/`; a repo-root `dist/` counts
+  only for a call whose derived package root IS the repo root. Every single-package consumer's
+  derived package root is the checkout root, so this is byte-identical for them. `packaging_artifact`
+  is untouched. Additive/non-breaking — a monorepo consumer that was silently skipped (never
+  failed) for a per-package `dist/` the workflow couldn't see now gets it inspected.
+
 - **`mutation` job installs and builds from the derived package root** (#279). The reusable
   workflow's `mutation` job (mirroring the `unit-coverage`/`coverage-changed` fixes, #278) now
   installs TypeScript deps with `npm ci` or `pnpm install --frozen-lockfile` — picked from

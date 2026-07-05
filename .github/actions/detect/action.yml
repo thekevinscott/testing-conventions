@@ -60,6 +60,9 @@ outputs:
   config:
     description: 'The config file to pass to `--config` (#277): the `config` input verbatim unless it is the default, in which case a package-root testing-conventions.toml wins if present.'
     value: ${{ steps.scan.outputs.config }}
+  build_command:
+    description: 'The `[python].build_command` escape hatch (#289) read from the discovered config file, or empty when none is declared — the suite-executing jobs run it before the suite.'
+    value: ${{ steps.scan.outputs.build_command }}
 
 runs:
   using: composite

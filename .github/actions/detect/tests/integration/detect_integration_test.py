@@ -31,6 +31,7 @@ def fs():
         "python_env": "pip",
         "provision_rust": "false",
         "config": "testing-conventions.toml",
+        "build_command": "",
         "attestation_roots_seen": [],
     }
 
@@ -49,7 +50,8 @@ def fs():
             patch.object(detect, "ts_package_manager", lambda root: state["ts_package_manager"]), \
             patch.object(detect, "python_env", lambda root: state["python_env"]), \
             patch.object(detect, "provision_rust", lambda root: state["provision_rust"]), \
-            patch.object(detect, "derive_config", lambda package_root_rel, config_input: state["config"]):
+            patch.object(detect, "derive_config", lambda package_root_rel, config_input: state["config"]), \
+            patch.object(detect, "derive_build_command", lambda config: state["build_command"]):
         yield state
 
 
@@ -157,6 +159,23 @@ def test_config_output_is_wired_from_derive_config(fs):
     fs["config"] = "packages/ts/testing-conventions.toml"
     out = detect.compute_outputs("", scan_root="/repo/packages/ts/src", repo_root="/repo")
     assert out["config"] == "packages/ts/testing-conventions.toml"
+
+
+# --- #289: the [python].build_command escape hatch is emitted as an output ---
+
+
+def test_build_command_output_wired_from_derive_build_command(fs):
+    # compute_outputs emits a `build_command` output wired straight from `derive_build_command`
+    # (which reads the package's own testing-conventions.toml, discovered at the package root like
+    # `config`). The workflow's suite-executing jobs read it instead of the removed input.
+    fs["build_command"] = "uv run maturin develop"
+    out = detect.compute_outputs("", scan_root="/repo")
+    assert out["build_command"] == "uv run maturin develop"
+
+
+def test_build_command_output_empty_by_default(fs):
+    out = detect.compute_outputs("", scan_root="/repo")
+    assert out["build_command"] == ""
 
 
 def test_attestation_is_looked_up_at_the_package_root_not_the_repo_root(fs):

@@ -15,6 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Adds a `[python] build_command` config key (#289): the loader accepts a Python build-hook command
+plus a required `reason` (validated non-empty on load, mirroring the exemption-reason bar), and the
+repo-only `detect` action emits it as a `build_command` output read from the package's own config.
+This is the schema-and-detection half; the reusable workflow's suite-executing jobs consume it
+(replacing the `build_command` workflow input) in the follow-up that lands once this releases. One
+breaking SDK change — `config::PythonConfig` gains public fields (see **Required changes**).
+Python-only: an npm `prepare` / `postinstall` script and Cargo's `build.rs` cover TypeScript and
+Rust.
+
 Moves the suite-executing jobs' (`unit-coverage`, `coverage-changed`, `mutation`) install/build
 location to the derived package root (#278, #279, epic #276, building on #277's `package_root` /
 `ts_package_manager` / `python_env` / `provision_rust` primitive). All three jobs now install
@@ -588,6 +597,17 @@ Adds the **`install`** command (#232): writes the testing contract into the repo
 existing command, flag, config key, or SDK item changes.
 
 ### Required changes
+
+`config::PythonConfig` gains `build_command: Option<String>` and `reason: String` (#289). Both
+carry serde defaults, so a `testing-conventions.toml` without them parses unchanged; but a struct
+literal must add the fields — `None` / `String::new()` preserve prior behavior:
+
+```rust
+// Before:
+PythonConfig { coverage: Some(cov), exempt: vec![] }
+// After:
+PythonConfig { coverage: Some(cov), exempt: vec![], build_command: None, reason: String::new() }
+```
 
 The reusable workflow's `build_command` input (`unit-coverage`, `coverage-changed`, and — unchanged
 — `unit mutation`) now runs at `needs.detect.outputs.package_root` instead of the checkout root

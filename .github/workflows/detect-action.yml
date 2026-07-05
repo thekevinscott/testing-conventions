@@ -63,9 +63,10 @@ jobs:
           PYENV: ${{ steps.detect.outputs.python_env }}
           PROVRUST: ${{ steps.detect.outputs.provision_rust }}
           CONFIG: ${{ steps.detect.outputs.config }}
+          BUILDCMD: ${{ steps.detect.outputs.build_command }}
         run: |
           set -euo pipefail
-          echo "integration_lint_languages=$LINT colocated_test_languages=$COLOC packaging_dist=$PKG e2e_attestation=$ATT package_root=$PKGROOT ts_package_manager=$TSPM python_env=$PYENV provision_rust=$PROVRUST config=$CONFIG"
+          echo "integration_lint_languages=$LINT colocated_test_languages=$COLOC packaging_dist=$PKG e2e_attestation=$ATT package_root=$PKGROOT ts_package_manager=$TSPM python_env=$PYENV provision_rust=$PROVRUST config=$CONFIG build_command=$BUILDCMD"
           [ "$LINT" = '["rust"]' ]  || { echo "::error::expected rust auto-detected, got $LINT"; exit 1; }
           [ "$COLOC" = '["rust"]' ] || { echo "::error::expected rust in the colocated-test matrix (#274), got $COLOC"; exit 1; }
           [ "$PKG" = "true" ]      || { echo "::error::expected packaging_dist=true, got $PKG"; exit 1; }
@@ -80,4 +81,7 @@ jobs:
           [ "$PYENV" = "pip" ]     || { echo "::error::expected python_env=pip (default), got $PYENV"; exit 1; }
           [ "$PROVRUST" = "true" ] || { echo "::error::expected provision_rust=true (Cargo.toml present), got $PROVRUST"; exit 1; }
           [ "$CONFIG" = "testing-conventions.toml" ] || { echo "::error::expected config=testing-conventions.toml (no package-root file), got $CONFIG"; exit 1; }
+          # #289: no testing-conventions.toml in detect-fixture/, so no [python].build_command
+          # is discoverable — the output is empty (byte-identical to the old no-build default).
+          [ -z "$BUILDCMD" ] || { echo "::error::expected build_command empty (no config with the key), got $BUILDCMD"; exit 1; }
           echo "action.yml glue OK"

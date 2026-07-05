@@ -210,7 +210,11 @@ enum E2eCommand {
         command: String,
     },
     /// Verify the committed attestation names the latest code commit (the CI gate).
-    Verify,
+    Verify {
+        /// Directory whose committed e2e-attestation.json is verified (default: current directory).
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
 }
 
 pub fn run<I, T>(args: I) -> anyhow::Result<i32>
@@ -267,7 +271,7 @@ where
         Some(Command::Workflow { path }) => run_workflow(&path),
         Some(Command::E2e { command }) => match command {
             E2eCommand::Attest { command } => run_e2e_attest(&command),
-            E2eCommand::Verify => run_e2e_verify(),
+            E2eCommand::Verify { path } => run_e2e_verify(&path),
         },
         Some(Command::Install { path }) => {
             agents::install(&path)?;
@@ -858,9 +862,14 @@ fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
 /// Verify the committed e2e attestation names the latest code commit (#68) — the
 /// CI side of the nudge. Exits `0` when fresh; otherwise prints the actionable
 /// hint and exits `1`. Never runs e2e, never judges the recorded run.
-fn run_e2e_verify() -> anyhow::Result<i32> {
-    let repo = std::env::current_dir()?;
-    match e2e::verify(&repo)? {
+///
+/// `path` is the directory whose committed `e2e-attestation.json` is checked
+/// (#281) — the default `.` resolves against the current directory, so a
+/// no-argument call behaves exactly like the pre-#281 `current_dir()` read.
+/// Passing a package subdirectory scopes discovery to it, matching a call made
+/// with that directory as cwd.
+fn run_e2e_verify(path: &Path) -> anyhow::Result<i32> {
+    match e2e::verify(path)? {
         e2e::Verification::Fresh => Ok(0),
         e2e::Verification::Missing => {
             eprintln!(

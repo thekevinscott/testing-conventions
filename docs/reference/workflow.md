@@ -43,7 +43,7 @@ offending files in the log. Each links to its explanation page.
 | [`integration lint`](../explanation/isolation) | always | Python, TypeScript, Rust. |
 | [`unit mutation`](../explanation/mutation) | pull requests only | Diff-scoped to the `<base>...HEAD` changed lines; a binary gate — any un-exempted survivor on a changed line fails. Installs and runs from the derived package root: TypeScript picks `npm ci` or `pnpm install --frozen-lockfile` from the package's own manifest/lockfile; Python runs `uv sync` plus an adapter/pytest install into the project's own venv for a `uv`-managed package, or the existing global `pytest` + `testing-conventions` wheel install otherwise. |
 | [`packaging`](../explanation/packaging) | when a built dist is discoverable | Inspects a `dist/` in the checkout or a named `packaging_artifact`; **skipped, never failed** when neither exists. |
-| [`e2e verify`](../explanation/e2e) | when an attestation is present | Runs when a committed `e2e-attestation.json` sits at the repo root; **skipped, never failed** otherwise. `run_e2e` forces it on. |
+| [`e2e verify`](../explanation/e2e) | when an attestation is present | Runs when a committed `e2e-attestation.json` sits at the [package root](../monorepo) (`path`'s nearest manifest directory, the repo root for a single-package repo); **skipped, never failed** otherwise. `run_e2e` forces it on. Needs a `testing-conventions` release carrying the `e2e verify <path>` argument (#281) — a `version` pinned older verifies the checkout root instead. |
 
 The suite-executing jobs install each language's toolchain and run your own suite: Python under
 `coverage.py` (installing `coverage` + `pytest`), TypeScript under `vitest` v8 coverage (installing

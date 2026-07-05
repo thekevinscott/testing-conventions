@@ -14,12 +14,12 @@ name: Dogfood
 #                   so we can finally point the reusable workflow at our own tree.)
 #                   A planted `.py` without a colocated test would flip it red.
 #   colocated-test — TS colocated-test over packages/node/src (bin.ts has a
-#                   colocated bin.test.ts). Kept a *direct* CLI call rather than the
-#                   reusable workflow because that workflow's bundled TS coverage job
-#                   installs deps with `pnpm install --frozen-lockfile` at the repo
-#                   root, but our node package is npm-based and package-scoped — so
-#                   it can't green-run there until the toolchain is config-driven
-#                   (#56). Rust uses inline `#[cfg(test)]`, out of scope for the
+#                   colocated bin.test.ts). The shipped reusable workflow's own
+#                   `colocated-test` job, scoped to just this gate via `gates` — it's
+#                   a static check (parses source, never installs or runs the suite),
+#                   so the TS coverage job's package-manager assumptions (#56, resolved
+#                   by #278's manifest-derived `ts_package_manager`) never applied here
+#                   to begin with. Rust uses inline `#[cfg(test)]`, out of scope for the
 #                   file-based rule.
 #   e2e-verify    — dogfoods the e2e attestation nudge (#71): packages/node carries a
 #                   tests/e2e suite and a committed e2e-attestation.json, and CI runs
@@ -64,12 +64,10 @@ jobs:
 
   colocated-test:
     name: Colocated test (packages/node/src)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      # node/npx ship on ubuntu-latest; `-y` skips the install prompt.
-      - name: Node (TypeScript) — packages/node/src
-        run: npx -y testing-conventions unit colocated-test --language typescript packages/node/src
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      path: packages/node/src
+      gates: '["colocated-test"]'
 
   e2e-verify:
     name: E2E attestation (packages/node)

@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use testing_conventions::e2e::{attest, verify, Verification};
+use testing_conventions::e2e::{attest, verify, verify_scoped, Verification};
 use testing_conventions::run;
 
 /// A throwaway git repo with one seed commit, removed on drop.
@@ -237,6 +237,116 @@ fn cli_verify_with_path_argument_fails_when_stale() {
         e2e_verify_run(&package).expect("dispatch should succeed"),
         1,
         "a stale attestation at the given path should fail",
+    );
+}
+
+// --- #294: `verify_scoped` narrows the freshness walk to `scope`, distinct
+// from `repo` (where the attestation file lives). `scope` must be `repo` or a
+// descendant of it — the shape a `path`-scoped workflow call always produces
+// (the derived package root is always at-or-above `path`).
+
+#[test]
+fn verify_scoped_ignores_a_commit_outside_the_scope_but_inside_the_repo() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    std::fs::create_dir_all(package.join("tests")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    // Attest at the package root (where the attestation naturally lives), but
+    // scope freshness to just `src/` — narrower than the package root.
+    attest(&package, "true").expect("attest should succeed");
+    // A commit touching only `tests/` (outside the scoped `src/` dir, but still
+    // inside the package root) must NOT make the attestation stale.
+    repo.commit_code("packages/widget/tests/widget_test.rs", "// test\n");
+
+    assert_eq!(
+        verify_scoped(&package, &package.join("src")).expect("verify should succeed"),
+        Verification::Fresh,
+        "a commit outside the scoped directory must not count as code",
+    );
+}
+
+#[test]
+fn verify_scoped_still_flags_a_commit_inside_the_scope() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    let attested = rev_parse(&repo.0, "HEAD^");
+    // A commit touching the scoped `src/` dir itself must still trip staleness.
+    repo.commit_code("packages/widget/src/widget2.rs", "pub fn widget2() {}\n");
+    let latest = rev_parse(&repo.0, "HEAD");
+
+    assert_eq!(
+        verify_scoped(&package, &package.join("src")).expect("verify should succeed"),
+        Verification::Stale { attested, latest },
+    );
+}
+
+#[test]
+fn verify_scoped_with_scope_equal_to_repo_matches_verify() {
+    // `verify_scoped(repo, repo)` is `verify`'s exact definition — a direct
+    // regression guard that the two stay in sync.
+    let repo = TempRepo::new();
+    attest(&repo.0, "true").expect("attest should succeed");
+    assert_eq!(
+        verify_scoped(&repo.0, &repo.0).expect("verify should succeed"),
+        verify(&repo.0).expect("verify should succeed"),
+    );
+}
+
+// --- #294: the `e2e verify <path> --scope <dir>` CLI surface.
+
+/// `testing-conventions e2e verify <path> [--scope <dir>]` exit code, dispatched
+/// in-process.
+fn e2e_verify_run_scoped(path: &Path, scope: Option<&Path>) -> anyhow::Result<i32> {
+    let mut argv: Vec<OsString> = vec![
+        "testing-conventions".into(),
+        "e2e".into(),
+        "verify".into(),
+        path.as_os_str().to_owned(),
+    ];
+    if let Some(scope) = scope {
+        argv.push("--scope".into());
+        argv.push(scope.as_os_str().to_owned());
+    }
+    run(argv)
+}
+
+#[test]
+fn cli_verify_with_scope_ignores_a_commit_outside_it() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    std::fs::create_dir_all(package.join("tests")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    repo.commit_code("packages/widget/tests/widget_test.rs", "// test\n");
+
+    assert_eq!(
+        e2e_verify_run_scoped(&package, Some(&package.join("src")))
+            .expect("dispatch should succeed"),
+        0,
+        "a fresh attestation should pass when the only new commit is outside --scope",
+    );
+}
+
+#[test]
+fn cli_verify_with_no_scope_defaults_to_path_unchanged() {
+    // Regression guard: omitting --scope must stay byte-identical to #281's
+    // behavior — freshness scoped to the whole `path` argument.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    repo.commit_code("packages/widget/other.rs", "pub fn other() {}\n");
+
+    assert_eq!(
+        e2e_verify_run_scoped(&package, None).expect("dispatch should succeed"),
+        1,
+        "with no --scope, a commit anywhere under path should still count as code",
     );
 }
 

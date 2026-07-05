@@ -103,7 +103,23 @@ pub enum Verification {
 /// Verify that the committed attestation names the latest code commit (#68) — the
 /// CI side of the nudge. Reads only the committed attestation: never runs e2e,
 /// never inspects the recorded exit code or output.
+///
+/// Equivalent to [`verify_scoped`] with `scope` set to `repo` — the freshness
+/// walk covers everything under `repo`, same as before #294.
 pub fn verify(repo: &Path) -> Result<Verification> {
+    verify_scoped(repo, repo)
+}
+
+/// Verify the committed attestation at `repo`, scoping the "latest code commit"
+/// walk to `scope` instead of all of `repo` (#294).
+///
+/// `repo` and `scope` serve different roles: `repo` is where
+/// `e2e-attestation.json` lives (the package root — a manifest's own natural
+/// home), while `scope` is what counts as "code" for freshness (the directory a
+/// `path`-scoped call actually named, which can be narrower — a package root
+/// commonly also holds `tests/`, docs, and config files that aren't the
+/// attestable source). `scope` must be `repo` or a descendant of it.
+pub fn verify_scoped(repo: &Path, scope: &Path) -> Result<Verification> {
     let path = repo.join(ATTESTATION_PATH);
     let Ok(contents) = std::fs::read_to_string(&path) else {
         return Ok(Verification::Missing);
@@ -111,7 +127,7 @@ pub fn verify(repo: &Path) -> Result<Verification> {
     let attestation: Attestation =
         serde_json::from_str(&contents).context("parsing the attestation")?;
 
-    let latest = latest_code_commit(repo)?;
+    let latest = latest_code_commit(repo, scope)?;
     if attestation.commit == latest {
         Ok(Verification::Fresh)
     } else {
@@ -122,15 +138,37 @@ pub fn verify(repo: &Path) -> Result<Verification> {
     }
 }
 
-/// The newest commit that changed any path other than the attestation file — the
-/// "latest code commit" the attestation must name to be fresh. Uses an
-/// `:(exclude)` pathspec so the attestation's own commit never counts as code.
-fn latest_code_commit(repo: &Path) -> Result<String> {
+/// The newest commit that changed any path other than the attestation file,
+/// under `scope` — the "latest code commit" the attestation must name to be
+/// fresh. Uses an `:(exclude)` pathspec so the attestation's own commit never
+/// counts as code.
+fn latest_code_commit(repo: &Path, scope: &Path) -> Result<String> {
     let exclude = format!(":(exclude){ATTESTATION_PATH}");
+    let pathspec = relative_pathspec(repo, scope);
     git_capture(
         repo,
-        &["log", "-1", "--format=%H", "--", ".", exclude.as_str()],
+        &[
+            "log",
+            "-1",
+            "--format=%H",
+            "--",
+            pathspec.as_str(),
+            exclude.as_str(),
+        ],
     )
+}
+
+/// `scope` as a pathspec relative to `repo` (git resolves pathspecs relative to
+/// the invocation's cwd, which is always `repo` here). `.` when `scope` is
+/// `repo` itself — byte-identical to the pre-#294 pathspec.
+fn relative_pathspec(repo: &Path, scope: &Path) -> String {
+    if scope == repo {
+        return ".".to_string();
+    }
+    match scope.strip_prefix(repo) {
+        Ok(rel) if !rel.as_os_str().is_empty() => rel.to_string_lossy().into_owned(),
+        _ => scope.to_string_lossy().into_owned(),
+    }
 }
 
 /// Run `git` with `args` in `repo`, returning trimmed stdout; errors if git fails.

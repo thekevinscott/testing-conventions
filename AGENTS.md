@@ -76,6 +76,27 @@ is file-scoped, so a real exemption is also isolated to the smallest possible fi
 bar: the entire #218 pytest plugin ended up needing **zero** exemptions. (The deterministic form of
 "keep it minimal" would be line-scoped exemptions — #226.)
 
+## Two-step rollout for workflow-consumed CLI changes
+
+The reusable workflow (`.github/workflows/testing-conventions.yml`) never runs this repo's own
+source — its `run:` steps shell out to `npx testing-conventions`, the **published** npm package
+(see `internals/repo.md`, "Self-test and the `@v0` path"). A PR that both adds a CLI flag/subcommand
+*and* edits the workflow to pass it in the same commit makes that job invoke a binary that doesn't
+understand the new argument yet — the workflow file changed, but the published binary it calls
+didn't. That job runs in this repo's own `dogfood.yml`, which is a required check: the PR cannot
+merge, because it is red against itself, on purpose, and there is no path from "red" to "merged."
+
+Land these as two PRs, not one:
+
+1. **The CLI change alone.** No workflow edit. Merges and releases like any other change; `@v0`
+   moves once the binary carrying the new flag is published.
+2. **The workflow wiring**, as an immediate follow-up, once step 1 has shipped. Dogfood is green
+   because the binary it calls already understands the flag.
+
+This isn't a deferral in the "Now over later" sense — the wiring lands the moment it *can*, not on
+a hypothetical later cleanup. It's sequencing around a hard constraint: the workflow-under-test and
+the binary-under-test can't change atomically.
+
 ## Never pass data through the environment
 
 **Do not use environment variables as a side-channel to pass data between components.** This is

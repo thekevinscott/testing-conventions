@@ -160,6 +160,60 @@ fn verify_with_path_argument_exits_nonzero_when_the_package_attestation_is_stale
     );
 }
 
+// --- #294: `e2e verify <path> --scope <dir>` narrows the freshness walk to
+// `<dir>` while still reading the attestation from `<path>`.
+
+#[test]
+fn verify_with_scope_ignores_a_commit_outside_it() {
+    let repo = TempRepo::new();
+    let package_rel = "packages/widget";
+    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
+    std::fs::create_dir_all(repo.0.join(package_rel).join("tests")).unwrap();
+    repo.commit_code(
+        &format!("{package_rel}/src/widget.rs"),
+        "pub fn widget() {}\n",
+    );
+    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
+    // A commit outside the scoped src/ dir, but still inside the package root.
+    repo.commit_code(&format!("{package_rel}/tests/widget_test.rs"), "// test\n");
+
+    let (code, _) = run_cli(
+        &repo.0,
+        &[
+            "e2e",
+            "verify",
+            package_rel,
+            "--scope",
+            &format!("{package_rel}/src"),
+        ],
+    );
+    assert_eq!(
+        code, 0,
+        "a commit outside --scope should not trip freshness"
+    );
+}
+
+#[test]
+fn verify_with_no_scope_is_unchanged_from_today() {
+    // Regression guard: omitting --scope stays byte-identical to #281's
+    // whole-path freshness walk.
+    let repo = TempRepo::new();
+    let package_rel = "packages/widget";
+    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
+    repo.commit_code(
+        &format!("{package_rel}/src/widget.rs"),
+        "pub fn widget() {}\n",
+    );
+    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
+    repo.commit_code(&format!("{package_rel}/other.rs"), "pub fn other() {}\n");
+
+    let (code, _) = run_cli(&repo.0, &["e2e", "verify", package_rel]);
+    assert_ne!(
+        code, 0,
+        "with no --scope, a commit anywhere under path should still count as code"
+    );
+}
+
 #[test]
 fn verify_with_no_argument_is_unchanged_from_today() {
     // Regression guard: `e2e verify` with no argument stays byte-identical —

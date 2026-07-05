@@ -7,6 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **BREAKING: the suite-executing jobs (`unit coverage`, changed-line coverage, `mutation`)
+  install, provision, and build at the derived package root, not the checkout root** (#278, #279,
+  epic #276, building on #277's `package_root`/`ts_package_manager`/`python_env`/`provision_rust`
+  primitive). All three jobs now install TypeScript dependencies — `npm ci` or `pnpm install
+  --frozen-lockfile`, picked from detect's `ts_package_manager` — and provision the Python
+  environment — `pip` unchanged; `uv` runs `uv sync` then installs the adapter wheel and pytest
+  into the project's own venv — at `needs.detect.outputs.package_root`, and `build_command` runs
+  there too. So a per-package-lockfile monorepo TS package (its own `package-lock.json`, no root
+  manifest) no longer hits `ERR_PNPM_NO_PKG_MANIFEST`, a `uv`-managed Python package's own
+  dependencies are installed before cosmic-ray's spawned pytest needs them, and `build_command` no
+  longer needs a smuggled-in `cd`. Rust toolchain provisioning (`rust_toolchain` / detect's
+  `provision_rust`) also moves ahead of the language-env setup and caches `target` under the
+  package root, since `uv sync` and an npm `prepare` script may themselves compile a Rust core. The
+  Rust language arm itself is unchanged — cargo-mutants already runs from the scan root and cargo
+  walks up to the crate. See [MIGRATIONS](./MIGRATIONS.md).
+
 - **`unit coverage --language typescript` no longer discards vitest's own default coverage
   excludes** (#290). Passing any `--coverage.exclude` to vitest replaces its built-in default
   list rather than extending it; the rule always passed its own test-file/declaration-file
@@ -27,20 +43,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   is untouched. Additive/non-breaking — a monorepo consumer that was silently skipped (never
   failed) for a per-package `dist/` the workflow couldn't see now gets it inspected.
 
-- **`mutation` job installs and builds from the derived package root** (#279). The reusable
-  workflow's `mutation` job (mirroring the `unit-coverage`/`coverage-changed` fixes, #278) now
-  installs TypeScript deps with `npm ci` or `pnpm install --frozen-lockfile` — picked from
-  detect's `ts_package_manager` — and provisions Python from detect's `python_env`: `pip` keeps
-  today's global `pytest` + `testing-conventions` wheel install; `uv` runs `uv sync` then installs
-  the adapter wheel and pytest into the project's own venv, so cosmic-ray's spawned pytest can
-  import both. Every install, and `build_command`, now runs at `needs.detect.outputs.package_root`
-  instead of the checkout root — **breaking** for a consumer whose `build_command` relied on
-  running at the repository root (see `packages/rust/MIGRATIONS.md`). Rust auto-provisioning
-  (`rust_toolchain` / detect's `provision_rust`) now also caches `target` under the package root.
-  The `unit-coverage`, `coverage-changed`, and `mutation` jobs' `build_command` now all run at the
-  derived package root — the same breaking change lands from two parallel PRs (#278, #279) and is
-  reconciled at merge.
-
 - **`install` block points at the reorganized docs** (#353). The managed `AGENTS.md` block's tail
   links the docs site and the machine-readable contract (`llms.txt`); the pointer to the removed
   CLI guide page is gone. Re-running `install` refreshes an existing block in place (the begin
@@ -48,6 +50,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **The coverage jobs auto-derive the TypeScript package manager, the Python environment model,
+  and Rust auto-provisioning from the package manifest** (#278, epic #276). TS installs run
+  `pnpm install --frozen-lockfile` or `npm ci` per `needs.detect.outputs.ts_package_manager`
+  (npm joins pnpm); a Python package with its own `[project]` table (`python_env == 'uv'`) is
+  installed with `uv sync` — building/installing the project itself, so a maturin package's
+  native module compiles with no `build_command` — with `coverage`/`pytest` layered on and the
+  venv's `bin` put on `PATH`; a plain `pip`-based package is unchanged. `rust_toolchain`'s cache
+  and provisioning now also fire automatically when the package manifest declares a Rust-compiling
+  build (`needs.detect.outputs.provision_rust`), with `rust_toolchain` remaining as a manual
+  override. See [MIGRATIONS](./MIGRATIONS.md).
 - **`e2e verify [path]`** (#281). `e2e verify` takes an optional directory argument (default: the
   current directory) whose committed `e2e-attestation.json` is checked — `testing-conventions e2e
   verify packages/widget` behaves identically to running `e2e verify` with `packages/widget` as

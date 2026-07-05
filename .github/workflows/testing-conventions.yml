@@ -77,14 +77,25 @@ name: Testing Conventions
 # (reusable-workflow inputs can't be native lists); empty — the default — means
 # auto-detect every supported language present under `path` (#185).
 #
-# `build_command` (#243) is an optional shell step run after toolchain + dependency setup
-# and before the suite, in the same job, for the suite-executing jobs only — `unit coverage`
-# (whole-tree), `unit coverage --base` (changed-line), and `unit mutation`. A native-binding
-# project whose unit suite imports a compiled module (a maturin/PyO3 extension, a napi-rs
-# addon) needs it built first, or the suite fails at import before the gate runs; set
-# `build_command: "uv run maturin develop"` / `"pnpm build"`. Empty (the default) ⇒ no build
-# step, so pure-language callers are unaffected. The static rules (colocated-test, unit lint,
-# integration lint) only parse source, and `e2e verify` checks the attestation rather than
+# `unit coverage` (whole-tree) and `unit coverage --base` (changed-line) install, provision,
+# and build at the *derived package root* (#277/#278) — the nearest directory at-or-above
+# `path`, down to the checkout root, holding a `package.json` / `pyproject.toml` / `Cargo.toml`
+# (`.` for a single-package repo, so an existing single-package call is unaffected). The
+# TypeScript package manager, the Python environment model (plain `pip`, or `uv sync` for a
+# `pyproject.toml` with a `[project]` table — which also builds a maturin package's native
+# module), and whether a Rust toolchain is auto-provisioned are all read from that root's own
+# manifest, so a per-package-lockfile monorepo package (dirsql PR #410) installs and builds
+# correctly with no configuration.
+#
+# `build_command` (#243) and `rust_toolchain` (#263) are the remaining *escape hatches*, for a
+# build the package manifest cannot express, run/provisioned at that same derived package root.
+# `build_command` is an optional shell step run after toolchain + dependency setup and before
+# the suite, in the same job, for the suite-executing jobs only — `unit coverage` (whole-tree),
+# `unit coverage --base` (changed-line), and `unit mutation` (still checkout-root scoped;
+# #278 covers only the coverage jobs). Set `build_command: "uv run maturin develop"` /
+# `"pnpm build"` for a build the auto-derivation above does not cover. Empty (the default) ⇒ no
+# build step, so pure-language callers are unaffected. The static rules (colocated-test, unit
+# lint, integration lint) only parse source, and `e2e verify` checks the attestation rather than
 # running the e2e suite, so none of those jobs build or import anything.
 #
 # `gates` (#262) is an optional allowlist naming which gates run — empty (the default) runs
@@ -99,12 +110,13 @@ name: Testing Conventions
 # suite-executing gates in its own build-capable jobs (a native binding whose second-language
 # core these jobs cannot build, #263) still adopts the static gates here.
 #
-# `rust_toolchain` (#263) provisions a stable Rust toolchain — with a cargo registry +
-# target cache — in the suite-executing jobs, before `build_command` runs. A native binding
-# whose build compiles a Rust core (a maturin/PyO3 extension, a napi-rs addon) needs cargo in
-# the *python/typescript* arms, which otherwise set up only their own language's toolchain;
-# the rust arm always carries its own. `false` (the default) adds nothing, so pure-language
-# callers are unaffected.
+# `rust_toolchain` (#263) is the manual override that provisions a stable Rust toolchain — with
+# a cargo registry + target cache — in the suite-executing jobs, before `build_command` runs.
+# `unit coverage` / `unit coverage --base` already auto-provision it whenever the package root's
+# manifest declares a Rust-compiling build (#277); set this by hand only for a build the
+# manifest does not express, or for `unit mutation`, which does not yet derive it. The rust
+# matrix arm always carries its own toolchain. `false` (the default) adds nothing beyond
+# auto-derivation.
 
 on:
   workflow_call:
@@ -138,7 +150,7 @@ on:
         type: string
         default: ''
       build_command:
-        description: 'Optional shell command run after toolchain + dependency setup and before the suite, in the same job, for the suite-executing jobs only (unit coverage, changed-line coverage, unit mutation). Use it to build a native module the suite imports — e.g. "uv run maturin develop" (Python/maturin) or "pnpm build" (TypeScript/napi). Empty (default) ⇒ no build step, so pure-language callers are unaffected. The static rules (colocated-test, unit lint, integration lint) only parse source and the e2e-verify job never runs the suite, so none of them run it (#243).'
+        description: 'Escape hatch: an optional shell command run at the derived package root (#277/#278), after toolchain + dependency setup and before the suite, in the same job, for the suite-executing jobs only (unit coverage, changed-line coverage, unit mutation). unit coverage / changed-line coverage already build a maturin package (uv sync) or a napi package (its own prepare script) with no input set; set this only for a build the package manifest cannot express — e.g. "uv run maturin develop" or "pnpm build" for a manifest-less build step. Empty (default) means no build step, so pure-language callers are unaffected. The static rules (colocated-test, unit lint, integration lint) only parse source and the e2e-verify job never runs the suite, so none of them run it (#243).'
         type: string
         default: ''
       gates:
@@ -146,7 +158,7 @@ on:
         type: string
         default: ''
       rust_toolchain:
-        description: 'Provision a stable Rust toolchain (with a cargo registry + target cache) in the suite-executing jobs, before build_command runs — for a native binding whose build compiles a Rust core (a maturin/PyO3 extension, a napi-rs addon). The rust matrix arm always carries its own toolchain; this adds cargo to the python/typescript arms. false (the default) adds nothing (#263).'
+        description: 'Manual override: provision a stable Rust toolchain (with a cargo registry + target cache) in the suite-executing jobs, before build_command runs. unit coverage / changed-line coverage already auto-provision it when the manifest at the derived package root declares a Rust-compiling build (a Cargo.toml, a maturin backend, a napi key — #277); set this by hand only for a build the manifest does not express, or for unit mutation, which does not yet derive it. The rust matrix arm always carries its own toolchain. false (the default) adds nothing beyond auto-derivation (#263).'
         type: boolean
         default: false
 
@@ -317,31 +329,9 @@ jobs:
       - uses: actions/checkout@v6
       # Unlike the static colocated-test / lint checks, `unit coverage` shells out
       # to the language's coverage tool — so its toolchain, and the project's own
-      # test deps, must be present. Set up per language.
-      - if: matrix.language == 'python'
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - if: matrix.language == 'python'
-        name: Install coverage toolchain (coverage.py + pytest)
-        run: python -m pip install --quiet coverage pytest
-      # TypeScript shells out to vitest, so install the project's deps (including
-      # vitest + @vitest/coverage-v8) with pnpm, the TS convention. A project on a
-      # different package manager should drive the CLI directly until #56 makes
-      # this config-driven.
-      - if: matrix.language == 'typescript'
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.0
-      - if: matrix.language == 'typescript'
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - if: matrix.language == 'typescript'
-        name: Install project dependencies (pnpm)
-        run: pnpm install --frozen-lockfile
-      # Rust shells out to cargo-llvm-cov (#37/#171): a stable toolchain with the
-      # llvm-tools component, plus cargo-llvm-cov itself.
+      # test deps, must be present. Rust provisioning comes first (#278): `uv sync`
+      # and an npm `prepare` script may themselves compile a Rust core, so cargo must
+      # already be on PATH before the language-env steps below run.
       - if: matrix.language == 'rust'
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -351,30 +341,78 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
-      # Provision cargo for a build_command that compiles a Rust core (#263): a
-      # maturin/PyO3 or napi-rs build needs the Rust toolchain in the python/typescript
-      # arms too — the rust arm already set its own up above — plus a cargo registry +
-      # target cache so the core isn't recompiled from scratch every run.
-      - if: inputs.rust_toolchain && matrix.language != 'rust'
+      # Provision cargo for a build the package manifest declares — a maturin/PyO3 or
+      # napi-rs build compiling a Rust core — in the python/typescript arms too (the
+      # rust arm already set its own up above): auto-derived from the package root's
+      # own manifest (`provision_rust`, #277), or forced by the manual `rust_toolchain`
+      # override (#263) for a build no manifest field expresses. Plus a cargo registry
+      # + target cache (keyed at the package root) so the core isn't recompiled from
+      # scratch every run.
+      - if: (inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') && matrix.language != 'rust'
         uses: dtolnay/rust-toolchain@stable
-      - if: inputs.rust_toolchain
+      - if: inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true'
         name: Cache the Rust build (cargo registry + target)
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
+            ${{ needs.detect.outputs.package_root }}/target
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      # Build a caller-supplied native module before the suite imports it (#243): a
-      # PyO3/maturin or napi-rs addon the unit suite `import`s must be compiled here, in
-      # this job, or coverage fails at import. Pure-language callers leave `build_command`
-      # empty and skip this. Passed via env (not interpolated into `run`) and `eval`-ed so
-      # a full shell string — `uv run maturin develop`, `pnpm build`, `a && b` — works.
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
+        name: Install coverage toolchain (coverage.py + pytest)
+        run: python -m pip install --quiet coverage pytest
+      # A package root whose pyproject.toml carries a [project] table (python_env ==
+      # 'uv', #277) is an installable project with its own dependencies: `uv sync`
+      # installs them AND builds/installs the project itself, so a maturin package's
+      # native module compiles right here (cargo already provisioned above) — zero
+      # config, no build_command / rust_toolchain needed.
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
+        name: Provision the project environment (uv)
+        working-directory: ${{ needs.detect.outputs.package_root }}
+        run: |
+          set -euo pipefail
+          uv sync
+          uv pip install coverage pytest
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      # TypeScript shells out to vitest, so install the project's own deps — the
+      # manager (pnpm or npm, #277) and the install location (the package root, #278)
+      # are both derived from the package's own manifest/lockfile, so a
+      # per-package-lockfile monorepo package installs correctly with no config.
+      - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.0
+      - if: matrix.language == 'typescript'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - if: matrix.language == 'typescript'
+        name: Install project dependencies
+        working-directory: ${{ needs.detect.outputs.package_root }}
+        env:
+          PM: ${{ needs.detect.outputs.ts_package_manager || 'pnpm' }}
+        run: |
+          set -euo pipefail
+          if [ "$PM" = "pnpm" ]; then pnpm install --frozen-lockfile; else npm ci; fi
+      # Build a caller-supplied native module the manifest can't express before the
+      # suite imports it (#243): the escape hatch for a build not covered by the
+      # auto-derivation above. Runs at the package root (#278), like the install
+      # steps. Passed via env (not interpolated into `run`) and `eval`-ed so a full
+      # shell string — `uv run maturin develop`, `pnpm build`, `a && b` — works.
       - if: inputs.build_command != ''
         name: Run the build step (build_command)
+        working-directory: ${{ needs.detect.outputs.package_root }}
         env:
           BUILD_COMMAND: ${{ inputs.build_command }}
         run: |
@@ -408,24 +446,10 @@ jobs:
           # Changed-line coverage diffs `<base>...HEAD`, so the base ref must be
           # reachable.
           fetch-depth: 0
-      - if: matrix.language == 'python'
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - if: matrix.language == 'python'
-        name: Install coverage toolchain (coverage.py + pytest)
-        run: python -m pip install --quiet coverage pytest
-      - if: matrix.language == 'typescript'
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.0
-      - if: matrix.language == 'typescript'
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - if: matrix.language == 'typescript'
-        name: Install project dependencies (pnpm)
-        run: pnpm install --frozen-lockfile
+      # Mirrors the whole-tree unit-coverage job's setup order and derivation (#278):
+      # Rust provisioning first (`uv sync` / an npm `prepare` script may compile a
+      # Rust core), then the language env, then `build_command` — all at the
+      # #277-derived package root.
       - if: matrix.language == 'rust'
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -435,25 +459,67 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
-      # Provision cargo (+ cache) for a build_command that compiles a Rust core (#263),
-      # as in the whole-tree coverage job; `rust_toolchain: false` ⇒ skipped.
-      - if: inputs.rust_toolchain && matrix.language != 'rust'
+      # Provision cargo for a build the package manifest declares, or the manual
+      # `rust_toolchain` override for a build no manifest field expresses (#263/#277),
+      # as in the whole-tree coverage job — plus the registry + target cache, keyed at
+      # the package root.
+      - if: (inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') && matrix.language != 'rust'
         uses: dtolnay/rust-toolchain@stable
-      - if: inputs.rust_toolchain
+      - if: inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true'
         name: Cache the Rust build (cargo registry + target)
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
+            ${{ needs.detect.outputs.package_root }}/target
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
+        name: Install coverage toolchain (coverage.py + pytest)
+        run: python -m pip install --quiet coverage pytest
+      # A package root with a [project] table (python_env == 'uv', #277): `uv sync`
+      # installs the project's own dependencies and builds/installs the project
+      # itself, as in the whole-tree coverage job.
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
+        name: Provision the project environment (uv)
+        working-directory: ${{ needs.detect.outputs.package_root }}
+        run: |
+          set -euo pipefail
+          uv sync
+          uv pip install coverage pytest
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.0
+      - if: matrix.language == 'typescript'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - if: matrix.language == 'typescript'
+        name: Install project dependencies
+        working-directory: ${{ needs.detect.outputs.package_root }}
+        env:
+          PM: ${{ needs.detect.outputs.ts_package_manager || 'pnpm' }}
+        run: |
+          set -euo pipefail
+          if [ "$PM" = "pnpm" ]; then pnpm install --frozen-lockfile; else npm ci; fi
       # Build a caller-supplied native module before the suite imports it (#243), as in the
-      # whole-tree coverage job; empty `build_command` ⇒ skipped.
+      # whole-tree coverage job; empty `build_command` ⇒ skipped. Runs at the package root
+      # (#278).
       - if: inputs.build_command != ''
         name: Run the build step (build_command)
+        working-directory: ${{ needs.detect.outputs.package_root }}
         env:
           BUILD_COMMAND: ${{ inputs.build_command }}
         run: |

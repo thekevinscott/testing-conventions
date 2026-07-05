@@ -105,3 +105,17 @@ fn a_suite_that_cannot_run_is_an_error_not_a_silent_pass() {
     let _ = std::fs::remove_dir_all(&empty);
     assert!(result.is_err());
 }
+
+#[test]
+fn a_package_root_config_file_is_not_counted_as_uncovered_source() {
+    // #290: `full_with_config/` is fully tested (identical to `full/`) but also
+    // carries its own `vitest.config.ts` — the shape a per-package monorepo
+    // `uses:` call produces (`path` names the whole package root, not just
+    // `src/`). vitest's own default excludes already keep config files out of
+    // the coverage denominator; the rule must not clobber those defaults with
+    // its own `--coverage.exclude` flags.
+    assert_eq!(
+        measure_typescript(&codebase("full_with_config"), FULL, &[]).unwrap(),
+        Outcome::Pass
+    );
+}

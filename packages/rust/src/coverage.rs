@@ -279,11 +279,50 @@ fn build_omit(omit: &[String]) -> String {
 /// What vitest measures: every TypeScript source under the scanned root. The
 /// braces are a vitest (picomatch) glob, expanded by vitest, not the shell.
 const TS_INCLUDE: &str = "**/*.{ts,tsx,mts,cts}";
-/// Always excluded from the denominator: the colocated unit tests are the suite,
-/// never a subject of it (`*.test.*`), and declaration files carry no runtime
-/// code (`*.d.ts` / `*.d.mts` / `*.d.cts`).
-const TS_TEST_EXCLUDE: &str = "**/*.test.*";
-const TS_DECL_EXCLUDE: &str = "**/*.d.{ts,mts,cts}";
+
+/// The project's own installed vitest's default coverage excludes (test files,
+/// declaration files, build-tool config files, `dist/`, `node_modules/`, …),
+/// resolved live via Node rather than hand-maintained here.
+///
+/// Passing *any* `--coverage.exclude` value to vitest replaces its built-in
+/// default list rather than extending it — so a rule-owned exclude flag (the
+/// colocated test glob; a config-driven `coverage` exemption) would otherwise
+/// silently un-exclude every default the provider ships, including its own
+/// `**/{vite,vitest,eslint,...}.config.*` pattern. That default list is
+/// exactly the ecosystem knowledge this tool has no business re-enumerating —
+/// it's resolved from whatever vitest version `root` actually has installed,
+/// so it can never go stale relative to it.
+fn vitest_default_excludes(root: &Path) -> Result<Vec<String>> {
+    let run = Command::new("node")
+        .current_dir(root)
+        .args([
+            "-e",
+            "process.stdout.write(JSON.stringify(require('vitest/config').coverageConfigDefaults.exclude))",
+        ])
+        .output()
+        .context("resolving vitest's default coverage excludes via node")?;
+    if !run.status.success() {
+        bail!(
+            "could not resolve vitest's default coverage excludes in `{}`. The rule runs the \
+             project's own vitest via `npx --no-install` and never downloads it, so `vitest` \
+             must be installed in the project. node output:\n{}{}",
+            root.display(),
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr),
+        );
+    }
+    let excludes: Vec<String> = serde_json::from_slice(&run.stdout).with_context(|| {
+        format!(
+            "vitest's default coverage excludes were not a JSON string array — got: {}",
+            String::from_utf8_lossy(&run.stdout)
+        )
+    })?;
+    // A couple of vitest's own default patterns embed a literal NUL byte (its
+    // virtual-module boundary markers, e.g. `**/\0*`) — meaningless as a glob
+    // against real files, and a NUL byte can't be passed as a process argument
+    // at all, so those entries are dropped rather than sent to `Command::arg`.
+    Ok(excludes.into_iter().filter(|p| !p.contains('\0')).collect())
+}
 
 /// The four vitest coverage floors, from a `[typescript].coverage` table. Each
 /// is an independent percent the unit suite must meet — vitest measures all four.
@@ -462,11 +501,13 @@ fn run_vitest(root: &Path, exclude: &[String]) -> Result<VitestReport> {
 /// the reporter and how they parse it.
 ///
 /// v8 coverage is written to an out-of-tree temp dir so the scanned tree stays
-/// pristine. `include` scopes measurement to the sources under `root`; the test
-/// glob, declaration files, and the config `exclude` paths are excluded from the
-/// denominator. `all=true` counts source files the suite never imported, so an
-/// untested file is measured (lowering the floor / showing as uncovered) rather
-/// than vanishing. `--no-cache` keeps vitest from writing a cache into the tree.
+/// pristine. `include` scopes measurement to the sources under `root`; vitest's
+/// own default excludes (test files, declaration files, build-tool config
+/// files, …, resolved live — see [`vitest_default_excludes`]) and the config
+/// `exclude` paths are excluded from the denominator. `all=true` counts source
+/// files the suite never imported, so an untested file is measured (lowering
+/// the floor / showing as uncovered) rather than vanishing. `--no-cache` keeps
+/// vitest from writing a cache into the tree.
 fn run_vitest_coverage(
     root: &Path,
     exclude: &[String],
@@ -490,10 +531,11 @@ fn run_vitest_coverage(
             "--coverage.reportsDirectory={}",
             reports.0.display()
         ))
-        .arg(format!("--coverage.include={TS_INCLUDE}"))
-        .arg(format!("--coverage.exclude={TS_TEST_EXCLUDE}"))
-        .arg(format!("--coverage.exclude={TS_DECL_EXCLUDE}"));
-    for path in exclude {
+        .arg(format!("--coverage.include={TS_INCLUDE}"));
+    // Passing any `--coverage.exclude` replaces vitest's own default exclude
+    // list rather than extending it, so its defaults are resolved and passed
+    // back explicitly, alongside the config-driven exemption paths.
+    for path in vitest_default_excludes(root)?.iter().chain(exclude) {
         command.arg(format!("--coverage.exclude={path}"));
     }
     // CI=1 keeps vitest non-interactive (no watch prompt, plain output).

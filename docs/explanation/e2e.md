@@ -34,10 +34,10 @@ The mechanism is a pair:
   suite and never inspects the recorded exit code: presence and freshness only. In a monorepo,
   `path` names the package — `e2e verify packages/widget` behaves exactly like running `e2e verify`
   with `packages/widget` as the current directory (#281). `--scope` narrows what counts as code
-  independently of where the attestation lives (#294) — useful when a package root also carries
-  `tests/`, docs, or config outside what a caller actually wants scanned for freshness. The
-  [workflow](../reference/workflow) doesn't pass `--scope` yet; that's a follow-up once this release
-  ships (see AGENTS.md, "Two-step rollout for workflow-consumed CLI changes").
+  independently of where the attestation lives (#294): the reusable workflow passes the package's
+  own root for `path` (a manifest's natural home for its attestation) but the caller's own `path`
+  input for `--scope`, so a commit touching the package's `tests/`, docs, or config — outside what
+  the caller actually scoped their call to — doesn't trip a false-stale.
 
 Push new code without re-attesting, and the recorded SHA no longer names the latest code commit —
 `verify` fails with a message naming the fix (re-run `attest`). That staleness is the whole nudge:

@@ -604,6 +604,31 @@ jobs:
           }
           echo "e2e-verify checks out the PR head commit"
 
+  e2e-verify-scoped-to-path:
+    name: e2e-verify scopes the freshness walk to path, not the derived package_root
+    # Red→green wiring signal for #294: the e2e-verify job's `e2e verify` invocation
+    # must pass `--scope` naming `inputs.path` (the caller's own scoping input), not
+    # rely on the derived `package_root` (which can be a real parent of `path` — a
+    # package root also holding tests/docs/config outside the caller's scanned
+    # directory). A static grep, so it tracks the workflow file regardless of what
+    # the published binary ships; runtime behavior is covered by the Rust e2e tests
+    # (`e2e_verify.rs`, `e2e_verify_e2e.rs`).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: e2e-verify must pass --scope "$SCAN_PATH" (inputs.path)
+        run: |
+          set -euo pipefail
+          BLOCK=$(awk '/^  e2e-verify:/,/^  packaging:/' .github/workflows/testing-conventions.yml)
+          missing=0
+          echo "$BLOCK" | grep -qE -- '--scope' || missing=1
+          echo "$BLOCK" | grep -qE 'SCAN_PATH: .*inputs\.path' || missing=1
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::the e2e-verify job doesn't pass --scope naming inputs.path — the freshness walk is scoped to the derived package_root instead, which can be broader than what the caller's own path input names (#294)"
+            exit 1
+          fi
+          echo "e2e-verify scopes the freshness walk to inputs.path"
+
   diff-scoped-runs:
     name: A clean PR passes the diff-scoped --base jobs
     # The runtime half of #172: call the reusable workflow with the new `base` input

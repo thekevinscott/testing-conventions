@@ -588,7 +588,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml must use the detect action
-        run: python3 .github/scripts/wiring-detect-action/check_wiring_detect_action.py
+        run: python3 .github/scripts/wiring-detect-action/check_wiring_detect_action.py .github/workflows/testing-conventions.yml
 
   wiring-packaging-default-on:
     name: The reusable workflow runs packaging by default (#186)
@@ -596,7 +596,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: packaging must gate on detect's packaging_dist output
-        run: python3 .github/scripts/wiring-packaging-default-on/check_wiring_packaging_default_on.py
+        run: python3 .github/scripts/wiring-packaging-default-on/check_wiring_packaging_default_on.py .github/workflows/testing-conventions.yml
 
   wiring-e2e-default-on:
     name: The reusable workflow runs e2e verify by default (#186)
@@ -604,7 +604,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: e2e-verify must gate on detect's e2e_attestation output
-        run: python3 .github/scripts/wiring-e2e-default-on/check_wiring_e2e_default_on.py
+        run: python3 .github/scripts/wiring-e2e-default-on/check_wiring_e2e_default_on.py .github/workflows/testing-conventions.yml
 
   # ---- #243: a build_command hook so native-binding projects can run the suite jobs ----
 

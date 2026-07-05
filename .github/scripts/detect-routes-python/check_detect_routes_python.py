@@ -8,18 +8,17 @@ composite action over the `clean` fixture and hands this script the action's
 `isolation_languages` output — a compact JSON array such as `["python"]` or `["python","rust"]`
 — which this script asserts routes Python into the unit-lint matrix.
 
-The value arrives as a CLI argument (never an environment side-channel: the workflow templates
-`${{ steps.detect.outputs.isolation_languages }}` into `argv[1]`). Living as a standalone,
+The value arrives as `argv[1]` (never an environment side-channel: the workflow templates
+`${{ steps.detect.outputs.isolation_languages }}` into the argument). Living as a standalone,
 colocated-tested script — rather than an inline `run: |` block — lets the routing assertion carry
 real unit + e2e tests, and keeps its logic off the untested, `${{ }}`-templated `run:` path.
 """
-from __future__ import annotations
-
 import json
 import sys
+from typing import Optional
 
 
-def routes_python(isolation_languages: str) -> str | None:
+def routes_python(isolation_languages: str) -> Optional[str]:
     """Error message when Python is not routed into the unit-lint matrix, else None.
 
     `isolation_languages` is the compact JSON array the detect action emits (e.g. `["python"]`,
@@ -37,8 +36,8 @@ def routes_python(isolation_languages: str) -> str | None:
     )
 
 
-def main(argv: list[str]) -> int:
-    value = argv[1] if len(argv) > 1 else ""
+def main(argv: list) -> int:
+    value = argv[1]
     problem = routes_python(value)
     if problem is not None:
         print(f"::error::{problem}")

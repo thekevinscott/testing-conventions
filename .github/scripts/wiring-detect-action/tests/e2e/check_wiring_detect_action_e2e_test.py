@@ -2,7 +2,8 @@
 
 Runs the script's `__main__` entry point in-process via `runpy` against temp workflow files,
 covering `main`, the file read, and the `__main__` guard (the lines the pure unit suite does not
-reach). A workflow that uses the detect action exits 0; one that does not exits 1.
+reach). A workflow that uses the detect action exits 0; one that does not exits 1. `argv[0]` is a
+bogus path so a mutant that reads it instead of `argv[1]` fails on a missing file.
 """
 import runpy
 import sys
@@ -29,24 +30,12 @@ def run(argv):
 def test_e2e_passes_on_a_wired_workflow(tmp_path, capsys):
     wf = tmp_path / "testing-conventions.yml"
     wf.write_text(WIRED)
-    assert run(["check_wiring_detect_action.py", str(wf)]) == 0
+    assert run([str(tmp_path / "prog-not-a-file"), str(wf)]) == 0
     assert "reusable workflow detects via the detect action" in capsys.readouterr().out
 
 
 def test_e2e_fails_on_an_unwired_workflow(tmp_path, capsys):
     wf = tmp_path / "testing-conventions.yml"
     wf.write_text(UNWIRED)
-    assert run(["check_wiring_detect_action.py", str(wf)]) == 1
+    assert run([str(tmp_path / "prog-not-a-file"), str(wf)]) == 1
     assert "::error::" in capsys.readouterr().out
-
-
-def test_e2e_default_path_matches_the_real_workflow():
-    # No argv[1]: reads the real .github/workflows/testing-conventions.yml from the repo root.
-    repo_root = Path(__file__).resolve().parents[5]
-    old = Path.cwd()
-    import os
-    os.chdir(repo_root)
-    try:
-        assert run(["check_wiring_detect_action.py"]) == 0
-    finally:
-        os.chdir(old)

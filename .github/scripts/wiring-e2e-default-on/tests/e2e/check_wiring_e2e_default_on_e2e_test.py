@@ -2,9 +2,9 @@
 
 Runs the script's `__main__` entry point in-process via `runpy` against temp workflow files,
 covering `main`, the file read, and the `__main__` guard. A workflow that gates e2e verify on
-`e2e_attestation` exits 0; one that does not exits 1.
+`e2e_attestation` exits 0; one that does not exits 1. `argv[0]` is a bogus path so a mutant that
+reads it instead of `argv[1]` fails on a missing file.
 """
-import os
 import runpy
 import sys
 from pathlib import Path
@@ -30,22 +30,12 @@ def run(argv):
 def test_e2e_passes_when_e2e_verify_gates_on_the_output(tmp_path, capsys):
     wf = tmp_path / "testing-conventions.yml"
     wf.write_text(WIRED)
-    assert run(["check.py", str(wf)]) == 0
+    assert run([str(tmp_path / "prog-not-a-file"), str(wf)]) == 0
     assert "e2e verify is default-on (gates on e2e_attestation)" in capsys.readouterr().out
 
 
 def test_e2e_fails_when_e2e_verify_does_not_gate(tmp_path, capsys):
     wf = tmp_path / "testing-conventions.yml"
     wf.write_text(UNWIRED)
-    assert run(["check.py", str(wf)]) == 1
+    assert run([str(tmp_path / "prog-not-a-file"), str(wf)]) == 1
     assert "::error::" in capsys.readouterr().out
-
-
-def test_e2e_default_path_matches_the_real_workflow():
-    repo_root = Path(__file__).resolve().parents[5]
-    old = Path.cwd()
-    os.chdir(repo_root)
-    try:
-        assert run(["check.py"]) == 0
-    finally:
-        os.chdir(old)

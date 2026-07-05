@@ -10,21 +10,20 @@ It lives as a standalone, colocated-tested script — rather than an inline `run
 wiring check carries real unit + e2e tests, and so its grep pattern escapes the GitHub-Actions
 `${{ }}` templating trap (a `run:` body is templated before the shell ever sees it, which would
 silently evaluate a literal `${{ ... }}` embedded in a pattern).
-"""
-from __future__ import annotations
 
+The workflow file to inspect is passed as `argv[1]`.
+"""
 import re
 import sys
 from pathlib import Path
-
-DEFAULT_WORKFLOW = ".github/workflows/testing-conventions.yml"
+from typing import Optional
 
 # `uses: <maybe-prefix>actions/detect@<ref>` — the reusable workflow pins the detect action,
 # mirroring the original grep `uses:[[:space:]]*[^[:space:]]*actions/detect@`.
 _DETECT_ACTION = re.compile(r"uses:\s*\S*actions/detect@")
 
 
-def find_missing_wiring(text: str) -> str | None:
+def find_missing_wiring(text: str) -> Optional[str]:
     """Error message when the workflow does not use the detect action, else None."""
     if _DETECT_ACTION.search(text):
         return None
@@ -34,9 +33,8 @@ def find_missing_wiring(text: str) -> str | None:
     )
 
 
-def main(argv: list[str]) -> int:
-    path = Path(argv[1]) if len(argv) > 1 else Path(DEFAULT_WORKFLOW)
-    problem = find_missing_wiring(path.read_text())
+def main(argv: list) -> int:
+    problem = find_missing_wiring(Path(argv[1]).read_text())
     if problem is not None:
         print(f"::error::{problem}")
         return 1

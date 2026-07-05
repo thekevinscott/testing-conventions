@@ -2,13 +2,16 @@
 
 Runs the script's `__main__` entry point in-process via `runpy`, passing an `isolation_languages`
 value as `argv[1]` exactly as the workflow does. Covers `main`, the argv read, and the `__main__`
-guard. A value that routes Python in exits 0; one that does not exits 1.
+guard. A value that routes Python in exits 0; one that does not exits 1. `argv[0]` is a bogus,
+non-JSON token so a mutant that reads it instead of `argv[1]` changes the outcome.
 """
 import runpy
 import sys
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[2] / "check_detect_routes_python.py"
+
+ARGV0 = "prog-not-json"
 
 
 def run(argv):
@@ -24,18 +27,12 @@ def run(argv):
 
 
 def test_e2e_passes_when_python_is_routed_in(capsys):
-    assert run(["check.py", '["python","rust"]']) == 0
+    assert run([ARGV0, '["python","rust"]']) == 0
     out = capsys.readouterr().out
     assert 'isolation_languages=["python","rust"]' in out
     assert "Python routed into the unit-lint matrix" in out
 
 
 def test_e2e_fails_when_python_is_absent(capsys):
-    assert run(["check.py", '["rust"]']) == 1
-    assert "::error::" in capsys.readouterr().out
-
-
-def test_e2e_fails_with_no_argument(capsys):
-    # No argv[1]: the empty default does not route Python in.
-    assert run(["check.py"]) == 1
+    assert run([ARGV0, '["rust"]']) == 1
     assert "::error::" in capsys.readouterr().out

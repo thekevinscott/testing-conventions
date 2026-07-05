@@ -55,11 +55,14 @@ Two optional inputs refine a call: `languages` restricts the detected set explic
 
 ## Escape hatches
 
-Three inputs cover what a manifest cannot express. They carry the same bar as
+Two inputs and one config key cover what a manifest cannot express. They carry the same bar as
 [exemptions](./guide/configure#exempt-a-file) — a reasoned last resort, with the manifest-level
 fix preferred:
 
-- **`build_command`** — a build step beyond the manifest's own hooks, run at the package root.
+- **`[python] build_command`** — a Python build step beyond the manifest's own hooks (a PEP 517
+  backend has no pre-build shell step), declared in the package's own `testing-conventions.toml`
+  with a required `reason` and run at the package root. Python-only: an npm `prepare` /
+  `postinstall` script and Cargo's `build.rs` cover TypeScript and Rust.
 - **`rust_toolchain`** — forces cargo provisioning when no manifest declares the need.
 - **`gates`** — restricts a call to named gates, for the rare package where one genuinely
   cannot run.

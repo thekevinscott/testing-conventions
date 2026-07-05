@@ -87,16 +87,19 @@ name: Testing Conventions
 # manifest, so a per-package-lockfile monorepo package (dirsql PR #410) installs and builds
 # correctly with no configuration.
 #
-# `build_command` (#243) and `rust_toolchain` (#263) are the remaining *escape hatches*, for a
+# `build_command` (#243/#289) and `rust_toolchain` (#263) are the remaining *escape hatches*, for a
 # build the package manifest cannot express, run/provisioned at that same derived package root.
-# `build_command` is an optional shell step run after toolchain + dependency setup and before
-# the suite, in the same job, for the suite-executing jobs only — `unit coverage` (whole-tree),
-# `unit coverage --base` (changed-line), and `unit mutation` (still checkout-root scoped;
-# #278 covers only the coverage jobs). Set `build_command: "uv run maturin develop"` /
-# `"pnpm build"` for a build the auto-derivation above does not cover. Empty (the default) ⇒ no
-# build step, so pure-language callers are unaffected. The static rules (colocated-test, unit
-# lint, integration lint) only parse source, and `e2e verify` checks the attestation rather than
-# running the e2e suite, so none of those jobs build or import anything.
+# `build_command` is a shell step run after toolchain + dependency setup and before the suite, in
+# the suite-executing jobs only — `unit coverage` (whole-tree), `unit coverage --base`
+# (changed-line), and `unit mutation`. It is NOT a workflow input (#289): the command lives in the
+# package's own `testing-conventions.toml` as `[python] build_command` (with a required `reason`),
+# discovered at the package root by `detect` exactly like `config` and surfaced as
+# `needs.detect.outputs.build_command`. Set it for a Python build the auto-derivation above does not
+# cover (a PEP 517 backend with no pre-build shell hook); a package with no such key leaves it empty
+# ⇒ no build step. TypeScript and Rust need no key — npm's `prepare`/`postinstall` and Cargo's
+# `build.rs` build their compiled modules during dependency install. The static rules
+# (colocated-test, unit lint, integration lint) only parse source, and `e2e verify` checks the
+# attestation rather than running the e2e suite, so none of those jobs build or import anything.
 #
 # `gates` (#262) is an optional allowlist naming which gates run — empty (the default) runs
 # every applicable gate. The seven gate names are colocated-test, unit-lint, unit-coverage,
@@ -147,10 +150,6 @@ on:
         default: false
       packaging_artifact:
         description: 'Name of an uploaded build artifact (actions/upload-artifact) holding the built distributions (.whl/.tar.gz/.tgz/.crate) to check. When set, the packaging job downloads and inspects it. When empty (default), packaging still runs over a conventional dist/ found in the checkout, and is skipped only when no dist/ exists either (#186).'
-        type: string
-        default: ''
-      build_command:
-        description: 'Escape hatch: an optional shell command run at the derived package root (#277/#278), after toolchain + dependency setup and before the suite, in the same job, for the suite-executing jobs only (unit coverage, changed-line coverage, unit mutation). unit coverage / changed-line coverage already build a maturin package (uv sync) or a napi package (its own prepare script) with no input set; set this only for a build the package manifest cannot express — e.g. "uv run maturin develop" or "pnpm build" for a manifest-less build step. Empty (default) means no build step, so pure-language callers are unaffected. The static rules (colocated-test, unit lint, integration lint) only parse source and the e2e-verify job never runs the suite, so none of them run it (#243).'
         type: string
         default: ''
       gates:
@@ -209,6 +208,10 @@ jobs:
       # verbatim unless it's the default, in which case a package-root
       # testing-conventions.toml wins if present — so a per-package call stops naming it.
       config: ${{ steps.scan.outputs.config }}
+      # The `[python].build_command` escape hatch (#289), read from that discovered config
+      # file rather than passed on the `uses:` call — the suite-executing jobs run it before
+      # the suite. Empty when no `[python].build_command` is declared (no build step).
+      build_command: ${{ steps.scan.outputs.build_command }}
     steps:
       - uses: actions/checkout@v6
       - id: scan
@@ -410,11 +413,11 @@ jobs:
       # auto-derivation above. Runs at the package root (#278), like the install
       # steps. Passed via env (not interpolated into `run`) and `eval`-ed so a full
       # shell string — `uv run maturin develop`, `pnpm build`, `a && b` — works.
-      - if: inputs.build_command != ''
+      - if: needs.detect.outputs.build_command != ''
         name: Run the build step (build_command)
         working-directory: ${{ needs.detect.outputs.package_root }}
         env:
-          BUILD_COMMAND: ${{ inputs.build_command }}
+          BUILD_COMMAND: ${{ needs.detect.outputs.build_command }}
         run: |
           set -euo pipefail
           eval "$BUILD_COMMAND"
@@ -517,11 +520,11 @@ jobs:
       # Build a caller-supplied native module before the suite imports it (#243), as in the
       # whole-tree coverage job; empty `build_command` ⇒ skipped. Runs at the package root
       # (#278).
-      - if: inputs.build_command != ''
+      - if: needs.detect.outputs.build_command != ''
         name: Run the build step (build_command)
         working-directory: ${{ needs.detect.outputs.package_root }}
         env:
-          BUILD_COMMAND: ${{ inputs.build_command }}
+          BUILD_COMMAND: ${{ needs.detect.outputs.build_command }}
         run: |
           set -euo pipefail
           eval "$BUILD_COMMAND"
@@ -652,11 +655,11 @@ jobs:
       # compiled here too; empty `build_command` ⇒ skipped. Runs at the derived package
       # root (#279) — breaking for a monorepo consumer whose command assumed the checkout
       # root (packages/rust/MIGRATIONS.md).
-      - if: inputs.build_command != ''
+      - if: needs.detect.outputs.build_command != ''
         name: Run the build step (build_command)
         working-directory: ${{ needs.detect.outputs.package_root }}
         env:
-          BUILD_COMMAND: ${{ inputs.build_command }}
+          BUILD_COMMAND: ${{ needs.detect.outputs.build_command }}
         run: |
           set -euo pipefail
           eval "$BUILD_COMMAND"

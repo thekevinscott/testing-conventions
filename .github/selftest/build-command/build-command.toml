@@ -1,0 +1,8 @@
+# #289 runtime fixture: the native-binding build hook now lives in the package's own config as
+# `[python].build_command`, not on the `uses:` call. `widget.py` imports `generated`, a module
+# absent from the source tree — this command produces it (standing in for a maturin/PyO3 native
+# module the suite imports). branch = false: the fixture exercises the build hook, not branches.
+[python]
+coverage = { branch = false, fail_under = 100 }
+build_command = "cp .github/selftest/build-command/generated.py.tmpl .github/selftest/build-command/generated.py"
+reason = "stands in for a maturin/PyO3 native module a PEP 517 backend can't build via a pre-build shell hook"

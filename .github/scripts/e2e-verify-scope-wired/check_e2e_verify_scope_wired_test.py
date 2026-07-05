@@ -144,6 +144,17 @@ def test_main_with_no_argv_reads_the_default_workflow_path(tmp_path, chdir_to, c
     assert "scopes the freshness walk to inputs.path" in capsys.readouterr().out
 
 
+def test_main_with_an_empty_argv_also_reads_the_default_workflow_path(tmp_path, chdir_to, capsys):
+    # Distinguishes len(argv) > 1 from len(argv) != 1: an empty argv has length 0, which is
+    # neither > 1 nor == 1 — a `!= 1` mutant would try argv[1] on an empty list and crash.
+    default = tmp_path / m.DEFAULT_WORKFLOW
+    default.parent.mkdir(parents=True)
+    default.write_text(WIRED)
+    chdir_to(tmp_path)
+    assert m.main([]) == 0
+    assert "scopes the freshness walk to inputs.path" in capsys.readouterr().out
+
+
 def test_dunder_main_guard_runs_and_exits_nonzero_on_a_stale_workflow(tmp_path, chdir_to, argv_is, capsys):
     default = tmp_path / m.DEFAULT_WORKFLOW
     default.parent.mkdir(parents=True)
@@ -151,5 +162,34 @@ def test_dunder_main_guard_runs_and_exits_nonzero_on_a_stale_workflow(tmp_path, 
     chdir_to(tmp_path)
     with pytest.raises(SystemExit) as exc_info:
         runpy.run_path(str(SCRIPT), run_name="__main__")
+    assert exc_info.value.code == 1
+    assert "::error::" in capsys.readouterr().out
+
+
+def test_dunder_main_guard_does_not_run_for_a_lesser_module_name(tmp_path, chdir_to, argv_is, capsys):
+    # Distinguishes == from <=: "__init__" < "__main__" lexically, so a `<=` mutant would still
+    # treat this as "__main__" and wrongly invoke main() (raising SystemExit); == correctly
+    # leaves the module a no-op import with no output and no exit.
+    default = tmp_path / m.DEFAULT_WORKFLOW
+    default.parent.mkdir(parents=True)
+    default.write_text(UNWIRED)
+    chdir_to(tmp_path)
+    runpy.run_path(str(SCRIPT), run_name="__init__")
+    assert capsys.readouterr().out == ""
+
+
+def test_dunder_main_guard_runs_for_an_equal_but_distinct_module_name_object(
+    tmp_path, chdir_to, argv_is, capsys
+):
+    # Distinguishes == from is: build "__main__" at runtime (not the module's compiled literal),
+    # so it's equal in value but not necessarily the same object. An `is` mutant would treat the
+    # names as different and skip main(); == correctly matches on value and runs it.
+    default = tmp_path / m.DEFAULT_WORKFLOW
+    default.parent.mkdir(parents=True)
+    default.write_text(UNWIRED)
+    chdir_to(tmp_path)
+    run_name = "".join(["__", "main", "__"])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(SCRIPT), run_name=run_name)
     assert exc_info.value.code == 1
     assert "::error::" in capsys.readouterr().out

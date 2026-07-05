@@ -13,9 +13,8 @@ colocated and e2e tests. Inline `run:` bash is untested prose, and the workflow'
 templating is applied to the `run:` text before the shell sees it, which can silently rewrite a
 literal expression. The detect outputs arrive as CLI arguments (never an env side-channel).
 """
-from __future__ import annotations
-
 import sys
+from typing import Optional
 
 # The outputs `./.github/actions/detect` must produce for the monorepo Python fixture (#277).
 EXPECTED_PACKAGE_ROOT = ".github/selftest/monorepo/packages/py"
@@ -23,7 +22,7 @@ EXPECTED_PYTHON_ENV = "uv"
 EXPECTED_CONFIG = ".github/selftest/monorepo/packages/py/testing-conventions.toml"
 
 
-def evaluate(package_root: str, python_env: str, config: str) -> str | None:
+def evaluate(package_root: str, python_env: str, config: str) -> Optional[str]:
     """Return an error message if any detect output is wrong, else None.
 
     Pure: takes the three detect outputs as plain strings and compares each against the value

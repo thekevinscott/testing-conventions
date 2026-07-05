@@ -16,6 +16,9 @@ from unittest.mock import patch
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import detect  # noqa: E402
+
 SCRIPT = Path(__file__).resolve().parents[2] / "detect.py"
 
 
@@ -226,6 +229,32 @@ def test_e2e_ts_package_manager_defaults_to_pnpm(run_detect):
     assert out["ts_package_manager"] == "pnpm"
 
 
+def test_e2e_ts_package_manager_pnpm_lockfile_with_no_field(run_detect):
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": "{}",
+            "packages/ts/pnpm-lock.yaml": "",
+            "packages/ts/src/index.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["ts_package_manager"] == "pnpm"
+
+
+def test_e2e_read_package_json_falls_back_to_empty_on_malformed_json(run_detect):
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": "not valid json {{{",
+            "packages/ts/package-lock.json": "{}",
+            "packages/ts/src/index.ts": "export const x = 1;\n",
+        },
+    )
+    # A malformed package.json never crashes detect: no packageManager field is readable,
+    # so ts_package_manager falls through to the lockfile tier.
+    assert out["ts_package_manager"] == "npm"
+
+
 def test_e2e_python_env_uv_when_project_table_present(run_detect):
     out = run_detect(
         scan_path="packages/py/src",
@@ -315,6 +344,43 @@ def test_e2e_provision_rust_false_by_default(run_detect):
     assert out["provision_rust"] == "false"
 
 
+def test_derive_package_root_falls_back_to_repo_root_when_scan_root_is_unrelated(tmp_path_factory):
+    # scan_root and repo_root live in disjoint trees, so walking up from scan_root never
+    # reaches repo_root — the walk exhausts at the filesystem root, and repo_root is appended
+    # as the final fallback candidate rather than already being one from the walk.
+    scan_root = tmp_path_factory.mktemp("scan-tree")
+    repo_root = tmp_path_factory.mktemp("repo-tree")
+    assert detect.derive_package_root(scan_root, repo_root) == repo_root.resolve()
+
+
+def test_derive_package_root_never_searches_outside_repo_root(tmp_path_factory):
+    # A manifest sitting *above* repo_root (outside the checkout) must never be returned: the
+    # walk stops at repo_root, inclusive, even though repo_root itself carries no manifest here.
+    base = tmp_path_factory.mktemp("outside-base")
+    (base / "Cargo.toml").write_text('[package]\nname = "outside"\n')
+    repo_root = base / "repo"
+    scan_root = repo_root / "src"
+    scan_root.mkdir(parents=True)
+    assert detect.derive_package_root(scan_root, repo_root) == repo_root.resolve()
+
+
+def test_derive_package_root_boundary_is_an_exact_match_not_an_ordering(tmp_path):
+    # A regression guard against a specific mutation-testing trap: the walk's stop condition
+    # (`ancestor == repo_root`) must be an exact match, never an ordering comparison. `repo_root`
+    # here is a disjoint sibling that sorts lexicographically *after* scan_root's own ancestor
+    # chain, so a `<=` in place of `==` would treat scan_root as already "past" repo_root and
+    # stop the walk on the very first candidate — before ever climbing to `base`, which is a
+    # real ancestor of scan_root carrying a manifest an `==`-based walk correctly finds.
+    base = tmp_path / "aaa"
+    scan_root = base / "pkg" / "src"
+    scan_root.mkdir(parents=True)
+    (base / "Cargo.toml").write_text('[package]\nname = "x"\n')
+    repo_root = tmp_path / "zzz"
+    repo_root.mkdir()
+    assert scan_root.resolve() <= repo_root.resolve()  # pins the ordering this test relies on
+    assert detect.derive_package_root(scan_root, repo_root) == base.resolve()
+
+
 def test_e2e_config_default_falls_back_when_no_package_root_file(run_detect):
     out = run_detect(sources={"widget.py": "x = 1\n"})
     assert out["config"] == "testing-conventions.toml"
@@ -345,3 +411,18 @@ def test_e2e_config_explicit_override_wins_verbatim(run_detect):
     # A caller-provided non-default value passes through unchanged even though a
     # package-root file exists, since the explicit override always wins.
     assert out["config"] == "custom.toml"
+
+
+def test_e2e_config_explicit_override_sorts_after_the_default_lexicographically(run_detect):
+    # "zzz-custom.toml" sorts after "testing-conventions.toml", unlike "custom.toml" above
+    # (which sorts before it) — together they pin the comparison to inequality, not ordering.
+    out = run_detect(
+        scan_path="packages/py/src",
+        config="zzz-custom.toml",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": "",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["config"] == "zzz-custom.toml"

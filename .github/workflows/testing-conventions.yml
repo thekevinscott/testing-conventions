@@ -191,9 +191,11 @@ jobs:
       # `unit mutation` (#204): the same set as coverage now that all three arms are at
       # parity (#201/#202/#203) — the matrix the diff-scoped mutation job fans out over.
       mutation_languages: ${{ steps.scan.outputs.mutation_languages }}
-      # Whether a built distribution is discoverable in the checkout, and whether a
-      # committed e2e-attestation.json is present (#186) — the packaging and e2e-verify
-      # jobs gate on these so they run by default and skip (never fail) when absent.
+      # Whether a built distribution is discoverable at the derived package_root (#280;
+      # the checkout root for every single-package consumer), and whether a committed
+      # e2e-attestation.json is present at the checkout root (#186) — the packaging and
+      # e2e-verify jobs gate on these so they run by default and skip (never fail) when
+      # absent.
       packaging_dist: ${{ steps.scan.outputs.packaging_dist }}
       e2e_attestation: ${{ steps.scan.outputs.e2e_attestation }}
       # The monorepo primitive (#277): everything a suite-executing job needs to install,
@@ -728,10 +730,11 @@ jobs:
     # Default-on, locate-or-skip (#186): packaging inspects the *built distribution*, not
     # the source tree, so it doesn't ride the source matrix — but it runs by default. It
     # runs when an explicit `packaging_artifact` was uploaded OR the detect action found a
-    # conventional dist/ in the checkout, and is skipped — never failed — when neither
-    # exists. Each distribution's language is inferred from its extension. The `gates`
-    # allowlist is authoritative (#262): checked first, so a scoped call that leaves
-    # packaging out skips the job even when `packaging_artifact` is set.
+    # conventional dist/ at the derived package root (#280; the checkout root for every
+    # single-package consumer), and is skipped — never failed — when neither exists. Each
+    # distribution's language is inferred from its extension. The `gates` allowlist is
+    # authoritative (#262): checked first, so a scoped call that leaves packaging out
+    # skips the job even when `packaging_artifact` is set.
     if: ${{ (inputs.gates == '' || contains(inputs.gates, '"packaging"')) && (inputs.packaging_artifact != '' || needs.detect.outputs.packaging_dist == 'true') }}
     runs-on: ubuntu-latest
     steps:
@@ -750,13 +753,16 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           PACKAGING_ARTIFACT: ${{ inputs.packaging_artifact }}
+          PACKAGE_ROOT: ${{ needs.detect.outputs.package_root }}
         run: |
           set -euo pipefail
           # nullglob: an unmatched glob expands to nothing (not the literal);
           # globstar: `**` recurses, so a nested dist is found too.
           shopt -s nullglob globstar
-          # The downloaded artifact when one was named, else the located dist/.
-          if [ -n "$PACKAGING_ARTIFACT" ]; then dist_root=_packaging_artifact; else dist_root=dist; fi
+          # The downloaded artifact when one was named, else the located dist/ at the
+          # derived package root (#280 — "." for a single-package repo, so this is
+          # `./dist`, byte-identical to today's `dist`).
+          if [ -n "$PACKAGING_ARTIFACT" ]; then dist_root=_packaging_artifact; else dist_root="${PACKAGE_ROOT:-.}/dist"; fi
           # Language is inferred from the distribution's extension: a wheel/sdist is
           # python, an `npm pack` tarball is typescript, a Cargo crate is rust.
           checked=0

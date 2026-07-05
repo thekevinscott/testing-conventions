@@ -23,6 +23,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Rust language arm itself is unchanged — cargo-mutants already runs from the scan root and cargo
   walks up to the crate. See [MIGRATIONS](./MIGRATIONS.md).
 
+- **`packaging` discovers `dist/` at the derived package root, not the checkout root** (#280).
+  A per-package `uses:` call now inspects its own package's `dist/`; a repo-root `dist/` counts
+  only for a call whose derived package root IS the repo root. Every single-package consumer's
+  derived package root is the checkout root, so this is byte-identical for them. `packaging_artifact`
+  is untouched. Additive/non-breaking — a monorepo consumer that was silently skipped (never
+  failed) for a per-package `dist/` the workflow couldn't see now gets it inspected.
+
 - **`install` block points at the reorganized docs** (#353). The managed `AGENTS.md` block's tail
   links the docs site and the machine-readable contract (`llms.txt`); the pointer to the removed
   CLI guide page is gone. Re-running `install` refreshes an existing block in place (the begin

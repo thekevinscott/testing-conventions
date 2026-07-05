@@ -518,12 +518,54 @@ def test_e2e_build_command_absent_is_empty(run_detect):
 
 
 def test_e2e_build_command_empty_when_config_declares_none(run_detect):
-    # A package-root config with no [python].build_command emits an empty build_command.
+    # A package-root config with a [python] table but no build_command emits an empty
+    # build_command.
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
             "packages/py/pyproject.toml": '[project]\nname = "x"\n',
             "packages/py/testing-conventions.toml": "[python]\ncoverage = { fail_under = 90 }\n",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["build_command"] == ""
+
+
+def test_e2e_build_command_empty_when_config_has_no_python_table(run_detect):
+    # A config with no [python] table at all (a rust-only config) emits an empty build_command.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": "[rust]\nfeatures = [\"cli\"]\n",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["build_command"] == ""
+
+
+def test_e2e_build_command_empty_on_a_malformed_config(run_detect):
+    # A malformed testing-conventions.toml never crashes detect — build_command falls back to
+    # empty, like read_pyproject on a malformed manifest.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": "not valid toml [[[",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["build_command"] == ""
+
+
+def test_e2e_build_command_empty_when_value_is_not_a_string(run_detect):
+    # A non-string build_command (which the Rust config loader would separately reject) is
+    # treated as absent by detect rather than emitted verbatim — detect never crashes on it.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": "[python]\nbuild_command = 123\n",
             "packages/py/src/widget.py": "x = 1\n",
         },
     )

@@ -214,6 +214,30 @@ def derive_config(package_root_rel: Path, config_input: str) -> str:
     candidate = package_root_rel / _CONFIG_DEFAULT
     return str(candidate) if candidate.is_file() else _CONFIG_DEFAULT
 
+
+def derive_build_command(config: str) -> str:
+    """The `[python].build_command` escape hatch (#289) read from the in-effect config file
+    `config` (the path `derive_config` resolved), or `''` when that file is absent, unparseable,
+    or declares no `[python].build_command`.
+
+    The escape hatch lives in the package's own `testing-conventions.toml` rather than on the
+    `uses:` call — discovered exactly like `config` itself. It plugs the one gap npm's
+    `prepare`/`postinstall` and Cargo's `build.rs` already fill for TypeScript and Rust: a PEP 517
+    Python backend has no manifest-declared pre-build shell step. `''` means no build step,
+    byte-identical to the old empty `build_command` default. Parsed with the same stdlib `tomllib`
+    used for `pyproject.toml`, so a malformed config never crashes detect.
+    """
+    path = Path(config)
+    if not path.is_file():
+        return ""
+    try:
+        data = tomllib.loads(path.read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        return ""
+    value = data.get("python", {}).get("build_command", "")
+    return value if isinstance(value, str) else ""
+
+
 def eligible(languages_input: str, language: str) -> bool:
     """Whether `language` is in scope, given the raw `LANGUAGES` restrictor.
 
@@ -248,7 +272,9 @@ def compute_outputs(
     `package_root` / `ts_package_manager` / `python_env` / `provision_rust` / `config` (#277)
     are the monorepo primitive: everything a suite-executing job needs to install, build, run,
     and configure at the right directory, derived from `scan_root` and the nearest manifest
-    rather than a second, consumer-facing scoping input.
+    rather than a second, consumer-facing scoping input. `build_command` (#289) is the
+    `[python].build_command` escape hatch, read from that same discovered `config` file rather
+    than passed on the `uses:` call — the suite-executing jobs run it before the suite.
     """
     root = Path(scan_root)
     present = [
@@ -264,6 +290,7 @@ def compute_outputs(
         package_root_rel = package_root.relative_to(repo.resolve())
     except ValueError:
         package_root_rel = Path(".")
+    config = derive_config(package_root_rel, config_input)
     return {
         "languages": _to_json(present),
         # Whole-tree colocated-test (#274): the file-paired languages plus rust — the rust
@@ -283,7 +310,10 @@ def compute_outputs(
         "ts_package_manager": ts_package_manager(package_root),
         "python_env": python_env(package_root),
         "provision_rust": provision_rust(package_root),
-        "config": derive_config(package_root_rel, config_input),
+        "config": config,
+        # #289: the `[python].build_command` escape hatch, read from the package's own config
+        # (`config` above) — the suite-executing jobs run it instead of a `uses:`-call input.
+        "build_command": derive_build_command(config),
     }
 
 

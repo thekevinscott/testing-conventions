@@ -21,6 +21,20 @@ subdirectory scopes attestation discovery to it, matching `e2e verify` run with 
 cwd — needed so a monorepo package's attestation can be verified without a `cd`. Purely additive;
 no existing invocation changes behavior (see **Required changes**).
 
+Runs the reusable workflow's `unit-coverage`, `coverage-changed`, and `mutation` jobs' install
+steps and `build_command` at the derived package root instead of the checkout root (#278, #279,
+built on the `package_root`/`ts_package_manager`/`python_env`/`provision_rust` primitive from
+#277). The `mutation` job additionally picks `npm ci` or `pnpm install --frozen-lockfile` from
+detect's `ts_package_manager` (previously hardcoded to pnpm) and branches Python provisioning on
+detect's `python_env`: `pip` is unchanged; `uv` runs `uv sync` and installs the mutation adapter
+wheel plus pytest into the project's own venv (`uv pip install pytest testing-conventions`, wheel
+last per the #92 drift guard), rather than into global pip, so cosmic-ray's spawned pytest can
+import both the project's own dependencies and the adapter. No Rust-arm change — cargo-mutants
+already runs from the scan root and cargo walks up to the crate. No API change; this is CI-workflow
+behavior only (see **Behavior changes without code changes**). #278 (unit-coverage/coverage-changed)
+lands the same `build_command`-cwd change from a parallel PR; both entries are kept for
+self-containment and reconciled at merge.
+
 Repoints the `install` template at the reorganized docs (#353): the managed `AGENTS.md` block's
 tail drops the link to the removed CLI guide page and keeps the docs-site and machine-readable
 contract (`llms.txt`) pointers. No API change; re-running `install` rewrites an existing block to
@@ -750,6 +764,21 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+The reusable workflow's `unit-coverage`, `coverage-changed`, and `mutation` jobs now install
+project dependencies and run `build_command` at `needs.detect.outputs.package_root` rather than
+the checkout root (#278, #279). A single-package repo (the common case) always derives
+`package_root: "."`, so its install commands and `build_command` run exactly where they did
+before — no change. A monorepo consumer whose `build_command` assumed the checkout root (e.g. a
+relative path into a specific package) must update it to be relative to that package's own root,
+or use an absolute/`$GITHUB_WORKSPACE`-relative path instead. The `mutation` job also now derives
+its TypeScript package manager from detect's `ts_package_manager` instead of always running
+`pnpm install --frozen-lockfile` — an npm-only TypeScript package (a `package-lock.json`, no
+`pnpm-lock.yaml` or `packageManager` field) that previously failed the job's install step
+(`ERR_PNPM_NO_PKG_MANIFEST`) now installs correctly with `npm ci`. A `python_env: "uv"` project's
+`mutation` job now runs `uv sync` and installs the adapter wheel and pytest into the project's own
+`.venv` instead of global pip — a `pip`-based project (no `pyproject.toml`, or one without a
+`[project]` table) is unaffected.
+
 `install` writes a refreshed managed block (#353): the region's content hash changes, so the next
 run on a repo carrying the old block rewrites the owned region in place — the tail now carries the
 docs-site and `llms.txt` pointers only. Content outside the markers is untouched, as before.
@@ -861,6 +890,18 @@ cd packages/rust && cargo test --test e2e_verify --test e2e_verify_e2e
 Expected: all pass — `e2e verify` with no argument still checks the current directory (unchanged
 from today), and `e2e verify packages/widget` run from the repo root behaves identically to
 running `e2e verify` with `packages/widget` as the current directory (fresh/stale/missing).
+
+```
+grep -n 'needs.detect.outputs.package_root' .github/workflows/testing-conventions.yml
+```
+
+Expected: matches in the `unit-coverage`, `coverage-changed`, and `mutation` jobs' install /
+`build_command` / cache steps. Full runtime verification of the `mutation` job's per-package
+install (npm vs. pnpm, uv vs. pip) is via `.github/selftest/monorepo`'s per-package `uses:` calls
+in `testing-conventions-selftest.yml` (`mutation-monorepo-ts`, `mutation-monorepo-py`) — these
+exercise the local `./.github/actions/detect` primitive already, but the reusable workflow's own
+`detect` job is pinned to `@v0` (`internals/repo.md`), so the *mutation job's* new package-root
+behavior is live in CI only after a release moves that tag.
 
 ```
 cd packages/rust && cargo test --test install --test install_e2e

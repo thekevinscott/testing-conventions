@@ -891,3 +891,69 @@ jobs:
           # #277: the fixture's own testing-conventions.toml is discovered with no `config`
           # input — the call above passes only `languages`/`path`.
           [ "$CONFIG" = ".github/selftest/monorepo/packages/py/testing-conventions.toml" ] || { echo "::error::expected the py fixture's own testing-conventions.toml as config, got $CONFIG"; exit 1; }
+
+  # ---- #278: unit-coverage installs and builds at the derived package root ----
+  #
+  # Consumes the #277 primitive: `unit-coverage` / `coverage-changed` must install TS deps,
+  # provision the Python env, and run `build_command` at `needs.detect.outputs.package_root`
+  # instead of the checkout root, or a per-package-lockfile monorepo TS package hits
+  # `ERR_PNPM_NO_PKG_MANIFEST` (dirsql PR #410) and a uv-managed Python package's own
+  # dependencies (e.g. `attrs`) are never installed.
+
+  coverage-package-root-wired:
+    name: unit-coverage / coverage-changed install and build at the derived package root
+    # Red→green wiring signal for #278: both the whole-tree and changed-line coverage jobs
+    # must reference `needs.detect.outputs.package_root` — the #277 primitive — for their
+    # TS install, Python env provisioning, and `build_command` step, or a per-package call
+    # falls back to installing/building at the checkout root. A static grep scoped to each
+    # job's own block (by anchoring on the next job's header), so it tracks the workflow file
+    # regardless of what the published binary ships; the runtime behavior is covered by the
+    # monorepo `uses:` calls below (blocked from truly exercising the new outputs until a
+    # release moves `@v0`, per internals/repo.md).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: unit-coverage must reference needs.detect.outputs.package_root
+        run: |
+          set -euo pipefail
+          BLOCK=$(awk '/^  unit-coverage:/,/^  coverage-changed:/' .github/workflows/testing-conventions.yml)
+          echo "$BLOCK" | grep -q 'needs.detect.outputs.package_root' || {
+            echo "::error::the unit-coverage job doesn't reference needs.detect.outputs.package_root — TS install / Python env / build_command still run at the checkout root, not the derived package root (#278)"
+            exit 1
+          }
+          echo "unit-coverage installs/builds at needs.detect.outputs.package_root"
+      - name: coverage-changed must reference needs.detect.outputs.package_root
+        run: |
+          set -euo pipefail
+          BLOCK=$(awk '/^  coverage-changed:/,/^  mutation:/' .github/workflows/testing-conventions.yml)
+          echo "$BLOCK" | grep -q 'needs.detect.outputs.package_root' || {
+            echo "::error::the coverage-changed job doesn't reference needs.detect.outputs.package_root — TS install / Python env / build_command still run at the checkout root, not the derived package root (#278)"
+            exit 1
+          }
+          echo "coverage-changed installs/builds at needs.detect.outputs.package_root"
+
+  monorepo-coverage-ts:
+    name: The monorepo npm TS fixture passes unit-coverage from its own package root
+    # Runtime half of #278, for the fixture from dirsql PR #410's motivating scenario: a TS
+    # package with its own package-lock.json and no root manifest. Only `path` is set — the
+    # #278 goal for a per-package call (`languages`/`config` are optional refinements; config
+    # is already derived from the package root by #277). This job invokes the LOCAL workflow
+    # file (this branch's edits), but that file's own `detect` job still pins
+    # `actions/detect@v0` — the published action, which doesn't yet emit `package_root` /
+    # `ts_package_manager` — so this can't truly exercise the new wiring until a release moves
+    # the tag (internals/repo.md). Included anyway, syntactically valid and semantically
+    # correct, so it starts passing for real the moment `@v0` advances.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      path: .github/selftest/monorepo/packages/ts
+      gates: '["unit-coverage"]'
+
+  monorepo-coverage-py:
+    name: The monorepo uv Python fixture passes unit-coverage from its own package root
+    # Same @v0-lag caveat as monorepo-coverage-ts: the fixture's `attrs` third-party
+    # dependency is never installed until the reusable workflow's own `detect` job resolves
+    # `python_env` post-release. Only `path` is set.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      path: .github/selftest/monorepo/packages/py
+      gates: '["unit-coverage"]'

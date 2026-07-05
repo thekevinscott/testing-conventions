@@ -15,6 +15,20 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Moves the coverage jobs' install/build location to the derived package root (#278, epic #276,
+building on #277's `package_root` / `ts_package_manager` / `python_env` / `provision_rust`
+primitive). `unit-coverage` and `coverage-changed` now install TypeScript dependencies (`pnpm
+install --frozen-lockfile` or `npm ci`, per the detected package manager) and provision the
+Python environment (`pip install coverage pytest`, or `uv sync` + `uv pip install coverage
+pytest` for a `[project]`-table package) at the package root rather than the checkout root, and
+Rust toolchain provisioning moves ahead of that setup and now also auto-fires when the package
+manifest itself declares a Rust-compiling build (a `Cargo.toml`, a maturin `pyproject.toml`
+backend, a napi `package.json` key) — `rust_toolchain` remains as a manual override for a build no
+manifest field expresses. One breaking change to a documented workflow input: `build_command` now
+runs at the package root instead of the checkout root (see **Required changes**). A single-package
+pnpm/pip consumer with no Rust build declared in its manifest is unaffected (see **Behavior
+changes without code changes**).
+
 Repoints the `install` template at the reorganized docs (#353): the managed `AGENTS.md` block's
 tail drops the link to the removed CLI guide page and keeps the docs-site and machine-readable
 contract (`llms.txt`) pointers. No API change; re-running `install` rewrites an existing block to
@@ -565,6 +579,22 @@ existing command, flag, config key, or SDK item changes.
 
 ### Required changes
 
+The reusable workflow's `build_command` input (`unit-coverage`, `coverage-changed`, and — unchanged
+— `unit mutation`) now runs at `needs.detect.outputs.package_root` instead of the checkout root
+(#278). Delete any leading `cd ... &&` your command used to smuggle in:
+
+```yaml
+# Before:
+build_command: cd packages/python && uv run maturin develop
+# After:
+build_command: uv run maturin develop
+```
+
+Most callers can delete the `build_command` (and `rust_toolchain`) input entirely once their
+manifest declares the build: a `pyproject.toml` with a maturin `build-system.build-backend`, or a
+`package.json` with a `napi` key / `@napi-rs/cli` devDependency, now builds and provisions cargo
+automatically (see **Behavior changes without code changes**).
+
 `config::RustCoverage` and `coverage::RustThresholds` gain `functions: Option<u8>` and
 `branch: Option<u8>`, and `coverage::LlvmCovTotals` gains `functions: LlvmCovMetric` and
 `branches: Option<LlvmCovMetric>` (#267). All three have public fields, so struct literals add
@@ -744,6 +774,22 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+The coverage jobs (`unit-coverage`, `coverage-changed`) now install TypeScript dependencies and
+provision the Python environment at the derived package root, and auto-provision a Rust toolchain
+from the package manifest (#278). A single-package repo with a root pnpm lockfile / global pip
+setup and no Rust build declared in its manifest is byte-identical to before — `package_root`
+derives to `.` and `provision_rust` to `false`, so every step runs exactly where and as it did.
+What changes: a per-package-lockfile monorepo TS package (its own `package-lock.json`, no root
+manifest) installs at its own directory instead of failing with `ERR_PNPM_NO_PKG_MANIFEST`; an npm
+TS package (`packageManager` field or a `package-lock.json`) installs with `npm ci` instead of
+assuming pnpm; a Python package with its own `[project]` table installs via `uv sync` — including
+building/installing the project itself, so a maturin package's native module compiles here with no
+`build_command` — with `coverage`/`pytest` layered on and its venv put on `PATH`; and a package
+whose manifest declares a Rust-compiling build gets a Rust toolchain (and its cache) with no
+`rust_toolchain: true` needed. This reaches the `@v0` self-test and every consumer only once a
+release moves the `@v0` tag (internals/repo.md) — this PR's own CI still runs the previously
+published `detect` action.
+
 `install` writes a refreshed managed block (#353): the region's content hash changes, so the next
 run on a repo carrying the old block rewrites the owned region in place — the tail now carries the
 docs-site and `llms.txt` pointers only. Content outside the markers is untouched, as before.
@@ -847,6 +893,27 @@ Exemptions (#32) change runtime behavior:
   isn't removed or updated. No API or config change.
 
 ### Verification
+
+```
+python3 -c "import yaml; yaml.safe_load(open('.github/workflows/testing-conventions.yml'))"
+python3 -c "import yaml; yaml.safe_load(open('.github/workflows/testing-conventions-selftest.yml'))"
+```
+
+Expected: both parse — no YAML change to the reusable/self-test workflows is malformed. There's
+no Rust API change for #278 (workflow-only), so its own coverage is the `coverage-package-root-wired`
+static wiring job in `testing-conventions-selftest.yml` (green once `unit-coverage` /
+`coverage-changed` reference `needs.detect.outputs.package_root`) plus the `monorepo-coverage-ts`
+/ `monorepo-coverage-py` runtime jobs — the latter only fully exercise the new install/build
+location once a release moves `@v0` (internals/repo.md); until then, verify by hand with the
+published-equivalent local actions, e.g.:
+
+```
+cd .github/selftest/monorepo/packages/ts && npm ci && npx vitest run
+cd .github/selftest/monorepo/packages/py && uv run --with pytest pytest src/widget
+```
+
+Expected: both pass — the fixtures already meet their own coverage floors when installed at their
+own package root by hand, the behavior the coverage jobs adopt.
 
 ```
 cd packages/rust && cargo test --test install --test install_e2e

@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **BREAKING: the coverage jobs (`unit coverage`, changed-line coverage) install, provision, and
+  build at the derived package root, not the checkout root** (#278, epic #276, building on #277).
+  `unit-coverage` / `coverage-changed` now install TypeScript dependencies and provision the
+  Python environment at `needs.detect.outputs.package_root`, and `build_command` runs there too —
+  so a per-package-lockfile monorepo TS package (its own `package-lock.json`, no root manifest) no
+  longer hits `ERR_PNPM_NO_PKG_MANIFEST`, and `build_command` no longer needs a smuggled-in `cd`.
+  Rust toolchain provisioning also moves ahead of the language-env setup, since `uv sync` and an
+  npm `prepare` script may themselves compile a Rust core. See [MIGRATIONS](./MIGRATIONS.md).
 - **`install` block points at the reorganized docs** (#353). The managed `AGENTS.md` block's tail
   links the docs site and the machine-readable contract (`llms.txt`); the pointer to the removed
   CLI guide page is gone. Re-running `install` refreshes an existing block in place (the begin
@@ -14,6 +22,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **The coverage jobs auto-derive the TypeScript package manager, the Python environment model,
+  and Rust auto-provisioning from the package manifest** (#278, epic #276). TS installs run
+  `pnpm install --frozen-lockfile` or `npm ci` per `needs.detect.outputs.ts_package_manager`
+  (npm joins pnpm); a Python package with its own `[project]` table (`python_env == 'uv'`) is
+  installed with `uv sync` — building/installing the project itself, so a maturin package's
+  native module compiles with no `build_command` — with `coverage`/`pytest` layered on and the
+  venv's `bin` put on `PATH`; a plain `pip`-based package is unchanged. `rust_toolchain`'s cache
+  and provisioning now also fire automatically when the package manifest declares a Rust-compiling
+  build (`needs.detect.outputs.provision_rust`), with `rust_toolchain` remaining as a manual
+  override. See [MIGRATIONS](./MIGRATIONS.md).
 - **`install`** (#232). Writes the testing contract into the repository's `AGENTS.md` as a
   marker-delimited, hash-versioned block (the beads `bd init` pattern), so a coding agent learns
   the contract before writing code. Idempotent: re-running refreshes the owned region; everything

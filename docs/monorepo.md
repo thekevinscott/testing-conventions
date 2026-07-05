@@ -58,9 +58,9 @@ Three inputs do the scoping (the [workflow reference](./reference/workflow) list
 
 ## Packages that build a native module
 
-A package whose unit suite imports a compiled module — a PyO3 extension, a napi-rs addon — needs
-that module built before the suite-executing checks run. Two inputs on that package's call handle
-it:
+The `unit coverage` jobs (whole-tree and changed-line) derive their install, provision, and build
+step from the package root's own manifest, so a package whose unit suite imports a compiled
+module — a PyO3/maturin extension, a napi-rs addon — needs no configuration on its call:
 
 ```yaml
   python:
@@ -69,20 +69,35 @@ it:
       languages: '["python"]'
       path: packages/python/yourpkg
       config: packages/python/testing-conventions.toml
-      rust_toolchain: true                      # the build compiles a Rust core
-      build_command: uv run maturin develop     # the suite imports the compiled module
 ```
 
-`build_command` runs after toolchain and dependency setup and before the suite, in the same job;
-`rust_toolchain: true` provisions a cached stable Rust toolchain for it. The binding crate itself
-(the Rust source of a PyO3/napi package) is a package like any other: give it its own
-`languages: '["rust"]'` call with inline `#[cfg(test)]` tests, or keep it outside every scan root.
+A `pyproject.toml` with a maturin `build-system.build-backend` gets `uv sync`, which builds and
+installs the project itself — the native module compiles right there, with cargo already
+provisioned from the same manifest. A `package.json` with a `napi` key or an `@napi-rs/cli`
+devDependency gets its Rust core built during the npm/pnpm `prepare` script, for the same reason.
+
+The binding crate itself (the Rust source of a PyO3/napi package) is a package like any other:
+give it its own `languages: '["rust"]'` call with inline `#[cfg(test)]` tests, or keep it outside
+every scan root.
+
+`build_command` and `rust_toolchain` remain as escape hatches for a build the manifest can't
+express — set them by hand when auto-derivation doesn't cover your build. `unit mutation` doesn't
+yet derive from the package manifest this way, so a mutation call over a native-binding package
+still names `build_command` / `rust_toolchain` explicitly.
 
 ## What the suite jobs expect
 
-The suite-executing TypeScript jobs (`unit coverage`, `unit mutation`) install dependencies with
-`pnpm install --frozen-lockfile` from the repository root — a pnpm workspace with a root lockfile
-satisfies this as-is.
+The `unit coverage` jobs install, provision, and build at the **derived package root** — the
+nearest directory at-or-above `path`, down to the checkout root, holding a `package.json` /
+`pyproject.toml` / `Cargo.toml` (`.` for a single-package repo, so an existing single-package call
+is unaffected). A per-package call needs only `path`:
+
+- **TypeScript** installs with the package's own lockfile — `pnpm install --frozen-lockfile` or
+  `npm ci`, chosen from the manifest's `packageManager` field or the lockfile present. Both
+  managers run the package's `prepare` script during install.
+- **Python** installs `coverage` + `pytest` for a plain package; a package whose `pyproject.toml`
+  carries a `[project]` table gets `uv sync` instead, installing the project's own dependencies and
+  the project itself, with the venv's `coverage` / `pytest` resolved for the suite.
 
 ## Next
 

@@ -14,11 +14,10 @@ inline workflow bash is untested prose and is vulnerable to the GitHub-Actions `
 trap (a `run:` string is templated before the shell sees it). The pure `find_missing_arm` holds the
 assertion logic and is unit-tested in isolation; `main` reads the workflow file and reports.
 """
-from __future__ import annotations
-
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Default target: the dogfood workflow that holds the .github helpers to the package conventions.
 DEFAULT_PATH = ".github/workflows/dogfood-github-helpers.yml"
@@ -36,7 +35,7 @@ ARMS: list[tuple[str, str]] = [
 ]
 
 
-def find_missing_arm(text: str) -> str | None:
+def find_missing_arm(text: str) -> Optional[str]:
     """Return the name of the first Python arm the workflow text does not wire, else None.
 
     Pure: takes the workflow file's contents as a string and returns the missing arm's name (or

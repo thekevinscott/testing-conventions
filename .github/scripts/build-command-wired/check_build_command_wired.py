@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 DEFAULT_WORKFLOW = ".github/workflows/testing-conventions.yml"
 REQUIRED = "needs.detect.outputs.build_command"
@@ -29,7 +30,7 @@ ERROR = (
 SUCCESS = "reusable workflow wires a build_command step"
 
 
-def find_missing_wiring(text: str) -> str | None:
+def find_missing_wiring(text: str) -> Optional[str]:
     """Return the error message when `text` lacks the `build_command` wiring, else None."""
     if REQUIRED in text:
         return None

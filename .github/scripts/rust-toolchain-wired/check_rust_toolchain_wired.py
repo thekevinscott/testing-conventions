@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 DEFAULT_WORKFLOW = ".github/workflows/testing-conventions.yml"
 REQUIRED = "inputs.rust_toolchain"
@@ -29,7 +30,7 @@ ERROR = (
 SUCCESS = "reusable workflow provisions a Rust toolchain behind `rust_toolchain`"
 
 
-def find_missing_wiring(text: str) -> str | None:
+def find_missing_wiring(text: str) -> Optional[str]:
     """Return the error message when `text` lacks the `rust_toolchain` wiring, else None."""
     if REQUIRED in text:
         return None

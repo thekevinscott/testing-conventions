@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 DEFAULT_WORKFLOW = ".github/workflows/testing-conventions.yml"
 REQUIRED = "inputs.gates"
@@ -29,7 +30,7 @@ ERROR = (
 SUCCESS = "reusable workflow scopes its gates to the `gates` allowlist"
 
 
-def find_missing_wiring(text: str) -> str | None:
+def find_missing_wiring(text: str) -> Optional[str]:
     """Return the error message when `text` lacks the `gates` allowlist wiring, else None."""
     if REQUIRED in text:
         return None

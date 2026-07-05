@@ -764,6 +764,12 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+The reusable workflow's `e2e-verify` job now checks out the PR's head commit
+(`github.event.pull_request.head.sha`) instead of the default `pull_request`-event ref (the
+ephemeral merge commit). A PR whose attestation was reported stale purely because the base moved
+since attestation (not because the package's own code changed) now correctly reports fresh. A
+push-event run (no PR) is unaffected — it falls back to `github.sha`, unchanged from today.
+
 `unit coverage --language typescript` now resolves and passes the project's own installed
 vitest's default coverage excludes, instead of silently discarding them (#290). A package whose
 scanned tree contains a build-tool config file (`vitest.config.ts`, `eslint.config.ts`, …) —

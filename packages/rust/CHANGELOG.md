@@ -46,6 +46,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   CLI guide page is gone. Re-running `install` refreshes an existing block in place (the begin
   marker's content hash advances with the content).
 
+### Fixed
+
+- **`e2e-verify` checks out the PR's head commit, not the ephemeral merge ref** (epic #276
+  follow-up). On a `pull_request` event, `actions/checkout`'s default ref is the synthetic merge
+  commit GitHub rebuilds on every push to the base or the PR — a commit an e2e attestation (which
+  names a real, attested code commit) can never match. Once a PR's base has moved since the
+  attestation, `git log`'s pathspec walk over the merge ref resolves the merge commit itself as
+  "latest," so a genuinely fresh attestation reports stale for reasons that have nothing to do
+  with the package's own code. The job now checks out `github.event.pull_request.head.sha`,
+  falling back to `github.sha` for a non-PR trigger. No API or config change.
+
 ### Added
 
 - **`e2e verify [path]`** (#281). `e2e verify` takes an optional directory argument (default: the

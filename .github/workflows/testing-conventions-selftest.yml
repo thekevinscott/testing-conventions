@@ -622,7 +622,7 @@ jobs:
           BLOCK=$(awk '/^  e2e-verify:/,/^  packaging:/' .github/workflows/testing-conventions.yml)
           missing=0
           echo "$BLOCK" | grep -qE -- '--scope' || missing=1
-          echo "$BLOCK" | grep -q 'SCAN_PATH: \${{ inputs.path }}' || missing=1
+          echo "$BLOCK" | grep -qE 'SCAN_PATH: .*inputs\.path' || missing=1
           if [ "$missing" -ne 0 ]; then
             echo "::error::the e2e-verify job doesn't pass --scope naming inputs.path — the freshness walk is scoped to the derived package_root instead, which can be broader than what the caller's own path input names (#294)"
             exit 1

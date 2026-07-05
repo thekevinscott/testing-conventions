@@ -214,6 +214,11 @@ enum E2eCommand {
         /// Directory whose committed e2e-attestation.json is verified (default: current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
+        /// Directory the "latest code commit" freshness walk is scoped to, if
+        /// narrower than `path` (default: `path` itself, byte-identical to before
+        /// this flag existed). Must be `path` or a descendant of it.
+        #[arg(long)]
+        scope: Option<PathBuf>,
     },
 }
 
@@ -271,7 +276,7 @@ where
         Some(Command::Workflow { path }) => run_workflow(&path),
         Some(Command::E2e { command }) => match command {
             E2eCommand::Attest { command } => run_e2e_attest(&command),
-            E2eCommand::Verify { path } => run_e2e_verify(&path),
+            E2eCommand::Verify { path, scope } => run_e2e_verify(&path, scope.as_deref()),
         },
         Some(Command::Install { path }) => {
             agents::install(&path)?;
@@ -867,9 +872,11 @@ fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
 /// (#281) — the default `.` resolves against the current directory, so a
 /// no-argument call behaves exactly like the pre-#281 `current_dir()` read.
 /// Passing a package subdirectory scopes discovery to it, matching a call made
-/// with that directory as cwd.
-fn run_e2e_verify(path: &Path) -> anyhow::Result<i32> {
-    match e2e::verify(path)? {
+/// with that directory as cwd. `scope`, when set, narrows the "latest code
+/// commit" freshness walk to a directory under `path` instead of all of it
+/// (#294) — `None` behaves exactly like passing `path` itself.
+fn run_e2e_verify(path: &Path, scope: Option<&Path>) -> anyhow::Result<i32> {
+    match e2e::verify_scoped(path, scope.unwrap_or(path))? {
         e2e::Verification::Fresh => Ok(0),
         e2e::Verification::Missing => {
             eprintln!(

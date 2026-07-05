@@ -14,8 +14,8 @@ templated before the shell sees it). Lifting it here earns it colocated, integra
 `subprocess` is the one external dependency; it lives behind [`run_command`] so an integration test
 can mock the boundary and drive the real `main` orchestration, while an e2e test runs the whole
 path against a benign command. The exact npx invocations the job asserts on are hardcoded in
-[`CHECKS`]; the workflow step runs this with no arguments. A single `<mode> <command...>` may be
-passed as arguments instead — the seam the e2e test drives with a benign `true`/`false`.
+[`CHECKS`]; the workflow step runs this with no arguments. A single command may be passed as
+trailing arguments instead — the seam the e2e test drives with a benign `true`/`false`.
 """
 from __future__ import annotations
 
@@ -54,17 +54,19 @@ def run_command(command):
 
 
 def expect_failure(returncode):
-    """A red-path assertion: `None` when the command failed as required (non-zero exit), else the
-    reason it did not."""
-    if returncode == 0:
+    """A red-path assertion: `None` when the command failed as required (a truthy, non-zero exit
+    code), else the reason it did not. Truthiness — not `== 0` — so no comparison operator can
+    mutate into an equivalent (`<= 0` never differs for a real exit code; `is 0` never differs for
+    a small cached int)."""
+    if not returncode:
         return "the command exited 0, but a non-zero (failing) exit was required"
     return None
 
 
 def expect_success(returncode):
-    """A clean-path assertion: `None` when the command passed as required (zero exit), else the
-    reason it did not."""
-    if returncode != 0:
+    """A clean-path assertion: `None` when the command passed as required (a falsy, zero exit code),
+    else the reason it did not. Truthiness for the same reason as [`expect_failure`]."""
+    if returncode:
         return f"the command exited {returncode}, but a zero (passing) exit was required"
     return None
 
@@ -77,11 +79,14 @@ def evaluate(expect_fail, returncode):
 
 
 def parse(argv):
-    """The checks to run: the hardcoded [`CHECKS`], or a single `<mode> <command...>` taken from
-    `argv` — the seam an e2e test drives with a benign command. `mode` is `fail` for a red-path
-    check, anything else for a clean-path check."""
-    if len(argv) > 1:
-        return [(argv[2:], argv[1] == "fail", "cli")]
+    """The checks to run: the hardcoded [`CHECKS`], or — when trailing arguments are given — the
+    single command in `argv[1:]` treated as a red-path check. The latter is the seam an e2e test
+    drives with a benign command; the slice's truthiness carries no comparison operator to mutate
+    (`len(argv) > 1` would mutate to an equivalent `!= 1`, since `argv` always holds the program
+    name)."""
+    command = argv[1:]
+    if command:
+        return [(command, True, "cli")]
     return CHECKS
 
 

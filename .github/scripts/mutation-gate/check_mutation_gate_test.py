@@ -12,7 +12,7 @@ import check_mutation_gate as m  # noqa: E402
 
 
 def test_expect_failure_is_none_when_the_command_failed():
-    # Any non-zero exit is a pass for a red-path check — including a signal-kill (negative code).
+    # Any truthy (non-zero) exit is a pass for a red-path check — including a signal-kill (negative).
     assert m.expect_failure(1) is None
     assert m.expect_failure(2) is None
     assert m.expect_failure(-9) is None
@@ -46,20 +46,21 @@ def test_parse_returns_the_hardcoded_checks_with_no_arguments():
     assert m.parse(["check_mutation_gate.py"]) is m.CHECKS
 
 
-def test_parse_builds_a_single_cli_check_from_arguments():
-    # The length boundary (one arg -> CHECKS; two or more -> a cli check) and the mode routing.
-    assert m.parse(["prog", "fail"]) == [([], True, "cli")]
-    assert m.parse(["prog", "fail", "npx", "x"]) == [(["npx", "x"], True, "cli")]
-    assert m.parse(["prog", "pass", "true"]) == [(["true"], False, "cli")]
+def test_parse_treats_trailing_arguments_as_a_red_path_command():
+    assert m.parse(["prog", "some-cmd"]) == [(["some-cmd"], True, "cli")]
+    assert m.parse(["prog", "npx", "run"]) == [(["npx", "run"], True, "cli")]
 
 
-def test_checks_are_the_two_mutation_invocations():
-    commands = [command for command, _expect, _label in m.CHECKS]
-    expectations = [expect for _command, expect, _label in m.CHECKS]
-    assert commands == [
-        ["npx", "-y", "testing-conventions", "unit", "mutation", "--language", "rust",
-         ".github/selftest/mutation/clean"],
-        ["npx", "-y", "testing-conventions", "unit", "mutation", "--language", "rust",
-         ".github/selftest/mutation/survivor"],
-    ]
-    assert expectations == [False, True]
+def test_checks_are_the_expected_invocations():
+    assert m.CHECKS == [
+    (
+        ["npx", "-y", "testing-conventions", "unit", "mutation", "--language", "rust", ".github/selftest/mutation/clean"],
+        False,
+        "clean crate passes unit mutation",
+    ),
+    (
+        ["npx", "-y", "testing-conventions", "unit", "mutation", "--language", "rust", ".github/selftest/mutation/survivor"],
+        True,
+        "survivor crate trips the mutation gate",
+    ),
+]

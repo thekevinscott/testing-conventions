@@ -41,3 +41,8 @@ packages/rust/tests/fixtures/unit_mutation/rust/*/Cargo.lock
 packages/rust/tests/fixtures/unit_mutation/typescript/*/reports/
 packages/rust/tests/fixtures/unit_mutation/typescript/*/.stryker-tmp/
 .stryker-tmp/
+
+# #280: real, committed `dist/` fixtures the packaging-package-root self-test discovers via
+# the derived package_root — the blanket `dist/` rule above would otherwise hide them from git.
+!.github/selftest/packaging-package-root/**/dist/
+!.github/selftest/packaging-package-root/**/dist/**

@@ -24,6 +24,7 @@ def fs():
         "typescript": False,
         "rust_crate": False,
         "dist": False,
+        "dist_root": None,  # where "dist" is found; None means the derived package root (#280)
         "attestation": False,
         "package_root": Path("/repo"),
         "ts_package_manager": "pnpm",
@@ -33,7 +34,10 @@ def fs():
     }
     with patch.object(detect, "has_source", lambda root, language: state[language]), \
             patch.object(detect, "has_rust_crate", lambda root: state["rust_crate"]), \
-            patch.object(detect, "has_dist", lambda root: state["dist"]), \
+            patch.object(
+                detect, "has_dist",
+                lambda root: state["dist"] and root == (state["dist_root"] or state["package_root"]),
+            ), \
             patch.object(detect, "has_attestation", lambda root: state["attestation"]), \
             patch.object(detect, "derive_package_root", lambda scan_root, repo_root: state["package_root"]), \
             patch.object(detect, "ts_package_manager", lambda root: state["ts_package_manager"]), \
@@ -105,6 +109,24 @@ def test_packaging_dist_and_attestation_absent(fs):
     out = detect.compute_outputs("", scan_root="/repo")
     assert out["packaging_dist"] == "false"
     assert out["e2e_attestation"] == "false"
+
+
+# --- #280: packaging_dist is looked for at the derived package root, not the checkout root ---
+
+
+def test_packaging_dist_found_at_the_derived_package_root(fs):
+    fs["package_root"] = Path("/repo/packages/x")
+    fs["dist"] = True
+    out = detect.compute_outputs("", scan_root="/repo/packages/x/src", repo_root="/repo")
+    assert out["packaging_dist"] == "true"
+
+
+def test_packaging_dist_at_the_repo_root_is_not_found_for_a_scoped_package(fs):
+    fs["package_root"] = Path("/repo/packages/x")
+    fs["dist"] = True
+    fs["dist_root"] = Path("/repo")  # the dist sits at the checkout root, not the package root
+    out = detect.compute_outputs("", scan_root="/repo/packages/x/src", repo_root="/repo")
+    assert out["packaging_dist"] == "false"
 
 
 def test_monorepo_outputs_wired_from_the_package_root(fs):

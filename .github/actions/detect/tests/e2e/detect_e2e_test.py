@@ -106,6 +106,43 @@ def test_e2e_packaging_dist_located(run_detect):
     assert out["packaging_dist"] == "true"
 
 
+# --- #280: packaging_dist is looked for at the derived package root, not the checkout root ---
+
+
+def test_e2e_packaging_dist_found_at_the_derived_package_root(run_detect):
+    out = run_detect(
+        scan_path="packages/x/src",
+        root_files={
+            "packages/x/package.json": "{}",
+            "packages/x/src/index.ts": "export const x = 1;\n",
+            "packages/x/dist/pkg.tgz": "",
+        },
+    )
+    assert out["package_root"] == "packages/x"
+    assert out["packaging_dist"] == "true"
+
+
+def test_e2e_packaging_dist_at_the_repo_root_is_not_found_for_a_scoped_package(run_detect):
+    out = run_detect(
+        scan_path="packages/x/src",
+        root_files={
+            "packages/x/package.json": "{}",
+            "packages/x/src/index.ts": "export const x = 1;\n",
+            "dist/pkg.tgz": "",  # at the checkout root, not the package's own dist/
+        },
+    )
+    assert out["package_root"] == "packages/x"
+    assert out["packaging_dist"] == "false"
+
+
+def test_e2e_packaging_dist_at_the_repo_root_still_found_for_a_single_package_repo(run_detect):
+    # Regression guard: no manifest above the scan root derives package_root == "." (the
+    # checkout root), so a root-level dist/ is unchanged from today's behavior.
+    out = run_detect(root_files={"dist/widget-0.1.0-py3-none-any.whl": ""})
+    assert out["package_root"] == "."
+    assert out["packaging_dist"] == "true"
+
+
 def test_e2e_attestation_detected(run_detect):
     out = run_detect(root_files={"e2e-attestation.json": "{}"})
     assert out["e2e_attestation"] == "true"

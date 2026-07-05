@@ -7,14 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **BREAKING: the coverage jobs (`unit coverage`, changed-line coverage) install, provision, and
-  build at the derived package root, not the checkout root** (#278, epic #276, building on #277).
-  `unit-coverage` / `coverage-changed` now install TypeScript dependencies and provision the
-  Python environment at `needs.detect.outputs.package_root`, and `build_command` runs there too —
-  so a per-package-lockfile monorepo TS package (its own `package-lock.json`, no root manifest) no
-  longer hits `ERR_PNPM_NO_PKG_MANIFEST`, and `build_command` no longer needs a smuggled-in `cd`.
-  Rust toolchain provisioning also moves ahead of the language-env setup, since `uv sync` and an
-  npm `prepare` script may themselves compile a Rust core. See [MIGRATIONS](./MIGRATIONS.md).
+- **BREAKING: the suite-executing jobs (`unit coverage`, changed-line coverage, `mutation`)
+  install, provision, and build at the derived package root, not the checkout root** (#278, #279,
+  epic #276, building on #277's `package_root`/`ts_package_manager`/`python_env`/`provision_rust`
+  primitive). All three jobs now install TypeScript dependencies — `npm ci` or `pnpm install
+  --frozen-lockfile`, picked from detect's `ts_package_manager` — and provision the Python
+  environment — `pip` unchanged; `uv` runs `uv sync` then installs the adapter wheel and pytest
+  into the project's own venv — at `needs.detect.outputs.package_root`, and `build_command` runs
+  there too. So a per-package-lockfile monorepo TS package (its own `package-lock.json`, no root
+  manifest) no longer hits `ERR_PNPM_NO_PKG_MANIFEST`, a `uv`-managed Python package's own
+  dependencies are installed before cosmic-ray's spawned pytest needs them, and `build_command` no
+  longer needs a smuggled-in `cd`. Rust toolchain provisioning (`rust_toolchain` / detect's
+  `provision_rust`) also moves ahead of the language-env setup and caches `target` under the
+  package root, since `uv sync` and an npm `prepare` script may themselves compile a Rust core. The
+  Rust language arm itself is unchanged — cargo-mutants already runs from the scan root and cargo
+  walks up to the crate. See [MIGRATIONS](./MIGRATIONS.md).
+
 - **`install` block points at the reorganized docs** (#353). The managed `AGENTS.md` block's tail
   links the docs site and the machine-readable contract (`llms.txt`); the pointer to the removed
   CLI guide page is gone. Re-running `install` refreshes an existing block in place (the begin

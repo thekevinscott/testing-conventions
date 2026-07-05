@@ -15,19 +15,23 @@ Each entry has five sections, in order:
 
 ### Summary
 
-Moves the coverage jobs' install/build location to the derived package root (#278, epic #276,
-building on #277's `package_root` / `ts_package_manager` / `python_env` / `provision_rust`
-primitive). `unit-coverage` and `coverage-changed` now install TypeScript dependencies (`pnpm
-install --frozen-lockfile` or `npm ci`, per the detected package manager) and provision the
-Python environment (`pip install coverage pytest`, or `uv sync` + `uv pip install coverage
-pytest` for a `[project]`-table package) at the package root rather than the checkout root, and
-Rust toolchain provisioning moves ahead of that setup and now also auto-fires when the package
-manifest itself declares a Rust-compiling build (a `Cargo.toml`, a maturin `pyproject.toml`
-backend, a napi `package.json` key) — `rust_toolchain` remains as a manual override for a build no
-manifest field expresses. One breaking change to a documented workflow input: `build_command` now
-runs at the package root instead of the checkout root (see **Required changes**). A single-package
-pnpm/pip consumer with no Rust build declared in its manifest is unaffected (see **Behavior
-changes without code changes**).
+Moves the suite-executing jobs' (`unit-coverage`, `coverage-changed`, `mutation`) install/build
+location to the derived package root (#278, #279, epic #276, building on #277's `package_root` /
+`ts_package_manager` / `python_env` / `provision_rust` primitive). All three jobs now install
+TypeScript dependencies (`pnpm install --frozen-lockfile` or `npm ci`, per the detected package
+manager) and provision the Python environment (`pip install coverage pytest` — or `pip install
+pytest testing-conventions` for `mutation` — unchanged; or `uv sync` + a `uv pip install` of the
+same packages into the project's own venv for a `[project]`-table package) at the package root
+rather than the checkout root, so cosmic-ray's spawned pytest (for `mutation`) or the coverage run
+can import the project's own dependencies. Rust toolchain provisioning moves ahead of that setup
+and now also auto-fires when the package manifest itself declares a Rust-compiling build (a
+`Cargo.toml`, a maturin `pyproject.toml` backend, a napi `package.json` key) — `rust_toolchain`
+remains as a manual override for a build no manifest field expresses — and caches `target` under
+the package root. No Rust-arm change to `mutation` itself — cargo-mutants already runs from the
+scan root and cargo walks up to the crate. One breaking change to a documented workflow input:
+`build_command` now runs at the package root instead of the checkout root (see **Required
+changes**). A single-package pnpm/pip consumer with no Rust build declared in its manifest is
+unaffected (see **Behavior changes without code changes**).
 
 Repoints the `install` template at the reorganized docs (#353): the managed `AGENTS.md` block's
 tail drops the link to the removed CLI guide page and keeps the docs-site and machine-readable
@@ -774,21 +778,26 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
-The coverage jobs (`unit-coverage`, `coverage-changed`) now install TypeScript dependencies and
-provision the Python environment at the derived package root, and auto-provision a Rust toolchain
-from the package manifest (#278). A single-package repo with a root pnpm lockfile / global pip
-setup and no Rust build declared in its manifest is byte-identical to before — `package_root`
-derives to `.` and `provision_rust` to `false`, so every step runs exactly where and as it did.
-What changes: a per-package-lockfile monorepo TS package (its own `package-lock.json`, no root
-manifest) installs at its own directory instead of failing with `ERR_PNPM_NO_PKG_MANIFEST`; an npm
-TS package (`packageManager` field or a `package-lock.json`) installs with `npm ci` instead of
-assuming pnpm; a Python package with its own `[project]` table installs via `uv sync` — including
-building/installing the project itself, so a maturin package's native module compiles here with no
-`build_command` — with `coverage`/`pytest` layered on and its venv put on `PATH`; and a package
-whose manifest declares a Rust-compiling build gets a Rust toolchain (and its cache) with no
-`rust_toolchain: true` needed. This reaches the `@v0` self-test and every consumer only once a
-release moves the `@v0` tag (internals/repo.md) — this PR's own CI still runs the previously
-published `detect` action.
+The reusable workflow's `unit-coverage`, `coverage-changed`, and `mutation` jobs now install
+TypeScript dependencies and provision the Python environment at the derived package root, run
+`build_command` there too, and auto-provision a Rust toolchain from the package manifest (#278,
+#279). A single-package repo with a root pnpm lockfile / global pip setup and no Rust build
+declared in its manifest is byte-identical to before — `package_root` derives to `.` and
+`provision_rust` to `false`, so every step (including `build_command`) runs exactly where and as
+it did. What changes: a per-package-lockfile monorepo TS package (its own `package-lock.json`, no
+root manifest) installs at its own directory instead of failing with `ERR_PNPM_NO_PKG_MANIFEST`;
+an npm TS package (`packageManager` field or a `package-lock.json`) installs with `npm ci` instead
+of assuming pnpm; a Python package with its own `[project]` table installs via `uv sync` —
+including building/installing the project itself, so a maturin package's native module compiles
+here with no `build_command`, and (for `mutation`) the adapter wheel and pytest install into that
+same venv instead of global pip — with `coverage`/`pytest` layered on for the coverage jobs and
+its venv put on `PATH`; and a package whose manifest declares a Rust-compiling build gets a Rust
+toolchain (and its cache, under the package root) with no `rust_toolchain: true` needed. A
+monorepo consumer whose `build_command` assumed the checkout root (e.g. a relative path into a
+specific package) must update it to be relative to that package's own root, or use an
+absolute/`$GITHUB_WORKSPACE`-relative path instead. This reaches the `@v0` self-test and every
+consumer only once a release moves the `@v0` tag (internals/repo.md) — this PR's own CI still
+runs the previously published `detect` action.
 
 `install` writes a refreshed managed block (#353): the region's content hash changes, so the next
 run on a repo carrying the old block rewrites the owned region in place — the tail now carries the
@@ -897,15 +906,17 @@ Exemptions (#32) change runtime behavior:
 ```
 python3 -c "import yaml; yaml.safe_load(open('.github/workflows/testing-conventions.yml'))"
 python3 -c "import yaml; yaml.safe_load(open('.github/workflows/testing-conventions-selftest.yml'))"
+grep -n 'needs.detect.outputs.package_root' .github/workflows/testing-conventions.yml
 ```
 
-Expected: both parse — no YAML change to the reusable/self-test workflows is malformed. There's
-no Rust API change for #278 (workflow-only), so its own coverage is the `coverage-package-root-wired`
-static wiring job in `testing-conventions-selftest.yml` (green once `unit-coverage` /
-`coverage-changed` reference `needs.detect.outputs.package_root`) plus the `monorepo-coverage-ts`
-/ `monorepo-coverage-py` runtime jobs — the latter only fully exercise the new install/build
-location once a release moves `@v0` (internals/repo.md); until then, verify by hand with the
-published-equivalent local actions, e.g.:
+Expected: both parse, and matches show up in the `unit-coverage`, `coverage-changed`, and
+`mutation` jobs' install / `build_command` / cache steps. There's no Rust API change for #278/#279
+(workflow-only), so their own coverage is the `coverage-package-root-wired` /
+`mutation-package-root-wired` static wiring jobs in `testing-conventions-selftest.yml` (green once
+the jobs reference `needs.detect.outputs.package_root`) plus the `monorepo-coverage-ts` /
+`monorepo-coverage-py` / `mutation-monorepo-ts` / `mutation-monorepo-py` runtime jobs — the latter
+only fully exercise the new install/build location once a release moves `@v0`
+(internals/repo.md); until then, verify by hand with the published-equivalent local actions, e.g.:
 
 ```
 cd .github/selftest/monorepo/packages/ts && npm ci && npx vitest run
@@ -913,7 +924,7 @@ cd .github/selftest/monorepo/packages/py && uv run --with pytest pytest src/widg
 ```
 
 Expected: both pass — the fixtures already meet their own coverage floors when installed at their
-own package root by hand, the behavior the coverage jobs adopt.
+own package root by hand, the behavior the coverage/mutation jobs adopt.
 
 ```
 cd packages/rust && cargo test --test install --test install_e2e

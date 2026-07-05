@@ -25,12 +25,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 DEFAULT_MOVE_TAG = ".github/workflows/move-major-tag.yml"
 DEFAULT_RELEASE = ".github/workflows/release.yml"
 
 
-def check_move_major_tag(text: str | None) -> str | None:
+def check_move_major_tag(text: Optional[str]) -> Optional[str]:
     """Validate the dedicated move-major-tag workflow.
 
     `text` is the file's contents, or `None` when the file is absent. Returns the first failing
@@ -54,7 +55,7 @@ def check_move_major_tag(text: str | None) -> str | None:
     return None
 
 
-def check_release_no_inline_tag_move(text: str) -> str | None:
+def check_release_no_inline_tag_move(text: str) -> Optional[str]:
     """Return an error if `release.yml` still moves the major tag inline (`git tag -f v0`)."""
     if "tag -f v0" in text:
         return (
@@ -66,7 +67,7 @@ def check_release_no_inline_tag_move(text: str) -> str | None:
 
 def path_from_argv(argv: list[str], index: int, default: str) -> str:
     """The file at position `index`: `argv[index]` when given, else the repo-relative default."""
-    return argv[index] if len(argv) > index else default
+    return argv[index] if argv[index:] else default
 
 
 def main(argv: list[str]) -> int:

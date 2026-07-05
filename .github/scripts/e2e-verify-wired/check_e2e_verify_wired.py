@@ -20,13 +20,14 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 DEFAULT_PATH = ".github/workflows/testing-conventions.yml"
 INPUT_MARKER = "run_e2e"
 COMMAND = re.compile(r"e2e verify")
 
 
-def find_missing_wiring(text: str) -> str | None:
+def find_missing_wiring(text: str) -> Optional[str]:
     """Return an error message unless both the `run_e2e` input and `e2e verify` command appear."""
     if INPUT_MARKER not in text or COMMAND.search(text) is None:
         return (
@@ -38,7 +39,7 @@ def find_missing_wiring(text: str) -> str | None:
 
 def path_from_argv(argv: list[str], default: str) -> str:
     """The workflow file to inspect: `argv[1]` when given, else the repo-relative default."""
-    return argv[1] if len(argv) > 1 else default
+    return argv[1] if argv[1:] else default
 
 
 def main(argv: list[str]) -> int:

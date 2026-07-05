@@ -20,13 +20,14 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 DEFAULT_PATH = ".github/workflows/testing-conventions.yml"
 CO_CHANGE = re.compile(r"colocated-test .*--base")
 CHANGED_LINE_COVERAGE = re.compile(r"unit coverage .*--base")
 
 
-def find_missing_wiring(text: str) -> str | None:
+def find_missing_wiring(text: str) -> Optional[str]:
     """Return an error message if either diff-scoped `--base` check is not invoked.
 
     Both the co-change (`colocated-test --base`) and changed-line coverage (`unit coverage
@@ -43,7 +44,7 @@ def find_missing_wiring(text: str) -> str | None:
 
 def path_from_argv(argv: list[str], default: str) -> str:
     """The workflow file to inspect: `argv[1]` when given, else the repo-relative default."""
-    return argv[1] if len(argv) > 1 else default
+    return argv[1] if argv[1:] else default
 
 
 def main(argv: list[str]) -> int:

@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 DEFAULT_PATH = ".github/workflows/testing-conventions.yml"
 JOB_START = re.compile(r"^  e2e-verify:")
@@ -51,7 +52,7 @@ def extract_block(text: str, start: re.Pattern[str], end: re.Pattern[str]) -> st
     return "\n".join(block)
 
 
-def find_missing_pr_head_pin(text: str) -> str | None:
+def find_missing_pr_head_pin(text: str) -> Optional[str]:
     """Return an error message unless the `e2e-verify` job pins the PR head commit."""
     block = extract_block(text, JOB_START, JOB_END)
     if PIN not in block:
@@ -65,7 +66,7 @@ def find_missing_pr_head_pin(text: str) -> str | None:
 
 def path_from_argv(argv: list[str], default: str) -> str:
     """The workflow file to inspect: `argv[1]` when given, else the repo-relative default."""
-    return argv[1] if len(argv) > 1 else default
+    return argv[1] if argv[1:] else default
 
 
 def main(argv: list[str]) -> int:

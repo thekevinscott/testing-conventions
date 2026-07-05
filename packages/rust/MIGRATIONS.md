@@ -764,6 +764,14 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`unit coverage --language typescript` now resolves and passes the project's own installed
+vitest's default coverage excludes, instead of silently discarding them (#290). A package whose
+scanned tree contains a build-tool config file (`vitest.config.ts`, `eslint.config.ts`, …) —
+previously counted as 0%-covered "source" — is now excluded exactly as vitest's own defaults
+already intend; its reported coverage percentage rises accordingly. A package with no such file
+inside the scanned tree (the common single-package layout, where `vitest.config.ts` sits outside
+the scanned `src/`) sees no change. No API or config change.
+
 The reusable workflow's `unit-coverage`, `coverage-changed`, and `mutation` jobs now install
 project dependencies and run `build_command` at `needs.detect.outputs.package_root` rather than
 the checkout root (#278, #279). A single-package repo (the common case) always derives
@@ -882,6 +890,15 @@ Exemptions (#32) change runtime behavior:
   isn't removed or updated. No API or config change.
 
 ### Verification
+
+```
+cd packages/rust && cargo test --test coverage_ts
+```
+
+Expected: all pass — including `a_package_root_config_file_is_not_counted_as_uncovered_source`,
+which proves a fully-tested package whose scanned root also carries its own `vitest.config.ts`
+reports 100%, not diluted by the config file. Requires Node with the fixtures' vitest toolchain
+installed (`npm install` under `tests/fixtures/unit_coverage/typescript/`).
 
 ```
 cd packages/rust && cargo test --test e2e_verify --test e2e_verify_e2e

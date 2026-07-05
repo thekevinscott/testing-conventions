@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **`unit coverage --language typescript` no longer discards vitest's own default coverage
+  excludes** (#290). Passing any `--coverage.exclude` to vitest replaces its built-in default
+  list rather than extending it; the rule always passed its own test-file/declaration-file
+  excludes, silently dropping vitest's defaults — which already exclude build-tool config files
+  (`vitest.config.ts`, `eslint.config.ts`, …), `dist/`, and `node_modules/`. A package whose
+  scanned root contained one of those (any monorepo package whose own `vitest.config.ts` sits
+  alongside `src/`, since a per-package call scans the whole package root) had it counted as
+  0%-covered "source," under-reporting real coverage. The rule now resolves the project's own
+  installed vitest's `coverageConfigDefaults.exclude` live (rather than hand-maintaining a list of
+  ecosystem config-file conventions) and passes that alongside the config-driven `coverage`
+  exemptions. A previously-affected consumer's reported percentage goes *up*; an unaffected one
+  (no config file inside the scanned tree) is unchanged. No API or config change.
+
 - **`packaging` discovers `dist/` at the derived package root, not the checkout root** (#280).
   A per-package `uses:` call now inspects its own package's `dist/`; a repo-root `dist/` counts
   only for a call whose derived package root IS the repo root. Every single-package consumer's

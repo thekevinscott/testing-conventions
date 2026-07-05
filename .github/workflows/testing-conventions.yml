@@ -517,11 +517,11 @@ jobs:
       # language, installed from the derived package root (#279) so a monorepo's
       # per-package lockfile/manifest is the one that's read. #56 (config-driven `check`)
       # will eventually drive this from config.
-      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'pip'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'pip'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
         name: Install the Python mutation toolchain (wheel + pytest)
         # `unit mutation --language python` spawns the adapter shipped in the wheel
         # (`python3 -m testing_conventions.mutation.main`, #248); installing the wheel puts
@@ -536,11 +536,11 @@ jobs:
       # and pytest go INTO that same venv (not global pip) so cosmic-ray's spawned pytest
       # can import both the project's own dependencies and the adapter (#279). Wheel named
       # last, same #92 drift-guard reason as the pip install above.
-      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'uv'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
         uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.12'
-      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'uv'
+      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
         name: Provision the project environment (uv)
         working-directory: ${{ needs.detect.outputs.package_root }}
         run: |
@@ -552,7 +552,7 @@ jobs:
       # project's deps (which must include @stryker-mutator/core and a runner plugin) with
       # whichever package manager the package root's own manifest/lockfile names (#279):
       # `pnpm/action-setup` only when it's pnpm, so an npm-only package doesn't require it.
-      - if: matrix.language == 'typescript' && needs.detect.outputs.ts_package_manager == 'pnpm'
+      - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
         with:
           version: 10.33.0
@@ -564,7 +564,7 @@ jobs:
         name: Install project dependencies
         working-directory: ${{ needs.detect.outputs.package_root }}
         env:
-          PM: ${{ needs.detect.outputs.ts_package_manager }}
+          PM: ${{ needs.detect.outputs.ts_package_manager || 'pnpm' }}
         run: |
           set -euo pipefail
           if [ "$PM" = "pnpm" ]; then pnpm install --frozen-lockfile; else npm ci; fi

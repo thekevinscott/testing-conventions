@@ -14,6 +14,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   is untouched. Additive/non-breaking — a monorepo consumer that was silently skipped (never
   failed) for a per-package `dist/` the workflow couldn't see now gets it inspected.
 
+- **`mutation` job installs and builds from the derived package root** (#279). The reusable
+  workflow's `mutation` job (mirroring the `unit-coverage`/`coverage-changed` fixes, #278) now
+  installs TypeScript deps with `npm ci` or `pnpm install --frozen-lockfile` — picked from
+  detect's `ts_package_manager` — and provisions Python from detect's `python_env`: `pip` keeps
+  today's global `pytest` + `testing-conventions` wheel install; `uv` runs `uv sync` then installs
+  the adapter wheel and pytest into the project's own venv, so cosmic-ray's spawned pytest can
+  import both. Every install, and `build_command`, now runs at `needs.detect.outputs.package_root`
+  instead of the checkout root — **breaking** for a consumer whose `build_command` relied on
+  running at the repository root (see `packages/rust/MIGRATIONS.md`). Rust auto-provisioning
+  (`rust_toolchain` / detect's `provision_rust`) now also caches `target` under the package root.
+  The `unit-coverage`, `coverage-changed`, and `mutation` jobs' `build_command` now all run at the
+  derived package root — the same breaking change lands from two parallel PRs (#278, #279) and is
+  reconciled at merge.
+
 - **`install` block points at the reorganized docs** (#353). The managed `AGENTS.md` block's tail
   links the docs site and the machine-readable contract (`llms.txt`); the pointer to the removed
   CLI guide page is gone. Re-running `install` refreshes an existing block in place (the begin

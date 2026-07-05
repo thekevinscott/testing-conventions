@@ -582,6 +582,28 @@ jobs:
           fi
           echo "reusable workflow offers opt-in e2e verify"
 
+  e2e-verify-checks-out-pr-head:
+    name: e2e-verify checks out the PR head commit, not the merge ref
+    # Red→green wiring signal: on a pull_request event, actions/checkout's default
+    # ref is the ephemeral merge commit — a synthetic commit an e2e attestation
+    # (which names a real, attested code commit) can never match. A non-trivial
+    # merge (base has moved since the PR branched, the common case on an active
+    # repo) makes `git log` resolve the merge commit itself as "latest," so
+    # `e2e verify` would report every fresh attestation stale. The e2e-verify
+    # job's checkout must pin `github.event.pull_request.head.sha` explicitly.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: e2e-verify's checkout must pin the PR head commit
+        run: |
+          set -euo pipefail
+          BLOCK=$(awk '/^  e2e-verify:/,/^  packaging:/' .github/workflows/testing-conventions.yml)
+          echo "$BLOCK" | grep -q 'github.event.pull_request.head.sha' || {
+            echo "::error::the e2e-verify job's checkout doesn't pin github.event.pull_request.head.sha — on a pull_request event it checks out the ephemeral merge ref instead, which a committed attestation's recorded commit can never match"
+            exit 1
+          }
+          echo "e2e-verify checks out the PR head commit"
+
   diff-scoped-runs:
     name: A clean PR passes the diff-scoped --base jobs
     # The runtime half of #172: call the reusable workflow with the new `base` input

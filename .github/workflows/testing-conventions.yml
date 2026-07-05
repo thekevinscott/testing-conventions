@@ -713,8 +713,13 @@ jobs:
       - uses: actions/checkout@v6
         with:
           # `e2e verify` finds the latest code commit via `git log`, so it needs
-          # full history — a shallow clone would miss it.
+          # full history — a shallow clone would miss it. On a pull_request event
+          # the default ref is the ephemeral merge commit, which an attestation
+          # can never name (it's rebuilt fresh on every push to the base or the
+          # PR); check out the PR's actual head commit instead, falling back to
+          # the triggering commit for a push/other event where there is no PR.
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Verify the e2e attestation is current
         env:
           VERSION: ${{ inputs.version }}

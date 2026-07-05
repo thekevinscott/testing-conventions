@@ -33,3 +33,11 @@ def test_to_json_is_compact():
 
 def test_to_json_empty_is_brackets():
     assert detect._to_json([]) == "[]"
+
+
+def test_package_manager_from_field_extracts_the_name():
+    assert detect._package_manager_from_field("pnpm@8.6.0") == "pnpm"
+
+
+def test_package_manager_from_field_empty_is_none():
+    assert detect._package_manager_from_field("") is None

@@ -20,6 +20,48 @@ Every PR that changes public API touches both files. Enforced in CI; a `skip-cha
 
 Public-API surface for the purpose of these files: every exported value/type, every CLI flag, every config key, every observable artifact (tag format, GitHub Release body shape). Internal refactors, test-only changes, and docs-only edits stay out.
 
+## Monorepo package-root derivation
+
+`detect.py` derives five outputs a suite-executing job needs to install, build, run, and
+configure at the right directory (#277): `package_root`, `ts_package_manager`, `python_env`,
+`provision_rust`, `config`. A `working_directory` input was considered and rejected — it would
+add a second, consumer-facing coordinate system against the documented rule that `path` is the
+only scoping mechanism (docs/monorepo.md). Everything else is derived from `path` and the
+package's own manifest instead.
+
+- **`package_root`** (`derive_package_root`): the nearest directory at-or-above the scan root
+  (`path`), down to the checkout root inclusive, holding a `package.json` / `pyproject.toml` /
+  `Cargo.toml`; the checkout root (`.`) when none is found. A single-package repo has no manifest
+  above the scan root other than possibly at the checkout root, so it always derives `.` —
+  every current consumer is untouched.
+- **`ts_package_manager`** (`ts_package_manager`): `package.json`'s `packageManager` field name,
+  else `pnpm`/`npm` by lockfile presence, else `pnpm` (today's hardcoded default).
+- **`python_env`** (`python_env`): `uv` when `package_root`'s `pyproject.toml` parses with a
+  `[project]` table (an installable project with its own dependencies), else `pip` — no
+  `pyproject.toml`, one with only tool config, or one that fails to parse. detect never crashes
+  on a malformed manifest; it degrades to `pip`.
+- **`provision_rust`** (`provision_rust`): `true` when `package_root`'s own manifest declares a
+  Rust-compiling build — a `Cargo.toml` sits there, `pyproject.toml`'s
+  `build-system.build-backend` is a maturin backend, or `package.json` declares a `napi` key or
+  an `@napi-rs/cli` devDependency. `rust_toolchain` remains as a manual override for a build no
+  manifest field expresses.
+- **`config`** (`derive_config`): the `config` input verbatim when the caller named anything
+  other than the default (`testing-conventions.toml`); otherwise a `testing-conventions.toml`
+  at `package_root` when one exists there, else the default itself — today's repo-root behavior,
+  unchanged when `package_root` is `.`. Every suite/lint job's `CONFIG` env reads this output
+  instead of `inputs.config` directly, so a per-package call's own config file is discovered,
+  never named.
+
+These are the primitive the four gate fixes (#278–#281) consume; deriving them is out of scope
+for what those jobs *do* with them (installing, building, discovering `dist/`, discovering
+`e2e-attestation.json`) — see each issue for its own gate-specific wiring.
+
+The `.github/selftest/monorepo/` fixture (no manifest or lockfile at its own root, mirroring a
+real per-package-lockfile monorepo) exercises the derivation end to end via the local
+`./.github/actions/detect` action — the same pattern `detect-routes-python` in
+`testing-conventions-selftest.yml` already uses, so it isn't blocked by the `@v0` lag described
+below.
+
 ## Self-test and the `@v0` path
 
 The reusable workflow (`.github/workflows/testing-conventions.yml`) drives the **published** tool — its `detect` step pins `…/actions/detect@v0`, and each rule job runs `npx testing-conventions` (no version → latest on npm). The self-test (`testing-conventions-selftest.yml`) calls that reusable workflow. So a change to *detection* (which rules fan out) or *rule behavior* does **not** take effect in the self-test — or for any consumer — until a release **moves `@v0`** to the new commit and publishes the package.

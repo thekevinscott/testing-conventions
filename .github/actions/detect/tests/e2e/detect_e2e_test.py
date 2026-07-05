@@ -25,9 +25,16 @@ def run_detect(tmp_path):
     origin_cwd = os.getcwd()
     os.chdir(tmp_path)
 
-    def run(languages="", sources=None, root_files=None, github_output="github_output"):
-        scan = Path("scan")
-        scan.mkdir(exist_ok=True)
+    def run(
+        languages="",
+        sources=None,
+        root_files=None,
+        github_output="github_output",
+        scan_path="scan",
+        config="testing-conventions.toml",
+    ):
+        scan = Path(scan_path)
+        scan.mkdir(parents=True, exist_ok=True)
         for rel, content in (sources or {}).items():
             path = scan / rel
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -39,7 +46,12 @@ def run_detect(tmp_path):
         out_path = Path(github_output) if github_output else None
         if out_path:
             out_path.write_text("")
-        env = {"LANGUAGES": languages, "SCAN_PATH": "scan", "GITHUB_OUTPUT": github_output}
+        env = {
+            "LANGUAGES": languages,
+            "SCAN_PATH": scan_path,
+            "GITHUB_OUTPUT": github_output,
+            "CONFIG": config,
+        }
         with patch.dict(os.environ, env):
             try:
                 runpy.run_path(str(SCRIPT), run_name="__main__")
@@ -105,3 +117,194 @@ def test_e2e_runs_without_a_github_output_file(run_detect, capsys):
     out = run_detect(languages='["python"]', sources={"widget.py": "x = 1\n"}, github_output="")
     assert out == {}
     assert "languages" in capsys.readouterr().out
+
+
+# --- #277: the monorepo package-root primitive ---
+
+
+def test_e2e_package_root_at_nested_manifest(run_detect):
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": "{}",
+            "packages/ts/src/index.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["package_root"] == "packages/ts"
+
+
+def test_e2e_package_root_equals_scan_root_when_the_manifest_is_there(run_detect):
+    out = run_detect(
+        scan_path="packages/rs",
+        root_files={
+            "packages/rs/Cargo.toml": '[package]\nname = "x"\n',
+            "packages/rs/lib.rs": "pub fn f() {}\n",
+        },
+    )
+    assert out["package_root"] == "packages/rs"
+
+
+def test_e2e_package_root_falls_back_to_the_repo_root(run_detect):
+    out = run_detect(sources={"widget.py": "x = 1\n"})
+    assert out["package_root"] == "."
+
+
+def test_e2e_ts_package_manager_from_packagemanager_field(run_detect):
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": '{"packageManager": "pnpm@8.6.0"}',
+            "packages/ts/src/index.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["ts_package_manager"] == "pnpm"
+
+
+def test_e2e_ts_package_manager_field_beats_lockfile(run_detect):
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": '{"packageManager": "npm@10.0.0"}',
+            "packages/ts/pnpm-lock.yaml": "",
+            "packages/ts/src/index.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["ts_package_manager"] == "npm"
+
+
+def test_e2e_ts_package_manager_from_npm_lockfile(run_detect):
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": "{}",
+            "packages/ts/package-lock.json": "{}",
+            "packages/ts/src/index.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["ts_package_manager"] == "npm"
+
+
+def test_e2e_ts_package_manager_defaults_to_pnpm(run_detect):
+    out = run_detect(sources={"widget.ts": "export const x = 1;\n"})
+    assert out["ts_package_manager"] == "pnpm"
+
+
+def test_e2e_python_env_uv_when_project_table_present(run_detect):
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\nversion = "0.1.0"\n',
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["python_env"] == "uv"
+
+
+def test_e2e_python_env_pip_without_a_project_table(run_detect):
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": "[tool.black]\nline-length = 100\n",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["python_env"] == "pip"
+
+
+def test_e2e_python_env_pip_without_a_pyproject(run_detect):
+    out = run_detect(sources={"widget.py": "x = 1\n"})
+    assert out["python_env"] == "pip"
+
+
+def test_e2e_python_env_pip_on_an_unparseable_pyproject(run_detect):
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": "not valid toml [[[",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["python_env"] == "pip"
+
+
+def test_e2e_provision_rust_true_for_a_cargo_toml_at_the_package_root(run_detect):
+    out = run_detect(
+        scan_path="packages/rs/src",
+        root_files={
+            "packages/rs/Cargo.toml": '[package]\nname = "x"\n',
+            "packages/rs/src/lib.rs": "pub fn f() {}\n",
+        },
+    )
+    assert out["provision_rust"] == "true"
+
+
+def test_e2e_provision_rust_true_for_a_maturin_backend(run_detect):
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": (
+                '[project]\nname = "x"\n\n[build-system]\nbuild-backend = "maturin"\n'
+            ),
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["provision_rust"] == "true"
+
+
+def test_e2e_provision_rust_true_for_a_napi_key(run_detect):
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": '{"napi": {}}',
+            "packages/ts/src/index.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["provision_rust"] == "true"
+
+
+def test_e2e_provision_rust_true_for_a_napi_cli_dev_dependency(run_detect):
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": '{"devDependencies": {"@napi-rs/cli": "^2.0.0"}}',
+            "packages/ts/src/index.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["provision_rust"] == "true"
+
+
+def test_e2e_provision_rust_false_by_default(run_detect):
+    out = run_detect(sources={"widget.py": "x = 1\n"})
+    assert out["provision_rust"] == "false"
+
+
+def test_e2e_config_default_falls_back_when_no_package_root_file(run_detect):
+    out = run_detect(sources={"widget.py": "x = 1\n"})
+    assert out["config"] == "testing-conventions.toml"
+
+
+def test_e2e_config_default_discovers_the_package_root_file(run_detect):
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": "",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["config"] == "packages/py/testing-conventions.toml"
+
+
+def test_e2e_config_explicit_override_wins_verbatim(run_detect):
+    out = run_detect(
+        scan_path="packages/py/src",
+        config="custom.toml",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": "",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    # A caller-provided non-default value passes through unchanged even though a
+    # package-root file exists, since the explicit override always wins.
+    assert out["config"] == "custom.toml"

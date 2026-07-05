@@ -1,0 +1,2 @@
+# Fixture-local config for the monorepo selftest (#277): no root manifest, so
+# every gate must be driven by the derived package root.

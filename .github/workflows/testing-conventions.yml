@@ -492,14 +492,36 @@ jobs:
         with:
           # `--base` diffs `<base>...HEAD`, so the base ref must be reachable.
           fetch-depth: 0
+      # Provision cargo (+ cache) for a build_command that compiles a Rust core (#263)
+      # BEFORE the language-env steps below — a maturin/PyO3 build triggered by `uv sync`
+      # (not just an explicit `build_command`) needs cargo already on PATH. Auto-provisions
+      # whenever the package root's own manifest declares a Rust-compiling build too
+      # (detect's `provision_rust`, #277), not only when the caller passes `rust_toolchain`;
+      # the rust arm sets its own toolchain up below, so skip it here. `target` caches under
+      # the package root (#279), mirroring the coverage jobs (#278).
+      - if: (inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') && matrix.language != 'rust'
+        uses: dtolnay/rust-toolchain@stable
+      - if: inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true'
+        name: Cache the Rust build (cargo registry + target)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ${{ needs.detect.outputs.package_root }}/target
+          key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            rust-toolchain-build-${{ runner.os }}-
       # Like coverage, `unit mutation` shells out to the language's mutation engine, so
       # its toolchain — and the project's own test deps — must be present. Set up per
-      # language. #56 (config-driven `check`) will eventually drive this from config.
-      - if: matrix.language == 'python'
+      # language, installed from the derived package root (#279) so a monorepo's
+      # per-package lockfile/manifest is the one that's read. #56 (config-driven `check`)
+      # will eventually drive this from config.
+      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'pip'
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - if: matrix.language == 'python'
+      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'pip'
         name: Install the Python mutation toolchain (wheel + pytest)
         # `unit mutation --language python` spawns the adapter shipped in the wheel
         # (`python3 -m testing_conventions.mutation.main`, #248); installing the wheel puts
@@ -508,10 +530,29 @@ jobs:
         # The wheel is named last so the subcommand-drift guard (#92) doesn't read the
         # package that follows the binary name as a `testing-conventions` invocation.
         run: python -m pip install --quiet pytest testing-conventions
+      # A `uv`-managed package (detect's python_env, #277) gets its own dependencies too:
+      # `uv sync` installs (and, for a maturin project, builds) the project itself — the
+      # cargo toolchain above is already on PATH for that build — then the adapter wheel
+      # and pytest go INTO that same venv (not global pip) so cosmic-ray's spawned pytest
+      # can import both the project's own dependencies and the adapter (#279). Wheel named
+      # last, same #92 drift-guard reason as the pip install above.
+      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'uv'
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+      - if: matrix.language == 'python' && needs.detect.outputs.python_env == 'uv'
+        name: Provision the project environment (uv)
+        working-directory: ${{ needs.detect.outputs.package_root }}
+        run: |
+          set -euo pipefail
+          uv sync
+          uv pip install pytest testing-conventions
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       # TypeScript drives Stryker, which runs the project's test runner — install the
-      # project's deps (which must include @stryker-mutator/core and a runner plugin)
-      # with pnpm, the TS convention.
-      - if: matrix.language == 'typescript'
+      # project's deps (which must include @stryker-mutator/core and a runner plugin) with
+      # whichever package manager the package root's own manifest/lockfile names (#279):
+      # `pnpm/action-setup` only when it's pnpm, so an npm-only package doesn't require it.
+      - if: matrix.language == 'typescript' && needs.detect.outputs.ts_package_manager == 'pnpm'
         uses: pnpm/action-setup@v5
         with:
           version: 10.33.0
@@ -520,8 +561,13 @@ jobs:
         with:
           node-version: 24
       - if: matrix.language == 'typescript'
-        name: Install project dependencies (pnpm)
-        run: pnpm install --frozen-lockfile
+        name: Install project dependencies
+        working-directory: ${{ needs.detect.outputs.package_root }}
+        env:
+          PM: ${{ needs.detect.outputs.ts_package_manager }}
+        run: |
+          set -euo pipefail
+          if [ "$PM" = "pnpm" ]; then pnpm install --frozen-lockfile; else npm ci; fi
       # Rust drives cargo-mutants over the crate. The published CLI provisions the engine
       # itself now (#242) — a pinned `cargo install` into its cache on first use — so only the
       # cargo toolchain is set up here; cache that dir so the from-source install is reused.
@@ -533,27 +579,14 @@ jobs:
         with:
           path: ~/.cache/testing-conventions
           key: cargo-mutants-provision-${{ runner.os }}
-      # Provision cargo (+ cache) for a build_command that compiles a Rust core (#263),
-      # as in the coverage jobs — the rust arm set its own toolchain up above;
-      # `rust_toolchain: false` ⇒ skipped.
-      - if: inputs.rust_toolchain && matrix.language != 'rust'
-        uses: dtolnay/rust-toolchain@stable
-      - if: inputs.rust_toolchain
-        name: Cache the Rust build (cargo registry + target)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            rust-toolchain-build-${{ runner.os }}-
       # Build a caller-supplied native module before the mutation engine runs the suite
       # (#243): cosmic-ray / Stryker / cargo-mutants import the same module, so it must be
-      # compiled here too; empty `build_command` ⇒ skipped.
+      # compiled here too; empty `build_command` ⇒ skipped. Runs at the derived package
+      # root (#279) — breaking for a monorepo consumer whose command assumed the checkout
+      # root (packages/rust/MIGRATIONS.md).
       - if: inputs.build_command != ''
         name: Run the build step (build_command)
+        working-directory: ${{ needs.detect.outputs.package_root }}
         env:
           BUILD_COMMAND: ${{ inputs.build_command }}
         run: |

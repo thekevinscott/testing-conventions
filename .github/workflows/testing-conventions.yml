@@ -659,7 +659,7 @@ jobs:
           # The downloaded artifact when one was named, else the located dist/ at the
           # derived package root (#280 — "." for a single-package repo, so this is
           # `./dist`, byte-identical to today's `dist`).
-          if [ -n "$PACKAGING_ARTIFACT" ]; then dist_root=_packaging_artifact; else dist_root="$PACKAGE_ROOT/dist"; fi
+          if [ -n "$PACKAGING_ARTIFACT" ]; then dist_root=_packaging_artifact; else dist_root="${PACKAGE_ROOT:-.}/dist"; fi
           # Language is inferred from the distribution's extension: a wheel/sdist is
           # python, an `npm pack` tarball is typescript, a Cargo crate is rust.
           checked=0

@@ -25,6 +25,12 @@ def test_rust_only_does_not_route_python_in():
     )
 
 
+def test_typescript_only_does_not_route_python_in():
+    assert m.routes_python('["typescript"]') == (
+        'the detect action did not route Python into isolation_languages (got: ["typescript"])'
+    )
+
+
 def test_empty_array_does_not_route_python_in():
     assert m.routes_python("[]") == (
         "the detect action did not route Python into isolation_languages (got: [])"

@@ -4,6 +4,9 @@ Runs the script's `__main__` entry point in-process via `runpy` against temp wor
 covering `main`, the file read, and the `__main__` guard. A workflow that gates e2e verify on
 `e2e_attestation` exits 0; one that does not exits 1. `argv[0]` is a bogus path so a mutant that
 reads it instead of `argv[1]` fails on a missing file.
+
+The last two tests pin the `if __name__ == "__main__":` guard's `==` against mutation: a distinct
+runtime-built "__main__" (kills `is`) and a name sorting below "__main__" (kills `<=`).
 """
 import runpy
 import sys
@@ -13,13 +16,14 @@ SCRIPT = Path(__file__).resolve().parents[2] / "check_wiring_e2e_default_on.py"
 
 WIRED = "  e2e-verify:\n    if: needs.detect.outputs.e2e_attestation == 'true'\n"
 UNWIRED = "  e2e-verify:\n    if: always()\n"
+SUCCESS = "e2e verify is default-on (gates on e2e_attestation)"
 
 
-def run(argv):
+def run_named(run_name, argv):
     old = sys.argv
     sys.argv = argv
     try:
-        runpy.run_path(str(SCRIPT), run_name="__main__")
+        runpy.run_path(str(SCRIPT), run_name=run_name)
         return 0
     except SystemExit as exit_:
         return exit_.code or 0
@@ -27,11 +31,15 @@ def run(argv):
         sys.argv = old
 
 
+def run(argv):
+    return run_named("__main__", argv)
+
+
 def test_e2e_passes_when_e2e_verify_gates_on_the_output(tmp_path, capsys):
     wf = tmp_path / "testing-conventions.yml"
     wf.write_text(WIRED)
     assert run([str(tmp_path / "prog-not-a-file"), str(wf)]) == 0
-    assert "e2e verify is default-on (gates on e2e_attestation)" in capsys.readouterr().out
+    assert SUCCESS in capsys.readouterr().out
 
 
 def test_e2e_fails_when_e2e_verify_does_not_gate(tmp_path, capsys):
@@ -39,3 +47,22 @@ def test_e2e_fails_when_e2e_verify_does_not_gate(tmp_path, capsys):
     wf.write_text(UNWIRED)
     assert run([str(tmp_path / "prog-not-a-file"), str(wf)]) == 1
     assert "::error::" in capsys.readouterr().out
+
+
+def test_e2e_guard_fires_for_a_distinct_main_object(tmp_path, capsys):
+    # A runtime-built "__main__", equal by value but a distinct object: the guard's `==` fires
+    # (main runs, prints the success line), where a mutated `is` would not.
+    wf = tmp_path / "testing-conventions.yml"
+    wf.write_text(WIRED)
+    distinct_main = "".join(["__main", "__"])
+    run_named(distinct_main, [str(tmp_path / "prog-not-a-file"), str(wf)])
+    assert SUCCESS in capsys.readouterr().out
+
+
+def test_e2e_guard_skips_for_a_name_below_main(tmp_path, capsys):
+    # A run name sorting strictly below "__main__": the guard's `==` skips main, where a mutated
+    # `<=` would fire it — so the success line is absent.
+    wf = tmp_path / "testing-conventions.yml"
+    wf.write_text(WIRED)
+    run_named("__lain__", [str(tmp_path / "prog-not-a-file"), str(wf)])
+    assert SUCCESS not in capsys.readouterr().out

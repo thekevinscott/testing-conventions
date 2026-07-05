@@ -363,7 +363,7 @@ jobs:
           languages: '["python"]'
           path: .github/selftest/clean
       - name: Assert Python is in isolation_languages
-        run: python3 .github/scripts/detect-routes-python/check_detect_routes_python.py "${{ steps.detect.outputs.isolation_languages }}"
+        run: python3 .github/scripts/detect-routes-python/check_detect_routes_python.py '${{ steps.detect.outputs.isolation_languages }}'
 
   isolation-clean:
     name: A clean crate passes the unit-lint job

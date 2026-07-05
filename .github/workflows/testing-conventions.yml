@@ -724,14 +724,15 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           PACKAGE_ROOT: ${{ needs.detect.outputs.package_root }}
-          SCAN_PATH: ${{ inputs.path }}
         # The attestation file lives at the derived package root (#281), matching
-        # `detect`'s package-scoped `e2e_attestation` flag above; the freshness
-        # walk is scoped to the caller's own `path` (#294) — narrower than the
-        # package root whenever a package also carries tests/docs/config outside
-        # `path`, so a commit there doesn't trip a false-stale. Requires a CLI new
-        # enough to accept `--scope` (published after #294 lands and `@v0` moves).
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH"
+        # `detect`'s package-scoped `e2e_attestation` flag above. #294 adds a
+        # `--scope` flag so the freshness walk can be narrower than the package
+        # root; wiring this job to pass it is a follow-up PR, landed only once a
+        # release has published the flag (see AGENTS.md, "Two-step rollout for
+        # workflow-consumed CLI changes") — wiring it here, in the same PR that
+        # adds the flag, would make this job's own dogfood run fail against the
+        # not-yet-published binary.
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" e2e verify "$PACKAGE_ROOT"
 
   packaging:
     name: Packaging (no test files in the built artifact)

@@ -891,3 +891,75 @@ jobs:
           # #277: the fixture's own testing-conventions.toml is discovered with no `config`
           # input — the call above passes only `languages`/`path`.
           [ "$CONFIG" = ".github/selftest/monorepo/packages/py/testing-conventions.toml" ] || { echo "::error::expected the py fixture's own testing-conventions.toml as config, got $CONFIG"; exit 1; }
+
+  # ---- #279: the mutation job installs and builds from the derived package root ----
+
+  mutation-package-root-wired:
+    name: The mutation job installs and builds from the derived package root
+    # Red→green wiring signal for #279: the `mutation` job must reference
+    # `needs.detect.outputs.package_root` (in its install steps, its `build_command`
+    # step, and its Rust-build cache path) or it still installs/builds at the checkout
+    # root — the same root-hardwired defect #278 fixes for the coverage jobs. A static
+    # grep, so it tracks the workflow file regardless of what the published binary
+    # ships; the runtime behavior (per-package install picking npm/pnpm and uv/pip) is
+    # covered by mutation-monorepo-ts / mutation-monorepo-py below.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: testing-conventions.yml's mutation job must reference package_root
+        run: |
+          set -euo pipefail
+          awk '/^  mutation:/{flag=1} /^  integration-lint:/{flag=0} flag' \
+            .github/workflows/testing-conventions.yml > /tmp/mutation-job.yml
+          if ! grep -q 'needs.detect.outputs.package_root' /tmp/mutation-job.yml; then
+            echo "::error::the mutation job does not reference needs.detect.outputs.package_root — it still installs/builds at the checkout root, so a per-package-lockfile monorepo (or a non-pnpm TS package, or a uv-managed Python package) fails the job (#279)"
+            exit 1
+          fi
+          echo "mutation job installs and builds from the derived package root"
+
+  mutation-monorepo-ts:
+    name: Mutation over the monorepo fixture's npm TS package (per-package call)
+    # The runtime half of #279's TS fix: a per-package `uses:` call over
+    # `.github/selftest/monorepo/packages/ts` (npm, its own lockfile, no root
+    # manifest) with only `path`/`config` set, scoped to just the `mutation` gate.
+    # `base: origin/main` gives the diff-scoped mutation gate real changed lines to
+    # scope to — the whole fixture is new relative to `main` (it landed in the
+    # still-unmerged #277), and `add()`'s existing test kills every default mutant.
+    # Like `detect-package-root-ts`, this exercises `package_root` /
+    # `ts_package_manager` — but through the reusable workflow's own `detect` job,
+    # which is pinned to `actions/detect@v0` (internals/repo.md), not the local
+    # action. So this call only fully validates once a release moves `@v0` to a
+    # detect build that emits these outputs; until then the old detect emits none of
+    # them, `working-directory` resolves to the checkout root, and the install step
+    # there has no root `package.json` for this per-package-lockfile fixture — the
+    # call is expected to fail pre-release, exactly as build-command-clean and
+    # rust-toolchain-clean documented for their own new inputs.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["typescript"]'
+      path: .github/selftest/monorepo/packages/ts/src
+      config: .github/selftest/monorepo/packages/ts/testing-conventions.toml
+      gates: '["mutation"]'
+      base: origin/main
+
+  mutation-monorepo-py:
+    name: Mutation over the monorepo fixture's uv Python package (per-package call)
+    # The runtime half of #279's Python fix: a per-package `uses:` call over
+    # `.github/selftest/monorepo/packages/py` (uv-managed, its own `uv.lock`, an
+    # `attrs` dependency, no root manifest), scoped to just the `mutation` gate.
+    # `base: origin/main` gives the diff-scoped mutation gate real changed lines —
+    # the whole fixture is new relative to `main` — and `Point.shift`'s existing
+    # test (an exact-value assertion) kills every default mutant. Exercises
+    # `package_root` / `python_env` through the reusable workflow's `@v0`-pinned
+    # detect job, same @v0 lag as mutation-monorepo-ts above: until a release moves
+    # the tag, the old detect emits no `python_env`, so this installs `pytest` +
+    # the wheel globally rather than via `uv sync` into the project's own venv — the
+    # project's own `attrs` dependency is then never installed, and the adapter
+    # cannot import `widget`, so the call is expected to fail pre-release.
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      languages: '["python"]'
+      path: .github/selftest/monorepo/packages/py/src
+      config: .github/selftest/monorepo/packages/py/testing-conventions.toml
+      gates: '["mutation"]'
+      base: origin/main

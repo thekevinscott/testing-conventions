@@ -24,8 +24,8 @@ jobs:
 | `config`             | `testing-conventions.toml` | The [config file](./config) supplying floors and exemptions. Per-call; absent means every check runs on its default. |
 | `base`               | `origin/main`              | Base ref for the diff-scoped `--base` jobs, diffed as `<base>...HEAD`. The diff-scoped jobs run on `pull_request` only. |
 | `version`            | latest                     | `testing-conventions` version to install (e.g. `0.1.0`). |
-| `build_command`      | `''` (no build step)       | A shell command run from the repository root after toolchain and dependency setup, **before** the suite, in the suite-executing jobs only (`unit coverage`, changed-line coverage, `unit mutation`) — for a native module the suite imports (e.g. `uv run maturin develop`). The static checks parse source and never run it. |
-| `rust_toolchain`     | `false`                    | `true` provisions a stable Rust toolchain, with build caching (the cargo registry and `target/`, keyed off `Cargo.lock`), in the suite-executing jobs before `build_command` runs — for a build that compiles a Rust core (PyO3, napi-rs). The `rust` matrix arm always carries its own toolchain. |
+| `build_command`      | `''` (no build step)       | A shell command run from the derived package root (`needs.detect.outputs.package_root` — the repository root on a single-package repo) after toolchain and dependency setup, **before** the suite, in the suite-executing jobs only (`unit coverage`, changed-line coverage, `unit mutation`) — for a native module the suite imports (e.g. `uv run maturin develop`). The static checks parse source and never run it. |
+| `rust_toolchain`     | `false`                    | `true` provisions a stable Rust toolchain, with build caching (the cargo registry and `target/` under the package root, keyed off `Cargo.lock`), in the suite-executing jobs before `build_command` runs — for a build that compiles a Rust core (PyO3, napi-rs). Auto-provisioned even without this input when the package root's own manifest declares a Rust-compiling build (detect's `provision_rust`). The `rust` matrix arm always carries its own toolchain. |
 | `packaging_artifact` | `''`                       | Name of an uploaded build artifact holding built distributions; when set, the packaging check downloads and inspects it. When empty, packaging runs over a conventional `dist/` in the checkout. An artifact holding no recognized distribution fails the job. |
 | `run_e2e`            | `false`                    | Forces the `e2e verify` job on. It is already on when a committed `e2e-attestation.json` is present. Needs the attestation and full history. |
 | `gates`              | `''` (all applicable)      | A JSON array naming which checks run (`colocated-test`, `unit-lint`, `unit-coverage`, `mutation`, `integration-lint`, `packaging`, `e2e-verify`). Empty runs every applicable check. A named check's diff-scoped variant rides with it, and the allowlist is authoritative even when `run_e2e` / `packaging_artifact` is set. |
@@ -41,14 +41,20 @@ offending files in the log. Each links to its explanation page.
 | [`unit coverage`](../explanation/coverage) | always | The language's [default floor](./config#coverage), plus the changed-line (`--base`) job on pull requests. |
 | [`unit lint`](../explanation/isolation) | always | Python, TypeScript, Rust. |
 | [`integration lint`](../explanation/isolation) | always | Python, TypeScript, Rust. |
-| [`unit mutation`](../explanation/mutation) | pull requests only | Diff-scoped to the `<base>...HEAD` changed lines; a binary gate — any un-exempted survivor on a changed line fails. |
+| [`unit mutation`](../explanation/mutation) | pull requests only | Diff-scoped to the `<base>...HEAD` changed lines; a binary gate — any un-exempted survivor on a changed line fails. Installs and runs from the derived package root: TypeScript picks `npm ci` or `pnpm install --frozen-lockfile` from the package's own manifest/lockfile; Python runs `uv sync` plus an adapter/pytest install into the project's own venv for a `uv`-managed package, or the existing global `pytest` + `testing-conventions` wheel install otherwise. |
 | [`packaging`](../explanation/packaging) | when a built dist is discoverable | Inspects a `dist/` in the checkout or a named `packaging_artifact`; **skipped, never failed** when neither exists. |
 | [`e2e verify`](../explanation/e2e) | when an attestation is present | Runs when a committed `e2e-attestation.json` sits at the repo root; **skipped, never failed** otherwise. `run_e2e` forces it on. |
 
 The suite-executing jobs install each language's toolchain and run your own suite: Python under
 `coverage.py` (installing `coverage` + `pytest`), TypeScript under `vitest` v8 coverage (installing
 your project's dependencies with `pnpm install --frozen-lockfile` from the repository root), Rust
-under `cargo llvm-cov --lib` (the unit suite only).
+under `cargo llvm-cov --lib` (the unit suite only). `unit mutation` installs and builds at the
+derived package root instead: TypeScript's project dependencies (must include
+`@stryker-mutator/core` and a runner plugin) install with `npm ci` or `pnpm install
+--frozen-lockfile`, whichever the package's own manifest/lockfile names; Python installs `pytest`
++ the `testing-conventions` wheel globally for a `pip`-only project, or runs `uv sync` and installs
+both into the project's own `.venv` for a `uv`-managed one, so cosmic-ray's spawned pytest can
+import the project's dependencies and the adapter together.
 
 ## Versioning: `@v0` is a moving tag
 

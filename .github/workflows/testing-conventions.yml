@@ -247,7 +247,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           # Forward the config so `exempt` entries apply to the whole-tree check,
           # matching every other job (lint / coverage / co-change / mutation).
-          CONFIG: ${{ needs.detect.outputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   colocated-test-changed:
@@ -274,7 +274,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          CONFIG: ${{ needs.detect.outputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
 
@@ -304,7 +304,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          CONFIG: ${{ needs.detect.outputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   unit-coverage:
@@ -421,7 +421,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          CONFIG: ${{ needs.detect.outputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit coverage --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   coverage-changed:
@@ -528,7 +528,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          CONFIG: ${{ needs.detect.outputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit coverage --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
 
@@ -630,7 +630,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          CONFIG: ${{ needs.detect.outputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit mutation --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
 
@@ -659,7 +659,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          CONFIG: ${{ needs.detect.outputs.config }}
+          CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
         run: npx -y "testing-conventions${VERSION:+@$VERSION}" integration lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   e2e-verify:

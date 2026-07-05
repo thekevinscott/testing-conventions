@@ -610,24 +610,17 @@ jobs:
     # must pass `--scope` naming `inputs.path` (the caller's own scoping input), not
     # rely on the derived `package_root` (which can be a real parent of `path` — a
     # package root also holding tests/docs/config outside the caller's scanned
-    # directory). A static grep, so it tracks the workflow file regardless of what
-    # the published binary ships; runtime behavior is covered by the Rust e2e tests
-    # (`e2e_verify.rs`, `e2e_verify_e2e.rs`).
+    # directory). The check itself lives in a standalone, colocated-tested Python
+    # script (.github/scripts/e2e-verify-scope-wired) rather than inline bash — an
+    # earlier inline version embedded a literal `${{ inputs.path }}` in a grep
+    # pattern, which GitHub Actions templated (and stripped) before the shell ever
+    # ran it, breaking the check silently. It tracks the workflow file regardless of
+    # what the published binary ships; runtime behavior is covered by the Rust e2e
+    # tests (`e2e_verify.rs`, `e2e_verify_e2e.rs`).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: e2e-verify must pass --scope "$SCAN_PATH" (inputs.path)
-        run: |
-          set -euo pipefail
-          BLOCK=$(awk '/^  e2e-verify:/,/^  packaging:/' .github/workflows/testing-conventions.yml)
-          missing=0
-          echo "$BLOCK" | grep -qE -- '--scope' || missing=1
-          echo "$BLOCK" | grep -qE 'SCAN_PATH: .*inputs\.path' || missing=1
-          if [ "$missing" -ne 0 ]; then
-            echo "::error::the e2e-verify job doesn't pass --scope naming inputs.path — the freshness walk is scoped to the derived package_root instead, which can be broader than what the caller's own path input names (#294)"
-            exit 1
-          fi
-          echo "e2e-verify scopes the freshness walk to inputs.path"
+      - run: python3 .github/scripts/e2e-verify-scope-wired/check_e2e_verify_scope_wired.py
 
   diff-scoped-runs:
     name: A clean PR passes the diff-scoped --base jobs

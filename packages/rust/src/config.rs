@@ -37,6 +37,21 @@ pub struct PythonConfig {
     pub coverage: Option<PythonCoverage>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
+    /// The Python-only build escape hatch (#289): a shell command the suite-executing
+    /// jobs run after toolchain + dependency setup and before the suite, for a package
+    /// whose unit suite imports a compiled module (a maturin/PyO3 extension) the build
+    /// backend produces. `detect` reads it from the package's own config and the workflow
+    /// jobs run it; the binary never runs it, but the schema must accept the key so a
+    /// consumer's config still loads under `deny_unknown_fields`. Absent (`None`) means no
+    /// build step. Python-only because PEP 517 backends expose only sandboxed
+    /// `build_wheel`/`build_sdist` hooks — npm's `prepare`/`postinstall` and Cargo's
+    /// `build.rs` are already manifest-native, a documented asymmetry under the parity rule.
+    pub build_command: Option<String>,
+    /// Why the manifest can't express this build — required alongside `build_command` and
+    /// validated non-empty in [`Config::validate`], mirroring the exemption-reason bar. An
+    /// unreasoned escape hatch can never be a silent pass.
+    #[serde(default)]
+    pub reason: String,
 }
 
 /// The `[typescript]` table.
@@ -433,6 +448,18 @@ impl Config {
     /// Reject any `exempt` entry that names no rule or carries an empty reason —
     /// a reasonless or scopeless exemption can never be a silent pass.
     fn validate(&self) -> Result<()> {
+        // The `[python].build_command` escape hatch (#289) is held to the exemption bar: a
+        // reasonless build command can never be a silent pass, so a present command with an
+        // empty reason fails to load, in the same style as the exemption reason check below.
+        if let Some(python) = &self.python {
+            if python.build_command.is_some() && python.reason.trim().is_empty() {
+                bail!(
+                    "[python].build_command has an empty reason — say why the manifest can't \
+                     express this build (maturin/PyO3's PEP 517 backend has no pre-build shell \
+                     hook; npm's prepare/postinstall and Cargo's build.rs already do)"
+                );
+            }
+        }
         let tables = [
             ("python", self.python.as_ref().map(|c| &c.exempt)),
             ("typescript", self.typescript.as_ref().map(|c| &c.exempt)),
@@ -657,6 +684,49 @@ mod tests {
         let coverage = config.rust.unwrap().coverage.unwrap();
         assert_eq!(coverage.regions, None);
         assert_eq!(coverage.lines, 90);
+    }
+
+    #[test]
+    fn a_python_build_command_with_a_reason_parses() {
+        // #289: the escape hatch and its required reason both survive into the [python] table.
+        let config = parse(
+            "[python]\nbuild_command = \"uv run maturin develop\"\n\
+             reason = \"maturin's PEP 517 backend has no pre-build shell hook\"\n",
+        )
+        .unwrap();
+        let python = config.python.unwrap();
+        assert_eq!(
+            python.build_command.as_deref(),
+            Some("uv run maturin develop")
+        );
+        assert_eq!(
+            python.reason,
+            "maturin's PEP 517 backend has no pre-build shell hook"
+        );
+    }
+
+    #[test]
+    fn a_python_build_command_with_an_empty_reason_is_rejected() {
+        let err = parse("[python]\nbuild_command = \"uv run maturin develop\"\nreason = \"  \"\n")
+            .unwrap_err();
+        assert!(err.to_string().contains("empty reason"), "got: {err}");
+    }
+
+    #[test]
+    fn a_python_build_command_with_no_reason_is_rejected() {
+        // The `reason` key is absent entirely (serde-defaulted to empty) — still rejected.
+        let err = parse("[python]\nbuild_command = \"uv run maturin develop\"\n").unwrap_err();
+        assert!(err.to_string().contains("empty reason"), "got: {err}");
+    }
+
+    #[test]
+    fn a_python_table_without_a_build_command_needs_no_reason() {
+        // The reason is required *only* alongside a build_command: a coverage-only [python]
+        // table (no build_command) loads with an empty defaulted reason, byte-identical to today.
+        let config = parse("[python]\ncoverage = { branch = true, fail_under = 90 }\n").unwrap();
+        let python = config.python.unwrap();
+        assert!(python.build_command.is_none());
+        assert!(python.reason.is_empty());
     }
 
     #[test]

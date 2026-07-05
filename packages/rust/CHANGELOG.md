@@ -61,6 +61,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`[python] build_command` config key** (#289). The config loader accepts a `[python]
+  build_command` shell command plus a required `reason` (validated non-empty on load, mirroring the
+  exemption-reason bar), and the repo-only `detect` action emits it as a `build_command` output read
+  from the package's own config. This ships the schema and detection half; the reusable workflow's
+  suite-executing jobs consume it (replacing the `build_command` workflow input) in the follow-up
+  that lands once this releases. Python-only: an npm `prepare` / `postinstall` script and Cargo's
+  `build.rs` already cover TypeScript and Rust.
+
 - **The coverage jobs auto-derive the TypeScript package manager, the Python environment model,
   and Rust auto-provisioning from the package manifest** (#278, epic #276). TS installs run
   `pnpm install --frozen-lockfile` or `npm ci` per `needs.detect.outputs.ts_package_manager`

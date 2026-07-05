@@ -16,6 +16,31 @@ Every PR starts with **documentation, written alongside the red tests** — both
 
 Strive for parity across the supported languages (Python, TypeScript, Rust). The bar is **least parity** — a rule or feature is offered only to the level the *least-capable* language can support. No language-only features (e.g. a Rust- or TypeScript-only rule): if a capability can't be met in one language, scope the feature down to the common denominator, or hold it until parity is reachable, rather than shipping it for some languages and not others. Any deliberate, unavoidable asymmetry must be called out explicitly in the rule's docs and reasoning.
 
+## Rebase on request
+
+When asked to rebase, rebase the working branch onto the latest default branch and **push it
+immediately** — resolving any conflicts — before running or testing locally. The rebase and its
+push come first; local verification resumes afterward. A rebase request is a request to make the
+remote branch current *now*, so treat the push as the deliverable, not a step to defer behind a
+test run.
+
+## Shepherding a PR across the finish line
+
+When driving a PR toward merge, **proactively check for the two failures that silently block a
+merge** — do not wait to be told:
+
+- **Merge conflicts.** `git fetch origin <default-branch>` and check whether the branch still sits
+  on top of it (`git merge-base --is-ancestor origin/<default-branch> HEAD`); if the default branch
+  has moved, rebase and push before anything else (see **Rebase on request**). A green PR that has
+  drifted behind `main` is not mergeable, and the drift only grows while you wait.
+- **GPG / commit-signing failures.** A `git commit` can fail (or a pushed commit can be rejected /
+  flagged unverified) because signing didn't succeed — a missing key, an unset `user.signingkey`, an
+  expired agent. Treat a signing error as a first-class blocker: read the actual `git` stderr,
+  surface it, and fix the signing setup rather than retrying blindly or committing unsigned when the
+  repo requires verification.
+
+Re-check both on every pass while shepherding — a PR that was mergeable an hour ago may not be now.
+
 ## Now over later
 
 When a change could be made **now** or deferred to **later**, always choose now. Don't punt

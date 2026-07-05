@@ -468,3 +468,105 @@ def test_e2e_attestation_at_the_repo_root_is_still_detected_for_a_single_package
         },
     )
     assert out["e2e_attestation"] == "true"
+
+
+# --- #289: the [python].build_command escape hatch, read from the package's own config ---
+
+
+def test_e2e_build_command_derived_from_the_package_root_config(run_detect):
+    # The escape hatch moves from a `uses:`-call input to a `[python] build_command` key in
+    # the package's own testing-conventions.toml, discovered at the package root exactly like
+    # `config` itself (never passed on the call). `detect` opens that file and emits it.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": (
+                '[python]\nbuild_command = "uv run maturin develop"\n'
+                'reason = "maturin\'s PEP 517 backend has no pre-build shell hook"\n'
+            ),
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["config"] == "packages/py/testing-conventions.toml"
+    assert out["build_command"] == "uv run maturin develop"
+
+
+def test_e2e_build_command_from_an_explicit_config_override(run_detect):
+    # An explicit non-default `config` path is honored verbatim (like `config` today), and
+    # build_command is read from that same file.
+    out = run_detect(
+        scan_path="packages/py/src",
+        config="packages/py/custom.toml",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/custom.toml": (
+                '[python]\nbuild_command = "pnpm build"\n'
+                'reason = "the addon is built by a workspace script"\n'
+            ),
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["build_command"] == "pnpm build"
+
+
+def test_e2e_build_command_absent_is_empty(run_detect):
+    # No config file at all: byte-identical to the old empty `build_command: ''` default —
+    # no build step.
+    out = run_detect(sources={"widget.py": "x = 1\n"})
+    assert out["build_command"] == ""
+
+
+def test_e2e_build_command_empty_when_config_declares_none(run_detect):
+    # A package-root config with a [python] table but no build_command emits an empty
+    # build_command.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": "[python]\ncoverage = { fail_under = 90 }\n",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["build_command"] == ""
+
+
+def test_e2e_build_command_empty_when_config_has_no_python_table(run_detect):
+    # A config with no [python] table at all (a rust-only config) emits an empty build_command.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": "[rust]\nfeatures = [\"cli\"]\n",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["build_command"] == ""
+
+
+def test_e2e_build_command_empty_on_a_malformed_config(run_detect):
+    # A malformed testing-conventions.toml never crashes detect — build_command falls back to
+    # empty, like read_pyproject on a malformed manifest.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": "not valid toml [[[",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["build_command"] == ""
+
+
+def test_e2e_build_command_empty_when_value_is_not_a_string(run_detect):
+    # A non-string build_command (which the Rust config loader would separately reject) is
+    # treated as absent by detect rather than emitted verbatim — detect never crashes on it.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": "[python]\nbuild_command = 123\n",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["build_command"] == ""

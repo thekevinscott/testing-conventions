@@ -1,0 +1,3 @@
+# #289: a build_command with no reason at all — rejected on load.
+[python]
+build_command = "uv run maturin develop"

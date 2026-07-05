@@ -363,15 +363,7 @@ jobs:
           languages: '["python"]'
           path: .github/selftest/clean
       - name: Assert Python is in isolation_languages
-        env:
-          ISO: ${{ steps.detect.outputs.isolation_languages }}
-        run: |
-          set -euo pipefail
-          echo "isolation_languages=$ISO"
-          case "$ISO" in
-            *'"python"'*) echo "Python routed into the unit-lint matrix" ;;
-            *) echo "::error::the detect action did not route Python into isolation_languages (got: $ISO)"; exit 1 ;;
-          esac
+        run: python3 .github/scripts/detect-routes-python/check_detect_routes_python.py "${{ steps.detect.outputs.isolation_languages }}"
 
   isolation-clean:
     name: A clean crate passes the unit-lint job
@@ -596,13 +588,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml must use the detect action
-        run: |
-          set -euo pipefail
-          if ! grep -qE 'uses:[[:space:]]*[^[:space:]]*actions/detect@' .github/workflows/testing-conventions.yml; then
-            echo "::error::the reusable workflow doesn't use the detect action — detection still runs as inline bash, off the tested engine (#185)"
-            exit 1
-          fi
-          echo "reusable workflow detects via the detect action"
+        run: python3 .github/scripts/wiring-detect-action/check_wiring_detect_action.py
 
   wiring-packaging-default-on:
     name: The reusable workflow runs packaging by default (#186)
@@ -610,13 +596,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: packaging must gate on detect's packaging_dist output
-        run: |
-          set -euo pipefail
-          if ! grep -q 'packaging_dist' .github/workflows/testing-conventions.yml; then
-            echo "::error::the packaging job doesn't gate on detect's \`packaging_dist\` — packaging isn't default-on (#186)"
-            exit 1
-          fi
-          echo "packaging is default-on (gates on packaging_dist)"
+        run: python3 .github/scripts/wiring-packaging-default-on/check_wiring_packaging_default_on.py
 
   wiring-e2e-default-on:
     name: The reusable workflow runs e2e verify by default (#186)
@@ -624,13 +604,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: e2e-verify must gate on detect's e2e_attestation output
-        run: |
-          set -euo pipefail
-          if ! grep -q 'e2e_attestation' .github/workflows/testing-conventions.yml; then
-            echo "::error::the e2e-verify job doesn't gate on detect's \`e2e_attestation\` — e2e verify isn't default-on (#186)"
-            exit 1
-          fi
-          echo "e2e verify is default-on (gates on e2e_attestation)"
+        run: python3 .github/scripts/wiring-e2e-default-on/check_wiring_e2e_default_on.py
 
   # ---- #243: a build_command hook so native-binding projects can run the suite jobs ----
 

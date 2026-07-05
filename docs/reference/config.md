@@ -105,6 +105,31 @@ mutated. Cargo features are Rust's build-system concept with no Python/TypeScrip
 key is deliberately Rust-only — a documented asymmetry under the
 [parity rule](../explanation/#parity-over-cleverness).
 
+## `[python] build_command`
+
+The `[python]` table takes **`build_command`**, a shell command the suite-executing jobs
+(`unit coverage`, changed-line coverage, `unit mutation`) run after toolchain and dependency setup
+and **before** the suite — for a Python package whose unit suite imports a compiled module (a
+maturin/PyO3 extension) the build backend produces. It carries a required **`reason`**, held to the
+same bar an exemption's reason meets: an empty or missing reason is rejected on load.
+
+```toml
+[python]
+build_command = "uv run maturin develop"
+reason = "maturin's PEP 517 backend builds the wheel but exposes no pre-build shell hook"
+```
+
+The workflow discovers `build_command` in the package's own `testing-conventions.toml` at the
+[package root](../monorepo), exactly like the config file itself — it is a config key, not a
+`uses:`-call input.
+
+The key is **Python-only**, a documented asymmetry under the
+[parity rule](../explanation/#parity-over-cleverness). TypeScript's npm `prepare` / `postinstall`
+script and Rust's `build.rs` are manifest-native build hooks their package managers already run, so
+a compiled module in those languages builds during dependency install. Python's PEP 517 build
+backends expose only sandboxed `build_wheel` / `build_sdist` hooks with no manifest-declared
+pre-build shell step, so `build_command` fills that single gap.
+
 ## Shared test configs
 
 The coverage floor is also published as a config your own test runner extends, so a local run is

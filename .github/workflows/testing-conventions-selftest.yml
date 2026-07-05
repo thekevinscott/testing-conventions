@@ -67,19 +67,24 @@ name: Testing Conventions (self-test)
 #                                    typescript arms and asserts the non-zero exit on
 #                                    a violation (a `uses:` call can't assert a fail).
 #
-# build_command (#243) — a hook so a native-binding project can run the suite-executing jobs:
-#   build-command-wired   asserts the reusable workflow runs a caller-provided `build_command`
-#                         before the suite — the red→green signal for the wiring itself.
+# build_command (#243/#289) — a hook so a native-binding project can run the suite-executing jobs.
+# The hook is the package's own `[python].build_command` config key (#289), read by detect, not a
+# `uses:`-call input:
+#   build-command-wired   asserts the reusable workflow runs the derived `build_command`
+#                         (`needs.detect.outputs.build_command`) before the suite — the red→green
+#                         signal for the wiring itself.
 #   build-command-clean   calls the reusable workflow over a fixture whose `widget.py` imports
-#                         a module produced only by the `build_command` (a maturin/napi stand-in),
-#                         so the coverage / mutation jobs pass only because the build ran first.
+#                         a module produced only by the `[python].build_command` (a maturin/napi
+#                         stand-in), so the coverage / mutation jobs pass only because the build ran
+#                         first. Expected to fail pre-release (the `@v0` detect emits no
+#                         `build_command` and the published binary rejects the config key).
 #
 # gates (#262) — an allowlist so a consumer can run a subset of gates:
 #   gates-wired           asserts the reusable workflow scopes its jobs to a `gates` allowlist
 #                         input — the red→green signal for the wiring itself.
 #   gates-scoped-static   calls the reusable workflow over the #243 native-binding fixture with
-#                         the three static gates named and NO build_command, so the call passes
-#                         only because the suite-executing gates are skipped.
+#                         the three static gates named and a build_command-free config, so the call
+#                         passes only because the suite-executing gates are skipped.
 #   gates-scoped-packaging-excluded  uploads the red wheel as `packaging_artifact` with a `gates`
 #                         allowlist that leaves packaging out, so the call passes only because
 #                         the allowlist overrides the forcing input.
@@ -88,9 +93,10 @@ name: Testing Conventions (self-test)
 #   rust-toolchain-wired  asserts the suite-executing jobs provision a Rust toolchain behind a
 #                         `rust_toolchain` input — the red→green signal for the wiring itself.
 #   rust-toolchain-clean  calls the reusable workflow with `rust_toolchain: true` and a
-#                         `build_command` that invokes cargo before producing the module the
-#                         suite imports, so the call passes only because cargo was provisioned
+#                         `[python].build_command` that invokes cargo before producing the module
+#                         the suite imports, so the call passes only because cargo was provisioned
 #                         ahead of the build (ubuntu-24.04 runners carry no preinstalled Rust).
+#                         Expected to fail pre-release, same `@v0`/binary lag as build-command-clean.
 #
 # rust colocated-test (#274) — the presence arm fans over rust:
 #   colocated-rust-wired  asserts the whole-tree colocated-test job fans out over the
@@ -669,20 +675,21 @@ jobs:
 
   build-command-wired:
     name: The reusable workflow runs a build_command before the suite
-    # Red→green wiring signal for #243: the reusable workflow must run a caller-provided
-    # `build_command` step before the suite-executing jobs (unit coverage / changed-line
-    # coverage / mutation) invoke the suite — otherwise a native-binding consumer's
-    # compiled module is never built and the suite fails at import. A static grep, so it
-    # tracks the workflow file regardless of what the published binary ships; the runtime
-    # behavior is covered by `build-command-clean`.
+    # Red→green wiring signal for #243/#289: the reusable workflow must run the derived
+    # `build_command` step — now read from detect's `build_command` output (the package's own
+    # `[python].build_command`, #289), not a `uses:`-call input — before the suite-executing jobs
+    # (unit coverage / changed-line coverage / mutation) invoke the suite, otherwise a
+    # native-binding consumer's compiled module is never built and the suite fails at import. A
+    # static grep, so it tracks the workflow file regardless of what the published binary ships;
+    # the runtime behavior is covered by `build-command-clean`.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml must wire a build_command step
         run: |
           set -euo pipefail
-          if ! grep -q 'inputs.build_command' .github/workflows/testing-conventions.yml; then
-            echo "::error::the reusable workflow has no \`build_command\` step — a native-binding consumer's compiled module is never built before the suite runs (#243)"
+          if ! grep -q 'needs.detect.outputs.build_command' .github/workflows/testing-conventions.yml; then
+            echo "::error::the reusable workflow has no derived \`build_command\` step — a native-binding consumer's compiled module is never built before the suite runs (#243/#289)"
             exit 1
           fi
           echo "reusable workflow wires a build_command step"
@@ -787,39 +794,46 @@ jobs:
 
   rust-toolchain-clean:
     name: A rust_toolchain call finds cargo before build_command
-    # The runtime half of #263: the same native-binding fixture as build-command-clean,
-    # but the build_command invokes cargo first — the stand-in for a `maturin develop` /
-    # `napi build` that compiles a Rust core. ubuntu-24.04 runners carry no preinstalled
-    # Rust, so the build — and with it every suite-executing job — succeeds only because
-    # `rust_toolchain: true` provisioned the toolchain ahead of the build step. The
-    # whole `uses:` call passing is the green signal that cargo is present (and cached)
-    # in the python arm, where only setup-python runs otherwise.
+    # The runtime half of #263: the same native-binding fixture as build-command-clean, but the
+    # `[python].build_command` invokes cargo first — the stand-in for a `maturin develop` /
+    # `napi build` that compiles a Rust core. ubuntu-24.04 runners carry no preinstalled Rust, so
+    # the build — and with it every suite-executing job — succeeds only because `rust_toolchain:
+    # true` provisioned the toolchain ahead of the build step. The whole `uses:` call passing is
+    # the green signal that cargo is present (and cached) in the python arm, where only
+    # setup-python runs otherwise. The build hook now lives in the package's own config as
+    # `[python].build_command` (#289), read by the reusable workflow's own `detect` job — which is
+    # pinned to `actions/detect@v0` (internals/repo.md), not the local action, and driven by the
+    # *published* binary. So this call only fully validates once a release moves `@v0` to a detect
+    # that emits `build_command` AND publishes a binary that accepts the config key; until then the
+    # old detect emits nothing, the build step is skipped, and the old binary rejects the config —
+    # the call is expected to fail pre-release, exactly as mutation-monorepo-ts/py document.
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'
       path: .github/selftest/build-command
-      config: .github/selftest/build-command/testing-conventions.toml
+      config: .github/selftest/build-command/rust-toolchain.toml
       rust_toolchain: true
-      build_command: cargo --version && cp .github/selftest/build-command/generated.py.tmpl .github/selftest/build-command/generated.py
       base: origin/main
 
   build-command-clean:
     name: A build_command makes the suite-executing jobs find a built module
-    # The runtime half of #243: the `build-command` fixture's `widget.py` imports
-    # `generated`, a module absent from the source tree — it stands in for a maturin/napi
-    # native module and is produced only by the `build_command`. So the coverage,
-    # changed-line coverage, and mutation jobs pass iff the workflow runs `build_command`
-    # before the suite (without it, pytest fails at import). The static colocated-test /
-    # lint jobs run without the build and never see the generated module, so they pass
-    # as-is. `base: origin/main` exercises the diff-scoped jobs over this PR-added fixture
-    # (its tests pin exact values, so every changed-line mutant is killed). The whole
-    # `uses:` call passes only because the build step is wired into the suite jobs (#243).
+    # The runtime half of #243/#289: the `build-command` fixture's `widget.py` imports
+    # `generated`, a module absent from the source tree — it stands in for a maturin/napi native
+    # module and is produced only by the `[python].build_command`. So the coverage, changed-line
+    # coverage, and mutation jobs pass iff the workflow runs `build_command` before the suite
+    # (without it, pytest fails at import). The static colocated-test / lint jobs run without the
+    # build and never see the generated module, so they pass as-is. `base: origin/main` exercises
+    # the diff-scoped jobs over this PR-added fixture (its tests pin exact values, so every
+    # changed-line mutant is killed). The build hook now lives in the package's own config as
+    # `[python].build_command` (#289), read by the reusable workflow's `@v0`-pinned `detect` job
+    # and run by the *published* binary — so, like rust-toolchain-clean and mutation-monorepo-ts/py,
+    # this call is expected to fail pre-release (the old detect emits no `build_command` and the old
+    # binary rejects the config key) and greens once a release moves `@v0` and publishes the binary.
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'
       path: .github/selftest/build-command
-      config: .github/selftest/build-command/testing-conventions.toml
-      build_command: cp .github/selftest/build-command/generated.py.tmpl .github/selftest/build-command/generated.py
+      config: .github/selftest/build-command/build-command.toml
       base: origin/main
 
   # ---- #274: the whole-tree colocated-test job fans out over rust ----

@@ -1,0 +1,7 @@
+# #289/#263 runtime fixture: same native-binding build hook as build-command.toml, but the command
+# invokes `cargo` first — the stand-in for a `maturin develop` / `napi build` that compiles a Rust
+# core. It succeeds only when `rust_toolchain: true` provisioned cargo ahead of the build step.
+[python]
+coverage = { branch = false, fail_under = 100 }
+build_command = "cargo --version && cp .github/selftest/build-command/generated.py.tmpl .github/selftest/build-command/generated.py"
+reason = "the maturin/PyO3 core is compiled by cargo, which a PEP 517 backend can't invoke via a pre-build shell hook"

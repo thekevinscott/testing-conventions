@@ -15,6 +15,12 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Adds an optional directory argument to **`e2e verify [path]`** (#281): `path` defaults to the
+current directory, so a no-argument call is byte-identical to today. Passing a package
+subdirectory scopes attestation discovery to it, matching `e2e verify` run with that directory as
+cwd — needed so a monorepo package's attestation can be verified without a `cd`. Purely additive;
+no existing invocation changes behavior (see **Required changes**).
+
 Repoints the `install` template at the reorganized docs (#353): the managed `AGENTS.md` block's
 tail drops the link to the removed CLI guide page and keeps the docs-site and machine-readable
 contract (`llms.txt`) pointers. No API change; re-running `install` rewrites an existing block to
@@ -847,6 +853,14 @@ Exemptions (#32) change runtime behavior:
   isn't removed or updated. No API or config change.
 
 ### Verification
+
+```
+cd packages/rust && cargo test --test e2e_verify --test e2e_verify_e2e
+```
+
+Expected: all pass — `e2e verify` with no argument still checks the current directory (unchanged
+from today), and `e2e verify packages/widget` run from the repo root behaves identically to
+running `e2e verify` with `packages/widget` as the current directory (fresh/stale/missing).
 
 ```
 cd packages/rust && cargo test --test install --test install_e2e

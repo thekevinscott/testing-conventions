@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 DEFAULT_WORKFLOW = ".github/workflows/testing-conventions.yml"
 
@@ -39,7 +40,7 @@ def extract_e2e_verify_block(workflow_text: str) -> str:
     return workflow_text[start.start(): end.start() if end else len(workflow_text)]
 
 
-def find_missing_wiring(workflow_text: str) -> str | None:
+def find_missing_wiring(workflow_text: str) -> Optional[str]:
     """None if the e2e-verify job passes --scope naming inputs.path; else an error message."""
     block = extract_e2e_verify_block(workflow_text)
     if not _HAS_SCOPE_FLAG.search(block) or not _HAS_SCAN_PATH_FROM_INPUTS_PATH.search(block):

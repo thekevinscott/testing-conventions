@@ -1,7 +1,8 @@
 """End-to-end tests for the build-command-wired command: real files, click's CliRunner.
 
-The command reads a workflow file, so it runs here (not the isolated unit suite). `CliRunner`
-invokes it and captures the exit code and output — no `sys.argv` juggling, no mocks.
+The command reads a workflow file, so it runs here (the package-root e2e suite), not the isolated
+unit suite. `CliRunner` invokes it and captures the exit code and output — no `sys.argv` juggling,
+no mocks.
 """
 import os
 from pathlib import Path
@@ -10,7 +11,7 @@ from click.testing import CliRunner
 
 from checks.build_command_wired.cli import cli
 
-REPO_ROOT = Path(__file__).resolve().parents[7]
+REPO_ROOT = Path(__file__).resolve().parents[4]
 WIRED = "jobs:\n  build:\n    run: ${{ needs.detect.outputs.build_command }}\n"
 UNWIRED = "jobs:\n  build:\n    run: echo nothing here\n"
 

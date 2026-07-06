@@ -28,7 +28,7 @@ def wires_build_command(text: str) -> bool:
 
 
 @click.command()
-@click.argument("workflow", required=False, default=DEFAULT_WORKFLOW, type=click.Path())
+@click.argument("workflow", default=DEFAULT_WORKFLOW, type=click.Path())
 def cli(workflow: str) -> None:
     if not wires_build_command(Path(workflow).read_text()):
         raise CheckFailed(

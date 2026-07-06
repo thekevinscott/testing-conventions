@@ -26,12 +26,15 @@ name: Testing Conventions
 #
 # Diff-scoped variants run as their own jobs on `pull_request` only (they need
 # `fetch-depth: 0` and a base ref): `unit colocated-test --base` (co-change, #161),
-# `unit coverage --base` (changed-line coverage, #162), and `unit mutation --base`
+# `unit coverage --base` (changed-line coverage, #162), `unit mutation --base`
 # (#204) — the mutation gate, binary and on by default, scoped to the changed lines
-# because whole-tree mutation is too slow to gate. An
-# `e2e verify` job (#68) checks the committed e2e attestation; it's default-on,
-# verify-if-present — it runs whenever an `e2e-attestation.json` is committed, and
-# `run_e2e` forces it on (#186).
+# because whole-tree mutation is too slow to gate — and `e2e verify --base` (#319),
+# the freshness gate below. The `e2e verify` job (#68) checks the committed e2e
+# attestation; it's verify-if-present — it runs whenever an `e2e-attestation.json`
+# is committed, and `run_e2e` forces it on (#186) — and diff-scoped (#319): it
+# measures freshness over the scoped source the branch changed (`<base>..HEAD`), so
+# it too runs on `pull_request` only, which keeps it adoptable by a squash-merging
+# repo (a squash-stale attestation never reds an unrelated PR).
 #
 # The `detect` job runs the repo-only detect action (`.github/actions/detect`, tested
 # by pytest, #189): it scans `path` and auto-detects every supported language *present*
@@ -703,39 +706,48 @@ jobs:
   e2e-verify:
     name: E2E attestation freshness (e2e verify)
     needs: detect
-    # Default-on, verify-if-present (#186): run the #68 freshness gate whenever a
-    # committed `e2e-attestation.json` is present (detected by the detect action) —
-    # verify it names the latest code commit, failing (with a re-attest nudge) when the
-    # code has moved on. A repo with no attestation is skipped, never failed; `run_e2e`
-    # forces the job on. Never runs the e2e suite itself. The `gates` allowlist is
-    # authoritative (#262): checked first, so a scoped call that leaves e2e-verify out
-    # skips the job even when `run_e2e` is set.
-    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"e2e-verify"')) && (inputs.run_e2e || needs.detect.outputs.e2e_attestation == 'true') }}
+    # Diff-scoped freshness, verify-if-present (#186, #319): on a PR, verify the
+    # committed attestation covers the scoped source *this branch changed*
+    # (`<base>..HEAD`) rather than the newest scoped commit in all history — the
+    # same diff-relative model the changed-line coverage/mutation gates use. A
+    # branch that changed the scoped source fails (with a re-attest nudge) until it
+    # re-attests; a branch that changed none of it has nothing to re-attest and
+    # passes. This is PR-only (it needs a base ref), so it rides the same
+    # `github.event_name == 'pull_request'` gate as the other `--base` jobs — which
+    # is also what makes it adoptable by a squash-merging repo: a squash rewrites
+    # the attested commit into a new one on the base branch, and a history-absolute
+    # walk would read that as permanently stale and red every later PR (#319). A
+    # repo with no attestation is skipped, never failed; `run_e2e` forces the job
+    # on. Never runs the e2e suite itself. The `gates` allowlist is authoritative
+    # (#262): checked first, so a scoped call that leaves e2e-verify out skips the
+    # job even when `run_e2e` is set.
+    if: ${{ github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"e2e-verify"')) && (inputs.run_e2e || needs.detect.outputs.e2e_attestation == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
-          # `e2e verify` finds the latest code commit via `git log`, so it needs
-          # full history — a shallow clone would miss it. On a pull_request event
-          # the default ref is the ephemeral merge commit, which an attestation
-          # can never name (it's rebuilt fresh on every push to the base or the
-          # PR); check out the PR's actual head commit instead, falling back to
-          # the triggering commit for a push/other event where there is no PR.
+          # `e2e verify --base` diffs `<base>..HEAD`, so it needs full history and
+          # the base ref reachable — `fetch-depth: 0` fetches every branch, so
+          # `inputs.base` (e.g. `origin/main`) resolves. Check out the PR's actual
+          # head commit, not the ephemeral merge commit, which an attestation can
+          # never name (it's rebuilt fresh on every push) — #293.
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Verify the e2e attestation is current
         env:
           VERSION: ${{ inputs.version }}
           PACKAGE_ROOT: ${{ needs.detect.outputs.package_root }}
           SCAN_PATH: ${{ inputs.path }}
+          BASE: ${{ inputs.base }}
         # The attestation file lives at the derived package root (#281), matching
-        # `detect`'s package-scoped `e2e_attestation` flag above; the freshness
-        # walk is scoped to the caller's own `path` (#294) — narrower than the
-        # package root whenever a package also carries tests/docs/config outside
-        # `path`, so a commit there doesn't trip a false-stale. Requires a CLI new
-        # enough to accept `--scope` (published by #294, landed ahead of this PR
-        # per AGENTS.md's "Two-step rollout for workflow-consumed CLI changes").
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH"
+        # `detect`'s package-scoped `e2e_attestation` flag above; the freshness walk
+        # is scoped to the caller's own `path` (#294) — narrower than the package
+        # root whenever a package also carries tests/docs/config outside `path` — and
+        # to the `<base>..HEAD` diff (#319), so only a change this branch made to the
+        # scoped source trips it. Requires a CLI new enough to accept `--base`
+        # (published by #319's CLI PR, landed ahead of this one per AGENTS.md's
+        # "Two-step rollout for workflow-consumed CLI changes").
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE"
 
   packaging:
     name: Packaging (no test files in the built artifact)

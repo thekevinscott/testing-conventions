@@ -270,8 +270,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: testing-conventions.yml must invoke `unit mutation`
-        run: python3 .github/scripts/mutation-wired/check_mutation_wired.py
+        run: uv run --project internals/checks tc-checks mutation-wired
 
   isolation-wired:
     name: The reusable workflow enforces unit lint
@@ -281,8 +282,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: testing-conventions.yml must invoke `unit lint`
-        run: python3 .github/scripts/isolation-wired/check_isolation_wired.py
+        run: uv run --project internals/checks tc-checks isolation-wired
 
   rolling-release-wired:
     name: The major tag advances only via the gated move-major-tag workflow
@@ -295,8 +297,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: move-major-tag.yml is gated and release.yml moves no tag inline
-        run: python3 .github/scripts/rolling-release-wired/check_rolling_release_wired.py
+        run: uv run --project internals/checks tc-checks rolling-release-wired
 
   github-helpers-wired:
     name: The .github helpers are dogfooded through every Python arm
@@ -409,8 +412,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: testing-conventions.yml must fan unit-coverage over rust
-        run: python3 .github/scripts/coverage-rust-wired/check_coverage_rust_wired.py
+        run: uv run --project internals/checks tc-checks coverage-rust-wired
 
   coverage-rust-clean:
     name: A clean Rust crate passes the reusable workflow's coverage arm
@@ -453,8 +457,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: testing-conventions.yml must run the --base checks
-        run: python3 .github/scripts/diff-scoped-wired/check_diff_scoped_wired.py
+        run: uv run --project internals/checks tc-checks diff-scoped-wired
 
   e2e-verify-wired:
     name: The reusable workflow offers an opt-in e2e verify job
@@ -465,8 +470,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: testing-conventions.yml must wire opt-in `e2e verify`
-        run: python3 .github/scripts/e2e-verify-wired/check_e2e_verify_wired.py
+        run: uv run --project internals/checks tc-checks e2e-verify-wired
 
   e2e-verify-checks-out-pr-head:
     name: e2e-verify checks out the PR head commit, not the merge ref
@@ -480,8 +486,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: e2e-verify's checkout must pin the PR head commit
-        run: python3 .github/scripts/e2e-verify-checks-out-pr-head/check_e2e_verify_checks_out_pr_head.py
+        run: uv run --project internals/checks tc-checks e2e-verify-checks-out-pr-head
 
   e2e-verify-scoped-to-path:
     name: e2e-verify passes --scope inputs.path and --base inputs.base on PRs
@@ -754,8 +761,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: testing-conventions.yml must fan colocated-test over rust
-        run: python3 .github/scripts/colocated-rust-wired/check_colocated_rust_wired.py
+        run: uv run --project internals/checks tc-checks colocated-rust-wired
 
   colocated-rust-red:
     name: A crate with an untested fn trips the rust colocated-test arm

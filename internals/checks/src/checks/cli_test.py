@@ -10,16 +10,36 @@ def test_build_command_wired_is_registered():
     assert "build-command-wired" in main.commands
 
 
+def test_colocated_rust_wired_is_registered():
+    assert "colocated-rust-wired" in main.commands
+
+
 def test_coverage_package_root_wired_is_registered():
     assert "coverage-package-root-wired" in main.commands
+
+
+def test_coverage_rust_wired_is_registered():
+    assert "coverage-rust-wired" in main.commands
 
 
 def test_detect_routes_python_is_registered():
     assert "detect-routes-python" in main.commands
 
 
+def test_diff_scoped_wired_is_registered():
+    assert "diff-scoped-wired" in main.commands
+
+
+def test_e2e_verify_checks_out_pr_head_is_registered():
+    assert "e2e-verify-checks-out-pr-head" in main.commands
+
+
 def test_e2e_verify_scope_wired_is_registered():
     assert "e2e-verify-scope-wired" in main.commands
+
+
+def test_e2e_verify_wired_is_registered():
+    assert "e2e-verify-wired" in main.commands
 
 
 def test_gates_wired_is_registered():
@@ -30,8 +50,16 @@ def test_github_helpers_wired_is_registered():
     assert "github-helpers-wired" in main.commands
 
 
+def test_isolation_wired_is_registered():
+    assert "isolation-wired" in main.commands
+
+
 def test_mutation_package_root_wired_is_registered():
     assert "mutation-package-root-wired" in main.commands
+
+
+def test_mutation_wired_is_registered():
+    assert "mutation-wired" in main.commands
 
 
 def test_packaging_build_wired_is_registered():
@@ -40,6 +68,10 @@ def test_packaging_build_wired_is_registered():
 
 def test_packaging_package_root_wired_is_registered():
     assert "packaging-package-root-wired" in main.commands
+
+
+def test_rolling_release_wired_is_registered():
+    assert "rolling-release-wired" in main.commands
 
 
 def test_rust_toolchain_wired_is_registered():

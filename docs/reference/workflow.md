@@ -52,7 +52,10 @@ for a single-package repo, so an existing single-package call is unaffected. Pyt
 `coverage` + `pytest` for a package with its own `[project]` table. TypeScript runs under `vitest`
 v8 coverage, installed with the package's own lockfile (`pnpm install --frozen-lockfile` or
 `npm ci`, per its manifest). Rust runs under `cargo llvm-cov --lib` (the unit suite only) and needs
-no install step of its own. `unit mutation` installs the same way: TypeScript's project
+no install step of its own; a [`[rust].coverage` `branch` floor](./config#coverage) adds `--branch`,
+which uses the nightly toolchain the crate pins in its own `rust-toolchain.toml` (with
+`llvm-tools-preview`) — the coverage run reads that pin directly, so the job provisions nothing
+extra for it. `unit mutation` installs the same way: TypeScript's project
 dependencies (must include `@stryker-mutator/core` and a runner plugin) install with `npm ci` or
 `pnpm install --frozen-lockfile`, whichever the package's own manifest/lockfile names; Python
 installs `pytest` + the `testing-conventions` wheel globally for a `pip`-only project, or runs

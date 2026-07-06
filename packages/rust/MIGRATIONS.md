@@ -621,6 +621,14 @@ empty union is byte-identical to before. The SDK gains one public item, `e2e::ve
 the existing `e2e::verify`, `e2e::verify_scoped`, and `e2e::verify_since` are unchanged (they now
 delegate to it with no extra roots and no excludes).
 
+Adds an **`[e2e]` config table** with `extra_scope` / `exclude` (#333): the declaration a package
+uses to name that shared source tree in its own `testing-conventions.toml`, discovered by `detect`
+like `[python] build_command`. The tool's config loader never acts on the keys — they drive the
+`--extra-scope` / `--exclude` CLI flags via detect and the workflow — but the schema must accept the
+table so a consumer declaring it still loads the rest of their config under `deny_unknown_fields`.
+Purely additive: the SDK gains `config::E2eConfig` and a `Config::e2e` field, both defaulting to
+absent/empty, so a package declaring no `[e2e]` table is unchanged.
+
 ### Required changes
 
 `config::PythonConfig` gains `build_command: Option<String>` and `reason: String` (#289). Both
@@ -632,6 +640,17 @@ literal must add the fields — `None` / `String::new()` preserve prior behavior
 PythonConfig { coverage: Some(cov), exempt: vec![] }
 // After:
 PythonConfig { coverage: Some(cov), exempt: vec![], build_command: None, reason: String::new() }
+```
+
+`config::Config` gains `e2e: Option<E2eConfig>` (#333), with a serde default, so a
+`testing-conventions.toml` without an `[e2e]` table parses unchanged; but a `Config` struct literal
+must add the field — `None` preserves prior behavior:
+
+```rust
+// Before:
+Config { python: p, typescript: t, rust: r }
+// After:
+Config { python: p, typescript: t, rust: r, e2e: None }
 ```
 
 The reusable workflow's `build_command` **input is removed** (#289); a consumer setting it on the

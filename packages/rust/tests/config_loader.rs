@@ -166,6 +166,19 @@ fn rejects_a_python_build_command_with_no_reason_self_guard() {
 }
 
 #[test]
+fn loads_an_e2e_extra_scope_and_exclude_table() {
+    // #333: `[e2e].extra_scope` / `exclude` are valid config keys. The binary never uses them —
+    // detect renders them into repeated `--extra-scope`/`--exclude` arguments the e2e-verify job
+    // appends — but the schema must accept the table, since `deny_unknown_fields` otherwise
+    // rejects a consumer's config (exactly like `[python].build_command`). Starts red: the schema
+    // has no `[e2e]` table yet, so the load errors until it does.
+    assert!(
+        load_config(fixture("e2e_extra_scope.toml")).is_ok(),
+        "an [e2e] extra_scope/exclude config must load (the schema must accept the table)"
+    );
+}
+
+#[test]
 fn partial_coverage_tables_inherit_defaults() {
     // Each table sets only one field; the rest fall back to the language's default
     // floor (#216). Previously a partial table errored on the required fields.

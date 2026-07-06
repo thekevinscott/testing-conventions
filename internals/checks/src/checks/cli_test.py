@@ -8,3 +8,7 @@ from checks.cli import main
 
 def test_build_command_wired_is_registered():
     assert "build-command-wired" in main.commands
+
+
+def test_e2e_verify_scope_wired_is_registered():
+    assert "e2e-verify-scope-wired" in main.commands

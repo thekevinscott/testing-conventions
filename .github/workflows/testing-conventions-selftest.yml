@@ -486,17 +486,23 @@ jobs:
     # caller's scanned directory), and (b) pass `--base` naming `inputs.base` under a
     # `github.event_name == 'pull_request'` gate, so freshness is diff-relative
     # (`<base>..HEAD`) rather than history-absolute — the model that keeps the gate
-    # adoptable by a squash-merging repo (#319). The check itself lives in a
-    # standalone, colocated-tested Python script (.github/scripts/e2e-verify-scope-wired)
-    # rather than inline bash — an earlier inline version embedded a literal
-    # `${{ inputs.path }}` in a grep pattern, which GitHub Actions templated (and
-    # stripped) before the shell ever ran it, breaking the check silently. It tracks
-    # the workflow file regardless of what the published binary ships; runtime
-    # behavior is covered by the Rust e2e tests (`e2e_verify.rs`, `e2e_verify_e2e.rs`).
+    # adoptable by a squash-merging repo (#319), and (c) append detect's rendered
+    # `$EXTRA_SCOPE` / `$EXCLUDE` extra-freshness-root arguments (#333). The check itself
+    # lives in the repo-only checks package (internals/checks) as a colocated-tested
+    # `@click.command()` rather than inline bash — an earlier inline version embedded a
+    # literal `${{ inputs.path }}` in a grep pattern, which GitHub Actions templated (and
+    # stripped) before the shell ever ran it, breaking the check silently. It tracks the
+    # workflow file regardless of what the published binary ships; runtime behavior is
+    # covered by the Rust e2e tests (`e2e_verify.rs`, `e2e_verify_e2e.rs`).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: python3 .github/scripts/e2e-verify-scope-wired/check_e2e_verify_scope_wired.py
+      - uses: astral-sh/setup-uv@v6
+      - name: the e2e-verify job must scope, diff, and append the extra freshness roots
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the
+        # `tc-checks` group's subcommand, from the repo root so the check's default
+        # workflow path resolves.
+        run: uv run --project internals/checks tc-checks e2e-verify-scope-wired
 
   diff-scoped-runs:
     name: A clean PR passes the diff-scoped --base jobs

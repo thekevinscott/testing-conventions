@@ -8,6 +8,7 @@ from __future__ import annotations
 import click
 
 from checks.build_command_wired.cli import cli as build_command_wired
+from checks.e2e_verify_scope_wired.cli import cli as e2e_verify_scope_wired
 
 
 @click.group()
@@ -16,3 +17,4 @@ def main() -> None:
 
 
 main.add_command(build_command_wired, name="build-command-wired")
+main.add_command(e2e_verify_scope_wired, name="e2e-verify-scope-wired")

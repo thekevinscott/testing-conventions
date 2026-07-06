@@ -1,31 +1,28 @@
-#!/usr/bin/env python3
-"""Assert the e2e-verify job passes --scope naming inputs.path (#294) and --base
-naming inputs.base, gated to pull requests (#319), and appends detect's rendered
-$EXTRA_SCOPE / $EXCLUDE extra-freshness-root arguments (#333).
+"""The e2e-verify-scope-wired check — repo-only (#294 #319 #333, #321).
 
-Repo-only: this module exists *only in this repository*. It backs the
-`e2e-verify-scoped-to-path` job in `testing-conventions-selftest.yml` — a red->green wiring
-signal that the reusable workflow's `e2e verify` invocation (a) scopes the freshness walk to
-the caller's own `path` input, not the (possibly broader) derived `package_root` (#294), and
-(b) makes it diff-relative by passing `--base` naming `inputs.base`, on pull requests only —
-the model that keeps the gate adoptable by a squash-merging repo (#319). A static check
-against the workflow file, so it tracks the workflow regardless of what the published binary
-ships; runtime behavior is covered by the Rust e2e tests (`e2e_verify.rs`, `e2e_verify_e2e.rs`).
+Backs the `tc-checks e2e-verify-scope-wired` subcommand: the reusable workflow's e2e-verify job
+must (a) pass `--scope` naming `inputs.path` (the caller's own scoping input), not rely on the
+derived `package_root` (which can be a real parent of `path`); (b) pass `--base` naming
+`inputs.base` under a `github.event_name == 'pull_request'` gate, so freshness is diff-relative
+(`<base>..HEAD`) rather than history-absolute — the model that keeps the gate adoptable by a
+squash-merging repo (#319); and (c) append detect's rendered `$EXTRA_SCOPE` / `$EXCLUDE`
+extra-freshness-root arguments (#333), so a shared source tree beside the package joins the walk.
 
-Written as a script with its own unit test rather than inline in the workflow YAML: an inline
-`run: |` block is untested prose, and GitHub Actions templates a workflow's `run:` text for
-`${{ }}` expressions before the shell ever sees it — embedding a literal `${{ inputs.path }}`
-inside a grep pattern gets silently evaluated (and stripped) by that templating, which is
-exactly the bug this script's own test suite would have caught before it reached CI.
-
-Usage: check_e2e_verify_scope_wired.py [path-to-testing-conventions.yml]
+A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
+untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:` text is
+templated before the shell sees it, so a literal `${{ ... }}` in a grep pattern is silently
+evaluated). It tracks the workflow file regardless of what the published binary ships; runtime
+behavior is covered by the Rust e2e tests (`e2e_verify.rs`, `e2e_verify_e2e.rs`).
 """
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 from typing import Optional
+
+import click
+
+from checks.utils.check_failed import CheckFailed
 
 DEFAULT_WORKFLOW = ".github/workflows/testing-conventions.yml"
 
@@ -77,7 +74,7 @@ def extract_e2e_verify_block(workflow_text: str) -> str:
     if not start:
         return ""
     end = _NEXT_JOB.search(workflow_text, start.end())
-    return workflow_text[start.start(): end.start() if end else len(workflow_text)]
+    return workflow_text[start.start() : end.start() if end else len(workflow_text)]
 
 
 def find_missing_wiring(workflow_text: str) -> Optional[str]:
@@ -98,18 +95,13 @@ def find_missing_wiring(workflow_text: str) -> Optional[str]:
     return None
 
 
-def main(argv: list[str]) -> int:
-    workflow_path = Path(argv[1] if len(argv) > 1 else DEFAULT_WORKFLOW)
-    error = find_missing_wiring(workflow_path.read_text())
-    if error:
-        print(f"::error::{error}")
-        return 1
-    print(
+@click.command()
+@click.argument("workflow", default=DEFAULT_WORKFLOW, type=click.Path())
+def cli(workflow: str) -> None:
+    problem = find_missing_wiring(Path(workflow).read_text())
+    if problem is not None:
+        raise CheckFailed(problem)
+    click.echo(
         "e2e-verify scopes the freshness walk to inputs.path, diffs inputs.base on PRs, and "
         "appends detect's extra-scope/exclude roots"
     )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))

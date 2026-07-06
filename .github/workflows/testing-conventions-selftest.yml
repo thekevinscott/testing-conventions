@@ -546,18 +546,21 @@ jobs:
           echo "e2e-verify checks out the PR head commit"
 
   e2e-verify-scoped-to-path:
-    name: e2e-verify scopes the freshness walk to path, not the derived package_root
-    # Red→green wiring signal for #294: the e2e-verify job's `e2e verify` invocation
-    # must pass `--scope` naming `inputs.path` (the caller's own scoping input), not
-    # rely on the derived `package_root` (which can be a real parent of `path` — a
-    # package root also holding tests/docs/config outside the caller's scanned
-    # directory). The check itself lives in a standalone, colocated-tested Python
-    # script (.github/scripts/e2e-verify-scope-wired) rather than inline bash — an
-    # earlier inline version embedded a literal `${{ inputs.path }}` in a grep
-    # pattern, which GitHub Actions templated (and stripped) before the shell ever
-    # ran it, breaking the check silently. It tracks the workflow file regardless of
-    # what the published binary ships; runtime behavior is covered by the Rust e2e
-    # tests (`e2e_verify.rs`, `e2e_verify_e2e.rs`).
+    name: e2e-verify passes --scope inputs.path and --base inputs.base on PRs
+    # Red→green wiring signal for #294 and #319: the e2e-verify job's `e2e verify`
+    # invocation must (a) pass `--scope` naming `inputs.path` (the caller's own
+    # scoping input), not rely on the derived `package_root` (which can be a real
+    # parent of `path` — a package root also holding tests/docs/config outside the
+    # caller's scanned directory), and (b) pass `--base` naming `inputs.base` under a
+    # `github.event_name == 'pull_request'` gate, so freshness is diff-relative
+    # (`<base>..HEAD`) rather than history-absolute — the model that keeps the gate
+    # adoptable by a squash-merging repo (#319). The check itself lives in a
+    # standalone, colocated-tested Python script (.github/scripts/e2e-verify-scope-wired)
+    # rather than inline bash — an earlier inline version embedded a literal
+    # `${{ inputs.path }}` in a grep pattern, which GitHub Actions templated (and
+    # stripped) before the shell ever ran it, breaking the check silently. It tracks
+    # the workflow file regardless of what the published binary ships; runtime
+    # behavior is covered by the Rust e2e tests (`e2e_verify.rs`, `e2e_verify_e2e.rs`).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

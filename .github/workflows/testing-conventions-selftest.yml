@@ -583,8 +583,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: testing-conventions.yml must wire a `gates` allowlist
-        run: python3 .github/scripts/gates-wired/check_gates_wired.py
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks gates-wired
 
   gates-scoped-static:
     name: A gates allowlist runs the static gates and skips the suite-executing ones
@@ -650,8 +653,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: testing-conventions.yml must wire a `rust_toolchain` setup step
-        run: python3 .github/scripts/rust-toolchain-wired/check_rust_toolchain_wired.py
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks rust-toolchain-wired
 
   rust-toolchain-clean:
     name: A rust_toolchain call finds cargo before build_command

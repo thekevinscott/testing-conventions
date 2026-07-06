@@ -9,6 +9,8 @@ import click
 
 from checks.build_command_wired.cli import cli as build_command_wired
 from checks.e2e_verify_scope_wired.cli import cli as e2e_verify_scope_wired
+from checks.gates_wired.cli import cli as gates_wired
+from checks.rust_toolchain_wired.cli import cli as rust_toolchain_wired
 
 
 @click.group()
@@ -18,3 +20,5 @@ def main() -> None:
 
 main.add_command(build_command_wired, name="build-command-wired")
 main.add_command(e2e_verify_scope_wired, name="e2e-verify-scope-wired")
+main.add_command(gates_wired, name="gates-wired")
+main.add_command(rust_toolchain_wired, name="rust-toolchain-wired")

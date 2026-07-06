@@ -374,20 +374,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: dogfood-github-helpers.yml must invoke all five Python arms
-        run: |
-          set -euo pipefail
-          wf=.github/workflows/dogfood-github-helpers.yml
-          missing=0
-          grep -q 'unit colocated-test' "$wf" || missing=1
-          grep -q 'unit lint' "$wf" || missing=1
-          grep -q 'unit coverage' "$wf" || missing=1
-          grep -q 'integration lint' "$wf" || missing=1
-          grep -qE 'unit mutation .*--base' "$wf" || missing=1
-          if [ "$missing" -ne 0 ]; then
-            echo "::error::$wf does not run every Python arm over the .github helpers — the dogfood gate (#237) must invoke unit colocated-test, unit lint, unit coverage, integration lint, and the diff-scoped unit mutation --base"
-            exit 1
-          fi
-          echo "dogfood-github-helpers.yml runs all five Python arms"
+        run: python3 .github/scripts/github-helpers-wired/check_github_helpers_wired.py
 
   detect-routes-python:
     name: the detect action routes Python into the unit-lint matrix

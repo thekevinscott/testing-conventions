@@ -63,6 +63,16 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
+fn rev_parse(dir: &Path, rev: &str) -> String {
+    let out = Command::new("git")
+        .args(["rev-parse", rev])
+        .current_dir(dir)
+        .output()
+        .expect("git rev-parse should run");
+    assert!(out.status.success(), "git rev-parse {rev} failed");
+    String::from_utf8(out.stdout).unwrap().trim().to_string()
+}
+
 /// Run the built binary with `args`, cwd set to `repo`; return (exit code, stderr).
 fn run_cli(repo: &Path, args: &[&str]) -> (i32, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
@@ -225,5 +235,85 @@ fn verify_with_no_argument_is_unchanged_from_today() {
     assert_eq!(
         code, 0,
         "a fresh attestation at cwd should still pass with no argument"
+    );
+}
+
+// --- #319: `e2e verify <path> --scope <dir> --base <ref>` restricts freshness to
+// the commits this branch introduced (`<base>..HEAD`), the squash-safe form the
+// reusable job needs. A PR that didn't touch the scoped source passes (exit 0)
+// even when the attestation is stale against absolute history; a PR that changed
+// the scoped source without re-attesting still fails.
+
+#[test]
+fn verify_with_base_exits_zero_on_an_unrelated_branch() {
+    let repo = TempRepo::new();
+    let package_rel = "packages/widget";
+    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
+    std::fs::create_dir_all(repo.0.join("packages/other")).unwrap();
+    repo.commit_code(
+        &format!("{package_rel}/src/widget.rs"),
+        "pub fn widget() {}\n",
+    );
+    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
+    // A later scoped commit the attestation does not name (stale vs history).
+    repo.commit_code(
+        &format!("{package_rel}/src/widget.rs"),
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    let base = rev_parse(&repo.0, "HEAD");
+    // The PR touches a different package.
+    repo.commit_code("packages/other/thing.rs", "pub fn thing() {}\n");
+
+    let (code, _) = run_cli(
+        &repo.0,
+        &[
+            "e2e",
+            "verify",
+            package_rel,
+            "--scope",
+            &format!("{package_rel}/src"),
+            "--base",
+            &base,
+        ],
+    );
+    assert_eq!(
+        code, 0,
+        "--base must make an unrelated PR pass despite a stale-on-base attestation"
+    );
+}
+
+#[test]
+fn verify_with_base_fails_when_the_branch_changed_scoped_source() {
+    let repo = TempRepo::new();
+    let package_rel = "packages/widget";
+    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
+    repo.commit_code(
+        &format!("{package_rel}/src/widget.rs"),
+        "pub fn widget() {}\n",
+    );
+    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
+    let base = rev_parse(&repo.0, "HEAD");
+    // The PR changes the scoped source without re-attesting.
+    repo.commit_code(
+        &format!("{package_rel}/src/widget.rs"),
+        "pub fn widget() { /* v2 */ }\n",
+    );
+
+    let (code, stderr) = run_cli(
+        &repo.0,
+        &[
+            "e2e",
+            "verify",
+            package_rel,
+            "--scope",
+            &format!("{package_rel}/src"),
+            "--base",
+            &base,
+        ],
+    );
+    assert_ne!(code, 0, "a scoped change on the branch should fail --base");
+    assert!(
+        stderr.contains("attest"),
+        "the failure should hint to re-run attest; got: {stderr}"
     );
 }

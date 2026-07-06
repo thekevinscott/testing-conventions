@@ -219,6 +219,14 @@ enum E2eCommand {
         /// this flag existed). Must be `path` or a descendant of it.
         #[arg(long)]
         scope: Option<PathBuf>,
+        /// Opt-in diff-scoping (#319): restrict freshness to the commits this
+        /// branch introduced (`<base>..HEAD`) rather than all reachable history.
+        /// A branch that didn't touch the scoped source passes with nothing to
+        /// re-attest — the way the changed-line coverage/mutation gates pass on an
+        /// empty diff, and what makes the gate safe for a squash-merging repo.
+        /// Absent means the whole history (byte-identical to before this flag).
+        #[arg(long)]
+        base: Option<String>,
     },
 }
 
@@ -276,7 +284,9 @@ where
         Some(Command::Workflow { path }) => run_workflow(&path),
         Some(Command::E2e { command }) => match command {
             E2eCommand::Attest { command } => run_e2e_attest(&command),
-            E2eCommand::Verify { path, scope } => run_e2e_verify(&path, scope.as_deref()),
+            E2eCommand::Verify { path, scope, base } => {
+                run_e2e_verify(&path, scope.as_deref(), base.as_deref())
+            }
         },
         Some(Command::Install { path }) => {
             agents::install(&path)?;
@@ -874,9 +884,11 @@ fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
 /// Passing a package subdirectory scopes discovery to it, matching a call made
 /// with that directory as cwd. `scope`, when set, narrows the "latest code
 /// commit" freshness walk to a directory under `path` instead of all of it
-/// (#294) — `None` behaves exactly like passing `path` itself.
-fn run_e2e_verify(path: &Path, scope: Option<&Path>) -> anyhow::Result<i32> {
-    match e2e::verify_scoped(path, scope.unwrap_or(path))? {
+/// (#294) — `None` behaves exactly like passing `path` itself. `base`, when set,
+/// restricts the walk to the commits this branch introduced (`<base>..HEAD`)
+/// instead of all history (#319) — `None` behaves exactly like before the flag.
+fn run_e2e_verify(path: &Path, scope: Option<&Path>, base: Option<&str>) -> anyhow::Result<i32> {
+    match e2e::verify_since(path, scope.unwrap_or(path), base)? {
         e2e::Verification::Fresh => Ok(0),
         e2e::Verification::Missing => {
             eprintln!(

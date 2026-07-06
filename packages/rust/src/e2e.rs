@@ -119,7 +119,27 @@ pub fn verify(repo: &Path) -> Result<Verification> {
 /// `path`-scoped call actually named, which can be narrower — a package root
 /// commonly also holds `tests/`, docs, and config files that aren't the
 /// attestable source). `scope` must be `repo` or a descendant of it.
+///
+/// Equivalent to [`verify_since`] with `base` set to `None` — the walk covers
+/// all reachable history, same as before #319.
 pub fn verify_scoped(repo: &Path, scope: &Path) -> Result<Verification> {
+    verify_since(repo, scope, None)
+}
+
+/// Verify the committed attestation at `repo`, optionally restricting the
+/// "latest code commit" walk to the commits this branch introduced —
+/// `<base>..HEAD` — instead of all reachable history (#319).
+///
+/// This makes freshness **diff-relative** rather than history-absolute, matching
+/// the changed-line coverage/mutation gates (`--base`). When `base` is `Some`,
+/// only commits reachable from `HEAD` but not `base` count as "the latest code
+/// commit": if this branch introduced no scoped code commit, there is nothing to
+/// re-attest, so the result is [`Verification::Fresh`] regardless of what the
+/// attestation names — a stale-on-`base` attestation (e.g. a squash merge
+/// rewrote the attested commit into a new one on the base branch) never reds a
+/// PR that didn't touch the scoped source. When `base` is `None`, the walk
+/// covers all reachable history, byte-identical to before this flag existed.
+pub fn verify_since(repo: &Path, scope: &Path, base: Option<&str>) -> Result<Verification> {
     let path = repo.join(ATTESTATION_PATH);
     let Ok(contents) = std::fs::read_to_string(&path) else {
         return Ok(Verification::Missing);
@@ -127,35 +147,53 @@ pub fn verify_scoped(repo: &Path, scope: &Path) -> Result<Verification> {
     let attestation: Attestation =
         serde_json::from_str(&contents).context("parsing the attestation")?;
 
-    let latest = latest_code_commit(repo, scope)?;
-    if attestation.commit == latest {
-        Ok(Verification::Fresh)
-    } else {
-        Ok(Verification::Stale {
-            attested: attestation.commit,
-            latest,
-        })
+    match latest_code_commit(repo, scope, base)? {
+        // With `--base`, an empty walk means this branch introduced no scoped
+        // code commit — there is nothing to re-attest, so it's fresh by
+        // construction (mirrors the changed-line coverage/mutation gates, which
+        // pass on an empty diff). This is what keeps the gate squash-safe: a
+        // stale-on-base attestation never reds a PR that didn't touch the source.
+        // Without `--base` the walk covers all history and only comes back empty
+        // for a scope with no commits at all, where an equality check against the
+        // attested SHA (below) is the right answer — same as before this flag.
+        None if base.is_some() => Ok(Verification::Fresh),
+        latest => {
+            let latest = latest.unwrap_or_default();
+            if attestation.commit == latest {
+                Ok(Verification::Fresh)
+            } else {
+                Ok(Verification::Stale {
+                    attested: attestation.commit,
+                    latest,
+                })
+            }
+        }
     }
 }
 
 /// The newest commit that changed any path other than the attestation file,
 /// under `scope` — the "latest code commit" the attestation must name to be
 /// fresh. Uses an `:(exclude)` pathspec so the attestation's own commit never
-/// counts as code.
-fn latest_code_commit(repo: &Path, scope: &Path) -> Result<String> {
+/// counts as code. When `base` is `Some`, the walk is restricted to the commits
+/// this branch introduced (`<base>..HEAD`); `None` when that range holds no such
+/// commit. Without `base` the walk covers all reachable history.
+fn latest_code_commit(repo: &Path, scope: &Path, base: Option<&str>) -> Result<Option<String>> {
     let exclude = format!(":(exclude){ATTESTATION_PATH}");
     let pathspec = relative_pathspec(repo, scope);
-    git_capture(
-        repo,
-        &[
-            "log",
-            "-1",
-            "--format=%H",
-            "--",
-            pathspec.as_str(),
-            exclude.as_str(),
-        ],
-    )
+    let mut args = vec!["log", "-1", "--format=%H"];
+    // `<base>..HEAD` — commits reachable from HEAD but not `base`, i.e. the ones
+    // this branch introduced. A commit that also landed on `base` (a squash of an
+    // earlier PR) is reachable from `base`, so it's excluded here — that's the
+    // whole point.
+    let range = base.map(|base| format!("{base}..HEAD"));
+    if let Some(range) = range.as_deref() {
+        args.push(range);
+    }
+    args.push("--");
+    args.push(pathspec.as_str());
+    args.push(exclude.as_str());
+    let out = git_capture(repo, &args)?;
+    Ok((!out.is_empty()).then_some(out))
 }
 
 /// `scope` as a pathspec relative to `repo` (git resolves pathspecs relative to

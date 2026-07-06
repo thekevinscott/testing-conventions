@@ -27,21 +27,38 @@ The mechanism is a pair:
   can't name its own SHA. It writes regardless of the command's exit code: the record is that the
   suite **ran**, and the honest result is part of the record.
 
-- **`e2e verify [path] [--scope <dir>]`** — the CI half, run by the [workflow](../reference/workflow).
-  It reads the committed attestation at `path` (default: the current directory) and passes only
-  when its recorded SHA equals the **latest code commit** under `--scope` (default: `path` itself)
-  — the newest commit that changed any path other than the attestation itself. It never runs the
-  suite and never inspects the recorded exit code: presence and freshness only. In a monorepo,
-  `path` names the package — `e2e verify packages/widget` behaves exactly like running `e2e verify`
-  with `packages/widget` as the current directory (#281). `--scope` narrows what counts as code
-  independently of where the attestation lives (#294): the reusable workflow passes the package's
-  own root for `path` (a manifest's natural home for its attestation) but the caller's own `path`
-  input for `--scope`, so a commit touching the package's `tests/`, docs, or config — outside what
-  the caller actually scoped their call to — doesn't trip a false-stale.
+- **`e2e verify [path] [--scope <dir>] [--base <ref>]`** — the CI half, run by the
+  [workflow](../reference/workflow). It reads the committed attestation at `path` (default: the
+  current directory) and passes only when its recorded SHA equals the **latest code commit** under
+  `--scope` (default: `path` itself) — the newest commit that changed any path other than the
+  attestation itself. It never runs the suite and never inspects the recorded exit code: presence
+  and freshness only. In a monorepo, `path` names the package — `e2e verify packages/widget` behaves
+  exactly like running `e2e verify` with `packages/widget` as the current directory (#281).
+  `--scope` narrows what counts as code independently of where the attestation lives (#294): the
+  reusable workflow passes the package's own root for `path` (a manifest's natural home for its
+  attestation) but the caller's own `path` input for `--scope`, so a commit touching the package's
+  `tests/`, docs, or config — outside what the caller actually scoped their call to — doesn't trip a
+  false-stale.
 
 Push new code without re-attesting, and the recorded SHA no longer names the latest code commit —
 `verify` fails with a message naming the fix (re-run `attest`). That staleness is the whole nudge:
 the e2e suite gets re-run exactly when the code it vouched for has moved on.
+
+## Freshness relative to a branch: `--base`
+
+By default `verify` measures freshness against all reachable history — the latest scoped commit
+anywhere in the tree. `--base <ref>` scopes it instead to the commits this branch introduced
+(`<base>..HEAD`), the same diff-relative model the [changed-line coverage](./coverage) and
+[mutation](./mutation) gates use (#319). A branch that touched the scoped source must name its
+newest scoped commit; a branch that touched none of it has nothing to re-attest and passes.
+
+This is what lets a **squash-merging** repo adopt the gate. A squash rewrites a source PR's commits
+— including its attestation commit — into one new commit on the base branch, so the SHA the
+attestation names no longer exists there. Against absolute history that reads as permanently stale,
+reddening every later PR, even ones that never touched the package. Scoped to `<base>..HEAD`,
+`verify` asks the only question that matters on a pull request — *did **this** branch change the
+scoped source without re-attesting?* — so an unrelated PR stays green and the PR that changes the
+source is exactly the one asked to re-attest.
 
 ## Why a receipt is enough
 

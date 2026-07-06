@@ -73,3 +73,6 @@ In the workflow the check is **verify-if-present**: it runs whenever a committed
 `e2e-attestation.json` sits at the [package root](../monorepo) — the repo root for a
 single-package repo, a package's own root in a monorepo — and is skipped, never failed,
 otherwise — so a library without an e2e suite adopts the [drop-in](../getting-started) unchanged.
+The reusable job passes `--base`, so it runs on pull requests and measures freshness over the
+scoped source the branch changed — diff-relative like the changed-line coverage and mutation
+jobs, and adoptable by a squash-merging repo.

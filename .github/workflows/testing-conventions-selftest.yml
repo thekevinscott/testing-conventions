@@ -798,6 +798,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - id: detect
         uses: ./.github/actions/detect
         with:
@@ -805,10 +806,10 @@ jobs:
           path: .github/selftest/monorepo/packages/ts/src
       # #277: the fixture's own testing-conventions.toml is discovered with no `config` input —
       # the detect call above passes only `languages`/`path`. The assertion runs in a
-      # colocated-tested helper (epic #302, #308); detect outputs are passed as CLI arguments.
+      # colocated-tested helper (epic #302, #308, #327); detect outputs are passed as CLI arguments.
       - name: Assert package_root / ts_package_manager / provision_rust / config
         run: >-
-          python3 .github/scripts/detect-package-root-ts/check_detect_package_root_ts.py
+          uv run --project internals/checks tc-checks detect-package-root-ts
           "${{ steps.detect.outputs.package_root }}"
           "${{ steps.detect.outputs.ts_package_manager }}"
           "${{ steps.detect.outputs.provision_rust }}"
@@ -819,6 +820,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - id: detect
         uses: ./.github/actions/detect
         with:
@@ -826,10 +828,10 @@ jobs:
           path: .github/selftest/monorepo/packages/py/src
       # #277: the fixture's own testing-conventions.toml is discovered with no `config` input —
       # the detect call above passes only `languages`/`path`. The assertion runs in a
-      # colocated-tested helper (epic #302, #308); detect outputs are passed as CLI arguments.
+      # colocated-tested helper (epic #302, #308, #327); detect outputs are passed as CLI arguments.
       - name: Assert package_root / python_env / config
         run: >-
-          python3 .github/scripts/detect-package-root-py/check_detect_package_root_py.py
+          uv run --project internals/checks tc-checks detect-package-root-py
           "${{ steps.detect.outputs.package_root }}"
           "${{ steps.detect.outputs.python_env }}"
           "${{ steps.detect.outputs.config }}"

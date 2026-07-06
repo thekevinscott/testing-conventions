@@ -129,7 +129,7 @@ Two reasons this is a rule, not a preference:
   extracting to a script sidesteps the whole class (#301, #302).
 
 Follow the `move-major-tag` (`move_major_tag.py` + colocated unit test + `tests/`) and
-`check_e2e_verify_scope_wired` precedents for structure. Passing a value from a step to a script is
+`check_e2e_verify_wired` precedents for structure. Passing a value from a step to a script is
 a CLI argument (`… check.py "${{ steps.detect.outputs.package_root }}"`), never an env
 side-channel — see **Never pass data through the environment**.
 

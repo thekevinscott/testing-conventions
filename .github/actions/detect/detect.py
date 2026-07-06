@@ -238,6 +238,46 @@ def derive_build_command(config: str) -> str:
     return value if isinstance(value, str) else ""
 
 
+def derive_e2e_extra_scope(config: str) -> str:
+    """The `[e2e].extra_scope` freshness roots (#333) read from the in-effect config file
+    `config`, rendered as repeated `--extra-scope <dir>` arguments for the e2e-verify run step,
+    or `''` when that file is absent, unparseable, declares no `[e2e].extra_scope`, or gives a
+    non-list. A package whose e2e artifact is compiled from a shared source tree beside it (a
+    native core bound into several bindings) declares that tree here — discovered exactly like
+    `config` and `build_command`, not passed on the `uses:` call.
+    """
+    return _e2e_scope_flags(config, "extra_scope", "--extra-scope")
+
+
+def derive_e2e_exclude(config: str) -> str:
+    """The `[e2e].exclude` feature-gated subtrees (#333) read from the in-effect config file
+    `config`, rendered as repeated `--exclude <dir>` arguments, or `''` when none are declared —
+    the carve-out for a core `cli/` compiled out of the bindings, so a change only under it stays
+    fresh. Same discovery and shape as [`derive_e2e_extra_scope`].
+    """
+    return _e2e_scope_flags(config, "exclude", "--exclude")
+
+
+def _e2e_scope_flags(config: str, key: str, flag: str) -> str:
+    """The `[e2e].<key>` list from `config`, rendered as repeated `<flag> <dir>` arguments the
+    e2e-verify run step appends verbatim, or `''` when the file is absent/unparseable or the key
+    is missing or not a list of directory strings. Parsed with the same stdlib `tomllib` used for
+    `pyproject.toml`, so a malformed config never crashes detect. Repo-relative directory paths
+    only — they are word-split by the run step, so a path with a space would not survive.
+    """
+    path = Path(config)
+    if not path.is_file():
+        return ""
+    try:
+        data = tomllib.loads(path.read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        return ""
+    value = data.get("e2e", {}).get(key, [])
+    if not isinstance(value, list):
+        return ""
+    return " ".join(f"{flag} {directory}" for directory in value if isinstance(directory, str) and directory)
+
+
 def eligible(languages_input: str, language: str) -> bool:
     """Whether `language` is in scope, given the raw `LANGUAGES` restrictor.
 
@@ -314,6 +354,12 @@ def compute_outputs(
         # #289: the `[python].build_command` escape hatch, read from the package's own config
         # (`config` above) — the suite-executing jobs run it instead of a `uses:`-call input.
         "build_command": derive_build_command(config),
+        # #333: extra e2e freshness roots and their feature-gated excludes, read from the same
+        # discovered `config` — a shared source tree beside the package that no `--scope`
+        # at-or-below the package root can reach. Rendered as repeated `--extra-scope`/`--exclude`
+        # arguments the e2e-verify run step appends; empty when the package declares none.
+        "e2e_extra_scope": derive_e2e_extra_scope(config),
+        "e2e_exclude": derive_e2e_exclude(config),
     }
 
 

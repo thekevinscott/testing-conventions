@@ -63,6 +63,12 @@ outputs:
   build_command:
     description: 'The `[python].build_command` escape hatch (#289) read from the discovered config file, or empty when none is declared — the suite-executing jobs run it before the suite.'
     value: ${{ steps.scan.outputs.build_command }}
+  e2e_extra_scope:
+    description: 'The `[e2e].extra_scope` freshness roots (#333) read from the discovered config file, rendered as repeated `--extra-scope <dir>` arguments the e2e-verify job appends, or empty when none are declared — a shared source tree beside the package that no `--scope` can reach.'
+    value: ${{ steps.scan.outputs.e2e_extra_scope }}
+  e2e_exclude:
+    description: 'The `[e2e].exclude` feature-gated subtrees (#333) read from the discovered config file, rendered as repeated `--exclude <dir>` arguments the e2e-verify job appends, or empty when none are declared.'
+    value: ${{ steps.scan.outputs.e2e_exclude }}
 
 runs:
   using: composite

@@ -32,6 +32,8 @@ def fs():
         "provision_rust": "false",
         "config": "testing-conventions.toml",
         "build_command": "",
+        "e2e_extra_scope": "",
+        "e2e_exclude": "",
         "attestation_roots_seen": [],
     }
 
@@ -51,7 +53,9 @@ def fs():
             patch.object(detect, "python_env", lambda root: state["python_env"]), \
             patch.object(detect, "provision_rust", lambda root: state["provision_rust"]), \
             patch.object(detect, "derive_config", lambda package_root_rel, config_input: state["config"]), \
-            patch.object(detect, "derive_build_command", lambda config: state["build_command"]):
+            patch.object(detect, "derive_build_command", lambda config: state["build_command"]), \
+            patch.object(detect, "derive_e2e_extra_scope", lambda config: state["e2e_extra_scope"]), \
+            patch.object(detect, "derive_e2e_exclude", lambda config: state["e2e_exclude"]):
         yield state
 
 
@@ -176,6 +180,28 @@ def test_build_command_output_wired_from_derive_build_command(fs):
 def test_build_command_output_empty_by_default(fs):
     out = detect.compute_outputs("", scan_root="/repo")
     assert out["build_command"] == ""
+
+
+# --- #333: the [e2e] extra_scope / exclude roots are emitted as outputs, wired straight from
+# their derive functions (which read the package's own discovered config, like build_command) ---
+
+
+def test_e2e_extra_scope_output_wired_from_derive(fs):
+    fs["e2e_extra_scope"] = "--extra-scope packages/rust/src"
+    out = detect.compute_outputs("", scan_root="/repo")
+    assert out["e2e_extra_scope"] == "--extra-scope packages/rust/src"
+
+
+def test_e2e_exclude_output_wired_from_derive(fs):
+    fs["e2e_exclude"] = "--exclude packages/rust/src/cli"
+    out = detect.compute_outputs("", scan_root="/repo")
+    assert out["e2e_exclude"] == "--exclude packages/rust/src/cli"
+
+
+def test_e2e_extra_scope_and_exclude_empty_by_default(fs):
+    out = detect.compute_outputs("", scan_root="/repo")
+    assert out["e2e_extra_scope"] == ""
+    assert out["e2e_exclude"] == ""
 
 
 def test_attestation_is_looked_up_at_the_package_root_not_the_repo_root(fs):

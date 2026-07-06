@@ -756,10 +756,15 @@ jobs:
         # is scoped to the caller's own `path` (#294) — narrower than the package
         # root whenever a package also carries tests/docs/config outside `path` — and
         # to the `<base>..HEAD` diff (#319), so only a change this branch made to the
-        # scoped source trips it. Requires a CLI new enough to accept `--base`
-        # (published by #319's CLI PR, landed ahead of this one per AGENTS.md's
-        # "Two-step rollout for workflow-consumed CLI changes").
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE"
+        # scoped source trips it. `$EXTRA_SCOPE` / `$EXCLUDE` are detect's pre-rendered
+        # `--extra-scope`/`--exclude` arguments for a shared source tree beside the
+        # package (#333) — deliberately unquoted so an empty value expands to nothing
+        # (byte-identical to before for a package declaring no `[e2e]` roots) and a
+        # rendered value word-splits into the repeated flags. Requires a CLI new enough
+        # to accept `--base` / `--extra-scope` (published by the #319 and #333 CLI PRs,
+        # landed ahead of this one per AGENTS.md's "Two-step rollout for
+        # workflow-consumed CLI changes").
+        run: npx -y "testing-conventions${VERSION:+@$VERSION}" e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE" $EXTRA_SCOPE $EXCLUDE
 
   packaging:
     name: Packaging (no test files in the built artifact)

@@ -271,13 +271,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml must invoke `unit mutation`
-        run: |
-          set -euo pipefail
-          if ! grep -q 'unit mutation --language' .github/workflows/testing-conventions.yml; then
-            echo "::error::the reusable workflow does not invoke \`unit mutation\` — the shipped mutation rule is not enforced on the @v0 path (#204)"
-            exit 1
-          fi
-          echo "reusable workflow invokes \`unit mutation\`"
+        run: python3 .github/scripts/mutation-wired/check_mutation_wired.py
 
   isolation-wired:
     name: The reusable workflow enforces unit lint
@@ -288,13 +282,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml must invoke `unit lint`
-        run: |
-          set -euo pipefail
-          if ! grep -q 'unit lint --language' .github/workflows/testing-conventions.yml; then
-            echo "::error::the reusable workflow does not invoke \`unit lint\` — the shipped lint rule is not enforced on the @v0 path (#125)"
-            exit 1
-          fi
-          echo "reusable workflow invokes \`unit lint\`"
+        run: python3 .github/scripts/isolation-wired/check_isolation_wired.py
 
   rolling-release-wired:
     name: The major tag advances only via the gated move-major-tag workflow
@@ -307,33 +295,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: move-major-tag.yml is present, publish-gated, and concurrency-guarded
-        run: |
-          set -euo pipefail
-          wf=.github/workflows/move-major-tag.yml
-          if [ ! -f "$wf" ]; then
-            echo "::error::missing $wf — the major tag has no dedicated advance workflow (#235)"
-            exit 1
-          fi
-          if ! grep -q 'workflow_run:' "$wf"; then
-            echo "::error::$wf is not gated on a workflow_run (Release completion) — @v0 could advance before the binary publishes (#235)"
-            exit 1
-          fi
-          if ! grep -q 'concurrency:' "$wf"; then
-            echo "::error::$wf has no concurrency group — out-of-order tag moves are unguarded (#235)"
-            exit 1
-          fi
-          echo "move-major-tag.yml is present, publish-gated, and concurrency-guarded"
-      - name: release.yml does not move the major tag inline
-        run: |
-          set -euo pipefail
-          # The tag move lives in the gated move-major-tag.yml, never inline in the publish
-          # pipeline — `git tag -f v0` in release.yml would re-couple it and drop the gate.
-          if grep -q 'tag -f v0' .github/workflows/release.yml; then
-            echo "::error::release.yml moves @v0 inline (\`git tag -f v0\`) — the move belongs in the gated move-major-tag.yml, not the publish workflow (#235)"
-            exit 1
-          fi
-          echo "release.yml no longer moves @v0 inline"
+      - name: move-major-tag.yml is gated and release.yml moves no tag inline
+        run: python3 .github/scripts/rolling-release-wired/check_rolling_release_wired.py
 
   github-helpers-wired:
     name: The .github helpers are dogfooded through every Python arm
@@ -441,13 +404,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml must fan unit-coverage over rust
-        run: |
-          set -euo pipefail
-          if ! grep -q 'coverage_languages' .github/workflows/testing-conventions.yml; then
-            echo "::error::the reusable workflow's unit-coverage job does not fan out over rust (no \`coverage_languages\` matrix) — the shipped Rust coverage arm (#37) is not enforced on the @v0 path (#171)"
-            exit 1
-          fi
-          echo "reusable workflow fans unit-coverage over rust"
+        run: python3 .github/scripts/coverage-rust-wired/check_coverage_rust_wired.py
 
   coverage-rust-clean:
     name: A clean Rust crate passes the reusable workflow's coverage arm
@@ -491,16 +448,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml must run the --base checks
-        run: |
-          set -euo pipefail
-          missing=0
-          grep -qE 'colocated-test .*--base' .github/workflows/testing-conventions.yml || missing=1
-          grep -qE 'unit coverage .*--base' .github/workflows/testing-conventions.yml || missing=1
-          if [ "$missing" -ne 0 ]; then
-            echo "::error::the reusable workflow does not run the diff-scoped \`--base\` checks (co-change #161 / changed-line coverage #162) — they never run in CI (#172)"
-            exit 1
-          fi
-          echo "reusable workflow runs the diff-scoped --base checks"
+        run: python3 .github/scripts/diff-scoped-wired/check_diff_scoped_wired.py
 
   e2e-verify-wired:
     name: The reusable workflow offers an opt-in e2e verify job
@@ -512,16 +460,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml must wire opt-in `e2e verify`
-        run: |
-          set -euo pipefail
-          missing=0
-          grep -q 'run_e2e' .github/workflows/testing-conventions.yml || missing=1
-          grep -qE 'e2e verify' .github/workflows/testing-conventions.yml || missing=1
-          if [ "$missing" -ne 0 ]; then
-            echo "::error::the reusable workflow does not offer an opt-in \`e2e verify\` job (input \`run_e2e\` + \`e2e verify\`) — the #68 freshness gate isn't on the @v0 path (#173)"
-            exit 1
-          fi
-          echo "reusable workflow offers opt-in e2e verify"
+        run: python3 .github/scripts/e2e-verify-wired/check_e2e_verify_wired.py
 
   e2e-verify-checks-out-pr-head:
     name: e2e-verify checks out the PR head commit, not the merge ref
@@ -536,14 +475,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: e2e-verify's checkout must pin the PR head commit
-        run: |
-          set -euo pipefail
-          BLOCK=$(awk '/^  e2e-verify:/,/^  packaging:/' .github/workflows/testing-conventions.yml)
-          echo "$BLOCK" | grep -q 'github.event.pull_request.head.sha' || {
-            echo "::error::the e2e-verify job's checkout doesn't pin github.event.pull_request.head.sha — on a pull_request event it checks out the ephemeral merge ref instead, which a committed attestation's recorded commit can never match"
-            exit 1
-          }
-          echo "e2e-verify checks out the PR head commit"
+        run: python3 .github/scripts/e2e-verify-checks-out-pr-head/check_e2e_verify_checks_out_pr_head.py
 
   e2e-verify-scoped-to-path:
     name: e2e-verify passes --scope inputs.path and --base inputs.base on PRs
@@ -773,13 +705,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml must fan colocated-test over rust
-        run: |
-          set -euo pipefail
-          if ! grep -q 'colocated_test_languages' .github/workflows/testing-conventions.yml; then
-            echo "::error::the reusable workflow's colocated-test job does not fan out over rust (no \`colocated_test_languages\` matrix) — the shipped rust presence arm (#40) is not enforced on the @v0 path (#274)"
-            exit 1
-          fi
-          echo "reusable workflow fans colocated-test over rust"
+        run: python3 .github/scripts/colocated-rust-wired/check_colocated_rust_wired.py
 
   colocated-rust-red:
     name: A crate with an untested fn trips the rust colocated-test arm

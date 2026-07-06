@@ -938,24 +938,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: unit-coverage must reference needs.detect.outputs.package_root
-        run: |
-          set -euo pipefail
-          BLOCK=$(awk '/^  unit-coverage:/,/^  coverage-changed:/' .github/workflows/testing-conventions.yml)
-          echo "$BLOCK" | grep -q 'needs.detect.outputs.package_root' || {
-            echo "::error::the unit-coverage job doesn't reference needs.detect.outputs.package_root — TS install / Python env / build_command still run at the checkout root, not the derived package root (#278)"
-            exit 1
-          }
-          echo "unit-coverage installs/builds at needs.detect.outputs.package_root"
-      - name: coverage-changed must reference needs.detect.outputs.package_root
-        run: |
-          set -euo pipefail
-          BLOCK=$(awk '/^  coverage-changed:/,/^  mutation:/' .github/workflows/testing-conventions.yml)
-          echo "$BLOCK" | grep -q 'needs.detect.outputs.package_root' || {
-            echo "::error::the coverage-changed job doesn't reference needs.detect.outputs.package_root — TS install / Python env / build_command still run at the checkout root, not the derived package root (#278)"
-            exit 1
-          }
-          echo "coverage-changed installs/builds at needs.detect.outputs.package_root"
+      - name: The coverage jobs must reference needs.detect.outputs.package_root
+        run: python3 .github/scripts/coverage-package-root-wired/check_coverage_package_root_wired.py
 
   monorepo-coverage-ts:
     name: The monorepo npm TS fixture passes unit-coverage from its own package root
@@ -1001,13 +985,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml's packaging job must reference package_root
-        run: |
-          set -euo pipefail
-          if ! grep -q 'needs.detect.outputs.package_root' .github/workflows/testing-conventions.yml; then
-            echo "::error::the reusable workflow's packaging job does not reference needs.detect.outputs.package_root — a per-package dist/ is never discovered, only a checkout-root one (#280)"
-            exit 1
-          fi
-          echo "reusable workflow's packaging job reads the derived package_root"
+        run: python3 .github/scripts/packaging-package-root-wired/check_packaging_package_root_wired.py
 
   packaging-package-root-clean:
     name: A per-package dist/ passes the packaging check with no packaging_artifact
@@ -1055,15 +1033,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: testing-conventions.yml's mutation job must reference package_root
-        run: |
-          set -euo pipefail
-          awk '/^  mutation:/{flag=1} /^  integration-lint:/{flag=0} flag' \
-            .github/workflows/testing-conventions.yml > /tmp/mutation-job.yml
-          if ! grep -q 'needs.detect.outputs.package_root' /tmp/mutation-job.yml; then
-            echo "::error::the mutation job does not reference needs.detect.outputs.package_root — it still installs/builds at the checkout root, so a per-package-lockfile monorepo (or a non-pnpm TS package, or a uv-managed Python package) fails the job (#279)"
-            exit 1
-          fi
-          echo "mutation job installs and builds from the derived package root"
+        run: python3 .github/scripts/mutation-package-root-wired/check_mutation_package_root_wired.py
 
   mutation-monorepo-ts:
     name: Mutation over the monorepo fixture's npm TS package (per-package call)

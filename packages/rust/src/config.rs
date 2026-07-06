@@ -25,6 +25,7 @@ pub struct Config {
     pub python: Option<PythonConfig>,
     pub typescript: Option<TypeScriptConfig>,
     pub rust: Option<RustConfig>,
+    pub e2e: Option<E2eConfig>,
 }
 
 /// The `[python]` table. Both keys are optional, so a repo can configure just
@@ -52,6 +53,27 @@ pub struct PythonConfig {
     /// unreasoned escape hatch can never be a silent pass.
     #[serde(default)]
     pub reason: String,
+}
+
+/// The `[e2e]` table (#333). `extra_scope` names a shared source tree beside the
+/// package — a native core bound into several language bindings — whose commits
+/// join the `e2e verify` freshness walk, and `exclude` carves feature-gated
+/// subtrees of it back out. Both are optional lists of repo-relative directory
+/// paths, so an absent `[e2e]` table (or one setting just one key) is the
+/// zero-config default.
+///
+/// The binary never acts on these keys — the freshness walk is driven by the
+/// `e2e verify --extra-scope` / `--exclude` CLI flags, which `detect` renders
+/// from this table and the reusable workflow supplies — but the schema must
+/// accept the table so a consumer declaring it still loads the rest of its
+/// config under `deny_unknown_fields`, exactly like `[python].build_command`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct E2eConfig {
+    #[serde(default)]
+    pub extra_scope: Vec<String>,
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 /// The `[typescript]` table.

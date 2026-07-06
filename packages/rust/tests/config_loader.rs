@@ -53,6 +53,7 @@ fn expected_valid() -> Config {
             features: vec![],
             exempt: vec![],
         }),
+        e2e: None,
     }
 }
 
@@ -162,6 +163,44 @@ fn rejects_a_python_build_command_with_no_reason_self_guard() {
     assert!(
         load_config(fixture("python_build_command_no_reason.toml")).is_err(),
         "a [python].build_command with no reason must be rejected (self-guard)"
+    );
+}
+
+#[test]
+fn loads_an_e2e_extra_scope_and_exclude_table() {
+    // #333: `[e2e].extra_scope` / `exclude` are valid config keys. The binary never uses them —
+    // detect renders them into repeated `--extra-scope`/`--exclude` arguments the e2e-verify job
+    // appends — but the schema must accept the table, since `deny_unknown_fields` otherwise
+    // rejects a consumer's config (exactly like `[python].build_command`). Starts red: the schema
+    // has no `[e2e]` table yet, so the load errors until it does.
+    let config = load_config(fixture("e2e_extra_scope.toml"))
+        .expect("an [e2e] extra_scope/exclude config must load (the schema must accept the table)");
+    let e2e = config.e2e.expect("[e2e] table present");
+    assert_eq!(e2e.extra_scope, vec!["packages/rust/src"]);
+    assert_eq!(
+        e2e.exclude,
+        vec!["packages/rust/src/cli", "packages/rust/src/bin"]
+    );
+}
+
+#[test]
+fn e2e_table_keys_are_optional() {
+    // Both keys default to empty, so an `[e2e]` table setting just one (or neither) loads — the
+    // zero-config shape a package that declares only extra_scope, or only exclude, produces.
+    let config = load_config(fixture("e2e_extra_scope_only.toml"))
+        .expect("an [e2e] table with only extra_scope should load");
+    let e2e = config.e2e.expect("[e2e] table present");
+    assert_eq!(e2e.extra_scope, vec!["packages/rust/src"]);
+    assert!(e2e.exclude.is_empty(), "exclude defaults to empty");
+}
+
+#[test]
+fn rejects_an_unknown_e2e_key_self_guard() {
+    // `deny_unknown_fields` still guards the table — a typo'd key inside `[e2e]` is rejected,
+    // not silently accepted.
+    assert!(
+        load_config(fixture("e2e_unknown_key.toml")).is_err(),
+        "an unknown key under [e2e] must be rejected (self-guard)"
     );
 }
 

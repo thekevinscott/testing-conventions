@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **The config schema accepts an `[e2e]` table with `extra_scope` / `exclude`** (#333). A package
+  whose e2e artifact is compiled from a shared source tree beside it declares that tree as an extra
+  freshness root in its own `testing-conventions.toml` — `[e2e] extra_scope = [...]` with an
+  optional `exclude = [...]` for feature-gated subtrees. The tool's own config loader never acts on
+  these keys (the freshness walk is driven by the `e2e verify --extra-scope` / `--exclude` CLI
+  flags, which `detect` and the reusable workflow supply); the schema accepts the table so a
+  consumer declaring it still loads the rest of their config under `deny_unknown_fields` — exactly
+  like `[python] build_command`. Both keys are optional lists of repo-relative directory paths, so a
+  package declaring neither is byte-identical to before. (The `detect` + workflow wiring that reads
+  this table and passes the flags lands as an immediate follow-up, per AGENTS.md's two-step rollout
+  for workflow-consumed CLI changes.)
+
 - **`e2e verify` accepts `--extra-scope <dir>` / `--exclude <dir>` for a shared source tree beside
   the package** (#333). A package whose e2e artifact is compiled from a source tree that is a
   *sibling* of it — a native core bound into several language bindings (dirsql's `packages/rust`

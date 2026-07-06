@@ -130,6 +130,31 @@ a compiled module in those languages builds during dependency install. Python's 
 backends expose only sandboxed `build_wheel` / `build_sdist` hooks with no manifest-declared
 pre-build shell step, so `build_command` fills that single gap.
 
+## `[e2e] extra_scope` and `exclude`
+
+The `[e2e]` table takes **`extra_scope`**, a list of repo-root-relative directories outside the
+package's own subtree whose commits join the [`e2e verify`](../explanation/e2e#a-shared-source-tree-beside-the-package)
+freshness walk, and **`exclude`**, a list of feature-gated subtrees carved back out of that union.
+It is the declaration for a package whose e2e artifact is compiled from a **shared source tree that
+sits beside it** — a native core bound into several language bindings — which no `--scope`
+at-or-below the package root can reach.
+
+```toml
+[e2e]
+extra_scope = ["packages/rust/src"]
+exclude = ["packages/rust/src/cli", "packages/rust/src/bin"]
+```
+
+The value is discovered in the package's own `testing-conventions.toml` at the
+[package root](../monorepo), exactly like the config file itself — a fact about the package's build
+(*my artifact is compiled from that tree*), not a `uses:`-call input. `detect` renders the lists as
+repeated `--extra-scope` / `--exclude` arguments and the `e2e-verify` job appends them; a package
+declaring neither behaves byte-identically to before. Both are lists of directory paths, so a path
+with a space is not supported. This is git-level and language-agnostic — it holds across Python,
+TypeScript, and Rust identically. Like `[python] build_command`, the tool's own config loader never
+acts on these keys — it accepts the table so the rest of the config still loads — while `detect` and
+the workflow read them.
+
 ## Shared test configs
 
 The coverage floor is also published as a config your own test runner extends, so a local run is

@@ -88,6 +88,14 @@ jobs:
     # isolation, coverage, integration-lint, and diff-scoped mutation. This replaces running the
     # `.github/scripts` helper conventions over them as loose scripts (a pyproject inside the
     # `.github/scripts` scan flips the tool into package-mode for the whole directory).
+    #
+    # `path` is the *inner* importable-package dir (internals/checks/src), not the package root
+    # — exactly as the Python plugin scans packages/python/python, not packages/python. The
+    # static gates recurse `path`, so the colocated `*_test.py` units live under src/ while the
+    # full e2e suite sits at internals/checks/tests/e2e (a sibling, outside the scan) — a
+    # `*_test.py` e2e file inside the scan would be read as an un-isolated unit test. The
+    # package root (internals/checks, where the pyproject lives) is still derived for the
+    # coverage/mutation venv.
     uses: ./.github/workflows/testing-conventions.yml
     with:
-      path: internals/checks
+      path: internals/checks/src

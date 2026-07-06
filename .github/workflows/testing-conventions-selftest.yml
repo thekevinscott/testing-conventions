@@ -197,16 +197,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: The rust/typescript integration-lint arms trip on a violation and pass when clean
         # The assertion (drive each published invocation, then pass/fail on its exit code) is a
-        # tested, colocated script (.github/scripts/, epic #302 / #309) rather than inline bash.
-        run: python3 .github/scripts/integration-lint-new-arms-trip/check_integration_lint_new_arms_trip.py
+        # tested check in the repo-only checks package (internals/checks, #321/#328); `uv run`
+        # syncs it and runs the `tc-checks` group's subcommand.
+        run: uv run --project internals/checks tc-checks integration-lint-new-arms-trip
 
   below-floor:
     name: Below-floor suite trips the coverage gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -214,15 +217,16 @@ jobs:
         run: python -m pip install --quiet coverage pytest
       - name: A sub-floor suite must fail `unit coverage`
         # The same invocation the reusable workflow's unit-coverage job runs; the non-zero exit is
-        # what fails a consumer's build. The assertion is a tested, colocated script
-        # (.github/scripts/, epic #302 / #309) rather than inline bash.
-        run: python3 .github/scripts/below-floor/check_below_floor.py
+        # what fails a consumer's build. The assertion is a tested check in the repo-only checks
+        # package (internals/checks, #321/#328); `uv run` syncs it and runs the subcommand.
+        run: uv run --project internals/checks tc-checks below-floor
 
   mutation-gate:
     name: An un-exempted survivor trips the mutation gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - uses: dtolnay/rust-toolchain@stable
       # The published CLI provisions cargo-mutants itself now (#242); only the cargo
       # toolchain is needed here. Cache the provisioning dir so it's reused across runs.
@@ -234,8 +238,9 @@ jobs:
       - name: A clean crate passes and a survivor crate trips `unit mutation`
         # The clean crate must pass (every mutant caught) and the survivor crate must fail (a
         # surviving mutant) — the same invocations the reusable workflow's mutation job runs. The
-        # assertion is a tested, colocated script (.github/scripts/, epic #302 / #309).
-        run: python3 .github/scripts/mutation-gate/check_mutation_gate.py
+        # assertion is a tested check in the repo-only checks package (internals/checks, #321/#328);
+        # `uv run` syncs it and runs the subcommand.
+        run: uv run --project internals/checks tc-checks mutation-gate
 
   python-mutation-clean:
     name: A clean Python library passes `unit mutation`
@@ -250,6 +255,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -258,9 +264,10 @@ jobs:
         # Wheel last, matching the reusable workflow (keeps the #92 drift guard quiet).
         run: python -m pip install --quiet pytest testing-conventions
       - name: A mutation-clean Python library clears `unit mutation`
-        # The zero exit proves the wheel-shipped adapter resolves (#258). The assertion is a tested,
-        # colocated script (.github/scripts/, epic #302 / #309) rather than inline bash.
-        run: python3 .github/scripts/python-mutation-clean/check_python_mutation_clean.py
+        # The zero exit proves the wheel-shipped adapter resolves (#258). The assertion is a tested
+        # check in the repo-only checks package (internals/checks, #321/#328); `uv run` syncs it and
+        # runs the subcommand.
+        run: uv run --project internals/checks tc-checks python-mutation-clean
 
   mutation-wired:
     name: The reusable workflow enforces unit mutation
@@ -356,10 +363,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: A crate with an out-of-module unit-test call must fail `unit lint`
         # The assertion (drive the published `unit lint`, then pass/fail on its non-zero exit) is a
-        # tested, colocated script (.github/scripts/, epic #302 / #309) rather than inline bash.
-        run: python3 .github/scripts/isolation-red/check_isolation_red.py
+        # tested check in the repo-only checks package (internals/checks, #321/#328); `uv run`
+        # syncs it and runs the subcommand.
+        run: uv run --project internals/checks tc-checks isolation-red
 
   upload-clean-dist:
     name: Upload the clean built wheel as an artifact
@@ -395,10 +404,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: A wheel that ships a `*_test.py` must fail `packaging`
         # The assertion (drive the published `packaging`, then pass/fail on its non-zero exit) is a
-        # tested, colocated script (.github/scripts/, epic #302 / #309) rather than inline bash.
-        run: python3 .github/scripts/packaging-red/check_packaging_red.py
+        # tested check in the repo-only checks package (internals/checks, #321/#328); `uv run`
+        # syncs it and runs the subcommand.
+        run: uv run --project internals/checks tc-checks packaging-red
 
   # ---- Epic #170: realign the workflow with the CLI surface (one rule = one job) ----
 
@@ -438,6 +449,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
@@ -446,8 +458,9 @@ jobs:
           tool: cargo-llvm-cov
       - name: A sub-floor crate must fail `unit coverage --language rust`
         # The assertion (drive the published `unit coverage --language rust`, then pass/fail on its
-        # non-zero exit) is a tested, colocated script (.github/scripts/, epic #302 / #309).
-        run: python3 .github/scripts/coverage-rust-red/check_coverage_rust_red.py
+        # non-zero exit) is a tested check in the repo-only checks package (internals/checks,
+        # #321/#328); `uv run` syncs it and runs the subcommand.
+        run: uv run --project internals/checks tc-checks coverage-rust-red
 
   diff-scoped-wired:
     name: The reusable workflow runs the diff-scoped --base checks
@@ -932,10 +945,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: A per-package dist/ shipping a test file must fail packaging
         # The assertion (drive the published `packaging` on the per-package tarball, then pass/fail
-        # on its non-zero exit) is a tested, colocated script (.github/scripts/, epic #302 / #309).
-        run: python3 .github/scripts/packaging-package-root-red/check_packaging_package_root_red.py
+        # on its non-zero exit) is a tested check in the repo-only checks package (internals/checks,
+        # #321/#328); `uv run` syncs it and runs the subcommand.
+        run: uv run --project internals/checks tc-checks packaging-package-root-red
   # ---- #279: the mutation job installs and builds from the derived package root ----
 
   mutation-package-root-wired:

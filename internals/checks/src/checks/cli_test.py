@@ -6,6 +6,10 @@ covered by the e2e suite under `tests/`.
 from checks.cli import main
 
 
+def test_below_floor_is_registered():
+    assert "below-floor" in main.commands
+
+
 def test_build_command_wired_is_registered():
     assert "build-command-wired" in main.commands
 
@@ -16,6 +20,10 @@ def test_colocated_rust_wired_is_registered():
 
 def test_coverage_package_root_wired_is_registered():
     assert "coverage-package-root-wired" in main.commands
+
+
+def test_coverage_rust_red_is_registered():
+    assert "coverage-rust-red" in main.commands
 
 
 def test_coverage_rust_wired_is_registered():
@@ -50,8 +58,20 @@ def test_github_helpers_wired_is_registered():
     assert "github-helpers-wired" in main.commands
 
 
+def test_integration_lint_new_arms_trip_is_registered():
+    assert "integration-lint-new-arms-trip" in main.commands
+
+
+def test_isolation_red_is_registered():
+    assert "isolation-red" in main.commands
+
+
 def test_isolation_wired_is_registered():
     assert "isolation-wired" in main.commands
+
+
+def test_mutation_gate_is_registered():
+    assert "mutation-gate" in main.commands
 
 
 def test_mutation_package_root_wired_is_registered():
@@ -66,8 +86,20 @@ def test_packaging_build_wired_is_registered():
     assert "packaging-build-wired" in main.commands
 
 
+def test_packaging_package_root_red_is_registered():
+    assert "packaging-package-root-red" in main.commands
+
+
 def test_packaging_package_root_wired_is_registered():
     assert "packaging-package-root-wired" in main.commands
+
+
+def test_packaging_red_is_registered():
+    assert "packaging-red" in main.commands
+
+
+def test_python_mutation_clean_is_registered():
+    assert "python-mutation-clean" in main.commands
 
 
 def test_rolling_release_wired_is_registered():

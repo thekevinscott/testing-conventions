@@ -8,9 +8,13 @@ from __future__ import annotations
 import click
 
 from checks.build_command_wired.cli import cli as build_command_wired
+from checks.detect_routes_python.cli import cli as detect_routes_python
 from checks.e2e_verify_scope_wired.cli import cli as e2e_verify_scope_wired
 from checks.gates_wired.cli import cli as gates_wired
 from checks.rust_toolchain_wired.cli import cli as rust_toolchain_wired
+from checks.wiring_detect_action.cli import cli as wiring_detect_action
+from checks.wiring_e2e_default_on.cli import cli as wiring_e2e_default_on
+from checks.wiring_packaging_default_on.cli import cli as wiring_packaging_default_on
 
 
 @click.group()
@@ -19,6 +23,10 @@ def main() -> None:
 
 
 main.add_command(build_command_wired, name="build-command-wired")
+main.add_command(detect_routes_python, name="detect-routes-python")
 main.add_command(e2e_verify_scope_wired, name="e2e-verify-scope-wired")
 main.add_command(gates_wired, name="gates-wired")
 main.add_command(rust_toolchain_wired, name="rust-toolchain-wired")
+main.add_command(wiring_detect_action, name="wiring-detect-action")
+main.add_command(wiring_e2e_default_on, name="wiring-e2e-default-on")
+main.add_command(wiring_packaging_default_on, name="wiring-packaging-default-on")

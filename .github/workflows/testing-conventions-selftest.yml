@@ -320,13 +320,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - id: detect
         uses: ./.github/actions/detect
         with:
           languages: '["python"]'
           path: .github/selftest/clean
       - name: Assert Python is in isolation_languages
-        run: python3 .github/scripts/detect-routes-python/check_detect_routes_python.py '${{ steps.detect.outputs.isolation_languages }}'
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand; the detect output is single-quoted into the CLI argument.
+        run: uv run --project internals/checks tc-checks detect-routes-python '${{ steps.detect.outputs.isolation_languages }}'
 
   isolation-clean:
     name: A clean crate passes the unit-lint job
@@ -528,24 +531,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: testing-conventions.yml must use the detect action
-        run: python3 .github/scripts/wiring-detect-action/check_wiring_detect_action.py .github/workflows/testing-conventions.yml
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks wiring-detect-action
 
   wiring-packaging-default-on:
     name: The reusable workflow runs packaging by default (#186)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: packaging must gate on detect's packaging_dist output
-        run: python3 .github/scripts/wiring-packaging-default-on/check_wiring_packaging_default_on.py .github/workflows/testing-conventions.yml
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks wiring-packaging-default-on
 
   wiring-e2e-default-on:
     name: The reusable workflow runs e2e verify by default (#186)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: e2e-verify must gate on detect's e2e_attestation output
-        run: python3 .github/scripts/wiring-e2e-default-on/check_wiring_e2e_default_on.py .github/workflows/testing-conventions.yml
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks wiring-e2e-default-on
 
   # ---- #243: a build_command hook so native-binding projects can run the suite jobs ----
 

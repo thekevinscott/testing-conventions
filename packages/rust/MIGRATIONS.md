@@ -605,6 +605,13 @@ Adds the **`install`** command (#232): writes the testing contract into the repo
 `AGENTS.md` as a marker-delimited, hash-versioned block, idempotently. Purely additive — no
 existing command, flag, config key, or SDK item changes.
 
+Adds **`e2e verify --base <ref>`** (#319): scopes the freshness walk to `<base>..HEAD` (the commits
+the branch introduced) instead of all reachable history, matching the changed-line coverage/mutation
+gates — what makes the gate adoptable by a squash-merging repo. Purely additive at the CLI: absent,
+freshness stays history-absolute, byte-identical to before. The SDK gains one public item,
+`e2e::verify_since`; the existing `e2e::verify` and `e2e::verify_scoped` are unchanged (they now
+delegate to it with `base = None`).
+
 ### Required changes
 
 `config::PythonConfig` gains `build_command: Option<String>` and `reason: String` (#289). Both

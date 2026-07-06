@@ -178,7 +178,10 @@ testing-conventions e2e attest '<your e2e command>'
 the exit code, and the commit it ran against. In CI, `testing-conventions e2e verify`
 passes only if that attestation names the latest code commit. Push code without
 re-attesting and it goes stale, so CI prompts you to re-run e2e. CI confirms someone
-ran the suite against this code; it never runs the suite itself.
+ran the suite against this code; it never runs the suite itself. On a pull request,
+`--base <ref>` scopes freshness to the commits the branch introduced — the same
+diff-relative model coverage and mutation use — so a branch that changed the source
+re-attests and a branch that didn't stays green, which keeps the gate squash-safe.
 
 **Checked:** the e2e location is a convention, not its own gate, and CI never runs
 the suite. CI checks the attestation: `e2e verify` requires the committed

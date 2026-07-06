@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- **`e2e verify` accepts `--base <ref>` to scope freshness to the current branch** (#319). With
+  `--base`, the "latest code commit" walk covers only the commits the branch introduced
+  (`<base>..HEAD`) instead of all reachable history — the same diff-relative model the changed-line
+  coverage and mutation gates use. A branch that changed the scoped source must name its newest
+  scoped commit; a branch that changed none of it has nothing to re-attest and passes. This lets a
+  squash-merging repo adopt the gate: a squash rewrites the attested commit into a new one on the
+  base branch, which reads as permanently stale against absolute history and reds every later PR —
+  scoping to `<base>..HEAD` asks only whether *this* branch changed the source without re-attesting,
+  so unrelated PRs stay green. Absent, freshness stays history-absolute, byte-identical to before.
+  (The reusable workflow wires this in as an immediate follow-up, per AGENTS.md's two-step rollout
+  for workflow-consumed CLI changes.)
+
 ### Changed
 
 - **BREAKING: the suite-executing jobs (`unit coverage`, changed-line coverage, `mutation`)

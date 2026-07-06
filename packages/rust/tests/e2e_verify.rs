@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use testing_conventions::e2e::{attest, verify, verify_scoped, Verification};
+use testing_conventions::e2e::{attest, verify, verify_scoped, verify_since, Verification};
 use testing_conventions::run;
 
 /// A throwaway git repo with one seed commit, removed on drop.
@@ -366,4 +366,134 @@ fn cli_verify_with_no_argument_defaults_to_the_current_directory() {
     // The crate root itself carries no attestation, so this is `1` (Missing) —
     // the point is that it dispatches at all, not which outcome cwd produces.
     assert_eq!(code, 1);
+}
+
+// --- #319: `verify_since` restricts the freshness walk to `<base>..HEAD` (the
+// commits this branch introduced) instead of all reachable history. This makes
+// the gate diff-relative — the way the changed-line coverage/mutation gates are
+// — so a squash-merging repo can adopt it: a stale-on-base attestation (a squash
+// rewrote the attested commit into a new one on `main`) never reds a PR that
+// didn't touch the scoped source. `base == None` is byte-identical to
+// `verify_scoped`.
+
+#[test]
+fn verify_since_passes_when_the_branch_introduced_no_scoped_commit() {
+    // The squash-merge / unrelated-PR case that reds every PR today. A scoped
+    // commit sits on the base branch that the committed attestation no longer
+    // names, and this PR touches a *different* package — so `<base>..HEAD` holds
+    // no scoped commit. There is nothing to re-attest; freshness must pass.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    std::fs::create_dir_all(repo.0.join("packages/other")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    // A later scoped commit the attestation does NOT name — this alone makes the
+    // attestation stale against absolute history.
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    let base = rev_parse(&repo.0, "HEAD");
+    // The PR: a commit touching a different package, never the scoped source.
+    repo.commit_code("packages/other/thing.rs", "pub fn thing() {}\n");
+
+    // Sanity: without --base this is (correctly) stale against absolute history —
+    // exactly what reds an unrelated PR on a squash repo today.
+    assert!(
+        matches!(
+            verify_scoped(&package, &package.join("src")).unwrap(),
+            Verification::Stale { .. },
+        ),
+        "history-absolute freshness should still see this attestation as stale",
+    );
+    // With --base scoped to the branch, nothing scoped changed → Fresh.
+    assert_eq!(
+        verify_since(&package, &package.join("src"), Some(&base)).unwrap(),
+        Verification::Fresh,
+        "a PR that didn't touch the scoped source must pass despite a stale-on-base attestation",
+    );
+}
+
+#[test]
+fn verify_since_flags_a_scoped_commit_the_branch_did_not_reattest() {
+    // The accountability case: this branch *did* change the scoped source but
+    // forgot to re-attest — it must still fail.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    let attested = rev_parse(&repo.0, "HEAD^");
+    let base = rev_parse(&repo.0, "HEAD");
+    // The PR changes the scoped source without re-attesting.
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    let latest = rev_parse(&repo.0, "HEAD");
+
+    assert_eq!(
+        verify_since(&package, &package.join("src"), Some(&base)).unwrap(),
+        Verification::Stale { attested, latest },
+        "a scoped change on the branch without a re-attest must still fail",
+    );
+}
+
+#[test]
+fn verify_since_passes_when_the_branch_reattested_its_scoped_change() {
+    // The branch changed the scoped source and re-attested — it passes.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    let base = rev_parse(&repo.0, "HEAD");
+    // The PR changes the scoped source, then re-attests it.
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    attest(&package, "true").expect("re-attest should succeed");
+
+    assert_eq!(
+        verify_since(&package, &package.join("src"), Some(&base)).unwrap(),
+        Verification::Fresh,
+        "a scoped change the branch re-attested must pass",
+    );
+}
+
+#[test]
+fn cli_verify_with_base_passes_on_an_unrelated_branch() {
+    // The reusable e2e-verify job's squash-safe form: `e2e verify <path> --scope
+    // <dir> --base <ref>` must exit 0 on a PR that didn't touch the scoped source,
+    // even when the attestation is stale against absolute history.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    std::fs::create_dir_all(repo.0.join("packages/other")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    let base = rev_parse(&repo.0, "HEAD");
+    repo.commit_code("packages/other/thing.rs", "pub fn thing() {}\n");
+
+    let argv: Vec<OsString> = vec![
+        "testing-conventions".into(),
+        "e2e".into(),
+        "verify".into(),
+        package.as_os_str().to_owned(),
+        "--scope".into(),
+        package.join("src").as_os_str().to_owned(),
+        "--base".into(),
+        base.into(),
+    ];
+    assert_eq!(
+        run(argv).expect("dispatch should succeed"),
+        0,
+        "--base must make an unrelated PR pass despite a stale-on-base attestation",
+    );
 }

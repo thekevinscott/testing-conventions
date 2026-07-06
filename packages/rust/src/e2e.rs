@@ -119,7 +119,27 @@ pub fn verify(repo: &Path) -> Result<Verification> {
 /// `path`-scoped call actually named, which can be narrower — a package root
 /// commonly also holds `tests/`, docs, and config files that aren't the
 /// attestable source). `scope` must be `repo` or a descendant of it.
+///
+/// Equivalent to [`verify_since`] with `base` set to `None` — the walk covers
+/// all reachable history, same as before #319.
 pub fn verify_scoped(repo: &Path, scope: &Path) -> Result<Verification> {
+    verify_since(repo, scope, None)
+}
+
+/// Verify the committed attestation at `repo`, optionally restricting the
+/// "latest code commit" walk to the commits this branch introduced —
+/// `<base>..HEAD` — instead of all reachable history (#319).
+///
+/// This makes freshness **diff-relative** rather than history-absolute, matching
+/// the changed-line coverage/mutation gates (`--base`). When `base` is `Some`,
+/// only commits reachable from `HEAD` but not `base` count as "the latest code
+/// commit": if this branch introduced no scoped code commit, there is nothing to
+/// re-attest, so the result is [`Verification::Fresh`] regardless of what the
+/// attestation names — a stale-on-`base` attestation (e.g. a squash merge
+/// rewrote the attested commit into a new one on the base branch) never reds a
+/// PR that didn't touch the scoped source. When `base` is `None`, the walk
+/// covers all reachable history, byte-identical to before this flag existed.
+pub fn verify_since(repo: &Path, scope: &Path, base: Option<&str>) -> Result<Verification> {
     let path = repo.join(ATTESTATION_PATH);
     let Ok(contents) = std::fs::read_to_string(&path) else {
         return Ok(Verification::Missing);
@@ -127,6 +147,10 @@ pub fn verify_scoped(repo: &Path, scope: &Path) -> Result<Verification> {
     let attestation: Attestation =
         serde_json::from_str(&contents).context("parsing the attestation")?;
 
+    // STUB (#319): `base` is not yet honored — the walk is still history-absolute,
+    // so a squash-stale attestation reds an unrelated PR. The red tests pin the
+    // diff-relative behavior this must grow.
+    let _ = base;
     let latest = latest_code_commit(repo, scope)?;
     if attestation.commit == latest {
         Ok(Verification::Fresh)

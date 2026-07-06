@@ -5,7 +5,15 @@ The pure predicate is driven directly; the `cli` command is driven through its `
 test is imported — a first-party collaborator (e.g. `CheckFailed`) would be flagged, so the
 raise path is asserted against the propagated exception's `.message` instead.
 """
-from checks.build_command_wired.cli import cli, wires_build_command
+from checks.build_command_wired.cli import DEFAULT_WORKFLOW, cli, wires_build_command
+
+
+def test_declares_the_workflow_argument_defaulting_to_the_reusable_workflow():
+    # Assert click's own registered metadata (the `@click.argument`) — `.callback` bypasses
+    # arg parsing, so this is what pins the decorator without a CliRunner collaborator.
+    (argument,) = cli.params
+    assert argument.name == "workflow"
+    assert argument.default == DEFAULT_WORKFLOW
 
 
 def test_true_when_the_build_command_output_is_referenced():

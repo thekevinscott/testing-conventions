@@ -570,3 +570,91 @@ def test_e2e_build_command_empty_when_value_is_not_a_string(run_detect):
         },
     )
     assert out["build_command"] == ""
+
+
+# --- #333: the [e2e] extra_scope / exclude freshness roots, read from the package's own config ---
+
+
+def test_e2e_extra_scope_and_exclude_rendered_as_repeated_flags(run_detect):
+    # A binding package declares the shared core beside it as an extra freshness root, with the
+    # feature-gated cli/ and bin/ excluded. detect discovers the config at the package root
+    # (like `config`/`build_command`) and renders repeated --extra-scope/--exclude arguments the
+    # e2e-verify run step appends verbatim.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": (
+                '[e2e]\nextra_scope = ["packages/rust/src"]\n'
+                'exclude = ["packages/rust/src/cli", "packages/rust/src/bin"]\n'
+            ),
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["config"] == "packages/py/testing-conventions.toml"
+    assert out["e2e_extra_scope"] == "--extra-scope packages/rust/src"
+    assert out["e2e_exclude"] == "--exclude packages/rust/src/cli --exclude packages/rust/src/bin"
+
+
+def test_e2e_extra_scope_and_exclude_absent_is_empty(run_detect):
+    # No config file at all: byte-identical to before — no extra roots, no excludes.
+    out = run_detect(sources={"widget.py": "x = 1\n"})
+    assert out["e2e_extra_scope"] == ""
+    assert out["e2e_exclude"] == ""
+
+
+def test_e2e_extra_scope_empty_when_config_declares_no_e2e_table(run_detect):
+    # A package-root config with no [e2e] table emits empty extra-scope/exclude.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": "[python]\ncoverage = { fail_under = 90 }\n",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["e2e_extra_scope"] == ""
+    assert out["e2e_exclude"] == ""
+
+
+def test_e2e_extra_scope_empty_on_a_malformed_config(run_detect):
+    # A malformed testing-conventions.toml never crashes detect — extra-scope falls back to empty.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": "not valid toml [[[",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["e2e_extra_scope"] == ""
+
+
+def test_e2e_extra_scope_empty_when_value_is_not_a_list(run_detect):
+    # A non-list extra_scope (which the tool would separately reject) is treated as absent by
+    # detect rather than emitted — detect never crashes on it.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": '[e2e]\nextra_scope = "packages/rust/src"\n',
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["e2e_extra_scope"] == ""
+
+
+def test_e2e_extra_scope_skips_blank_and_non_string_entries(run_detect):
+    # A blank string renders as an empty `--extra-scope ` argument and a non-string can't render
+    # at all, so both are skipped — detect never emits a malformed flag. (The config loader
+    # separately rejects a non-string, but a blank string is a valid `Vec<String>` entry it
+    # accepts, so the guard earns its keep.)
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": '[e2e]\nextra_scope = ["packages/rust/src", "", 5]\n',
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["e2e_extra_scope"] == "--extra-scope packages/rust/src"

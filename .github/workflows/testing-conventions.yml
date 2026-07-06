@@ -215,6 +215,13 @@ jobs:
       # file rather than passed on the `uses:` call — the suite-executing jobs run it before
       # the suite. Empty when no `[python].build_command` is declared (no build step).
       build_command: ${{ steps.scan.outputs.build_command }}
+      # Extra e2e freshness roots and their feature-gated excludes (#333), read from that same
+      # discovered config — a shared source tree beside the package (a native core bound into
+      # several bindings) that no `--scope` at-or-below the package root can reach. Rendered as
+      # repeated `--extra-scope`/`--exclude` arguments the e2e-verify job appends; empty when the
+      # package declares none, so a package that declares nothing is byte-identical to before.
+      e2e_extra_scope: ${{ steps.scan.outputs.e2e_extra_scope }}
+      e2e_exclude: ${{ steps.scan.outputs.e2e_exclude }}
     steps:
       - uses: actions/checkout@v6
       - id: scan
@@ -739,6 +746,11 @@ jobs:
           PACKAGE_ROOT: ${{ needs.detect.outputs.package_root }}
           SCAN_PATH: ${{ inputs.path }}
           BASE: ${{ inputs.base }}
+          # Extra freshness roots and their excludes (#333), pre-rendered by detect as repeated
+          # `--extra-scope`/`--exclude` arguments — empty when the package declares no `[e2e]`
+          # roots, so the invocation is byte-identical to before for every current consumer.
+          EXTRA_SCOPE: ${{ needs.detect.outputs.e2e_extra_scope }}
+          EXCLUDE: ${{ needs.detect.outputs.e2e_exclude }}
         # The attestation file lives at the derived package root (#281), matching
         # `detect`'s package-scoped `e2e_attestation` flag above; the freshness walk
         # is scoped to the caller's own `path` (#294) — narrower than the package

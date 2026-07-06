@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Assert the e2e-verify job passes --scope naming inputs.path (#294) and --base
-naming inputs.base, gated to pull requests (#319).
+naming inputs.base, gated to pull requests (#319), and appends detect's rendered
+$EXTRA_SCOPE / $EXCLUDE extra-freshness-root arguments (#333).
 
 Repo-only: this module exists *only in this repository*. It backs the
 `e2e-verify-scoped-to-path` job in `testing-conventions-selftest.yml` — a red->green wiring
@@ -35,6 +36,12 @@ _HAS_SCAN_PATH_FROM_INPUTS_PATH = re.compile(r"SCAN_PATH:\s*.*inputs\.path")
 _HAS_BASE_FLAG = re.compile(r"--base")
 _HAS_BASE_FROM_INPUTS_BASE = re.compile(r"BASE:\s*.*inputs\.base")
 _HAS_PULL_REQUEST_GATE = re.compile(r"github\.event_name == 'pull_request'")
+# #333: the run step appends the detect-rendered `$EXTRA_SCOPE` / `$EXCLUDE` (repeated
+# `--extra-scope`/`--exclude` arguments) and their env is wired from detect's outputs.
+_HAS_EXTRA_SCOPE_ARG = re.compile(r"\$EXTRA_SCOPE")
+_HAS_EXTRA_SCOPE_FROM_DETECT = re.compile(r"EXTRA_SCOPE:\s*.*e2e_extra_scope")
+_HAS_EXCLUDE_ARG = re.compile(r"\$EXCLUDE")
+_HAS_EXCLUDE_FROM_DETECT = re.compile(r"EXCLUDE:\s*.*e2e_exclude")
 
 _SCOPE_ERROR = (
     "the e2e-verify job doesn't pass --scope naming inputs.path — the freshness walk "
@@ -51,6 +58,17 @@ _GATE_ERROR = (
     "--base diff needs a base ref, so it must ride the same pull-request gate as the "
     "other diff-scoped jobs (#319)"
 )
+_EXTRA_SCOPE_ERROR = (
+    "the e2e-verify job doesn't append $EXTRA_SCOPE from detect's e2e_extra_scope output — a "
+    "shared source tree beside the package (a native core bound into several bindings) can't "
+    "join the freshness walk, so a core-only PR leaves the binding attestation falsely fresh "
+    "(#333)"
+)
+_EXCLUDE_ERROR = (
+    "the e2e-verify job doesn't append $EXCLUDE from detect's e2e_exclude output — a "
+    "feature-gated subtree of an extra root (a core cli/ compiled out of the bindings) can't "
+    "be carved back out, so a change only under it would falsely stale the attestation (#333)"
+)
 
 
 def extract_e2e_verify_block(workflow_text: str) -> str:
@@ -64,7 +82,8 @@ def extract_e2e_verify_block(workflow_text: str) -> str:
 
 def find_missing_wiring(workflow_text: str) -> Optional[str]:
     """None if the e2e-verify job passes --scope naming inputs.path and --base naming
-    inputs.base under a pull-request gate; else the first error message."""
+    inputs.base under a pull-request gate, and appends the detect-rendered $EXTRA_SCOPE /
+    $EXCLUDE arguments from detect's outputs; else the first error message."""
     block = extract_e2e_verify_block(workflow_text)
     if not _HAS_SCOPE_FLAG.search(block) or not _HAS_SCAN_PATH_FROM_INPUTS_PATH.search(block):
         return _SCOPE_ERROR
@@ -72,6 +91,10 @@ def find_missing_wiring(workflow_text: str) -> Optional[str]:
         return _BASE_ERROR
     if not _HAS_PULL_REQUEST_GATE.search(block):
         return _GATE_ERROR
+    if not _HAS_EXTRA_SCOPE_ARG.search(block) or not _HAS_EXTRA_SCOPE_FROM_DETECT.search(block):
+        return _EXTRA_SCOPE_ERROR
+    if not _HAS_EXCLUDE_ARG.search(block) or not _HAS_EXCLUDE_FROM_DETECT.search(block):
+        return _EXCLUDE_ERROR
     return None
 
 
@@ -81,7 +104,10 @@ def main(argv: list[str]) -> int:
     if error:
         print(f"::error::{error}")
         return 1
-    print("e2e-verify scopes the freshness walk to inputs.path and diffs inputs.base on PRs")
+    print(
+        "e2e-verify scopes the freshness walk to inputs.path, diffs inputs.base on PRs, and "
+        "appends detect's extra-scope/exclude roots"
+    )
     return 0
 
 

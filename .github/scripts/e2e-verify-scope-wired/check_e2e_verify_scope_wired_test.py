@@ -28,7 +28,9 @@ WIRED = """\
           PACKAGE_ROOT: ${{ needs.detect.outputs.package_root }}
           SCAN_PATH: ${{ inputs.path }}
           BASE: ${{ inputs.base }}
-        run: npx -y testing-conventions e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE"
+          EXTRA_SCOPE: ${{ needs.detect.outputs.e2e_extra_scope }}
+          EXCLUDE: ${{ needs.detect.outputs.e2e_exclude }}
+        run: npx -y testing-conventions e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE" $EXTRA_SCOPE $EXCLUDE
 
   packaging:
     name: Packaging
@@ -108,9 +110,83 @@ MISSING_PULL_REQUEST_GATE = """\
     name: Packaging
 """
 
+# #333: scope/base/gate all wired, but the extra-scope/exclude wiring varies. Each keeps
+# everything the earlier checks require so the walk reaches the new branches.
+MISSING_EXTRA_SCOPE_ARG_ONLY = """\
+  e2e-verify:
+    if: ${{ github.event_name == 'pull_request' }}
+    env:
+      SCAN_PATH: ${{ inputs.path }}
+      BASE: ${{ inputs.base }}
+      EXTRA_SCOPE: ${{ needs.detect.outputs.e2e_extra_scope }}
+      EXCLUDE: ${{ needs.detect.outputs.e2e_exclude }}
+    run: npx -y testing-conventions e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE" $EXCLUDE
 
-def test_finds_no_missing_wiring_when_scope_base_and_gate_are_all_present():
+  packaging:
+    name: Packaging
+"""
+
+MISSING_EXTRA_SCOPE_ENV_ONLY = """\
+  e2e-verify:
+    if: ${{ github.event_name == 'pull_request' }}
+    env:
+      SCAN_PATH: ${{ inputs.path }}
+      BASE: ${{ inputs.base }}
+      EXTRA_SCOPE: something-else
+      EXCLUDE: ${{ needs.detect.outputs.e2e_exclude }}
+    run: npx -y testing-conventions e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE" $EXTRA_SCOPE $EXCLUDE
+
+  packaging:
+    name: Packaging
+"""
+
+MISSING_EXCLUDE_ARG_ONLY = """\
+  e2e-verify:
+    if: ${{ github.event_name == 'pull_request' }}
+    env:
+      SCAN_PATH: ${{ inputs.path }}
+      BASE: ${{ inputs.base }}
+      EXTRA_SCOPE: ${{ needs.detect.outputs.e2e_extra_scope }}
+      EXCLUDE: ${{ needs.detect.outputs.e2e_exclude }}
+    run: npx -y testing-conventions e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE" $EXTRA_SCOPE
+
+  packaging:
+    name: Packaging
+"""
+
+MISSING_EXCLUDE_ENV_ONLY = """\
+  e2e-verify:
+    if: ${{ github.event_name == 'pull_request' }}
+    env:
+      SCAN_PATH: ${{ inputs.path }}
+      BASE: ${{ inputs.base }}
+      EXTRA_SCOPE: ${{ needs.detect.outputs.e2e_extra_scope }}
+      EXCLUDE: something-else
+    run: npx -y testing-conventions e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE" $EXTRA_SCOPE $EXCLUDE
+
+  packaging:
+    name: Packaging
+"""
+
+
+def test_finds_no_missing_wiring_when_scope_base_gate_and_extra_roots_are_all_present():
     assert m.find_missing_wiring(WIRED) is None
+
+
+def test_finds_missing_wiring_when_only_the_extra_scope_arg_is_absent():
+    assert m.find_missing_wiring(MISSING_EXTRA_SCOPE_ARG_ONLY) == m._EXTRA_SCOPE_ERROR
+
+
+def test_finds_missing_wiring_when_only_the_extra_scope_env_is_unbound():
+    assert m.find_missing_wiring(MISSING_EXTRA_SCOPE_ENV_ONLY) == m._EXTRA_SCOPE_ERROR
+
+
+def test_finds_missing_wiring_when_only_the_exclude_arg_is_absent():
+    assert m.find_missing_wiring(MISSING_EXCLUDE_ARG_ONLY) == m._EXCLUDE_ERROR
+
+
+def test_finds_missing_wiring_when_only_the_exclude_env_is_unbound():
+    assert m.find_missing_wiring(MISSING_EXCLUDE_ENV_ONLY) == m._EXCLUDE_ERROR
 
 
 def test_finds_missing_wiring_when_scope_is_absent():

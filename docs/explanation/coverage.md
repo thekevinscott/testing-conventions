@@ -36,9 +36,11 @@ exempted files/lines are lifted from it. The exact keys and defaults are in the
   slice the other languages measure (the integration tier under `tests/` stays out of the number).
   The default floors **lines** only; three finer metrics are opt-in: `regions` is a Rust-only
   sub-line metric with a harsher bar and no cross-language analog, `functions` mirrors
-  TypeScript's, and `branch` instruments only on a nightly toolchain. Keeping them opt-in keeps
-  Rust's default floor line-shaped like Python's — the [parity](./#parity-over-cleverness) call,
-  with the asymmetry named here.
+  TypeScript's, and `branch` instruments on a nightly toolchain, which the crate pins in its own
+  `rust-toolchain.toml` (with `llvm-tools-preview`) — the coverage run reads that pin, in CI and
+  locally alike (the [config reference](../reference/config#coverage) has the exact keys). Keeping
+  them opt-in keeps Rust's default floor line-shaped like Python's — the
+  [parity](./#parity-over-cleverness) call, with the asymmetry named here.
 
 ## The changed-line floor
 

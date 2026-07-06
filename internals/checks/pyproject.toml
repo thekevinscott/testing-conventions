@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+# Repo-only: the self-test wiring/assertion checks the reusable workflow's self-test invokes
+# (#321, consolidating the per-check scripts extracted in #302). Never published to an index — run
+# in CI via `uv run --project internals/checks tc-checks <check>`, and dogfooded through the shipped
+# reusable workflow (dogfood.yml) like any other package.
+name = "testing-conventions-github-checks"
+version = "0"
+description = "Repo-only self-test wiring/assertion checks for testing-conventions (#321)."
+requires-python = ">=3.11"
+dependencies = ["click>=8.1"]
+
+[project.scripts]
+# A single entry point for the whole suite — the click group in `checks/cli.py` that composes each
+# check as a subcommand (`tc-checks build-command-wired`). Stays one line; new checks are registered
+# in the group.
+tc-checks = "checks.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/checks"]
+
+[tool.pytest.ini_options]
+# `src` layout: put it on the path so the checks and their colocated tests import the package
+# normally (`from checks import ...`) — no per-file `sys.path.insert` hack.
+pythonpath = ["src"]

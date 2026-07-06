@@ -41,6 +41,7 @@ on:
     paths:
       - 'packages/node/**'
       - 'packages/python/**'
+      - 'internals/checks/**'
       - '.github/workflows/dogfood.yml'
       # Re-run the dogfood whenever the reusable workflow it consumes changes.
       - '.github/workflows/testing-conventions.yml'
@@ -79,3 +80,14 @@ jobs:
     with:
       path: packages/node
       gates: '["e2e-verify"]'
+
+  checks:
+    name: Shipped reusable workflow over the self-test checks package
+    # #321: the repo-only self-test checks are a uv package (internals/checks), so they're
+    # dogfooded through the shipped reusable workflow like any other package — colocated test,
+    # isolation, coverage, integration-lint, and diff-scoped mutation. This replaces running the
+    # `.github/scripts` helper conventions over them as loose scripts (a pyproject inside the
+    # `.github/scripts` scan flips the tool into package-mode for the whole directory).
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      path: internals/checks

@@ -14,7 +14,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use testing_conventions::e2e::{attest, verify, verify_scoped, verify_since, Verification};
+use testing_conventions::e2e::{
+    attest, verify, verify_extra_scoped, verify_scoped, verify_since, Verification,
+};
 use testing_conventions::run;
 
 /// A throwaway git repo with one seed commit, removed on drop.
@@ -495,5 +497,201 @@ fn cli_verify_with_base_passes_on_an_unrelated_branch() {
         run(argv).expect("dispatch should succeed"),
         0,
         "--base must make an unrelated PR pass despite a stale-on-base attestation",
+    );
+}
+
+// --- #333: `verify_extra_scoped` joins **extra freshness roots** — directories
+// outside the package's own `scope` (a shared source tree that is a sibling of
+// every package, e.g. a native core bound into language bindings) — into the
+// `<base>..HEAD` freshness walk, with an optional exclude for feature-gated
+// subtrees. The extra roots are repo-root-relative and may lie outside the
+// package subtree (that's the point); the existing exact-match rule is unchanged
+// — the attestation must name the newest in-range commit touching the union of
+// scope and extra roots, minus the excludes. `verify_extra_scoped(repo, scope,
+// base, &[], &[])` is `verify_since`'s exact definition.
+
+#[test]
+fn verify_extra_scoped_flags_a_commit_under_an_extra_root() {
+    // The dirsql shape: a binding package whose e2e artifact is compiled from a
+    // shared core that lives in a *sibling* tree. A core-only PR leaves the
+    // binding's own `<base>..HEAD` diff empty — so `--base` alone would pass it —
+    // yet the binding attestation is genuinely stale. Declaring the core as an
+    // extra root makes that commit count as code again.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/python");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    std::fs::create_dir_all(repo.0.join("packages/rust/src")).unwrap();
+    // The binding's own code, then an attestation naming it.
+    repo.commit_code("packages/python/src/lib.rs", "pub fn binding() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    let attested = rev_parse(&repo.0, "HEAD^");
+    let base = rev_parse(&repo.0, "HEAD");
+    // The PR touches only the shared core — outside the binding's own subtree.
+    repo.commit_code("packages/rust/src/core.rs", "pub fn core() {}\n");
+    let latest = rev_parse(&repo.0, "HEAD");
+
+    // Sanity: without the extra root, `--base` scoped to the binding sees an empty
+    // diff and passes — exactly the gap #333 describes.
+    assert_eq!(
+        verify_since(&package, &package, Some(&base)).unwrap(),
+        Verification::Fresh,
+        "scope-only --base can't see a sibling-tree change",
+    );
+    // With the core declared as an extra root, the core commit counts as code and
+    // the stale binding attestation is flagged.
+    let extra = [PathBuf::from("packages/rust/src")];
+    let exclude = [PathBuf::from("packages/rust/src/cli")];
+    assert_eq!(
+        verify_extra_scoped(&package, &package, Some(&base), &extra, &exclude).unwrap(),
+        Verification::Stale { attested, latest },
+        "a non-excluded change under an extra root must stale the attestation",
+    );
+}
+
+#[test]
+fn verify_extra_scoped_passes_once_the_extra_root_change_is_reattested() {
+    // Same setup, but the branch re-attests after the core change — it passes.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/python");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    std::fs::create_dir_all(repo.0.join("packages/rust/src")).unwrap();
+    repo.commit_code("packages/python/src/lib.rs", "pub fn binding() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    let base = rev_parse(&repo.0, "HEAD");
+    repo.commit_code("packages/rust/src/core.rs", "pub fn core() {}\n");
+    attest(&package, "true").expect("re-attest should succeed");
+
+    let extra = [PathBuf::from("packages/rust/src")];
+    let exclude = [PathBuf::from("packages/rust/src/cli")];
+    assert_eq!(
+        verify_extra_scoped(&package, &package, Some(&base), &extra, &exclude).unwrap(),
+        Verification::Fresh,
+        "re-attesting after the extra-root change must pass",
+    );
+}
+
+#[test]
+fn verify_extra_scoped_ignores_a_commit_under_an_excluded_subtree() {
+    // The feature-gated carve-out: `packages/rust/src/cli` is compiled out of the
+    // binding, so a cli-only core change must NOT stale it, even though cli lives
+    // under the declared extra root.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/python");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    std::fs::create_dir_all(repo.0.join("packages/rust/src/cli")).unwrap();
+    repo.commit_code("packages/python/src/lib.rs", "pub fn binding() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    let base = rev_parse(&repo.0, "HEAD");
+    // A change only under the excluded cli/ subtree of the extra root.
+    repo.commit_code("packages/rust/src/cli/main.rs", "pub fn cli() {}\n");
+
+    let extra = [PathBuf::from("packages/rust/src")];
+    let exclude = [PathBuf::from("packages/rust/src/cli")];
+    assert_eq!(
+        verify_extra_scoped(&package, &package, Some(&base), &extra, &exclude).unwrap(),
+        Verification::Fresh,
+        "a change only under an excluded subtree must not stale the attestation",
+    );
+}
+
+#[test]
+fn verify_extra_scoped_with_no_extra_roots_matches_verify_since() {
+    // The regression guard: no extra roots (and no excludes) is byte-identical to
+    // `verify_since` — a package declaring nothing behaves exactly like today.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    let base = rev_parse(&repo.0, "HEAD");
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+
+    assert_eq!(
+        verify_extra_scoped(&package, &package.join("src"), Some(&base), &[], &[]).unwrap(),
+        verify_since(&package, &package.join("src"), Some(&base)).unwrap(),
+        "no extra roots must be byte-identical to verify_since",
+    );
+}
+
+// --- #333: the `e2e verify <path> [--extra-scope <dir>]... [--exclude <dir>]...`
+// CLI surface. Repeatable flags flow the declared roots through to the freshness
+// walk. Before `lib.rs` grows these fields, clap rejects the unknown flags and
+// `run` errors — so these start red.
+
+/// `testing-conventions e2e verify <path> --base <ref> [--extra-scope <dir>]...
+/// [--exclude <dir>]...` exit code, dispatched in-process.
+fn e2e_verify_run_extra(
+    path: &Path,
+    base: &str,
+    extra_scopes: &[&str],
+    excludes: &[&str],
+) -> anyhow::Result<i32> {
+    let mut argv: Vec<OsString> = vec![
+        "testing-conventions".into(),
+        "e2e".into(),
+        "verify".into(),
+        path.as_os_str().to_owned(),
+        "--base".into(),
+        base.into(),
+    ];
+    for extra in extra_scopes {
+        argv.push("--extra-scope".into());
+        argv.push((*extra).into());
+    }
+    for exclude in excludes {
+        argv.push("--exclude".into());
+        argv.push((*exclude).into());
+    }
+    run(argv)
+}
+
+#[test]
+fn cli_verify_with_extra_scope_fails_on_a_non_excluded_core_change() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/python");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    std::fs::create_dir_all(repo.0.join("packages/rust/src")).unwrap();
+    repo.commit_code("packages/python/src/lib.rs", "pub fn binding() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    let base = rev_parse(&repo.0, "HEAD");
+    repo.commit_code("packages/rust/src/core.rs", "pub fn core() {}\n");
+
+    assert_eq!(
+        e2e_verify_run_extra(
+            &package,
+            &base,
+            &["packages/rust/src"],
+            &["packages/rust/src/cli"],
+        )
+        .expect("dispatch should succeed"),
+        1,
+        "a non-excluded change under --extra-scope should fail verify",
+    );
+}
+
+#[test]
+fn cli_verify_with_extra_scope_passes_on_an_excluded_change() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/python");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    std::fs::create_dir_all(repo.0.join("packages/rust/src/cli")).unwrap();
+    repo.commit_code("packages/python/src/lib.rs", "pub fn binding() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    let base = rev_parse(&repo.0, "HEAD");
+    repo.commit_code("packages/rust/src/cli/main.rs", "pub fn cli() {}\n");
+
+    assert_eq!(
+        e2e_verify_run_extra(
+            &package,
+            &base,
+            &["packages/rust/src"],
+            &["packages/rust/src/cli"],
+        )
+        .expect("dispatch should succeed"),
+        0,
+        "a change only under --exclude should pass verify",
     );
 }

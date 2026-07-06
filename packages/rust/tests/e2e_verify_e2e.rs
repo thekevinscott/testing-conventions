@@ -317,3 +317,78 @@ fn verify_with_base_fails_when_the_branch_changed_scoped_source() {
         "the failure should hint to re-run attest; got: {stderr}"
     );
 }
+
+// --- #333: `e2e verify <path> --base <ref> [--extra-scope <dir>]...
+// [--exclude <dir>]...` joins extra freshness roots (a shared source tree that is
+// a sibling of the package) into the walk. A non-excluded change under an extra
+// root stales the attestation; a change only under an excluded subtree stays
+// fresh. Before the binary grows the flags, passing them is a clap usage error
+// (non-zero exit, no attestation-shaped message), so these start red.
+
+#[test]
+fn verify_with_extra_scope_fails_on_a_non_excluded_core_change() {
+    let repo = TempRepo::new();
+    let package_rel = "packages/python";
+    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
+    std::fs::create_dir_all(repo.0.join("packages/rust/src")).unwrap();
+    repo.commit_code(&format!("{package_rel}/src/lib.rs"), "pub fn binding() {}\n");
+    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
+    let base = rev_parse(&repo.0, "HEAD");
+    // The PR touches only the shared core, outside the binding's own subtree.
+    repo.commit_code("packages/rust/src/core.rs", "pub fn core() {}\n");
+
+    let (code, stderr) = run_cli(
+        &repo.0,
+        &[
+            "e2e",
+            "verify",
+            package_rel,
+            "--base",
+            &base,
+            "--extra-scope",
+            "packages/rust/src",
+            "--exclude",
+            "packages/rust/src/cli",
+        ],
+    );
+    assert_ne!(
+        code, 0,
+        "a non-excluded change under --extra-scope should fail verify"
+    );
+    assert!(
+        stderr.contains("attest"),
+        "the failure should hint to re-run attest; got: {stderr}"
+    );
+}
+
+#[test]
+fn verify_with_extra_scope_exits_zero_on_an_excluded_change() {
+    let repo = TempRepo::new();
+    let package_rel = "packages/python";
+    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
+    std::fs::create_dir_all(repo.0.join("packages/rust/src/cli")).unwrap();
+    repo.commit_code(&format!("{package_rel}/src/lib.rs"), "pub fn binding() {}\n");
+    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
+    let base = rev_parse(&repo.0, "HEAD");
+    // A change only under the feature-gated cli/ subtree of the extra root.
+    repo.commit_code("packages/rust/src/cli/main.rs", "pub fn cli() {}\n");
+
+    let (code, _) = run_cli(
+        &repo.0,
+        &[
+            "e2e",
+            "verify",
+            package_rel,
+            "--base",
+            &base,
+            "--extra-scope",
+            "packages/rust/src",
+            "--exclude",
+            "packages/rust/src/cli",
+        ],
+    );
+    assert_eq!(
+        code, 0,
+        "a change only under --exclude should not trip freshness"
+    );
+}

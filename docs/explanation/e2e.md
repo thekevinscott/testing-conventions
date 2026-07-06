@@ -27,7 +27,7 @@ The mechanism is a pair:
   can't name its own SHA. It writes regardless of the command's exit code: the record is that the
   suite **ran**, and the honest result is part of the record.
 
-- **`e2e verify [path] [--scope <dir>] [--base <ref>]`** — the CI half, run by the
+- **`e2e verify [path] [--scope <dir>] [--base <ref>] [--extra-scope <dir>]… [--exclude <dir>]…`** — the CI half, run by the
   [workflow](../reference/workflow). It reads the committed attestation at `path` (default: the
   current directory) and passes only when its recorded SHA equals the **latest code commit** under
   `--scope` (default: `path` itself) — the newest commit that changed any path other than the
@@ -59,6 +59,43 @@ reddening every later PR, even ones that never touched the package. Scoped to `<
 `verify` asks the only question that matters on a pull request — *did **this** branch change the
 scoped source without re-attesting?* — so an unrelated PR stays green and the PR that changes the
 source is exactly the one asked to re-attest.
+
+## A shared source tree beside the package
+
+`--scope` narrows the freshness walk to a directory *at or below* where the attestation lives, so a
+package's own subtree defines what counts as code. That misses one monorepo shape: a package whose
+e2e artifact is compiled from a **shared source tree that sits beside the package** — a native core
+bound into several language bindings (dirsql's `packages/rust` core, compiled into its Python and
+TypeScript bindings via PyO3 and napi). That core lives in no binding's subtree, so no binding can
+point `--scope` at it. A PR that changes only the core leaves every binding's own `<base>..HEAD`
+diff empty — so `--base` passes each binding — while the binding attestations are genuinely stale.
+
+`--extra-scope <dir>` closes that gap. It names a **repo-root-relative** directory — outside the
+package's own `path`, which is the whole point — whose commits join the `<base>..HEAD` freshness
+walk. A binding declares the shared core as an extra scope, and a core change stales its attestation
+the same way a change to its own source would. The flag is repeatable; each occurrence adds one
+root. Freshness keeps its single definition — the exact-match rule is unchanged — so the attestation
+must name the newest in-range commit touching the **union** of `--scope` and every `--extra-scope`.
+
+`--exclude <dir>` carves a feature-gated subtree back out. dirsql's core `cli/` and `bin/` are
+compiled out of both bindings, so a `cli`-only core change should *not* stale them: declaring
+`--extra-scope packages/rust/src --exclude packages/rust/src/cli --exclude packages/rust/src/bin`
+counts every core change as code except those under the excluded trees. Excludes are repo-root
+relative and repeatable, like extra scopes.
+
+This is a fact about the package's build — *my artifact is compiled from that tree* — so it lives in
+the package's own `testing-conventions.toml`, discovered by `detect` like `build_command` and
+`config` already are, not in the `uses:` call:
+
+```toml
+[e2e]
+extra_scope = ["packages/rust/src"]
+exclude = ["packages/rust/src/cli", "packages/rust/src/bin"]
+```
+
+The walk is git-level and language-agnostic, so this holds across Python, TypeScript, and Rust by
+construction. A package that declares nothing behaves exactly as before — no extra roots means the
+walk covers only `--scope`, byte-identical to today.
 
 ## Why a receipt is enough
 

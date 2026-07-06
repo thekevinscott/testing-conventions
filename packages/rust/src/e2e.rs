@@ -126,6 +126,19 @@ pub fn verify_scoped(repo: &Path, scope: &Path) -> Result<Verification> {
     verify_since(repo, scope, None)
 }
 
+/// STUB (#333, red phase): joins extra freshness roots into the walk. Not yet
+/// implemented — delegates to [`verify_since`], ignoring `extra_scopes` and
+/// `excludes`, so the extra-root tests are red until the real logic lands.
+pub fn verify_extra_scoped(
+    repo: &Path,
+    scope: &Path,
+    base: Option<&str>,
+    _extra_scopes: &[std::path::PathBuf],
+    _excludes: &[std::path::PathBuf],
+) -> Result<Verification> {
+    verify_since(repo, scope, base)
+}
+
 /// Verify the committed attestation at `repo`, optionally restricting the
 /// "latest code commit" walk to the commits this branch introduced —
 /// `<base>..HEAD` — instead of all reachable history (#319).

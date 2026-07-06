@@ -7,7 +7,7 @@
 //!
 //! This module implements both `attest` (#67) and `verify` (#68).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -126,20 +126,36 @@ pub fn verify_scoped(repo: &Path, scope: &Path) -> Result<Verification> {
     verify_since(repo, scope, None)
 }
 
-/// Verify the committed attestation at `repo`, optionally restricting the
-/// "latest code commit" walk to the commits this branch introduced —
-/// `<base>..HEAD` — instead of all reachable history (#319).
-///
-/// This makes freshness **diff-relative** rather than history-absolute, matching
-/// the changed-line coverage/mutation gates (`--base`). When `base` is `Some`,
-/// only commits reachable from `HEAD` but not `base` count as "the latest code
-/// commit": if this branch introduced no scoped code commit, there is nothing to
-/// re-attest, so the result is [`Verification::Fresh`] regardless of what the
-/// attestation names — a stale-on-`base` attestation (e.g. a squash merge
-/// rewrote the attested commit into a new one on the base branch) never reds a
-/// PR that didn't touch the scoped source. When `base` is `None`, the walk
-/// covers all reachable history, byte-identical to before this flag existed.
+/// Equivalent to [`verify_extra_scoped`] with no extra roots and no excludes —
+/// the freshness walk covers only `scope`, same as before #333.
 pub fn verify_since(repo: &Path, scope: &Path, base: Option<&str>) -> Result<Verification> {
+    verify_extra_scoped(repo, scope, base, &[], &[])
+}
+
+/// Verify the committed attestation at `repo`, joining **extra freshness roots**
+/// outside `scope` into the "latest code commit" walk (#333).
+///
+/// `extra_scopes` are **repo-root-relative** directories — a shared source tree
+/// that is a sibling of the package (a native core bound into several language
+/// bindings), which no `scope` at-or-below the attestation directory can reach.
+/// Their commits count as code just like commits under `scope`, so a change to
+/// the shared tree stales an attestation whose own subtree it doesn't touch.
+/// `excludes` are repo-root-relative directories carved back out of that union —
+/// a feature-gated subtree (a core `cli/` compiled out of the bindings) whose
+/// changes must not stale them. Because the roots may lie outside the package
+/// subtree — that's the point — the descendant constraint stays on `scope` only.
+///
+/// The freshness rule is unchanged: the attestation must name the newest in-range
+/// commit touching the **union** of `scope` and `extra_scopes`, minus `excludes`.
+/// `base` diff-scopes the walk exactly as in [`verify_since`]. Empty
+/// `extra_scopes` and `excludes` are byte-identical to [`verify_since`].
+pub fn verify_extra_scoped(
+    repo: &Path,
+    scope: &Path,
+    base: Option<&str>,
+    extra_scopes: &[PathBuf],
+    excludes: &[PathBuf],
+) -> Result<Verification> {
     let path = repo.join(ATTESTATION_PATH);
     let Ok(contents) = std::fs::read_to_string(&path) else {
         return Ok(Verification::Missing);
@@ -147,7 +163,7 @@ pub fn verify_since(repo: &Path, scope: &Path, base: Option<&str>) -> Result<Ver
     let attestation: Attestation =
         serde_json::from_str(&contents).context("parsing the attestation")?;
 
-    match latest_code_commit(repo, scope, base)? {
+    match latest_code_commit(repo, scope, base, extra_scopes, excludes)? {
         // With `--base`, an empty walk means this branch introduced no scoped
         // code commit — there is nothing to re-attest, so it's fresh by
         // construction (mirrors the changed-line coverage/mutation gates, which
@@ -172,27 +188,47 @@ pub fn verify_since(repo: &Path, scope: &Path, base: Option<&str>) -> Result<Ver
 }
 
 /// The newest commit that changed any path other than the attestation file,
-/// under `scope` — the "latest code commit" the attestation must name to be
-/// fresh. Uses an `:(exclude)` pathspec so the attestation's own commit never
-/// counts as code. When `base` is `Some`, the walk is restricted to the commits
-/// this branch introduced (`<base>..HEAD`); `None` when that range holds no such
-/// commit. Without `base` the walk covers all reachable history.
-fn latest_code_commit(repo: &Path, scope: &Path, base: Option<&str>) -> Result<Option<String>> {
-    let exclude = format!(":(exclude){ATTESTATION_PATH}");
+/// under the union of `scope` and `extra_scopes` minus `excludes` — the "latest
+/// code commit" the attestation must name to be fresh. Uses an `:(exclude)`
+/// pathspec so the attestation's own commit never counts as code. `extra_scopes`
+/// and `excludes` are repo-root-relative (`:(top)` pathspec magic), so they match
+/// from the top of the tree regardless of `repo` being a subdirectory cwd — that
+/// is how a sibling tree outside `scope` joins the walk (#333). When `base` is
+/// `Some`, the walk is restricted to the commits this branch introduced
+/// (`<base>..HEAD`); `None` when that range holds no such commit. Without `base`
+/// the walk covers all reachable history.
+fn latest_code_commit(
+    repo: &Path,
+    scope: &Path,
+    base: Option<&str>,
+    extra_scopes: &[PathBuf],
+    excludes: &[PathBuf],
+) -> Result<Option<String>> {
     let pathspec = relative_pathspec(repo, scope);
-    let mut args = vec!["log", "-1", "--format=%H"];
+    let mut args: Vec<String> = vec!["log".into(), "-1".into(), "--format=%H".into()];
     // `<base>..HEAD` — commits reachable from HEAD but not `base`, i.e. the ones
     // this branch introduced. A commit that also landed on `base` (a squash of an
     // earlier PR) is reachable from `base`, so it's excluded here — that's the
     // whole point.
-    let range = base.map(|base| format!("{base}..HEAD"));
-    if let Some(range) = range.as_deref() {
-        args.push(range);
+    if let Some(base) = base {
+        args.push(format!("{base}..HEAD"));
     }
-    args.push("--");
-    args.push(pathspec.as_str());
-    args.push(exclude.as_str());
-    let out = git_capture(repo, &args)?;
+    args.push("--".into());
+    // Positive pathspecs: the package's own `scope`, plus each extra root as a
+    // repo-root-relative `:(top)` pathspec so it matches from the tree top rather
+    // than relative to `repo` (the package cwd git runs in).
+    args.push(pathspec);
+    for extra in extra_scopes {
+        args.push(format!(":(top){}", extra.display()));
+    }
+    // Negative pathspecs: the attestation itself never counts as code, and each
+    // excluded (feature-gated) subtree of an extra root is carved back out.
+    args.push(format!(":(exclude){ATTESTATION_PATH}"));
+    for exclude in excludes {
+        args.push(format!(":(top,exclude){}", exclude.display()));
+    }
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let out = git_capture(repo, &arg_refs)?;
     Ok((!out.is_empty()).then_some(out))
 }
 

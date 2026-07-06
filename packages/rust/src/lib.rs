@@ -227,6 +227,19 @@ enum E2eCommand {
         /// Absent means the whole history (byte-identical to before this flag).
         #[arg(long)]
         base: Option<String>,
+        /// Extra freshness roots (#333): repo-root-relative directories outside
+        /// `path` whose commits join the freshness walk — a shared source tree
+        /// beside the package (a native core bound into several bindings) that no
+        /// `--scope` at-or-below `path` can reach. Repeatable; the attestation
+        /// must name the newest in-range commit touching the union of `--scope`
+        /// and every `--extra-scope`. Absent means the walk covers only `--scope`.
+        #[arg(long = "extra-scope")]
+        extra_scope: Vec<PathBuf>,
+        /// Feature-gated subtrees carved back out of the `--extra-scope` union
+        /// (#333): repo-root-relative directories (a core `cli/` compiled out of
+        /// the bindings) whose commits must not stale the attestation. Repeatable.
+        #[arg(long = "exclude")]
+        exclude: Vec<PathBuf>,
     },
 }
 
@@ -284,9 +297,19 @@ where
         Some(Command::Workflow { path }) => run_workflow(&path),
         Some(Command::E2e { command }) => match command {
             E2eCommand::Attest { command } => run_e2e_attest(&command),
-            E2eCommand::Verify { path, scope, base } => {
-                run_e2e_verify(&path, scope.as_deref(), base.as_deref())
-            }
+            E2eCommand::Verify {
+                path,
+                scope,
+                base,
+                extra_scope,
+                exclude,
+            } => run_e2e_verify(
+                &path,
+                scope.as_deref(),
+                base.as_deref(),
+                &extra_scope,
+                &exclude,
+            ),
         },
         Some(Command::Install { path }) => {
             agents::install(&path)?;
@@ -887,8 +910,17 @@ fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
 /// (#294) — `None` behaves exactly like passing `path` itself. `base`, when set,
 /// restricts the walk to the commits this branch introduced (`<base>..HEAD`)
 /// instead of all history (#319) — `None` behaves exactly like before the flag.
-fn run_e2e_verify(path: &Path, scope: Option<&Path>, base: Option<&str>) -> anyhow::Result<i32> {
-    match e2e::verify_since(path, scope.unwrap_or(path), base)? {
+/// `extra_scopes` join repo-root-relative sibling trees into the walk and
+/// `excludes` carve feature-gated subtrees back out (#333) — both empty behaves
+/// exactly like before those flags.
+fn run_e2e_verify(
+    path: &Path,
+    scope: Option<&Path>,
+    base: Option<&str>,
+    extra_scopes: &[PathBuf],
+    excludes: &[PathBuf],
+) -> anyhow::Result<i32> {
+    match e2e::verify_extra_scoped(path, scope.unwrap_or(path), base, extra_scopes, excludes)? {
         e2e::Verification::Fresh => Ok(0),
         e2e::Verification::Missing => {
             eprintln!(

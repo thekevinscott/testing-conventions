@@ -7,6 +7,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`e2e verify` accepts `--extra-scope <dir>` / `--exclude <dir>` for a shared source tree beside
+  the package** (#333). A package whose e2e artifact is compiled from a source tree that is a
+  *sibling* of it — a native core bound into several language bindings (dirsql's `packages/rust`
+  core, compiled into its Python and TypeScript bindings) — can now declare that tree as an extra
+  freshness root. The core lives in no binding's subtree, so no `--scope` at-or-below the
+  attestation directory can reach it, and `--base` sees an empty in-scope diff for a core-only PR —
+  so each binding's gate no-opped while its attestation was genuinely stale. `--extra-scope` names a
+  repo-root-relative directory whose commits join the `<base>..HEAD` freshness walk; the exact-match
+  rule is unchanged, so the attestation must name the newest in-range commit touching the **union**
+  of `--scope` and every `--extra-scope`. `--exclude` carves a feature-gated subtree (a core `cli/`
+  compiled out of the bindings) back out, so a change only under it stays fresh. Both flags are
+  repeatable and repo-root-relative (they may lie outside the package subtree — that's the point —
+  so the descendant constraint stays on `--scope` only). The walk is git-level and
+  language-agnostic, so this holds across Python, TypeScript, and Rust by construction. A package
+  declaring neither behaves byte-identically to before. (The reusable workflow wires the detected
+  `[e2e] extra_scope` / `exclude` config through as an immediate follow-up, per AGENTS.md's two-step
+  rollout for workflow-consumed CLI changes.)
+
 - **`e2e verify` accepts `--base <ref>` to scope freshness to the current branch** (#319). With
   `--base`, the "latest code commit" walk covers only the commits the branch introduced
   (`<base>..HEAD`) instead of all reachable history — the same diff-relative model the changed-line

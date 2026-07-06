@@ -331,7 +331,10 @@ fn verify_with_extra_scope_fails_on_a_non_excluded_core_change() {
     let package_rel = "packages/python";
     std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
     std::fs::create_dir_all(repo.0.join("packages/rust/src")).unwrap();
-    repo.commit_code(&format!("{package_rel}/src/lib.rs"), "pub fn binding() {}\n");
+    repo.commit_code(
+        &format!("{package_rel}/src/lib.rs"),
+        "pub fn binding() {}\n",
+    );
     run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
     let base = rev_parse(&repo.0, "HEAD");
     // The PR touches only the shared core, outside the binding's own subtree.
@@ -367,7 +370,10 @@ fn verify_with_extra_scope_exits_zero_on_an_excluded_change() {
     let package_rel = "packages/python";
     std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
     std::fs::create_dir_all(repo.0.join("packages/rust/src/cli")).unwrap();
-    repo.commit_code(&format!("{package_rel}/src/lib.rs"), "pub fn binding() {}\n");
+    repo.commit_code(
+        &format!("{package_rel}/src/lib.rs"),
+        "pub fn binding() {}\n",
+    );
     run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
     let base = rev_parse(&repo.0, "HEAD");
     // A change only under the feature-gated cli/ subtree of the extra root.

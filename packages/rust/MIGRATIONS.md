@@ -612,6 +612,15 @@ freshness stays history-absolute, byte-identical to before. The SDK gains one pu
 `e2e::verify_since`; the existing `e2e::verify` and `e2e::verify_scoped` are unchanged (they now
 delegate to it with `base = None`).
 
+Adds **`e2e verify --extra-scope <dir>` / `--exclude <dir>`** (#333): joins a shared source tree
+beside the package (repo-root-relative directories outside `--scope`) into the `<base>..HEAD`
+freshness walk, with an exclude for feature-gated subtrees — so a native core bound into several
+language bindings can stale each binding's attestation, which no `--scope` at-or-below the
+attestation directory could reach. Purely additive at the CLI: both flags default empty, and an
+empty union is byte-identical to before. The SDK gains one public item, `e2e::verify_extra_scoped`;
+the existing `e2e::verify`, `e2e::verify_scoped`, and `e2e::verify_since` are unchanged (they now
+delegate to it with no extra roots and no excludes).
+
 ### Required changes
 
 `config::PythonConfig` gains `build_command: Option<String>` and `reason: String` (#289). Both

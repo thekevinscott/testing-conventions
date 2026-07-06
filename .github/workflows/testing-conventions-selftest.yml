@@ -308,8 +308,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: dogfood-github-helpers.yml must invoke all five Python arms
-        run: python3 .github/scripts/github-helpers-wired/check_github_helpers_wired.py
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks github-helpers-wired
 
   detect-routes-python:
     name: the detect action routes Python into the unit-lint matrix

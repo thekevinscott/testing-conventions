@@ -904,21 +904,16 @@ jobs:
         with:
           languages: '["typescript"]'
           path: .github/selftest/monorepo/packages/ts/src
+      # #277: the fixture's own testing-conventions.toml is discovered with no `config` input —
+      # the detect call above passes only `languages`/`path`. The assertion runs in a
+      # colocated-tested helper (epic #302, #308); detect outputs are passed as CLI arguments.
       - name: Assert package_root / ts_package_manager / provision_rust / config
-        env:
-          PKGROOT: ${{ steps.detect.outputs.package_root }}
-          TSPM: ${{ steps.detect.outputs.ts_package_manager }}
-          PROVRUST: ${{ steps.detect.outputs.provision_rust }}
-          CONFIG: ${{ steps.detect.outputs.config }}
-        run: |
-          set -euo pipefail
-          echo "package_root=$PKGROOT ts_package_manager=$TSPM provision_rust=$PROVRUST config=$CONFIG"
-          [ "$PKGROOT" = ".github/selftest/monorepo/packages/ts" ] || { echo "::error::expected the ts fixture's own directory as package_root, got $PKGROOT"; exit 1; }
-          [ "$TSPM" = "npm" ] || { echo "::error::expected ts_package_manager=npm (package-lock.json, no packageManager field), got $TSPM"; exit 1; }
-          [ "$PROVRUST" = "false" ] || { echo "::error::expected provision_rust=false (no Cargo.toml/maturin/napi), got $PROVRUST"; exit 1; }
-          # #277: the fixture's own testing-conventions.toml is discovered with no `config`
-          # input — the call above passes only `languages`/`path`.
-          [ "$CONFIG" = ".github/selftest/monorepo/packages/ts/testing-conventions.toml" ] || { echo "::error::expected the ts fixture's own testing-conventions.toml as config, got $CONFIG"; exit 1; }
+        run: >-
+          python3 .github/scripts/detect-package-root-ts/check_detect_package_root_ts.py
+          "${{ steps.detect.outputs.package_root }}"
+          "${{ steps.detect.outputs.ts_package_manager }}"
+          "${{ steps.detect.outputs.provision_rust }}"
+          "${{ steps.detect.outputs.config }}"
 
   detect-package-root-py:
     name: detect resolves the monorepo fixture's uv Python package
@@ -930,19 +925,15 @@ jobs:
         with:
           languages: '["python"]'
           path: .github/selftest/monorepo/packages/py/src
+      # #277: the fixture's own testing-conventions.toml is discovered with no `config` input —
+      # the detect call above passes only `languages`/`path`. The assertion runs in a
+      # colocated-tested helper (epic #302, #308); detect outputs are passed as CLI arguments.
       - name: Assert package_root / python_env / config
-        env:
-          PKGROOT: ${{ steps.detect.outputs.package_root }}
-          PYENV: ${{ steps.detect.outputs.python_env }}
-          CONFIG: ${{ steps.detect.outputs.config }}
-        run: |
-          set -euo pipefail
-          echo "package_root=$PKGROOT python_env=$PYENV config=$CONFIG"
-          [ "$PKGROOT" = ".github/selftest/monorepo/packages/py" ] || { echo "::error::expected the py fixture's own directory as package_root, got $PKGROOT"; exit 1; }
-          [ "$PYENV" = "uv" ] || { echo "::error::expected python_env=uv ([project] table present), got $PYENV"; exit 1; }
-          # #277: the fixture's own testing-conventions.toml is discovered with no `config`
-          # input — the call above passes only `languages`/`path`.
-          [ "$CONFIG" = ".github/selftest/monorepo/packages/py/testing-conventions.toml" ] || { echo "::error::expected the py fixture's own testing-conventions.toml as config, got $CONFIG"; exit 1; }
+        run: >-
+          python3 .github/scripts/detect-package-root-py/check_detect_package_root_py.py
+          "${{ steps.detect.outputs.package_root }}"
+          "${{ steps.detect.outputs.python_env }}"
+          "${{ steps.detect.outputs.config }}"
 
   # ---- #278: unit-coverage installs and builds at the derived package root ----
   #

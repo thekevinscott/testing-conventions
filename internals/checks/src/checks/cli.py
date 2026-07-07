@@ -8,10 +8,13 @@ from __future__ import annotations
 import click
 
 from checks.build_command_wired.cli import cli as build_command_wired
+from checks.coverage_package_root_wired.cli import cli as coverage_package_root_wired
 from checks.detect_routes_python.cli import cli as detect_routes_python
 from checks.e2e_verify_scope_wired.cli import cli as e2e_verify_scope_wired
 from checks.gates_wired.cli import cli as gates_wired
 from checks.github_helpers_wired.cli import cli as github_helpers_wired
+from checks.mutation_package_root_wired.cli import cli as mutation_package_root_wired
+from checks.packaging_package_root_wired.cli import cli as packaging_package_root_wired
 from checks.rust_toolchain_wired.cli import cli as rust_toolchain_wired
 from checks.wiring_detect_action.cli import cli as wiring_detect_action
 from checks.wiring_e2e_default_on.cli import cli as wiring_e2e_default_on
@@ -24,10 +27,13 @@ def main() -> None:
 
 
 main.add_command(build_command_wired, name="build-command-wired")
+main.add_command(coverage_package_root_wired, name="coverage-package-root-wired")
 main.add_command(detect_routes_python, name="detect-routes-python")
 main.add_command(e2e_verify_scope_wired, name="e2e-verify-scope-wired")
 main.add_command(gates_wired, name="gates-wired")
 main.add_command(github_helpers_wired, name="github-helpers-wired")
+main.add_command(mutation_package_root_wired, name="mutation-package-root-wired")
+main.add_command(packaging_package_root_wired, name="packaging-package-root-wired")
 main.add_command(rust_toolchain_wired, name="rust-toolchain-wired")
 main.add_command(wiring_detect_action, name="wiring-detect-action")
 main.add_command(wiring_e2e_default_on, name="wiring-e2e-default-on")

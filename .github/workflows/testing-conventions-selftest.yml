@@ -827,8 +827,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: The coverage jobs must reference needs.detect.outputs.package_root
-        run: python3 .github/scripts/coverage-package-root-wired/check_coverage_package_root_wired.py
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks coverage-package-root-wired
 
   monorepo-coverage-ts:
     name: The monorepo npm TS fixture passes unit-coverage from its own package root
@@ -873,8 +876,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: testing-conventions.yml's packaging job must reference package_root
-        run: python3 .github/scripts/packaging-package-root-wired/check_packaging_package_root_wired.py
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks packaging-package-root-wired
 
   packaging-package-root-clean:
     name: A per-package dist/ passes the packaging check with no packaging_artifact
@@ -916,8 +922,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
       - name: testing-conventions.yml's mutation job must reference package_root
-        run: python3 .github/scripts/mutation-package-root-wired/check_mutation_package_root_wired.py
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks mutation-package-root-wired
 
   mutation-monorepo-ts:
     name: Mutation over the monorepo fixture's npm TS package (per-package call)

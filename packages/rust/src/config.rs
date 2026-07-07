@@ -38,18 +38,19 @@ pub struct PythonConfig {
     pub coverage: Option<PythonCoverage>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
-    /// A build escape hatch (#289, generalized to every language table in #335): a shell
+    /// The build declaration (#289, generalized to every language table in #335): a shell
     /// command a build-dependent job runs after toolchain + dependency setup and before it
     /// builds or imports the package, for a build the manifest **structurally can't express**.
-    /// `detect` reads it from the package's own config and the workflow jobs run it; the binary
-    /// never runs it, but the schema must accept the key so a consumer's config still loads
-    /// under `deny_unknown_fields`. Absent (`None`) means no build step. For Python it's the
-    /// common case — a PEP 517 backend exposes only sandboxed `build_wheel`/`build_sdist` hooks
-    /// with no pre-build shell step.
+    /// It is not an escape hatch — it *supplies* a necessary fact (how to build), it doesn't
+    /// *waive* a check — so it carries no reason requirement. `detect` reads it from the
+    /// package's own config and the workflow jobs run it; the binary never runs it, but the
+    /// schema must accept the key so a consumer's config still loads under `deny_unknown_fields`.
+    /// Absent (`None`) means no build step. For Python it's the common case — a PEP 517 backend
+    /// exposes only sandboxed `build_wheel`/`build_sdist` hooks with no pre-build shell step.
     pub build_command: Option<String>,
-    /// Why the manifest can't express this build — required alongside `build_command` and
-    /// validated non-empty in [`Config::validate`], mirroring the exemption-reason bar. An
-    /// unreasoned escape hatch can never be a silent pass.
+    /// Optional note on the build (#335): free-form documentation, never validated — a necessary
+    /// build fact needs no justification. Retained as a key so a config that carried one still
+    /// loads under `deny_unknown_fields`.
     #[serde(default)]
     pub reason: String,
 }
@@ -82,13 +83,13 @@ pub struct TypeScriptConfig {
     pub coverage: Option<TypeScriptCoverage>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
-    /// The build escape hatch (#335); see [`PythonConfig::build_command`]. For TypeScript this
-    /// names a compile-before-`pack` that npm doesn't standardize — `npm pack` runs `prepare` /
-    /// `prepack`, but the build script's own name is `build` in one package and `compile` in the
-    /// next, so the tool can't derive it.
+    /// The build declaration (#335); see [`PythonConfig::build_command`]. For TypeScript it's
+    /// *necessary*, not exceptional: a published TS library ships compiled JS, and `npm pack`
+    /// runs `prepare` / `prepack` but not a bare `build` script — whose name npm never
+    /// standardized — so a compiling package that doesn't wire `prepare` names its build here.
     pub build_command: Option<String>,
-    /// Why the manifest can't express this build — required alongside `build_command`, validated
-    /// non-empty in [`Config::validate`].
+    /// Optional note on the build (#335); free-form, never validated. See
+    /// [`PythonConfig::reason`].
     #[serde(default)]
     pub reason: String,
 }
@@ -108,12 +109,12 @@ pub struct RustConfig {
     pub features: Vec<String>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
-    /// The build escape hatch (#335); see [`PythonConfig::build_command`]. Rarely needed for Rust
+    /// The build declaration (#335); see [`PythonConfig::build_command`]. Rarely needed for Rust
     /// — `cargo` compiles via `build.rs` and packages via `cargo package` from the manifest — so
     /// this is only for a pre-build step neither expresses.
     pub build_command: Option<String>,
-    /// Why the manifest can't express this build — required alongside `build_command`, validated
-    /// non-empty in [`Config::validate`].
+    /// Optional note on the build (#335); free-form, never validated. See
+    /// [`PythonConfig::reason`].
     #[serde(default)]
     pub reason: String,
 }
@@ -486,38 +487,10 @@ impl Config {
     /// Reject any `exempt` entry that names no rule or carries an empty reason —
     /// a reasonless or scopeless exemption can never be a silent pass.
     fn validate(&self) -> Result<()> {
-        // The `build_command` escape hatch (#289, generalized to every language table in #335) is
-        // held to the exemption bar: a reasonless build command can never be a silent pass, so a
-        // present command with an empty reason fails to load, in the same style as the exemption
-        // reason check below.
-        let build_commands = [
-            (
-                "python",
-                self.python.as_ref().map(|c| (&c.build_command, &c.reason)),
-            ),
-            (
-                "typescript",
-                self.typescript
-                    .as_ref()
-                    .map(|c| (&c.build_command, &c.reason)),
-            ),
-            (
-                "rust",
-                self.rust.as_ref().map(|c| (&c.build_command, &c.reason)),
-            ),
-        ];
-        for (table, (build_command, reason)) in build_commands
-            .into_iter()
-            .filter_map(|(t, p)| p.map(|p| (t, p)))
-        {
-            if build_command.is_some() && reason.trim().is_empty() {
-                bail!(
-                    "[{table}].build_command has an empty reason — say why the manifest can't \
-                     express this build (an ecosystem that standardizes the build needs no \
-                     build_command; name only one it structurally can't)"
-                );
-            }
-        }
+        // `build_command` carries no reason requirement (#335): it *supplies* a necessary fact —
+        // how to build a package the ecosystem doesn't build for you — rather than *waiving* a
+        // check the way an exemption does, so there is nothing to justify. (An `exempt` entry
+        // still requires a reason below; that one really does waive a gate.)
         let tables = [
             ("python", self.python.as_ref().map(|c| &c.exempt)),
             ("typescript", self.typescript.as_ref().map(|c| &c.exempt)),
@@ -745,8 +718,8 @@ mod tests {
     }
 
     #[test]
-    fn a_python_build_command_with_a_reason_parses() {
-        // #289: the escape hatch and its required reason both survive into the [python] table.
+    fn a_python_build_command_with_an_optional_reason_parses() {
+        // #289/#335: the build_command survives, and an optional `reason` note is retained.
         let config = parse(
             "[python]\nbuild_command = \"uv run maturin develop\"\n\
              reason = \"maturin's PEP 517 backend has no pre-build shell hook\"\n",
@@ -764,27 +737,26 @@ mod tests {
     }
 
     #[test]
-    fn a_python_build_command_with_an_empty_reason_is_rejected() {
-        let err = parse("[python]\nbuild_command = \"uv run maturin develop\"\nreason = \"  \"\n")
-            .unwrap_err();
-        assert!(err.to_string().contains("empty reason"), "got: {err}");
-    }
-
-    #[test]
-    fn a_python_build_command_with_no_reason_is_rejected() {
-        // The `reason` key is absent entirely (serde-defaulted to empty) — still rejected.
-        let err = parse("[python]\nbuild_command = \"uv run maturin develop\"\n").unwrap_err();
-        assert!(err.to_string().contains("empty reason"), "got: {err}");
-    }
-
-    #[test]
-    fn a_python_table_without_a_build_command_needs_no_reason() {
-        // The reason is required *only* alongside a build_command: a coverage-only [python]
-        // table (no build_command) loads with an empty defaulted reason, byte-identical to today.
-        let config = parse("[python]\ncoverage = { branch = true, fail_under = 90 }\n").unwrap();
+    fn a_python_build_command_with_no_reason_loads() {
+        // #335: `build_command` needs no reason — it supplies a necessary fact, it doesn't waive
+        // a check. A bare command (reason serde-defaulted to empty) loads, where #289 rejected it.
+        let config = parse("[python]\nbuild_command = \"uv run maturin develop\"\n").unwrap();
         let python = config.python.unwrap();
-        assert!(python.build_command.is_none());
+        assert_eq!(
+            python.build_command.as_deref(),
+            Some("uv run maturin develop")
+        );
         assert!(python.reason.is_empty());
+    }
+
+    #[test]
+    fn a_typescript_build_command_with_no_reason_loads() {
+        // The common TS case: a compile-before-pack named with no boilerplate justification.
+        let config = parse("[typescript]\nbuild_command = \"pnpm build\"\n").unwrap();
+        assert_eq!(
+            config.typescript.unwrap().build_command.as_deref(),
+            Some("pnpm build")
+        );
     }
 
     #[test]

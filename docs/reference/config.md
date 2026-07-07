@@ -109,18 +109,20 @@ key is deliberately Rust-only — a documented asymmetry under the
 
 Each language table — `[python]`, `[typescript]`, `[rust]` — takes **`build_command`**, a shell
 command a build-dependent job runs after toolchain and dependency setup and **before** it builds or
-imports the package. It is the escape hatch for a build the manifest **structurally can't
-express**: where an ecosystem standardizes the build, the tool derives it (a maturin/PEP 517
-backend, Cargo's `build.rs` and `cargo package`, npm's `prepare` / `prepack` run by `npm pack`), and
-`build_command` catches only the remainder — never a heuristic that guesses a script name that isn't
-standardized. It carries a required **`reason`**, held to the same bar an exemption's reason meets:
-an empty or missing reason is rejected on load, because a reasonless escape hatch can never be a
-silent pass.
+imports the package. It **supplies a necessary fact** — how to build a package the ecosystem
+doesn't build for you — for a build the manifest **structurally can't express**: where an ecosystem
+standardizes the build, the tool derives it (a maturin/PEP 517 backend, Cargo's `build.rs` and
+`cargo package`, npm's `prepare` / `prepack` run by `npm pack`), and `build_command` names only the
+remainder — never a heuristic that guesses a script name that isn't standardized.
+
+It is **not an escape hatch** and requires no justification: unlike `gates` (which skips a check) or
+`rust_toolchain` (which overrides a working default), it waives nothing — it just names the build.
+So it carries **no required `reason`**; an optional `reason` note is retained if you want to explain
+the build, but a bare `build_command` loads.
 
 ```toml
 [typescript]
 build_command = "pnpm build"
-reason = "npm defines no standard build command; the compile is a `build` script `pnpm pack` doesn't run"
 ```
 
 The workflow discovers `build_command` in the package's own `testing-conventions.toml` at the

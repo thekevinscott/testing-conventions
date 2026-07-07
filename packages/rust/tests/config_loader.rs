@@ -153,35 +153,35 @@ fn loads_a_python_build_command_with_a_reason() {
 }
 
 #[test]
-fn rejects_a_python_build_command_with_a_blank_reason_self_guard() {
-    // The reason is required — an unreasoned escape hatch can never be a silent pass,
-    // mirroring the exemption-reason bar.
+fn a_python_build_command_with_no_reason_loads() {
+    // #335: `build_command` needs no reason — it supplies a necessary build fact rather than
+    // waiving a check, so a bare command (reason absent or blank) loads, where #289 rejected it.
     assert!(
-        load_config(fixture("python_build_command_blank_reason.toml")).is_err(),
-        "a [python].build_command with a blank reason must be rejected (self-guard)"
+        load_config(fixture("python_build_command_no_reason.toml")).is_ok(),
+        "a [python].build_command with no reason must load (reason is optional)"
     );
-}
-
-#[test]
-fn rejects_a_python_build_command_with_no_reason_self_guard() {
     assert!(
-        load_config(fixture("python_build_command_no_reason.toml")).is_err(),
-        "a [python].build_command with no reason must be rejected (self-guard)"
+        load_config(fixture("python_build_command_blank_reason.toml")).is_ok(),
+        "a [python].build_command with a blank reason must load (reason is optional)"
     );
 }
 
 #[test]
 fn loads_a_typescript_build_command_with_a_reason() {
-    // #335: `build_command` (plus a required `reason`) generalizes from `[python]`-only to all
-    // three language tables — the uniform escape hatch for a build the manifest structurally can't
-    // express (npm defines no standard build command; the TS compile-before-pack is a
-    // project-specific script `pnpm pack` doesn't run). Starts red: the schema has no
-    // `build_command` on the `[typescript]` table yet, so `deny_unknown_fields` rejects it.
+    // #335: `build_command` generalizes from `[python]`-only to all three language tables — a
+    // necessary build declaration for a build the manifest structurally can't express (npm defines
+    // no standard build command; the TS compile-before-pack is a project-specific script `pnpm
+    // pack` doesn't run). Started red: the schema had no `build_command` on the `[typescript]`
+    // table, so `deny_unknown_fields` rejected it.
     let config = load_config(fixture("typescript_build_command.toml"))
-        .expect("a [typescript].build_command with a reason must load once the schema generalizes");
+        .expect("a [typescript].build_command must load once the schema generalizes");
     let ts = config.typescript.expect("[typescript] table present");
     assert_eq!(ts.build_command.as_deref(), Some("pnpm build"));
-    assert!(!ts.reason.trim().is_empty(), "the reason must survive");
+    // An optional reason note is retained when present, but never required.
+    assert!(
+        !ts.reason.trim().is_empty(),
+        "the reason note survives when present"
+    );
 }
 
 #[test]
@@ -198,12 +198,12 @@ fn loads_a_rust_build_command_with_a_reason() {
 }
 
 #[test]
-fn rejects_a_typescript_build_command_with_a_blank_reason_self_guard() {
-    // The reason bar generalizes with the key: a reasonless escape hatch can never be a silent
-    // pass, in any language.
+fn a_typescript_build_command_with_a_blank_reason_loads() {
+    // The reason is optional in every language: a bare `[typescript].build_command` (blank reason)
+    // loads — naming the build is a necessary fact, not a waiver to justify.
     assert!(
-        load_config(fixture("typescript_build_command_blank_reason.toml")).is_err(),
-        "a [typescript].build_command with a blank reason must be rejected (self-guard)"
+        load_config(fixture("typescript_build_command_blank_reason.toml")).is_ok(),
+        "a [typescript].build_command with a blank reason must load (reason is optional)"
     );
 }
 

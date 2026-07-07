@@ -60,11 +60,12 @@ Two inputs and one config key cover what a manifest cannot express. They carry t
 fix preferred:
 
 - **`build_command`** — a build step beyond the manifest's own hooks, declared per language in the
-  package's own `testing-conventions.toml` with a required `reason` and run at the package root.
-  Each language's standard build is derived (a maturin/PEP 517 backend, Cargo's `build.rs` and
-  `cargo package`, npm's `prepare` / `prepack`); `build_command` names only what an ecosystem
-  structurally can't standardize — a PEP 517 backend's absent pre-build shell step, or a TypeScript
-  compile in a `build` script npm doesn't run on `pack`.
+  package's own `testing-conventions.toml` and run at the package root. Each language's standard
+  build is derived (a maturin/PEP 517 backend, Cargo's `build.rs` and `cargo package`, npm's
+  `prepare` / `prepack`); `build_command` names only what an ecosystem structurally can't
+  standardize — a PEP 517 backend's absent pre-build shell step, or a TypeScript compile in a
+  `build` script npm doesn't run on `pack`. It supplies a necessary fact rather than waiving a
+  check, so unlike the other escape hatches it needs no `reason`.
 - **`rust_toolchain`** — forces cargo provisioning when no manifest declares the need.
 - **`gates`** — restricts a call to named gates, for the rare package where one genuinely
   cannot run.

@@ -629,13 +629,19 @@ table so a consumer declaring it still loads the rest of their config under `den
 Purely additive: the SDK gains `config::E2eConfig` and a `Config::e2e` field, both defaulting to
 absent/empty, so a package declaring no `[e2e]` table is unchanged.
 
-Generalizes **`build_command`** from `[python]`-only to all three language tables (#335): the
-uniform escape hatch for a build the manifest structurally can't express, held to the same required
-`reason`. `[typescript].build_command` motivates it — the packaging gate's forthcoming auto-build
-needs a way to name a TS compile-before-`pack` that npm doesn't standardize the name of — but the
-key is offered under every table for parity. The config loader accepts it everywhere so a
-consumer's config loads under `deny_unknown_fields`; the reader wiring lands as a follow-up. A
-package that sets no `build_command` is unchanged.
+Generalizes **`build_command`** from `[python]`-only to all three language tables and **drops its
+required `reason`** (#335). It's reclassified from an escape hatch to a necessary declaration — it
+supplies a build fact rather than waiving a check — so a bare `build_command` (no `reason`) now
+loads, where #289's `[python].build_command` rejected it; an optional `reason` note is retained if
+present. `[typescript].build_command` motivates the generalization: the packaging gate's
+forthcoming auto-build needs a way to name a TS compile-before-`pack` that npm doesn't standardize
+the name of. The config loader accepts the key under every table so a consumer's config loads under
+`deny_unknown_fields`; the reader wiring lands as a follow-up. A package that sets no `build_command`
+is unchanged.
+
+**Behavior change without code changes:** a `[python].build_command` with no `reason` (or a blank
+one) that failed to load under #289 now loads — the reason is optional. No config needs editing;
+existing configs that carry a `reason` keep it (as an optional note).
 
 ### Required changes
 

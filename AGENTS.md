@@ -1,6 +1,6 @@
 ## North Star
 
-A consuming package adopts `conventions.yml` whole-hog with a call carrying only `path`. One `uses:` call per package, and all seven gates run: layout, package manager, Python environment, native-build toolchain, dist location, attestation location, and config file are all derived from `path` and the package's own manifest — a `testing-conventions.toml` at the package root is discovered, never named. `languages` and `config` survive as optional refinements; `gates`, `build_command`, and `rust_toolchain` remain only as escape hatches for what a manifest genuinely cannot express, held to the exemption bar (near-forbidden, reasoned).
+A consuming package adopts `conventions.yml` whole-hog with a call carrying only `path`. One `uses:` call per package, and all seven gates run: layout, package manager, Python environment, native-build toolchain, dist location, attestation location, and config file are all derived from `path` and the package's own manifest — a `testing-conventions.toml` at the package root is discovered, never named. `languages` and `config` survive as optional refinements. `build_command` is a **necessary declaration, not an escape hatch**: where an ecosystem standardizes the build the tool derives it, and where it structurally can't (npm names no build command) a compiling package states its build in one line — a fact, requiring no justification. `gates` and `rust_toolchain` are the true escape hatches — they *skip* or *override* something that already works — so they remain held to the exemption bar (near-forbidden, reasoned).
 
 Follow red/green testing methodology. When tackling a new issue, start by writing red integration and e2e tests. Run the e2e tests locally.
 
@@ -18,11 +18,13 @@ or script name (npm defines no build command; the build script is `build` in one
 `compile` in the next) — do **not** paper over the gap with a heuristic that guesses one. A guess
 that works most of the time fails silently the rest: a green gate that built the wrong thing, or a
 red one with no visible cause — worse for the consumer than an honest interface. Name the gap and
-expose the minimal escape hatch — one `testing-conventions.toml` line, held to the same
-near-forbidden/reasoned bar as the others — and stop.
+expose the minimal declaration — one `testing-conventions.toml` line stating the fact — and stop.
+That declaration is **not** an escape hatch and carries no justification bar: it *supplies* a
+necessary fact the ecosystem left unnamed, it doesn't *waive* a check or *override* a working
+default (those — `gates`, `rust_toolchain` — are the near-forbidden, reasoned ones).
 
 The bar for "structural" is high: prove the standard's absence, never reach for config because a
-derivation is merely *hard*. The hatch catches only the structurally-underivable remainder;
+derivation is merely *hard*. The declaration catches only the structurally-underivable remainder;
 everything an ecosystem standardizes is still derived, for every language it standardizes it in.
 
 ## Docs first

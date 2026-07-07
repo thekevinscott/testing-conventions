@@ -222,9 +222,16 @@ def build_command_language(primary: str, present: list[str]) -> str:
     a manifest-less pip Python package (#289's original case) has no `primary_language` to key
     on, but its language is unambiguous when exactly one of python/typescript is present. `''`
     (no fallback, never a guess) when `present` holds zero or more than one language and there is
-    no manifest to disambiguate (#354/#355).
+    no manifest to disambiguate (#354/#355). Unpacking (not a `len(...) == 1` comparison) names
+    the "exactly one" boundary without a numeric literal to guess at.
     """
-    return primary or (present[0] if len(present) == 1 else "")
+    if primary:
+        return primary
+    try:
+        (sole,) = present
+    except ValueError:
+        return ""
+    return sole
 
 
 def derive_build_command(config: str, language: str) -> str:

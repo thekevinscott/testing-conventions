@@ -7,6 +7,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`build_command` generalizes from `[python]`-only to all three language tables, and no longer
+  requires a `reason`** (#335). Each of `[python]` / `[typescript]` / `[rust]` now takes
+  `build_command`. It is reclassified from an escape hatch to a **necessary declaration**: it
+  *supplies* a build fact (how to build a package the ecosystem doesn't build for you) rather than
+  *waiving* a check the way an exemption does, so it carries **no required `reason`** — an optional
+  note is retained if present, but a bare `build_command` loads (a relaxation of the #289
+  `[python].build_command`, which rejected a reasonless command). It exists for the packaging
+  gate's forthcoming auto-build: a TypeScript compile-before-`pack` lives in a `build` script npm
+  doesn't standardize the name of, so a consumer names that build in one line instead of a bespoke
+  build job. The config loader accepts the key under every table so a consumer's config loads under
+  `deny_unknown_fields`; the jobs that read it (the suite-executing jobs today, packaging next) wire
+  it through as a follow-up per the two-step rollout. A package that sets no `build_command` is
+  byte-identical to before.
+
 - **The config schema accepts an `[e2e]` table with `extra_scope` / `exclude`** (#333). A package
   whose e2e artifact is compiled from a shared source tree beside it declares that tree as an extra
   freshness root in its own `testing-conventions.toml` — `[e2e] extra_scope = [...]` with an

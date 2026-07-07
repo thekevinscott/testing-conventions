@@ -105,30 +105,42 @@ mutated. Cargo features are Rust's build-system concept with no Python/TypeScrip
 key is deliberately Rust-only — a documented asymmetry under the
 [parity rule](../explanation/#parity-over-cleverness).
 
-## `[python] build_command`
+## `build_command`
 
-The `[python]` table takes **`build_command`**, a shell command the suite-executing jobs
-(`unit coverage`, changed-line coverage, `unit mutation`) run after toolchain and dependency setup
-and **before** the suite — for a Python package whose unit suite imports a compiled module (a
-maturin/PyO3 extension) the build backend produces. It carries a required **`reason`**, held to the
-same bar an exemption's reason meets: an empty or missing reason is rejected on load.
+Each language table — `[python]`, `[typescript]`, `[rust]` — takes **`build_command`**, a shell
+command a build-dependent job runs after toolchain and dependency setup and **before** it builds or
+imports the package. It **supplies a necessary fact** — how to build a package the ecosystem
+doesn't build for you — for a build the manifest **structurally can't express**: where an ecosystem
+standardizes the build, the tool derives it (a maturin/PEP 517 backend, Cargo's `build.rs` and
+`cargo package`, npm's `prepare` / `prepack` run by `npm pack`), and `build_command` names only the
+remainder — never a heuristic that guesses a script name that isn't standardized.
+
+It is **not an escape hatch** and requires no justification: unlike `gates` (which skips a check) or
+`rust_toolchain` (which overrides a working default), it waives nothing — it just names the build.
+So it carries **no required `reason`**; an optional `reason` note is retained if you want to explain
+the build, but a bare `build_command` loads.
 
 ```toml
-[python]
-build_command = "uv run maturin develop"
-reason = "maturin's PEP 517 backend builds the wheel but exposes no pre-build shell hook"
+[typescript]
+build_command = "pnpm build"
 ```
 
 The workflow discovers `build_command` in the package's own `testing-conventions.toml` at the
-[package root](../monorepo), exactly like the config file itself — it is a config key, not a
-`uses:`-call input.
+[package root](../monorepo), exactly like the config file itself — a config key, not a `uses:`-call
+input, and one per language table so a package names only the build its own language needs.
 
-The key is **Python-only**, a documented asymmetry under the
-[parity rule](../explanation/#parity-over-cleverness). TypeScript's npm `prepare` / `postinstall`
-script and Rust's `build.rs` are manifest-native build hooks their package managers already run, so
-a compiled module in those languages builds during dependency install. Python's PEP 517 build
-backends expose only sandboxed `build_wheel` / `build_sdist` hooks with no manifest-declared
-pre-build shell step, so `build_command` fills that single gap.
+Where each language reaches for it:
+
+- **Python** — the common case: a unit suite that imports a compiled module (a maturin/PyO3
+  extension) needs it built first, and PEP 517 backends expose only sandboxed `build_wheel` /
+  `build_sdist` hooks with no manifest-declared pre-build shell step
+  (`build_command = "uv run maturin develop"`).
+- **TypeScript** — for packaging, when the compile-before-pack lives in a script npm doesn't run on
+  `pack`. npm standardizes `pack` (which runs `prepare` / `prepack`) but not the build script's name
+  — it's `build` in one package and `compile` in the next — so the tool can't derive it, and this
+  one line names it.
+- **Rust** — rarely: `cargo` compiles via `build.rs` and packages via `cargo package` from the
+  manifest, so `build_command` is only for a pre-build step neither expresses.
 
 ## `[e2e] extra_scope` and `exclude`
 
@@ -151,9 +163,9 @@ The value is discovered in the package's own `testing-conventions.toml` at the
 repeated `--extra-scope` / `--exclude` arguments and the `e2e-verify` job appends them; a package
 declaring neither behaves byte-identically to before. Both are lists of directory paths, so a path
 with a space is not supported. This is git-level and language-agnostic — it holds across Python,
-TypeScript, and Rust identically. Like `[python] build_command`, the tool's own config loader never
-acts on these keys — it accepts the table so the rest of the config still loads — while `detect` and
-the workflow read them.
+TypeScript, and Rust identically. Like `build_command`, the tool's own config loader never acts on
+these keys — it accepts the table so the rest of the config still loads — while `detect` and the
+workflow read them.
 
 ## Shared test configs
 

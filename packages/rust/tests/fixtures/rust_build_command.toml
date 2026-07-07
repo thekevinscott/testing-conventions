@@ -1,0 +1,3 @@
+[rust]
+build_command = "cargo run --bin codegen"
+reason = "the crate needs a generated source module built before packaging"

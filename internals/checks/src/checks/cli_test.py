@@ -36,3 +36,7 @@ def test_wiring_e2e_default_on_is_registered():
 
 def test_detect_routes_python_is_registered():
     assert "detect-routes-python" in main.commands
+
+
+def test_github_helpers_wired_is_registered():
+    assert "github-helpers-wired" in main.commands

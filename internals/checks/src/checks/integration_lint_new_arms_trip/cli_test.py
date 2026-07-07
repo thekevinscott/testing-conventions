@@ -1,39 +1,12 @@
 """Colocated unit tests for the integration-lint-new-arms-trip check (isolation — no CliRunner, no subprocess mocks).
 
-The pure `failure_reason` and `checks_for` are driven directly; `cli` is driven through its
-`.callback` over the benign `true`/`false` builtins, so no `click.testing` or `CheckFailed`
-collaborator is imported — the raise path is asserted against the propagated exception's `.message`.
+Imports only the unit under test: this check's own `CHECKS` data and `cli` command. The shared
+orchestration and exit-code decision are covered once beside `run_checks` / `failure_reason`.
+Here we pin this check's `CHECKS` and drive `cli` through its `.callback` over the benign
+`true`/`false` builtins (the trailing-command seam), asserting the raise path against the
+propagated exception's `.message` — so no `click.testing` or `CheckFailed` is imported.
 """
-from checks.integration_lint_new_arms_trip.cli import CHECKS, checks_for, cli, failure_reason
-
-
-def test_failure_reason_red_check_flags_a_zero_exit():
-    # expect_fail=True, a zero exit is the violation.
-    assert failure_reason(True, 0) == "the command exited 0, but a non-zero (failing) exit was required"
-
-
-def test_failure_reason_red_check_passes_a_nonzero_exit():
-    # Any truthy (non-zero) exit clears a red-path check — including a signal-kill (negative).
-    assert failure_reason(True, 1) is None
-    assert failure_reason(True, -9) is None
-
-
-def test_failure_reason_clean_check_passes_a_zero_exit():
-    assert failure_reason(False, 0) is None
-
-
-def test_failure_reason_clean_check_flags_a_nonzero_exit():
-    assert failure_reason(False, 3) == "the command exited 3, but a zero (passing) exit was required"
-    assert failure_reason(False, -9) == "the command exited -9, but a zero (passing) exit was required"
-
-
-def test_checks_for_returns_the_hardcoded_checks_with_no_command():
-    assert checks_for([]) is CHECKS
-
-
-def test_checks_for_treats_a_trailing_command_as_a_red_path_check():
-    assert checks_for(("some-cmd",)) == [(["some-cmd"], True, "cli")]
-    assert checks_for(("npx", "run")) == [(["npx", "run"], True, "cli")]
+from checks.integration_lint_new_arms_trip.cli import CHECKS, cli
 
 
 def test_checks_are_the_expected_invocations():
@@ -53,7 +26,7 @@ def test_checks_are_the_expected_invocations():
         False,
         "clean TypeScript suite passes integration lint",
     ),
-    ]
+]
 
 
 def test_declares_a_variadic_command_argument():

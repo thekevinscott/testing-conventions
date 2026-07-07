@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+# Repo-only: the detect logic backing the `detect` composite action (.github/actions/detect,
+# #363 migrating it out of `.github/`). Never published to an index — the composite action's
+# `action.yml` invokes it directly by file path (no console-script entry point needed), and it
+# is dogfooded through the shipped reusable workflow (dogfood.yml) like any other package.
+name = "testing-conventions-detect"
+version = "0"
+description = "Repo-only language/condition detection backing the detect composite action (#363)."
+requires-python = ">=3.11"
+
+[tool.hatch.build]
+# Same fix as #354 (internals/checks): a colocated `detect_test.py` beside `detect.py` would
+# otherwise ship inside a built wheel/sdist if packaging_build ever scans this path.
+exclude = ["**/*_test.py"]
+
+[tool.hatch.build.targets.wheel]
+include = ["src/detect.py"]
+sources = ["src"]
+
+[tool.pytest.ini_options]
+# `src` layout: put it on the path so detect and its colocated test import normally
+# (`import detect`) — no per-file `sys.path.insert` hack.
+pythonpath = ["src"]

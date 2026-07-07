@@ -1,15 +1,19 @@
 name: Detect action (tests)
 
-# Red/green tests for the repo-only detect helper (.github/actions/detect). The detect logic
-# used to live as inline bash in the reusable workflow with no real tests; it now lives in
-# detect.py and is covered here by integration tests (the filesystem mocked) and e2e tests
-# (the real filesystem), run with pytest. This is the gate that goes red before a behavior
-# change lands and green after it.
+# Red/green tests for the repo-only detect helper. The detect logic used to live as inline bash
+# in the reusable workflow with no real tests; it now lives in `internals/detect` (#363 moved it
+# out of `.github/actions/detect`, which keeps only the composite action manifest) and is covered
+# here by integration tests (the filesystem mocked) and e2e tests (the real filesystem), run with
+# pytest. This is the gate that goes red before a behavior change lands and green after it.
+# `internals/detect` also carries the colocated-test/coverage/mutation dogfood bar via
+# dogfood.yml, exactly like internals/checks — this workflow is the pytest-direct layer beneath
+# that, plus the composite action's own end-to-end wiring test.
 
 on:
   pull_request:
     paths:
-      - '.github/actions/detect/**'
+      - 'internals/detect/**'
+      - '.github/actions/detect/action.yml'
       - '.github/workflows/detect-action.yml'
   workflow_dispatch:
 
@@ -28,7 +32,7 @@ jobs:
       - name: Install pytest
         run: python -m pip install --quiet pytest
       - name: Unit + integration + e2e tests
-        run: python -m pytest .github/actions/detect/ -v --import-mode=importlib
+        run: python -m pytest internals/detect/ -v --import-mode=importlib
 
   action:
     name: action.yml — end-to-end (local use)

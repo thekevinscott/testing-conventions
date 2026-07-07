@@ -1,11 +1,17 @@
 name: Dogfood (.github helpers)
 
-# Hold this repo's own .github/ helper scripts to the same conventions we enforce on every
-# shipped package (#237): detect.py (the detect composite action) and move_major_tag.py (the
-# rolling-tag helper) are first-party Python with real logic, so they earn colocated tests,
+# Hold this repo's own loose .github/scripts/ helpers to the same conventions we enforce on
+# every shipped package (#237): move_major_tag.py (the rolling-tag helper) and the not-yet-
+# migrated #302 checks are first-party Python with real logic, so they earn colocated tests,
 # isolation, coverage, integration-lint, and the diff-scoped mutation gate like anything else.
 #
-# Scoped to the helper *code* — .github/actions/ + .github/scripts/ — and deliberately NOT:
+# detect.py (the detect composite action's source) moved to internals/detect (#363) and is
+# dogfooded through the shipped reusable workflow instead (dogfood.yml's `detect` job), exactly
+# like internals/checks — a real uv package earns the full gate set, not the loose-script
+# conventions this workflow runs. `.github/actions/` now holds only composite-action manifests
+# (YAML), nothing to scan, so it's dropped from the loop below.
+#
+# Scoped to the helper *code* — .github/scripts/ — and deliberately NOT:
 #   - .github/selftest/**  : intentional negative fixtures (below-floor, surviving mutants,
 #                            un-colocated reds) that the rules are *supposed* to fire on;
 #   - .github/workflows/** : YAML, nothing to scan.
@@ -17,7 +23,6 @@ name: Dogfood (.github helpers)
 on:
   pull_request:
     paths:
-      - '.github/actions/**'
       - '.github/scripts/**'
       - '.github/workflows/dogfood-github-helpers.yml'
   workflow_dispatch:
@@ -51,7 +56,7 @@ jobs:
         run: |
           set -uo pipefail
           fail=0
-          for dir in .github/actions .github/scripts; do
+          for dir in .github/scripts; do
             for rule in "unit colocated-test" "unit lint" "unit coverage" "integration lint" "unit mutation --base origin/main"; do
               echo "::group::testing-conventions $rule --language python $dir"
               if ! npx -y testing-conventions $rule --language python "$dir"; then

@@ -85,6 +85,11 @@ runs:
         LANGUAGES: ${{ inputs.languages }}
         SCAN_PATH: ${{ inputs.path }}
         CONFIG: ${{ inputs.config }}
-      # `$GITHUB_ACTION_PATH` is this action's directory, so detect.py is found whether the
-      # action is used locally (./.github/actions/detect) or by a consumer (owner/repo@ref).
-      run: python3 "$GITHUB_ACTION_PATH/detect.py"
+      # `$GITHUB_ACTION_PATH` is this action's directory — `.github/actions/detect`, three
+      # levels below the checkout root of whichever ref is resolved (the action's own repo,
+      # fetched whether it's used locally via `./.github/actions/detect` or by a consumer via
+      # `owner/repo/.github/actions/detect@ref`). The action manifest stays here (the `uses:`
+      # contract every consumer pins), but the detect logic itself lives in `internals/detect`
+      # (#363) alongside its own tests and dogfood gate — this walks back up to that checkout
+      # root to find it, rather than keeping the Python source colocated with the manifest.
+      run: python3 "$GITHUB_ACTION_PATH/../../../internals/detect/src/detect.py"

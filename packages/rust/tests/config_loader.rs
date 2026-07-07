@@ -42,6 +42,8 @@ fn expected_valid() -> Config {
                 statements: 100,
             }),
             exempt: vec![],
+            build_command: None,
+            reason: String::new(),
         }),
         rust: Some(RustConfig {
             coverage: Some(RustCoverage {
@@ -52,6 +54,8 @@ fn expected_valid() -> Config {
             }),
             features: vec![],
             exempt: vec![],
+            build_command: None,
+            reason: String::new(),
         }),
         e2e: None,
     }
@@ -173,19 +177,24 @@ fn loads_a_typescript_build_command_with_a_reason() {
     // express (npm defines no standard build command; the TS compile-before-pack is a
     // project-specific script `pnpm pack` doesn't run). Starts red: the schema has no
     // `build_command` on the `[typescript]` table yet, so `deny_unknown_fields` rejects it.
-    assert!(
-        load_config(fixture("typescript_build_command.toml")).is_ok(),
-        "a [typescript].build_command with a reason must load once the schema generalizes"
-    );
+    let config = load_config(fixture("typescript_build_command.toml"))
+        .expect("a [typescript].build_command with a reason must load once the schema generalizes");
+    let ts = config.typescript.expect("[typescript] table present");
+    assert_eq!(ts.build_command.as_deref(), Some("pnpm build"));
+    assert!(!ts.reason.trim().is_empty(), "the reason must survive");
 }
 
 #[test]
 fn loads_a_rust_build_command_with_a_reason() {
     // #335: the same generalization for `[rust]`.
-    assert!(
-        load_config(fixture("rust_build_command.toml")).is_ok(),
-        "a [rust].build_command with a reason must load once the schema generalizes"
+    let config = load_config(fixture("rust_build_command.toml"))
+        .expect("a [rust].build_command with a reason must load once the schema generalizes");
+    let rust = config.rust.expect("[rust] table present");
+    assert_eq!(
+        rust.build_command.as_deref(),
+        Some("cargo run --bin codegen")
     );
+    assert!(!rust.reason.trim().is_empty(), "the reason must survive");
 }
 
 #[test]

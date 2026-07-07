@@ -38,15 +38,14 @@ pub struct PythonConfig {
     pub coverage: Option<PythonCoverage>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
-    /// The Python-only build escape hatch (#289): a shell command the suite-executing
-    /// jobs run after toolchain + dependency setup and before the suite, for a package
-    /// whose unit suite imports a compiled module (a maturin/PyO3 extension) the build
-    /// backend produces. `detect` reads it from the package's own config and the workflow
-    /// jobs run it; the binary never runs it, but the schema must accept the key so a
-    /// consumer's config still loads under `deny_unknown_fields`. Absent (`None`) means no
-    /// build step. Python-only because PEP 517 backends expose only sandboxed
-    /// `build_wheel`/`build_sdist` hooks — npm's `prepare`/`postinstall` and Cargo's
-    /// `build.rs` are already manifest-native, a documented asymmetry under the parity rule.
+    /// A build escape hatch (#289, generalized to every language table in #335): a shell
+    /// command a build-dependent job runs after toolchain + dependency setup and before it
+    /// builds or imports the package, for a build the manifest **structurally can't express**.
+    /// `detect` reads it from the package's own config and the workflow jobs run it; the binary
+    /// never runs it, but the schema must accept the key so a consumer's config still loads
+    /// under `deny_unknown_fields`. Absent (`None`) means no build step. For Python it's the
+    /// common case — a PEP 517 backend exposes only sandboxed `build_wheel`/`build_sdist` hooks
+    /// with no pre-build shell step.
     pub build_command: Option<String>,
     /// Why the manifest can't express this build — required alongside `build_command` and
     /// validated non-empty in [`Config::validate`], mirroring the exemption-reason bar. An
@@ -83,6 +82,15 @@ pub struct TypeScriptConfig {
     pub coverage: Option<TypeScriptCoverage>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
+    /// The build escape hatch (#335); see [`PythonConfig::build_command`]. For TypeScript this
+    /// names a compile-before-`pack` that npm doesn't standardize — `npm pack` runs `prepare` /
+    /// `prepack`, but the build script's own name is `build` in one package and `compile` in the
+    /// next, so the tool can't derive it.
+    pub build_command: Option<String>,
+    /// Why the manifest can't express this build — required alongside `build_command`, validated
+    /// non-empty in [`Config::validate`].
+    #[serde(default)]
+    pub reason: String,
 }
 
 /// The `[rust]` table.
@@ -100,6 +108,14 @@ pub struct RustConfig {
     pub features: Vec<String>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
+    /// The build escape hatch (#335); see [`PythonConfig::build_command`]. Rarely needed for Rust
+    /// — `cargo` compiles via `build.rs` and packages via `cargo package` from the manifest — so
+    /// this is only for a pre-build step neither expresses.
+    pub build_command: Option<String>,
+    /// Why the manifest can't express this build — required alongside `build_command`, validated
+    /// non-empty in [`Config::validate`].
+    #[serde(default)]
+    pub reason: String,
 }
 
 /// `[python].coverage`. A **partial override** — `#[serde(default)]` fills any missing
@@ -470,15 +486,35 @@ impl Config {
     /// Reject any `exempt` entry that names no rule or carries an empty reason —
     /// a reasonless or scopeless exemption can never be a silent pass.
     fn validate(&self) -> Result<()> {
-        // The `[python].build_command` escape hatch (#289) is held to the exemption bar: a
-        // reasonless build command can never be a silent pass, so a present command with an
-        // empty reason fails to load, in the same style as the exemption reason check below.
-        if let Some(python) = &self.python {
-            if python.build_command.is_some() && python.reason.trim().is_empty() {
+        // The `build_command` escape hatch (#289, generalized to every language table in #335) is
+        // held to the exemption bar: a reasonless build command can never be a silent pass, so a
+        // present command with an empty reason fails to load, in the same style as the exemption
+        // reason check below.
+        let build_commands = [
+            (
+                "python",
+                self.python.as_ref().map(|c| (&c.build_command, &c.reason)),
+            ),
+            (
+                "typescript",
+                self.typescript
+                    .as_ref()
+                    .map(|c| (&c.build_command, &c.reason)),
+            ),
+            (
+                "rust",
+                self.rust.as_ref().map(|c| (&c.build_command, &c.reason)),
+            ),
+        ];
+        for (table, (build_command, reason)) in build_commands
+            .into_iter()
+            .filter_map(|(t, p)| p.map(|p| (t, p)))
+        {
+            if build_command.is_some() && reason.trim().is_empty() {
                 bail!(
-                    "[python].build_command has an empty reason — say why the manifest can't \
-                     express this build (maturin/PyO3's PEP 517 backend has no pre-build shell \
-                     hook; npm's prepare/postinstall and Cargo's build.rs already do)"
+                    "[{table}].build_command has an empty reason — say why the manifest can't \
+                     express this build (an ecosystem that standardizes the build needs no \
+                     build_command; name only one it structurally can't)"
                 );
             }
         }

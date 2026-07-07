@@ -32,6 +32,8 @@ def fs():
         "provision_rust": "false",
         "config": "testing-conventions.toml",
         "build_command": "",
+        "primary": "",
+        "packaging_build": "",
         "e2e_extra_scope": "",
         "e2e_exclude": "",
         "attestation_roots_seen": [],
@@ -53,7 +55,9 @@ def fs():
             patch.object(detect, "python_env", lambda root: state["python_env"]), \
             patch.object(detect, "provision_rust", lambda root: state["provision_rust"]), \
             patch.object(detect, "derive_config", lambda package_root_rel, config_input: state["config"]), \
-            patch.object(detect, "derive_build_command", lambda config: state["build_command"]), \
+            patch.object(detect, "primary_language", lambda package_root: state["primary"]), \
+            patch.object(detect, "derive_packaging", lambda package_root, primary: state["packaging_build"]), \
+            patch.object(detect, "derive_build_command", lambda config, language: state["build_command"]), \
             patch.object(detect, "derive_e2e_extra_scope", lambda config: state["e2e_extra_scope"]), \
             patch.object(detect, "derive_e2e_exclude", lambda config: state["e2e_exclude"]):
         yield state
@@ -180,6 +184,30 @@ def test_build_command_output_wired_from_derive_build_command(fs):
 def test_build_command_output_empty_by_default(fs):
     out = detect.compute_outputs("", scan_root="/repo")
     assert out["build_command"] == ""
+
+
+# --- #335: the derived packaging build + its provisioning language are emitted as outputs ---
+
+
+def test_packaging_build_output_wired_from_derive_packaging(fs):
+    # compute_outputs emits `packaging_build` straight from `derive_packaging`, and
+    # `packaging_language` from the primary language when a build was derived — so the packaging
+    # job provisions the toolchain and builds the distribution before scanning.
+    fs["primary"] = "python"
+    fs["packaging_build"] = "uv build"
+    out = detect.compute_outputs("", scan_root="/repo")
+    assert out["packaging_build"] == "uv build"
+    assert out["packaging_language"] == "python"
+
+
+def test_packaging_language_is_empty_when_no_build_was_derived(fs):
+    # A package whose manifest can't state a build (`derive_packaging` returns "") reports no
+    # packaging language either, so the job provisions nothing and falls back to a committed dist.
+    fs["primary"] = "python"
+    fs["packaging_build"] = ""
+    out = detect.compute_outputs("", scan_root="/repo")
+    assert out["packaging_build"] == ""
+    assert out["packaging_language"] == ""
 
 
 # --- #333: the [e2e] extra_scope / exclude roots are emitted as outputs, wired straight from

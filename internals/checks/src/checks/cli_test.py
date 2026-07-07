@@ -34,6 +34,10 @@ def test_mutation_package_root_wired_is_registered():
     assert "mutation-package-root-wired" in main.commands
 
 
+def test_packaging_build_wired_is_registered():
+    assert "packaging-build-wired" in main.commands
+
+
 def test_packaging_package_root_wired_is_registered():
     assert "packaging-package-root-wired" in main.commands
 

@@ -61,8 +61,14 @@ outputs:
     description: 'The config file to pass to `--config` (#277): the `config` input verbatim unless it is the default, in which case a package-root testing-conventions.toml wins if present.'
     value: ${{ steps.scan.outputs.config }}
   build_command:
-    description: 'The `[python].build_command` escape hatch (#289) read from the discovered config file, or empty when none is declared — the suite-executing jobs run it before the suite.'
+    description: 'The `build_command` declaration (#289, #335) read from the primary language table of the discovered config file, or empty when none is declared — the suite-executing jobs run it before the suite.'
     value: ${{ steps.scan.outputs.build_command }}
+  packaging_build:
+    description: 'The distribution build the packaging job runs before scanning (#335), derived from the package root manifest: `uv build` for a Python project, `<pm> pack --pack-destination dist` for a TypeScript package, `cargo package` for a crate — or empty when the manifest structurally cannot state one.'
+    value: ${{ steps.scan.outputs.packaging_build }}
+  packaging_language:
+    description: 'The primary language whose toolchain the packaging job provisions to run `packaging_build` (#335), or empty when no build was derived — the job then falls back to a committed dist.'
+    value: ${{ steps.scan.outputs.packaging_language }}
   e2e_extra_scope:
     description: 'The `[e2e].extra_scope` freshness roots (#333) read from the discovered config file, rendered as repeated `--extra-scope <dir>` arguments the e2e-verify job appends, or empty when none are declared — a shared source tree beside the package that no `--scope` can reach.'
     value: ${{ steps.scan.outputs.e2e_extra_scope }}

@@ -582,6 +582,26 @@ jobs:
         # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks build-command-wired
 
+  # ---- #335: packaging builds the distribution from the manifest before scanning ----
+
+  packaging-build-wired:
+    name: The reusable workflow builds the distribution before scanning
+    # Red→green wiring signal for #335: the reusable workflow's packaging job must gate on
+    # detect's `packaging_build`, provision the toolchain for `packaging_language`, run the
+    # derived build (`uv build` / `<pm> pack` / `cargo package`) before scanning, and scan
+    # `target/package` alongside `dist/` — so a native monorepo adopts the gate with
+    # `gates: ["packaging"]` and no bespoke build job. A colocated-tested check rather than
+    # inline bash (the `${{ }}` templating trap); the runtime behavior is covered by the Rust
+    # packaging tests.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
+      - name: testing-conventions.yml must build the distribution before scanning
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks packaging-build-wired
+
   # ---- #262: a gates allowlist so a consumer can run a subset of gates ----
 
   gates-wired:

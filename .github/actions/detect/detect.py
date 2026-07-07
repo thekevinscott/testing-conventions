@@ -215,18 +215,22 @@ def derive_config(package_root_rel: Path, config_input: str) -> str:
     return str(candidate) if candidate.is_file() else _CONFIG_DEFAULT
 
 
-def derive_build_command(config: str) -> str:
-    """The `[python].build_command` escape hatch (#289) read from the in-effect config file
-    `config` (the path `derive_config` resolved), or `''` when that file is absent, unparseable,
-    or declares no `[python].build_command`.
+def derive_build_command(config: str, language: str) -> str:
+    """The `[<language>].build_command` build declaration (#289, generalized to all languages in
+    #335) read from the in-effect config file `config` (the path `derive_config` resolved), or
+    `''` when that file is absent/unparseable, `language` is empty, or the table declares no
+    `build_command`.
 
-    The escape hatch lives in the package's own `testing-conventions.toml` rather than on the
-    `uses:` call — discovered exactly like `config` itself. It plugs the one gap npm's
-    `prepare`/`postinstall` and Cargo's `build.rs` already fill for TypeScript and Rust: a PEP 517
-    Python backend has no manifest-declared pre-build shell step. `''` means no build step,
-    byte-identical to the old empty `build_command` default. Parsed with the same stdlib `tomllib`
-    used for `pyproject.toml`, so a malformed config never crashes detect.
+    It lives in the package's own `testing-conventions.toml` rather than on the `uses:` call —
+    discovered exactly like `config` itself — and names a build the manifest structurally can't
+    express: a PEP 517 Python backend's missing pre-build shell step, or a TypeScript
+    compile-before-`pack` in a `build` script npm doesn't standardize the name of. `language` is
+    the package's primary language (`primary_language`), so a package's own table is read. `''`
+    means no build step. Parsed with the same stdlib `tomllib`, so a malformed config never
+    crashes detect.
     """
+    if not language:
+        return ""
     path = Path(config)
     if not path.is_file():
         return ""
@@ -234,8 +238,68 @@ def derive_build_command(config: str) -> str:
         data = tomllib.loads(path.read_text())
     except (OSError, tomllib.TOMLDecodeError):
         return ""
-    value = data.get("python", {}).get("build_command", "")
+    value = data.get(language, {}).get("build_command", "")
     return value if isinstance(value, str) else ""
+
+
+def primary_language(package_root: Path) -> str:
+    """The package's primary language by manifest, or `''` when none is present (#335): a
+    `pyproject.toml` is `python`, else a `package.json` is `typescript`, else a `Cargo.toml` is
+    `rust`. The priority resolves a binding, which carries two manifests: a PyO3 binding
+    (`pyproject.toml` + `Cargo.toml`) publishes a Python wheel, a napi binding (`package.json` +
+    `Cargo.toml`) publishes an npm tarball — the second manifest is the private core, not the
+    published artifact. Drives which `[<language>]` table `build_command` is read from, and which
+    build `derive_packaging` picks.
+    """
+    if (package_root / "pyproject.toml").is_file():
+        return "python"
+    if (package_root / "package.json").is_file():
+        return "typescript"
+    if (package_root / "Cargo.toml").is_file():
+        return "rust"
+    return ""
+
+
+def read_cargo(package_root: Path) -> dict:
+    """The parsed `Cargo.toml` at `package_root`, or `{}` if absent or unparseable. Only called
+    once `primary_language` has seen a `Cargo.toml`, so a missing file is handled by the same
+    `OSError` catch as an unreadable one — no separate presence guard."""
+    try:
+        return tomllib.loads((package_root / "Cargo.toml").read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+
+
+def derive_packaging(package_root: Path, primary: str) -> str:
+    """The command that builds the package's publishable distribution from its manifest alone
+    (#335), or `''` when the manifest doesn't standardize one. The reusable packaging job runs it
+    at the package root, then scans the built artifact — so a native-building monorepo adopts the
+    gate with `gates: ["packaging"]` and no bespoke build job:
+
+    - **Python** (a `pyproject.toml` with a `[project]` table) → `uv build` — the PEP 517 build,
+      which writes `dist/*.whl` + `*.tar.gz` and compiles a maturin/PyO3 core along the way.
+    - **TypeScript** (a `package.json`) → `<pm> pack --pack-destination dist` — a standard `npm` /
+      `pnpm` command that runs the package's own `prepare` / `prepack` lifecycle. A compile that
+      lives in a bare `build` script instead (whose name npm doesn't standardize) is named in
+      `[typescript].build_command`, run first.
+    - **Rust** (a `Cargo.toml` with a `[package]` table) → `cargo package` — writes
+      `target/package/*.crate`.
+
+    `''` for a package whose manifest can't state the build (a non-`[project]` pyproject, a
+    workspace-only `Cargo.toml`): the job then scans a committed `dist/` if present, or a
+    `packaging_artifact`, exactly as before.
+
+    Dispatched on `primary` through a table rather than a chain of `primary == "…"` branches, so
+    which language builds is an exact key lookup — a language the table doesn't name yields no
+    build, no comparison to misjudge.
+    """
+    builders = {
+        "python": lambda: "uv build" if "project" in read_pyproject(package_root) else "",
+        "typescript": lambda: f"{ts_package_manager(package_root)} pack --pack-destination dist",
+        "rust": lambda: "cargo package" if "package" in read_cargo(package_root) else "",
+    }
+    build = builders.get(primary)
+    return build() if build else ""
 
 
 def derive_e2e_extra_scope(config: str) -> str:
@@ -331,6 +395,8 @@ def compute_outputs(
     except ValueError:
         package_root_rel = Path(".")
     config = derive_config(package_root_rel, config_input)
+    primary = primary_language(package_root)
+    packaging_build = derive_packaging(package_root, primary)
     return {
         "languages": _to_json(present),
         # Whole-tree colocated-test (#274): the file-paired languages plus rust — the rust
@@ -351,9 +417,16 @@ def compute_outputs(
         "python_env": python_env(package_root),
         "provision_rust": provision_rust(package_root),
         "config": config,
-        # #289: the `[python].build_command` escape hatch, read from the package's own config
-        # (`config` above) — the suite-executing jobs run it instead of a `uses:`-call input.
-        "build_command": derive_build_command(config),
+        # #289/#335: the `[<primary>].build_command` declaration, read from the package's own
+        # config (`config` above) — the suite-executing and packaging jobs run it. Read from the
+        # package's primary-language table, generalized from the old `[python]`-only lookup.
+        "build_command": derive_build_command(config, primary),
+        # #335: the standard artifact build derived from the manifest (`uv build` / `<pm> pack` /
+        # `cargo package`), and the language to provision for it — so the packaging job builds the
+        # distribution before scanning, no caller build job. Empty when the manifest can't state a
+        # build (the job then scans a committed dist/ or a packaging_artifact, as before).
+        "packaging_build": packaging_build,
+        "packaging_language": primary if packaging_build else "",
         # #333: extra e2e freshness roots and their feature-gated excludes, read from the same
         # discovered `config` — a shared source tree beside the package that no `--scope`
         # at-or-below the package root can reach. Rendered as repeated `--extra-scope`/`--exclude`

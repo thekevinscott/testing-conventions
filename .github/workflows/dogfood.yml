@@ -42,7 +42,6 @@ on:
       - 'packages/node/**'
       - 'packages/python/**'
       - 'internals/checks/**'
-      - 'internals/detect/**'
       - '.github/workflows/dogfood.yml'
       # Re-run the dogfood whenever the reusable workflow it consumes changes.
       - '.github/workflows/testing-conventions.yml'
@@ -101,15 +100,15 @@ jobs:
     with:
       path: internals/checks/src
 
-  detect:
-    name: Shipped reusable workflow over the detect action's source
-    # #363: detect.py (the detect composite action's implementation) is a uv package
-    # (internals/detect) for the same reason internals/checks is — dogfooded through the
-    # shipped reusable workflow instead of the loose-script path (dogfood-github-helpers.yml),
-    # which a pyproject.toml would otherwise break. `path` is the inner src/ dir, exactly like
-    # the checks package above; the integration/e2e suites sit at internals/detect/tests/ as
-    # siblings outside the scan. `.github/actions/detect/action.yml` is unaffected — the
-    # composite-action `uses:` contract every consumer pins doesn't move (#363).
-    uses: ./.github/workflows/testing-conventions.yml
-    with:
-      path: internals/detect/src
+  # internals/detect (#363) is NOT dogfooded here, unlike internals/checks above. Its
+  # colocated detect_test.py alone doesn't reach the coverage floor — compute_outputs's
+  # orchestration is exercised only by the integration suite (fs mocked) and the full script
+  # by the e2e suite, both living outside src/. Scanning `internals/detect/src` alone misses
+  # them (coverage fails); scanning `internals/detect` (src/ + tests/ together) makes the
+  # isolation-lint's `unmocked-collaborator` rule flag detect_integration_test.py /
+  # detect_e2e_test.py, because that rule has no notion of test tiers — it applies full
+  # scrutiny to every `*_test.py` under the scanned root the moment a first-party package is
+  # declared (a pyproject.toml), which internals/checks avoids only because its colocated
+  # tests are independently sufficient. detect.py keeps its existing, proven test-quality gate
+  # instead: detect-action.yml's dedicated pytest run across all three tiers (100% coverage
+  # via plain coverage.py, verified independently of this tool's own gates).

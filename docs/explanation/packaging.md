@@ -39,7 +39,12 @@ The build the tool derives, from `path` and the manifest alone:
   package's own `prepare` / `prepack` lifecycle. A compile that lives in a bare `build` script —
   a name npm doesn't standardize — is named once in `[typescript].build_command` and runs first.
 - **Rust** (a `Cargo.toml` with a `[package]` table) → `cargo package`, writing
-  `target/package/*.crate`.
+  `target/package/*.crate`. When the crate is a member of an ancestor Cargo workspace, Cargo
+  always resolves the target directory — and so `cargo package`'s output — at the *workspace*
+  root, regardless of the invoking working directory. The derived command detects that from the
+  manifests alone and redirects with `--target-dir target`, so the crate lands at the package's
+  own `target/package/`, exactly where the job already scans, rather than at the workspace
+  root where the scan would never see it.
 
 So a native monorepo adopts the gate with `gates: ["packaging"]` and no bespoke build job: the job
 provisions the toolchain, builds, and scans on its own. The primary language is derived from the

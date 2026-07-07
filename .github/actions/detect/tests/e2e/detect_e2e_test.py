@@ -708,6 +708,45 @@ def test_e2e_packaging_build_is_cargo_package_for_a_crate(run_detect):
     assert out["packaging_language"] == "rust"
 
 
+def test_e2e_packaging_build_redirects_target_dir_for_a_workspace_member(run_detect):
+    # #360: `cargo package` for a workspace member always writes to the *workspace root's*
+    # target/package/, never the member's own, regardless of the invoking cwd — a plain
+    # "cargo package" would build successfully but leave the packaging job scanning an empty
+    # `packages/rust/target/package`. The derived command must redirect the target dir back to
+    # the member's own tree.
+    out = run_detect(
+        scan_path="packages/rust/src",
+        root_files={
+            "Cargo.toml": '[workspace]\nmembers = ["packages/rust"]\n',
+            "packages/rust/Cargo.toml": '[package]\nname = "x"\n',
+            "packages/rust/src/lib.rs": "pub fn f() {}\n",
+        },
+    )
+    assert out["packaging_build"] == "cargo package --target-dir target"
+    assert out["packaging_language"] == "rust"
+
+
+def test_e2e_packaging_build_unredirected_for_a_standalone_crate_with_no_workspace(run_detect):
+    # A crate with no ancestor [workspace] table at all is unaffected — same as today.
+    out = run_detect(
+        sources={"Cargo.toml": '[package]\nname = "x"\n', "src/lib.rs": "pub fn f() {}\n"},
+    )
+    assert out["packaging_build"] == "cargo package"
+
+
+def test_e2e_packaging_build_unredirected_for_a_crate_that_is_itself_the_workspace_root(run_detect):
+    # A single Cargo.toml carrying both [package] and [workspace] (a workspace-root package) is
+    # not a *member* of an ancestor workspace — its own target dir is already correct, so no
+    # redirect is needed.
+    out = run_detect(
+        sources={
+            "Cargo.toml": '[package]\nname = "x"\n\n[workspace]\nmembers = ["."]\n',
+            "src/lib.rs": "pub fn f() {}\n",
+        },
+    )
+    assert out["packaging_build"] == "cargo package"
+
+
 def test_e2e_packaging_build_prefers_the_wheel_for_a_pyo3_binding(run_detect):
     # A binding carries two manifests; the published artifact is the wheel, not the core crate.
     out = run_detect(

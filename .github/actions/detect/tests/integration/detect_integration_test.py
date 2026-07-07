@@ -56,7 +56,7 @@ def fs():
             patch.object(detect, "provision_rust", lambda root: state["provision_rust"]), \
             patch.object(detect, "derive_config", lambda package_root_rel, config_input: state["config"]), \
             patch.object(detect, "primary_language", lambda package_root: state["primary"]), \
-            patch.object(detect, "derive_packaging", lambda package_root, primary: state["packaging_build"]), \
+            patch.object(detect, "derive_packaging", lambda package_root, primary, repo_root: state["packaging_build"]), \
             patch.object(detect, "derive_build_command", lambda config, language: state["build_command"]), \
             patch.object(detect, "derive_e2e_extra_scope", lambda config: state["e2e_extra_scope"]), \
             patch.object(detect, "derive_e2e_exclude", lambda config: state["e2e_exclude"]):

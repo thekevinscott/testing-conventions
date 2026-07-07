@@ -22,9 +22,8 @@ from typing import Optional
 
 import click
 
+from checks.config import REUSABLE_WORKFLOW
 from checks.utils.check_failed import CheckFailed
-
-DEFAULT_WORKFLOW = ".github/workflows/testing-conventions.yml"
 
 _JOB_START = re.compile(r"^  e2e-verify:", re.MULTILINE)
 _NEXT_JOB = re.compile(r"^  packaging:", re.MULTILINE)
@@ -96,7 +95,7 @@ def find_missing_wiring(workflow_text: str) -> Optional[str]:
 
 
 @click.command()
-@click.argument("workflow", default=DEFAULT_WORKFLOW, type=click.Path())
+@click.argument("workflow", default=REUSABLE_WORKFLOW, type=click.Path())
 def cli(workflow: str) -> None:
     problem = find_missing_wiring(Path(workflow).read_text())
     if problem is not None:

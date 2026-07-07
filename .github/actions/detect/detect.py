@@ -225,9 +225,12 @@ def derive_build_command(config: str, language: str) -> str:
     discovered exactly like `config` itself — and names a build the manifest structurally can't
     express: a PEP 517 Python backend's missing pre-build shell step, or a TypeScript
     compile-before-`pack` in a `build` script npm doesn't standardize the name of. `language` is
-    the package's primary language (`primary_language`), so a package's own table is read. `''`
-    means no build step. Parsed with the same stdlib `tomllib`, so a malformed config never
-    crashes detect.
+    normally the package's primary language (`primary_language`), so a package's own table is
+    read — but callers pass the single present language as a fallback when there is no manifest
+    to derive a primary from (a bare pip Python package, #289's original case has none), since
+    `primary_language` alone would otherwise silently drop the build step for every manifest-less
+    package (#355). `''` means no build step. Parsed with the same stdlib `tomllib`, so a
+    malformed config never crashes detect.
     """
     if not language:
         return ""
@@ -433,6 +436,11 @@ def compute_outputs(
         package_root_rel = Path(".")
     config = derive_config(package_root_rel, config_input)
     primary = primary_language(package_root)
+    # #354/#355: a manifest-less pip Python package (no pyproject.toml, #289's original case) has
+    # no `primary_language` to key the build_command table on, but its language is unambiguous
+    # when exactly one of python/typescript is present — falls back to that language rather than
+    # silently dropping the build step. Ambiguous (both present, no manifest) still needs no guess.
+    bc_language = primary or (present[0] if len(present) == 1 else "")
     packaging_build = derive_packaging(package_root, primary, repo)
     return {
         "languages": _to_json(present),
@@ -457,7 +465,7 @@ def compute_outputs(
         # #289/#335: the `[<primary>].build_command` declaration, read from the package's own
         # config (`config` above) — the suite-executing and packaging jobs run it. Read from the
         # package's primary-language table, generalized from the old `[python]`-only lookup.
-        "build_command": derive_build_command(config, primary),
+        "build_command": derive_build_command(config, bc_language),
         # #335: the standard artifact build derived from the manifest (`uv build` / `<pm> pack` /
         # `cargo package`), and the language to provision for it — so the packaging job builds the
         # distribution before scanning, no caller build job. Empty when the manifest can't state a

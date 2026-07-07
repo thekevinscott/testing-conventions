@@ -7,7 +7,7 @@ is imported — a first-party collaborator (e.g. `CheckFailed`) would be flagged
 path is asserted against the propagated exception's `.message` instead.
 """
 from checks.e2e_verify_scope_wired.cli import (
-    DEFAULT_WORKFLOW,
+    REUSABLE_WORKFLOW,
     _BASE_ERROR,
     _EXCLUDE_ERROR,
     _EXTRA_SCOPE_ERROR,
@@ -175,7 +175,7 @@ def test_declares_the_workflow_argument_defaulting_to_the_reusable_workflow():
     # arg parsing, so this is what pins the decorator without a CliRunner collaborator.
     (argument,) = cli.params
     assert argument.name == "workflow"
-    assert argument.default == DEFAULT_WORKFLOW
+    assert argument.default == REUSABLE_WORKFLOW
 
 
 def test_finds_no_missing_wiring_when_scope_base_gate_and_extra_roots_are_all_present():

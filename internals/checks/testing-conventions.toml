@@ -1,0 +1,15 @@
+# Repo-only checks package config (#321). Coverage/lint floors stay at the zero-config
+# defaults (branch coverage on, fail_under = 100); only config.py is exempted.
+#
+# checks/config.py holds nothing but the shared workflow-path string constants every check
+# imports (the "re-export barrel" exemption case the README names). It has no behavior, so:
+[[python.exempt]]
+path = "checks/config.py"
+rules = ["colocated-test"]
+reason = "constants-only module: the shared workflow-path literals, imported by every check; no logic to unit-test (a colocated test could only re-assert the same string)"
+
+[[python.exempt]]
+path = "checks/config.py"
+rules = ["mutation"]
+lines = ["4-5"]
+reason = "path-string constants; a mutated literal is observable only through a real file read, which lives in the out-of-scope e2e suite (CliRunner over the real workflow), so no in-scope unit test can kill it"

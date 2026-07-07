@@ -7,5 +7,11 @@
 name = "gadget"
 version = "0.0.0"
 edition = "2021"
+# #351 generalized packaging_build to Rust (`cargo package`), so this fixture's own crate is now
+# built and scanned by the packaging job too — `cargo package` ships `tests/` by default, which
+# the packaging gate rejects as a shipped test file (#364). `integration lint` and the
+# coverage/mutation jobs still run `tests/integration.rs` from the source tree, never from the
+# package, so excluding it from the package has no effect on what those jobs measure.
+exclude = ["tests/*"]
 
 [workspace]

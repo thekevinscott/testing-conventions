@@ -77,8 +77,10 @@ name: Testing Conventions (self-test)
 #                         a module produced only by the `[python].build_command` (a maturin/napi
 #                         stand-in), so the coverage / mutation jobs pass only because the build ran
 #                         first. The fixture is deliberately manifest-less (bare pip); #355 traced a
-#                         post-`@v0`-flip red here to a genuine detect regression, not `@v0` lag —
-#                         see the job's own comment.
+#                         post-`@v0`-flip red here to a genuine detect regression on top of the usual
+#                         `@v0` lag, fixed in `detect.compute_outputs` — but still expected to fail
+#                         pre-release, same as before, since `detect` here is the published `@v0`
+#                         tag. See the job's own comment.
 #
 # gates (#262) — an allowlist so a consumer can run a subset of gates:
 #   gates-wired           asserts the reusable workflow scopes its jobs to a `gates` allowlist
@@ -707,11 +709,16 @@ jobs:
     # `[<language>].build_command` (#289, generalized #335), read by the reusable workflow's own
     # `detect` job — which is pinned to `actions/detect@v0` (internals/repo.md), not the local
     # action. #355 diagnosed a run of this job failing post-`@v0`-flip and traced it to a genuine
-    # detect regression, not `@v0` lag: #335 keyed `build_command`'s language lookup off
-    # `primary_language`, which requires a manifest — but this fixture is deliberately
+    # detect regression, not the usual `@v0`/binary lag: #335 keyed `build_command`'s language
+    # lookup off `primary_language`, which requires a manifest — but this fixture is deliberately
     # manifest-less (bare pip, #289's original case), so `primary_language` returned `''` and the
-    # build step was silently skipped. Fixed in detect by falling back to the single present
-    # language when no manifest names one (#355).
+    # build step was silently skipped. Fixed in `detect.compute_outputs` by falling back to the
+    # single present language when no manifest names one (#355) — verified by running `detect.py`
+    # directly against this fixture's config. That fix still can't turn *this* job green in any
+    # PR's own CI, though: `detect` here is `actions/detect@v0`, the published tag, not this PR's
+    # local source, so the fix only takes effect once a release moves `@v0` — the ordinary
+    # pre-release lag this job's original comment described, now compounding a real bug that was
+    # hiding behind it.
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'
@@ -733,7 +740,10 @@ jobs:
     # `[python].build_command` (#289, generalized #335), read by the reusable workflow's
     # `@v0`-pinned `detect` job. Like rust-toolchain-clean, a run of this job failing
     # post-`@v0`-flip was traced (#355) to a genuine detect regression — `primary_language`
-    # requiring a manifest this bare-pip fixture doesn't have — not `@v0` lag; fixed in detect.
+    # requiring a manifest this bare-pip fixture doesn't have — fixed in `detect.compute_outputs`.
+    # This job still shows red in any pre-release PR regardless, same as before #355: `detect` here
+    # is the published `@v0` tag, not this PR's local source, so the fix only reaches this job once
+    # a release moves `@v0`. Verify the fix directly against `detect.py` instead (see #355).
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'

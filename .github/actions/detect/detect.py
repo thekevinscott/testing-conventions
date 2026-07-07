@@ -215,6 +215,18 @@ def derive_config(package_root_rel: Path, config_input: str) -> str:
     return str(candidate) if candidate.is_file() else _CONFIG_DEFAULT
 
 
+def build_command_language(primary: str, present: list[str]) -> str:
+    """The language `derive_build_command` should read its `[<language>].build_command` table
+    from: `primary` (the manifest-derived `primary_language`) when there is one, else the single
+    entry in `present` (the file-paired languages `has_source` found) when that's unambiguous —
+    a manifest-less pip Python package (#289's original case) has no `primary_language` to key
+    on, but its language is unambiguous when exactly one of python/typescript is present. `''`
+    (no fallback, never a guess) when `present` holds zero or more than one language and there is
+    no manifest to disambiguate (#354/#355).
+    """
+    return primary or (present[0] if len(present) == 1 else "")
+
+
 def derive_build_command(config: str, language: str) -> str:
     """The `[<language>].build_command` build declaration (#289, generalized to all languages in
     #335) read from the in-effect config file `config` (the path `derive_config` resolved), or
@@ -436,11 +448,7 @@ def compute_outputs(
         package_root_rel = Path(".")
     config = derive_config(package_root_rel, config_input)
     primary = primary_language(package_root)
-    # #354/#355: a manifest-less pip Python package (no pyproject.toml, #289's original case) has
-    # no `primary_language` to key the build_command table on, but its language is unambiguous
-    # when exactly one of python/typescript is present — falls back to that language rather than
-    # silently dropping the build step. Ambiguous (both present, no manifest) still needs no guess.
-    bc_language = primary or (present[0] if len(present) == 1 else "")
+    bc_language = build_command_language(primary, present)
     packaging_build = derive_packaging(package_root, primary, repo)
     return {
         "languages": _to_json(present),

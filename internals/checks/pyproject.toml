@@ -19,9 +19,11 @@ dependencies = ["click>=8.1"]
 # in the group.
 tc-checks = "checks.cli:main"
 
+[tool.hatch.build]
+exclude = ["**/*_test.py"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/checks"]
-exclude = ["**/*_test.py"]
 
 [tool.pytest.ini_options]
 # `src` layout: put it on the path so the checks and their colocated tests import the package

@@ -51,7 +51,13 @@ merge** — do not wait to be told:
 - **Merge conflicts.** `git fetch origin <default-branch>` and check whether the branch still sits
   on top of it (`git merge-base --is-ancestor origin/<default-branch> HEAD`); if the default branch
   has moved, rebase and push before anything else (see **Rebase on request**). A green PR that has
-  drifted behind `main` is not mergeable, and the drift only grows while you wait.
+  drifted behind `main` is not mergeable, and the drift only grows while you wait. **If CI never
+  schedules a single run for the PR — no checks appear at all, or none appear for your latest push —
+  a merge conflict is the first thing to check, not a runner outage or an approval gate.** GitHub
+  cannot compute the PR's merge commit when the branch conflicts with the base, and it runs
+  `pull_request` checks against that merge commit — so a conflicted branch gets *no* runs scheduled,
+  which reads as "CI is down" when it is really "CI has nothing to run." Fetch, check the merge base,
+  rebase, and push; the runs appear once the branch merges cleanly again.
 - **GPG / commit-signing failures.** A `git commit` can fail (or a pushed commit can be rejected /
   flagged unverified) because signing didn't succeed — a missing key, an unset `user.signingkey`, an
   expired agent. Treat a signing error as a first-class blocker: read the actual `git` stderr,

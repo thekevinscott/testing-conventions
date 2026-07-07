@@ -775,6 +775,31 @@ def test_is_workspace_member_false_when_package_root_is_the_repo_root(tmp_path):
     assert detect.is_workspace_member(tmp_path, tmp_path) is False
 
 
+def test_is_workspace_member_false_for_repo_root_package_even_with_an_outer_workspace(tmp_path_factory):
+    # package_root == repo_root must short-circuit before any ancestor walk — even when an
+    # ancestor *above* repo_root genuinely declares a workspace, it must never be consulted.
+    # A `==`-vs-`is` regression on that comparison would fall through to the walk and find it.
+    base = tmp_path_factory.mktemp("outside-base")
+    (base / "Cargo.toml").write_text('[workspace]\nmembers = ["repo"]\n')
+    repo_root = base / "repo"
+    repo_root.mkdir()
+    assert detect.is_workspace_member(repo_root, repo_root) is False
+
+
+def test_is_workspace_member_true_when_an_intermediate_ancestor_declares_a_workspace(tmp_path):
+    # The workspace sits at neither package_root nor repo_root but strictly between them, so
+    # only an ancestor walk that actually iterates (not a no-op loop) can find it — repo_root
+    # itself declares no workspace, so the for/else fallback candidate alone can't explain a
+    # correct `True` here.
+    repo_root = tmp_path
+    mid = repo_root / "mid"
+    mid.mkdir()
+    (mid / "Cargo.toml").write_text('[workspace]\nmembers = ["packages/rust"]\n')
+    package_root = mid / "packages" / "rust"
+    package_root.mkdir(parents=True)
+    assert detect.is_workspace_member(package_root, repo_root) is True
+
+
 def test_is_workspace_member_falls_back_to_repo_root_when_package_root_is_unrelated(tmp_path_factory):
     # package_root and repo_root live in disjoint trees, so walking up from package_root never
     # reaches repo_root — the walk exhausts and repo_root is checked as the final fallback

@@ -1,12 +1,14 @@
 # Repo-only checks package config (#321). Coverage/lint floors stay at the zero-config
 # defaults (branch coverage on, fail_under = 100); only config.py is exempted.
 #
-# checks/config.py holds nothing but the shared workflow-path string constants every check
-# imports (the "re-export barrel" exemption case the README names). It has no behavior, so:
+# checks/config.py holds nothing but shared string constants — the workflow paths every check
+# imports and the detect fixture expected-outputs the detect-package-root checks assert against
+# (the "re-export barrel" exemption case the README names). It has no behavior, so it carries no
+# colocated test of its own; with no test to hold, there is likewise no test to co-change:
 [[python.exempt]]
 path = "checks/config.py"
-rules = ["colocated-test"]
-reason = "constants-only module: the shared workflow-path literals, imported by every check; no logic to unit-test (a colocated test could only re-assert the same string)"
+rules = ["colocated-test", "co-change"]
+reason = "constants-only module: shared workflow-path literals and detect fixture expected-outputs, imported by every check; no logic to unit-test (a colocated test could only re-assert the same string), so no colocated test exists to co-change when a constant is edited — a changed fixture constant is caught by the detect-package-root evaluate tests that hardcode it, a changed path literal by the e2e suite"
 
 [[python.exempt]]
 path = "checks/config.py"

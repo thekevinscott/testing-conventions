@@ -20,3 +20,19 @@ def test_gates_wired_is_registered():
 
 def test_rust_toolchain_wired_is_registered():
     assert "rust-toolchain-wired" in main.commands
+
+
+def test_wiring_detect_action_is_registered():
+    assert "wiring-detect-action" in main.commands
+
+
+def test_wiring_packaging_default_on_is_registered():
+    assert "wiring-packaging-default-on" in main.commands
+
+
+def test_wiring_e2e_default_on_is_registered():
+    assert "wiring-e2e-default-on" in main.commands
+
+
+def test_detect_routes_python_is_registered():
+    assert "detect-routes-python" in main.commands

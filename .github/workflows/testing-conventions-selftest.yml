@@ -76,11 +76,8 @@ name: Testing Conventions (self-test)
 #   build-command-clean   calls the reusable workflow over a fixture whose `widget.py` imports
 #                         a module produced only by the `[python].build_command` (a maturin/napi
 #                         stand-in), so the coverage / mutation jobs pass only because the build ran
-#                         first. The fixture is deliberately manifest-less (bare pip); #355 traced a
-#                         post-`@v0`-flip red here to a genuine detect regression on top of the usual
-#                         `@v0` lag, fixed in `detect.compute_outputs` — but still expected to fail
-#                         pre-release, same as before, since `detect` here is the published `@v0`
-#                         tag. See the job's own comment.
+#                         first. Expected to fail pre-release (the `@v0` detect emits no
+#                         `build_command` and the published binary rejects the config key).
 #
 # gates (#262) — an allowlist so a consumer can run a subset of gates:
 #   gates-wired           asserts the reusable workflow scopes its jobs to a `gates` allowlist
@@ -99,7 +96,7 @@ name: Testing Conventions (self-test)
 #                         `[python].build_command` that invokes cargo before producing the module
 #                         the suite imports, so the call passes only because cargo was provisioned
 #                         ahead of the build (ubuntu-24.04 runners carry no preinstalled Rust).
-#                         Same manifest-less fixture and #355 detect fix as build-command-clean.
+#                         Expected to fail pre-release, same `@v0`/binary lag as build-command-clean.
 #
 # rust colocated-test (#274) — the presence arm fans over rust:
 #   colocated-rust-wired  asserts the whole-tree colocated-test job fans out over the
@@ -705,20 +702,13 @@ jobs:
     # the build — and with it every suite-executing job — succeeds only because `rust_toolchain:
     # true` provisioned the toolchain ahead of the build step. The whole `uses:` call passing is
     # the green signal that cargo is present (and cached) in the python arm, where only
-    # setup-python runs otherwise. The build hook lives in the package's own config as
-    # `[<language>].build_command` (#289, generalized #335), read by the reusable workflow's own
-    # `detect` job — which is pinned to `actions/detect@v0` (internals/repo.md), not the local
-    # action. #355 diagnosed a run of this job failing post-`@v0`-flip and traced it to a genuine
-    # detect regression, not the usual `@v0`/binary lag: #335 keyed `build_command`'s language
-    # lookup off `primary_language`, which requires a manifest — but this fixture is deliberately
-    # manifest-less (bare pip, #289's original case), so `primary_language` returned `''` and the
-    # build step was silently skipped. Fixed in `detect.compute_outputs` by falling back to the
-    # single present language when no manifest names one (#355) — verified by running `detect.py`
-    # directly against this fixture's config. That fix still can't turn *this* job green in any
-    # PR's own CI, though: `detect` here is `actions/detect@v0`, the published tag, not this PR's
-    # local source, so the fix only takes effect once a release moves `@v0` — the ordinary
-    # pre-release lag this job's original comment described, now compounding a real bug that was
-    # hiding behind it.
+    # setup-python runs otherwise. The build hook now lives in the package's own config as
+    # `[python].build_command` (#289), read by the reusable workflow's own `detect` job — which is
+    # pinned to `actions/detect@v0` (internals/repo.md), not the local action, and driven by the
+    # *published* binary. So this call only fully validates once a release moves `@v0` to a detect
+    # that emits `build_command` AND publishes a binary that accepts the config key; until then the
+    # old detect emits nothing, the build step is skipped, and the old binary rejects the config —
+    # the call is expected to fail pre-release, exactly as mutation-monorepo-ts/py document.
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'
@@ -736,14 +726,11 @@ jobs:
     # (without it, pytest fails at import). The static colocated-test / lint jobs run without the
     # build and never see the generated module, so they pass as-is. `base: origin/main` exercises
     # the diff-scoped jobs over this PR-added fixture (its tests pin exact values, so every
-    # changed-line mutant is killed). The build hook lives in the package's own config as
-    # `[python].build_command` (#289, generalized #335), read by the reusable workflow's
-    # `@v0`-pinned `detect` job. Like rust-toolchain-clean, a run of this job failing
-    # post-`@v0`-flip was traced (#355) to a genuine detect regression — `primary_language`
-    # requiring a manifest this bare-pip fixture doesn't have — fixed in `detect.compute_outputs`.
-    # This job still shows red in any pre-release PR regardless, same as before #355: `detect` here
-    # is the published `@v0` tag, not this PR's local source, so the fix only reaches this job once
-    # a release moves `@v0`. Verify the fix directly against `detect.py` instead (see #355).
+    # changed-line mutant is killed). The build hook now lives in the package's own config as
+    # `[python].build_command` (#289), read by the reusable workflow's `@v0`-pinned `detect` job
+    # and run by the *published* binary — so, like rust-toolchain-clean and mutation-monorepo-ts/py,
+    # this call is expected to fail pre-release (the old detect emits no `build_command` and the old
+    # binary rejects the config key) and greens once a release moves `@v0` and publishes the binary.
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'

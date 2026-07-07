@@ -747,6 +747,55 @@ def test_e2e_packaging_build_unredirected_for_a_crate_that_is_itself_the_workspa
     assert out["packaging_build"] == "cargo package"
 
 
+def test_e2e_packaging_build_unredirected_when_the_package_root_is_the_repo_root(run_detect):
+    # The crate's manifest sits at the checkout root itself (package_root == repo_root) — there
+    # is no ancestor to inspect, so `is_workspace_member` returns early without walking upward.
+    out = run_detect(
+        root_files={"Cargo.toml": '[package]\nname = "x"\n', "src/lib.rs": "pub fn f() {}\n"},
+    )
+    assert out["packaging_build"] == "cargo package"
+
+
+def test_is_workspace_member_true_when_an_ancestor_up_to_repo_root_declares_a_workspace(tmp_path):
+    repo_root = tmp_path
+    (repo_root / "Cargo.toml").write_text('[workspace]\nmembers = ["packages/rust"]\n')
+    package_root = repo_root / "packages" / "rust"
+    package_root.mkdir(parents=True)
+    assert detect.is_workspace_member(package_root, repo_root) is True
+
+
+def test_is_workspace_member_false_when_no_ancestor_up_to_repo_root_declares_one(tmp_path):
+    repo_root = tmp_path
+    package_root = repo_root / "packages" / "rust"
+    package_root.mkdir(parents=True)
+    assert detect.is_workspace_member(package_root, repo_root) is False
+
+
+def test_is_workspace_member_false_when_package_root_is_the_repo_root(tmp_path):
+    assert detect.is_workspace_member(tmp_path, tmp_path) is False
+
+
+def test_is_workspace_member_falls_back_to_repo_root_when_package_root_is_unrelated(tmp_path_factory):
+    # package_root and repo_root live in disjoint trees, so walking up from package_root never
+    # reaches repo_root — the walk exhausts and repo_root is checked as the final fallback
+    # candidate, mirroring `derive_package_root`'s own boundary handling.
+    package_root = tmp_path_factory.mktemp("package-tree")
+    repo_root = tmp_path_factory.mktemp("repo-tree")
+    (repo_root / "Cargo.toml").write_text('[workspace]\nmembers = ["x"]\n')
+    assert detect.is_workspace_member(package_root, repo_root) is True
+
+
+def test_is_workspace_member_never_searches_outside_repo_root(tmp_path_factory):
+    # A workspace Cargo.toml sitting *above* repo_root (outside the checkout) must never count:
+    # the walk stops at repo_root, inclusive, even though repo_root itself declares no workspace.
+    base = tmp_path_factory.mktemp("outside-base")
+    (base / "Cargo.toml").write_text('[workspace]\nmembers = ["repo/packages/rust"]\n')
+    repo_root = base / "repo"
+    package_root = repo_root / "packages" / "rust"
+    package_root.mkdir(parents=True)
+    assert detect.is_workspace_member(package_root, repo_root) is False
+
+
 def test_e2e_packaging_build_prefers_the_wheel_for_a_pyo3_binding(run_detect):
     # A binding carries two manifests; the published artifact is the wheel, not the core crate.
     out = run_detect(

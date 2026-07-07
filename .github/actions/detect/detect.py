@@ -270,7 +270,35 @@ def read_cargo(package_root: Path) -> dict:
         return {}
 
 
-def derive_packaging(package_root: Path, primary: str) -> str:
+def is_workspace_member(package_root: Path, repo_root: Path) -> bool:
+    """True when `package_root`'s crate belongs to a Cargo workspace rooted at an ancestor (#360):
+    some directory strictly above `package_root`, down to `repo_root` inclusive, has a
+    `Cargo.toml` with a `[workspace]` table. Cargo resolves the target directory — and so `cargo
+    package`'s output — at the *workspace* root regardless of the invoking working directory, so
+    a workspace member's derived build must redirect `--target-dir` back to its own tree rather
+    than let the crate land where the packaging job's scan never looks.
+
+    A crate whose own `Cargo.toml` carries both `[package]` and `[workspace]` (a workspace-root
+    package) is not a *member* of an ancestor workspace — its own target dir is already correct,
+    so this only inspects ancestors, never `package_root` itself.
+    """
+    package_root = package_root.resolve()
+    repo_root = repo_root.resolve()
+    if package_root == repo_root:
+        return False
+    ancestors = []
+    for ancestor in package_root.parents:
+        ancestors.append(ancestor)
+        if ancestor == repo_root:
+            break
+    else:
+        # The walk never reached repo_root (package_root isn't under it): fall back to
+        # checking repo_root itself, mirroring `derive_package_root`'s own boundary handling.
+        ancestors.append(repo_root)
+    return any("workspace" in read_cargo(ancestor) for ancestor in ancestors)
+
+
+def derive_packaging(package_root: Path, primary: str, repo_root: Path) -> str:
     """The command that builds the package's publishable distribution from its manifest alone
     (#335), or `''` when the manifest doesn't standardize one. The reusable packaging job runs it
     at the package root, then scans the built artifact — so a native-building monorepo adopts the
@@ -283,7 +311,9 @@ def derive_packaging(package_root: Path, primary: str) -> str:
       lives in a bare `build` script instead (whose name npm doesn't standardize) is named in
       `[typescript].build_command`, run first.
     - **Rust** (a `Cargo.toml` with a `[package]` table) → `cargo package` — writes
-      `target/package/*.crate`.
+      `target/package/*.crate`. When `package_root` is a member of an ancestor Cargo workspace
+      (#360), that command redirects with `--target-dir target` so the crate lands at the
+      package's own `target/package/` instead of the workspace root's.
 
     `''` for a package whose manifest can't state the build (a non-`[project]` pyproject, a
     workspace-only `Cargo.toml`): the job then scans a committed `dist/` if present, or a
@@ -293,10 +323,17 @@ def derive_packaging(package_root: Path, primary: str) -> str:
     which language builds is an exact key lookup — a language the table doesn't name yields no
     build, no comparison to misjudge.
     """
+    def rust_package() -> str:
+        if "package" not in read_cargo(package_root):
+            return ""
+        if is_workspace_member(package_root, repo_root):
+            return "cargo package --target-dir target"
+        return "cargo package"
+
     builders = {
         "python": lambda: "uv build" if "project" in read_pyproject(package_root) else "",
         "typescript": lambda: f"{ts_package_manager(package_root)} pack --pack-destination dist",
-        "rust": lambda: "cargo package" if "package" in read_cargo(package_root) else "",
+        "rust": rust_package,
     }
     build = builders.get(primary)
     return build() if build else ""
@@ -396,7 +433,7 @@ def compute_outputs(
         package_root_rel = Path(".")
     config = derive_config(package_root_rel, config_input)
     primary = primary_language(package_root)
-    packaging_build = derive_packaging(package_root, primary)
+    packaging_build = derive_packaging(package_root, primary, repo)
     return {
         "languages": _to_json(present),
         # Whole-tree colocated-test (#274): the file-paired languages plus rust — the rust

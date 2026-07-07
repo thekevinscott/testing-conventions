@@ -167,6 +167,38 @@ fn rejects_a_python_build_command_with_no_reason_self_guard() {
 }
 
 #[test]
+fn loads_a_typescript_build_command_with_a_reason() {
+    // #335: `build_command` (plus a required `reason`) generalizes from `[python]`-only to all
+    // three language tables — the uniform escape hatch for a build the manifest structurally can't
+    // express (npm defines no standard build command; the TS compile-before-pack is a
+    // project-specific script `pnpm pack` doesn't run). Starts red: the schema has no
+    // `build_command` on the `[typescript]` table yet, so `deny_unknown_fields` rejects it.
+    assert!(
+        load_config(fixture("typescript_build_command.toml")).is_ok(),
+        "a [typescript].build_command with a reason must load once the schema generalizes"
+    );
+}
+
+#[test]
+fn loads_a_rust_build_command_with_a_reason() {
+    // #335: the same generalization for `[rust]`.
+    assert!(
+        load_config(fixture("rust_build_command.toml")).is_ok(),
+        "a [rust].build_command with a reason must load once the schema generalizes"
+    );
+}
+
+#[test]
+fn rejects_a_typescript_build_command_with_a_blank_reason_self_guard() {
+    // The reason bar generalizes with the key: a reasonless escape hatch can never be a silent
+    // pass, in any language.
+    assert!(
+        load_config(fixture("typescript_build_command_blank_reason.toml")).is_err(),
+        "a [typescript].build_command with a blank reason must be rejected (self-guard)"
+    );
+}
+
+#[test]
 fn loads_an_e2e_extra_scope_and_exclude_table() {
     // #333: `[e2e].extra_scope` / `exclude` are valid config keys. The binary never uses them —
     // detect renders them into repeated `--extra-scope`/`--exclude` arguments the e2e-verify job

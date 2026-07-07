@@ -59,10 +59,12 @@ Two inputs and one config key cover what a manifest cannot express. They carry t
 [exemptions](./guide/configure#exempt-a-file) — a reasoned last resort, with the manifest-level
 fix preferred:
 
-- **`[python] build_command`** — a Python build step beyond the manifest's own hooks (a PEP 517
-  backend has no pre-build shell step), declared in the package's own `testing-conventions.toml`
-  with a required `reason` and run at the package root. Python-only: an npm `prepare` /
-  `postinstall` script and Cargo's `build.rs` cover TypeScript and Rust.
+- **`build_command`** — a build step beyond the manifest's own hooks, declared per language in the
+  package's own `testing-conventions.toml` with a required `reason` and run at the package root.
+  Each language's standard build is derived (a maturin/PEP 517 backend, Cargo's `build.rs` and
+  `cargo package`, npm's `prepare` / `prepack`); `build_command` names only what an ecosystem
+  structurally can't standardize — a PEP 517 backend's absent pre-build shell step, or a TypeScript
+  compile in a `build` script npm doesn't run on `pack`.
 - **`rust_toolchain`** — forces cargo provisioning when no manifest declares the need.
 - **`gates`** — restricts a call to named gates, for the rare package where one genuinely
   cannot run.

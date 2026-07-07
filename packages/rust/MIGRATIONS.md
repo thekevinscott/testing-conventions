@@ -629,6 +629,14 @@ table so a consumer declaring it still loads the rest of their config under `den
 Purely additive: the SDK gains `config::E2eConfig` and a `Config::e2e` field, both defaulting to
 absent/empty, so a package declaring no `[e2e]` table is unchanged.
 
+Generalizes **`build_command`** from `[python]`-only to all three language tables (#335): the
+uniform escape hatch for a build the manifest structurally can't express, held to the same required
+`reason`. `[typescript].build_command` motivates it — the packaging gate's forthcoming auto-build
+needs a way to name a TS compile-before-`pack` that npm doesn't standardize the name of — but the
+key is offered under every table for parity. The config loader accepts it everywhere so a
+consumer's config loads under `deny_unknown_fields`; the reader wiring lands as a follow-up. A
+package that sets no `build_command` is unchanged.
+
 ### Required changes
 
 `config::PythonConfig` gains `build_command: Option<String>` and `reason: String` (#289). Both
@@ -651,6 +659,18 @@ must add the field — `None` preserves prior behavior:
 Config { python: p, typescript: t, rust: r }
 // After:
 Config { python: p, typescript: t, rust: r, e2e: None }
+```
+
+`config::TypeScriptConfig` and `config::RustConfig` each gain `build_command: Option<String>` and
+`reason: String` (#335) — the same fields `PythonConfig` already carries — with serde defaults, so
+a `testing-conventions.toml` without them parses unchanged; a struct literal adds the fields
+(`None` / `String::new()` preserve prior behavior):
+
+```rust
+// Before:
+TypeScriptConfig { coverage: Some(cov), exempt: vec![] }
+// After:
+TypeScriptConfig { coverage: Some(cov), exempt: vec![], build_command: None, reason: String::new() }
 ```
 
 The reusable workflow's `build_command` **input is removed** (#289); a consumer setting it on the

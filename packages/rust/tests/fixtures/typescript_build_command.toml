@@ -1,0 +1,3 @@
+[typescript]
+build_command = "pnpm build"
+reason = "npm has no standard build command; the compile is a project-specific `build` script pnpm pack does not run"

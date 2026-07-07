@@ -26,7 +26,7 @@ Every rule is a CLI command that fails CI on a violation.
 
 **E2E**
 
-- [`e2e attest`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) / [`e2e verify`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) — `attest` runs the e2e suite locally and records the commit it ran against; `verify` checks that receipt in CI and never runs e2e.
+- [`e2e attest`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) / [`e2e verify`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) — `attest` runs the e2e suite locally and records the commit it ran against; `verify` checks that receipt in CI and never runs e2e; an `[e2e]` config table joins shared source trees beside the package into the freshness walk ([#333](https://github.com/thekevinscott/testing-conventions/issues/333)).
 <!-- #endregion rules -->
 
 ## The three kinds of tests
@@ -183,6 +183,30 @@ ran the suite against this code; it never runs the suite itself. On a pull reque
 diff-relative model coverage and mutation use — so a branch that changed the source
 re-attests and a branch that didn't stays green, which keeps the gate squash-safe.
 
+**Shared source trees:** a package whose e2e artifact is compiled from a source tree beside it —
+a native core bound into several language bindings — declares that tree in its
+`testing-conventions.toml`, and a commit there stales the package's attestation the same way a
+change to its own source does ([#333](https://github.com/thekevinscott/testing-conventions/issues/333)):
+
+```toml
+[e2e]
+# A source tree compiled into this package but living outside it: its commits
+# join the freshness walk.
+extra_scope = ["packages/rust/src"]
+# Feature-gated subtrees compiled out of this package: their commits leave the
+# attestation fresh.
+exclude = ["packages/rust/src/cli", "packages/rust/src/bin"]
+```
+
+Both keys are lists of repo-root-relative directories, and they map to the repeatable
+`e2e verify --extra-scope <dir>` / `--exclude <dir>` flags: the attestation must name the newest
+in-range commit touching the union of `--scope` and every extra scope, with the excluded subtrees
+carved out. The reusable workflow reads the keys through `detect` and appends the flags itself, so
+the config table is the whole declaration a package makes; a package declaring neither key behaves
+exactly as before. The walk is git-level, so it holds identically across Python, TypeScript, and
+Rust. See the [e2e explanation](https://thekevinscott.github.io/testing-conventions/explanation/e2e#a-shared-source-tree-beside-the-package)
+and the [config reference](https://thekevinscott.github.io/testing-conventions/reference/config#e2e-extra_scope-and-exclude).
+
 **Checked:** the e2e location is a convention, not its own gate, and CI never runs
 the suite. CI checks the attestation: `e2e verify` requires the committed
 `e2e-attestation.json` to name the latest code commit.
@@ -291,6 +315,14 @@ coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
 # code is compiled, measured, and mutated:
 features = ["cli"]
 coverage = { regions = 100, lines = 100 }
+
+# A source tree compiled into this package but living outside it (a native core
+# bound into several bindings): its commits stale this package's e2e attestation.
+# Feature-gated subtrees under `exclude` are compiled out of the package, so
+# their commits leave it fresh:
+[e2e]
+extra_scope = ["packages/rust/src"]
+exclude = ["packages/rust/src/cli", "packages/rust/src/bin"]
 ```
 
 ## License

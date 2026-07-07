@@ -5,9 +5,13 @@ name: Detect action (tests)
 # out of `.github/actions/detect`, which keeps only the composite action manifest) and is covered
 # here by integration tests (the filesystem mocked) and e2e tests (the real filesystem), run with
 # pytest. This is the gate that goes red before a behavior change lands and green after it.
-# `internals/detect` also carries the colocated-test/coverage/mutation dogfood bar via
-# dogfood.yml, exactly like internals/checks — this workflow is the pytest-direct layer beneath
-# that, plus the composite action's own end-to-end wiring test.
+#
+# Unlike internals/checks, this is NOT also dogfooded through the shipped reusable workflow's
+# `unit coverage` gate: that gate measures only the colocated unit tier, and detect.py's colocated
+# detect_test.py deliberately covers just its pure, filesystem-free helpers — compute_outputs and
+# the rest of the orchestration are covered by the integration + e2e suites below, by design
+# (predating the #363 move). This workflow's combined pytest run is the real coverage/correctness
+# gate; see internals/repo.md, "The detect action source" for the full explanation.
 
 on:
   pull_request:

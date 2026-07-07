@@ -5,11 +5,12 @@ name: Dogfood (.github helpers)
 # migrated #302 checks are first-party Python with real logic, so they earn colocated tests,
 # isolation, coverage, integration-lint, and the diff-scoped mutation gate like anything else.
 #
-# detect.py (the detect composite action's source) moved to internals/detect (#363) and is
-# dogfooded through the shipped reusable workflow instead (dogfood.yml's `detect` job), exactly
-# like internals/checks — a real uv package earns the full gate set, not the loose-script
-# conventions this workflow runs. `.github/actions/` now holds only composite-action manifests
-# (YAML), nothing to scan, so it's dropped from the loop below.
+# detect.py (the detect composite action's source) moved to internals/detect (#363), gated by
+# detect-action.yml's own pytest run instead — its colocated unit tests deliberately don't reach
+# 100% alone (compute_outputs is integration/e2e-tested by design), so it doesn't fit the shipped
+# reusable workflow's unit-coverage gate the way internals/checks does. `.github/actions/` now
+# holds only composite-action manifests (YAML), nothing to scan, so it's dropped from the loop
+# below.
 #
 # Scoped to the helper *code* — .github/scripts/ — and deliberately NOT:
 #   - .github/selftest/**  : intentional negative fixtures (below-floor, surviving mutants,

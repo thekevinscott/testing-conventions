@@ -42,7 +42,6 @@ on:
       - 'packages/node/**'
       - 'packages/python/**'
       - 'internals/checks/**'
-      - 'internals/detect/**'
       - '.github/workflows/dogfood.yml'
       # Re-run the dogfood whenever the reusable workflow it consumes changes.
       - '.github/workflows/testing-conventions.yml'
@@ -100,21 +99,3 @@ jobs:
     uses: ./.github/workflows/testing-conventions.yml
     with:
       path: internals/checks/src
-
-  detect:
-    name: Shipped reusable workflow over the detect action source
-    # #363: the detect composite action's Python source moved out of `.github/actions/detect`
-    # (which now holds only the action.yml manifest the `uses:` contract pins) into
-    # `internals/detect`, a uv package dogfooded exactly like internals/checks above —
-    # colocated-test, isolation, coverage, integration-lint, and diff-scoped mutation, replacing
-    # the loose-script conventions run over `.github/actions/` in dogfood-github-helpers.yml.
-    #
-    # `path` is the inner `src/` dir (detect.py + its colocated detect_test.py), not the package
-    # root; the full integration/e2e suite sits at internals/detect/tests/ (a sibling, outside
-    # the scan). The package root (internals/detect, where the pyproject lives) is still derived
-    # for the coverage/mutation venv. detect-action.yml covers the pytest-direct layer beneath
-    # this (colocated unit + integration + e2e in one run) plus the composite action's own
-    # end-to-end wiring test.
-    uses: ./.github/workflows/testing-conventions.yml
-    with:
-      path: internals/detect/src

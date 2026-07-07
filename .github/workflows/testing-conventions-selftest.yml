@@ -213,13 +213,14 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Install coverage toolchain (coverage.py + pytest)
-        run: python -m pip install --quiet coverage pytest
       - name: A sub-floor suite must fail `unit coverage`
         # The same invocation the reusable workflow's unit-coverage job runs; the non-zero exit is
         # what fails a consumer's build. The assertion is a tested check in the repo-only checks
-        # package (internals/checks, #321/#328); `uv run` syncs it and runs the subcommand.
-        run: uv run --project internals/checks tc-checks below-floor
+        # package (internals/checks, #321/#328). The published `unit coverage --language python`
+        # measures with coverage.py + pytest through a bare `python3`, which under `uv run` is the
+        # checks venv (click only) — so `--with coverage --with pytest` layers them into that
+        # environment for the run (no `pip`).
+        run: uv run --with coverage --with pytest --project internals/checks tc-checks below-floor
 
   mutation-gate:
     name: An un-exempted survivor trips the mutation gate
@@ -247,11 +248,13 @@ jobs:
     # #258 regression guard. `unit mutation --language python` spawns the adapter shipped in
     # the testing-conventions *wheel* (`python3 -m testing_conventions.mutation.main`, #248),
     # resolved from the Python environment. The published npm binary (`npx`) does not put that
-    # module on the path — the wheel must be installed alongside it. Install the same toolchain
-    # the reusable workflow's mutation job provides and drive the published command over a
-    # mutation-clean fixture: it clears the gate only when the adapter resolves. (Whole-tree,
-    # not `--base`, so the adapter always runs — a `--base` diff with no changed Python lines
-    # returns early and never spawns it, which is why this trap stayed hidden.)
+    # module on the path — the wheel must be importable by the `python3` it spawns. Under
+    # `uv run` that `python3` is the checks venv (click only), so `--with testing-conventions
+    # --with pytest` layers the wheel-shipped adapter and its pytest runner into that environment
+    # for the run (no `pip`). Drive the published command over a mutation-clean fixture: it clears
+    # the gate only when the adapter resolves. (Whole-tree, not `--base`, so the adapter always
+    # runs — a `--base` diff with no changed Python lines returns early and never spawns it, which
+    # is why this trap stayed hidden.)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -259,15 +262,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install the Python mutation toolchain (wheel + pytest)
-        # The wheel ships the adapter (#248) and brings cosmic-ray; pytest runs the suite.
-        # Wheel last, matching the reusable workflow (keeps the #92 drift guard quiet).
-        run: python -m pip install --quiet pytest testing-conventions
       - name: A mutation-clean Python library clears `unit mutation`
         # The zero exit proves the wheel-shipped adapter resolves (#258). The assertion is a tested
         # check in the repo-only checks package (internals/checks, #321/#328); `uv run` syncs it and
-        # runs the subcommand.
-        run: uv run --project internals/checks tc-checks python-mutation-clean
+        # runs the subcommand, with the adapter layered in via `--with`.
+        run: uv run --with testing-conventions --with pytest --project internals/checks tc-checks python-mutation-clean
 
   mutation-wired:
     name: The reusable workflow enforces unit mutation

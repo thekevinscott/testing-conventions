@@ -42,6 +42,7 @@ on:
       - 'packages/node/**'
       - 'packages/python/**'
       - 'internals/checks/**'
+      - 'internals/detect/**'
       - '.github/workflows/dogfood.yml'
       # Re-run the dogfood whenever the reusable workflow it consumes changes.
       - '.github/workflows/testing-conventions.yml'
@@ -99,3 +100,16 @@ jobs:
     uses: ./.github/workflows/testing-conventions.yml
     with:
       path: internals/checks/src
+
+  detect:
+    name: Shipped reusable workflow over the detect action's source
+    # #363: detect.py (the detect composite action's implementation) is a uv package
+    # (internals/detect) for the same reason internals/checks is — dogfooded through the
+    # shipped reusable workflow instead of the loose-script path (dogfood-github-helpers.yml),
+    # which a pyproject.toml would otherwise break. `path` is the inner src/ dir, exactly like
+    # the checks package above; the integration/e2e suites sit at internals/detect/tests/ as
+    # siblings outside the scan. `.github/actions/detect/action.yml` is unaffected — the
+    # composite-action `uses:` contract every consumer pins doesn't move (#363).
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      path: internals/detect/src

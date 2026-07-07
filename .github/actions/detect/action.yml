@@ -2,9 +2,10 @@ name: 'Detect languages'
 description: >-
   Repo-only helper for the reusable testing-conventions workflow: detect which languages
   (and conditions) are present under a path and emit them as step outputs. NOT part of the
-  published testing-conventions tool — it exists only in this repository and carries its own
-  integration + e2e tests (see tests/). The workflow calls it as a composite action so the
-  script is available without checking out this repo into the consumer's workspace.
+  published testing-conventions tool — it exists only in this repository. Its implementation
+  and tests live in internals/detect/ (#363); this action.yml is a thin wrapper the workflow
+  calls as a composite action so the script is available without checking out this repo into
+  the consumer's workspace.
 
 inputs:
   languages:
@@ -85,6 +86,10 @@ runs:
         LANGUAGES: ${{ inputs.languages }}
         SCAN_PATH: ${{ inputs.path }}
         CONFIG: ${{ inputs.config }}
-      # `$GITHUB_ACTION_PATH` is this action's directory, so detect.py is found whether the
-      # action is used locally (./.github/actions/detect) or by a consumer (owner/repo@ref).
-      run: python3 "$GITHUB_ACTION_PATH/detect.py"
+      # `$GITHUB_ACTION_PATH` is this action's directory. The implementation itself lives at
+      # internals/detect/src/detect.py (#363) — a repo-only helper, not a published action, so
+      # it's found relative to this directory whether the action is used locally
+      # (./.github/actions/detect) or by a consumer (owner/repo@ref): GitHub Actions checks out
+      # the whole repo at the pinned ref to resolve a composite action, so the relative path
+      # up to the repo root and back down into internals/ resolves either way.
+      run: python3 "$GITHUB_ACTION_PATH/../../../internals/detect/src/detect.py"

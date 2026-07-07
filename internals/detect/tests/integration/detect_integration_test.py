@@ -6,14 +6,12 @@ one external is the filesystem, so the `fs` fixture patches the boundary functio
 test sets the facts it needs and asserts the emitted sets. The patching lives in the fixture, never
 inline in a test body.
 """
-import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # .github/actions/detect
-import detect  # noqa: E402
+import detect
 
 
 @pytest.fixture

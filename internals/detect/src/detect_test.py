@@ -4,11 +4,7 @@ Unit-level: the pure helpers exercised in isolation (no filesystem, no mocks). T
 (`compute_outputs`) is covered by the integration suite with the filesystem boundary mocked, and
 the whole script end-to-end by the e2e suite against a real tree — both under `tests/`.
 """
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import detect  # noqa: E402
+import detect
 
 
 def test_eligible_empty_restrictor_allows_any_language():

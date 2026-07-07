@@ -1,11 +1,14 @@
 name: Dogfood (.github helpers)
 
 # Hold this repo's own .github/ helper scripts to the same conventions we enforce on every
-# shipped package (#237): detect.py (the detect composite action) and move_major_tag.py (the
-# rolling-tag helper) are first-party Python with real logic, so they earn colocated tests,
-# isolation, coverage, integration-lint, and the diff-scoped mutation gate like anything else.
+# shipped package (#237): move_major_tag.py (the rolling-tag helper) is first-party Python with
+# real logic, so it earns colocated tests, isolation, coverage, integration-lint, and the
+# diff-scoped mutation gate like anything else. detect.py moved to internals/detect/ (#363) — a
+# real uv package now dogfooded through the shipped reusable workflow (dogfood.yml) instead of
+# here, per the same reasoning #321 moved the checks helpers: a pyproject.toml inside this scan
+# would flip the conventions tool into package-mode for the whole directory.
 #
-# Scoped to the helper *code* — .github/actions/ + .github/scripts/ — and deliberately NOT:
+# Scoped to the helper *code* — .github/scripts/ — and deliberately NOT:
 #   - .github/selftest/**  : intentional negative fixtures (below-floor, surviving mutants,
 #                            un-colocated reds) that the rules are *supposed* to fire on;
 #   - .github/workflows/** : YAML, nothing to scan.
@@ -17,7 +20,6 @@ name: Dogfood (.github helpers)
 on:
   pull_request:
     paths:
-      - '.github/actions/**'
       - '.github/scripts/**'
       - '.github/workflows/dogfood-github-helpers.yml'
   workflow_dispatch:
@@ -51,7 +53,7 @@ jobs:
         run: |
           set -uo pipefail
           fail=0
-          for dir in .github/actions .github/scripts; do
+          for dir in .github/scripts; do
             for rule in "unit colocated-test" "unit lint" "unit coverage" "integration lint" "unit mutation --base origin/main"; do
               echo "::group::testing-conventions $rule --language python $dir"
               if ! npx -y testing-conventions $rule --language python "$dir"; then

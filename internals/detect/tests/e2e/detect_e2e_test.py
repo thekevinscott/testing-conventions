@@ -10,16 +10,14 @@ the fixture.
 """
 import os
 import runpy
-import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import detect  # noqa: E402
+import detect
 
-SCRIPT = Path(__file__).resolve().parents[2] / "detect.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "src" / "detect.py"
 
 
 @pytest.fixture

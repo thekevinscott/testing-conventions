@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+# Repo-only: the implementation of the `detect` composite action (.github/actions/detect),
+# the reusable workflow's monorepo-detection primitive (#277 onward). Never published to an
+# index — the composite action's action.yml invokes it directly as a plain script
+# (`python3 <path>/detect.py`, stdlib only, no install step), and it is dogfooded through the
+# shipped reusable workflow (dogfood.yml) like any other package (#363).
+name = "testing-conventions-detect"
+version = "0"
+description = "Repo-only implementation of the `detect` composite action for testing-conventions (#363)."
+requires-python = ">=3.11"
+
+[tool.hatch.build]
+exclude = ["**/*_test.py"]
+
+[tool.hatch.build.targets.wheel]
+# A single top-level module, not a package dir: map src/detect.py -> detect.py in the wheel.
+include = ["src/detect.py"]
+
+[tool.hatch.build.targets.wheel.sources]
+src = ""
+
+[tool.pytest.ini_options]
+# `src` layout: put it on the path so detect.py and its colocated/integration/e2e tests import
+# it normally (`import detect`) — no per-file `sys.path.insert` hack.
+pythonpath = ["src"]

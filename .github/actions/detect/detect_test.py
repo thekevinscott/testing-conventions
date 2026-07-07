@@ -41,3 +41,19 @@ def test_package_manager_from_field_extracts_the_name():
 
 def test_package_manager_from_field_empty_is_none():
     assert detect._package_manager_from_field("") is None
+
+
+def test_build_command_language_prefers_primary():
+    assert detect.build_command_language("python", ["python", "typescript"]) == "python"
+
+
+def test_build_command_language_falls_back_to_the_sole_present_language():
+    assert detect.build_command_language("", ["python"]) == "python"
+
+
+def test_build_command_language_empty_when_no_manifest_and_none_present():
+    assert detect.build_command_language("", []) == ""
+
+
+def test_build_command_language_empty_when_no_manifest_and_ambiguous():
+    assert detect.build_command_language("", ["python", "typescript"]) == ""

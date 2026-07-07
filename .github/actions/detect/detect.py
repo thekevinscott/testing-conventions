@@ -215,6 +215,25 @@ def derive_config(package_root_rel: Path, config_input: str) -> str:
     return str(candidate) if candidate.is_file() else _CONFIG_DEFAULT
 
 
+def build_command_language(primary: str, present: list[str]) -> str:
+    """The language `derive_build_command` should read its `[<language>].build_command` table
+    from: `primary` (the manifest-derived `primary_language`) when there is one, else the single
+    entry in `present` (the file-paired languages `has_source` found) when that's unambiguous —
+    a manifest-less pip Python package (#289's original case) has no `primary_language` to key
+    on, but its language is unambiguous when exactly one of python/typescript is present. `''`
+    (no fallback, never a guess) when `present` holds zero or more than one language and there is
+    no manifest to disambiguate (#354/#355). Unpacking (not a `len(...) == 1` comparison) names
+    the "exactly one" boundary without a numeric literal to guess at.
+    """
+    if primary:
+        return primary
+    try:
+        (sole,) = present
+    except ValueError:
+        return ""
+    return sole
+
+
 def derive_build_command(config: str, language: str) -> str:
     """The `[<language>].build_command` build declaration (#289, generalized to all languages in
     #335) read from the in-effect config file `config` (the path `derive_config` resolved), or
@@ -225,9 +244,12 @@ def derive_build_command(config: str, language: str) -> str:
     discovered exactly like `config` itself — and names a build the manifest structurally can't
     express: a PEP 517 Python backend's missing pre-build shell step, or a TypeScript
     compile-before-`pack` in a `build` script npm doesn't standardize the name of. `language` is
-    the package's primary language (`primary_language`), so a package's own table is read. `''`
-    means no build step. Parsed with the same stdlib `tomllib`, so a malformed config never
-    crashes detect.
+    normally the package's primary language (`primary_language`), so a package's own table is
+    read — but callers pass the single present language as a fallback when there is no manifest
+    to derive a primary from (a bare pip Python package, #289's original case has none), since
+    `primary_language` alone would otherwise silently drop the build step for every manifest-less
+    package (#355). `''` means no build step. Parsed with the same stdlib `tomllib`, so a
+    malformed config never crashes detect.
     """
     if not language:
         return ""
@@ -433,6 +455,7 @@ def compute_outputs(
         package_root_rel = Path(".")
     config = derive_config(package_root_rel, config_input)
     primary = primary_language(package_root)
+    bc_language = build_command_language(primary, present)
     packaging_build = derive_packaging(package_root, primary, repo)
     return {
         "languages": _to_json(present),
@@ -457,7 +480,7 @@ def compute_outputs(
         # #289/#335: the `[<primary>].build_command` declaration, read from the package's own
         # config (`config` above) — the suite-executing and packaging jobs run it. Read from the
         # package's primary-language table, generalized from the old `[python]`-only lookup.
-        "build_command": derive_build_command(config, primary),
+        "build_command": derive_build_command(config, bc_language),
         # #335: the standard artifact build derived from the manifest (`uv build` / `<pm> pack` /
         # `cargo package`), and the language to provision for it — so the packaging job builds the
         # distribution before scanning, no caller build job. Empty when the manifest can't state a

@@ -572,6 +572,37 @@ def test_e2e_build_command_empty_when_value_is_not_a_string(run_detect):
     assert out["build_command"] == ""
 
 
+def test_e2e_build_command_derived_for_a_manifest_less_pip_python_package(run_detect):
+    # #354/#355: a bare pip Python package (no pyproject.toml — python_env defaults to pip, #289's
+    # original case) still declares [python].build_command. #335 generalized the lookup to key off
+    # `primary_language`, which requires a manifest and returns '' here, silently dropping the
+    # build step for every manifest-less package. With exactly one language present, build_command
+    # falls back to it.
+    out = run_detect(
+        languages='["python"]',
+        root_files={
+            "testing-conventions.toml": (
+                '[python]\nbuild_command = "cp generated.py.tmpl generated.py"\n'
+            ),
+        },
+        sources={"widget.py": "from generated import OFFSET\n"},
+    )
+    assert out["build_command"] == "cp generated.py.tmpl generated.py"
+
+
+def test_e2e_build_command_empty_when_manifest_less_and_ambiguous(run_detect):
+    # Two manifest-less languages present at once: no single language to fall back to, so
+    # build_command stays empty rather than guessing which table applies.
+    out = run_detect(
+        languages='["python","typescript"]',
+        root_files={
+            "testing-conventions.toml": '[python]\nbuild_command = "cp a.tmpl a.py"\n',
+        },
+        sources={"widget.py": "x = 1\n", "index.ts": "export const x = 1;\n"},
+    )
+    assert out["build_command"] == ""
+
+
 # --- #333: the [e2e] extra_scope / exclude freshness roots, read from the package's own config ---
 
 

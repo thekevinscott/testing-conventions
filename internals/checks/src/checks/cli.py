@@ -14,6 +14,7 @@ from checks.e2e_verify_scope_wired.cli import cli as e2e_verify_scope_wired
 from checks.gates_wired.cli import cli as gates_wired
 from checks.github_helpers_wired.cli import cli as github_helpers_wired
 from checks.mutation_package_root_wired.cli import cli as mutation_package_root_wired
+from checks.packaging_build_wired.cli import cli as packaging_build_wired
 from checks.packaging_package_root_wired.cli import cli as packaging_package_root_wired
 from checks.rust_toolchain_wired.cli import cli as rust_toolchain_wired
 from checks.wiring_detect_action.cli import cli as wiring_detect_action
@@ -33,6 +34,7 @@ main.add_command(e2e_verify_scope_wired, name="e2e-verify-scope-wired")
 main.add_command(gates_wired, name="gates-wired")
 main.add_command(github_helpers_wired, name="github-helpers-wired")
 main.add_command(mutation_package_root_wired, name="mutation-package-root-wired")
+main.add_command(packaging_build_wired, name="packaging-build-wired")
 main.add_command(packaging_package_root_wired, name="packaging-package-root-wired")
 main.add_command(rust_toolchain_wired, name="rust-toolchain-wired")
 main.add_command(wiring_detect_action, name="wiring-detect-action")

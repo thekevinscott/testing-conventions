@@ -658,3 +658,111 @@ def test_e2e_extra_scope_skips_blank_and_non_string_entries(run_detect):
         },
     )
     assert out["e2e_extra_scope"] == "--extra-scope packages/rust/src"
+
+
+# --- #335: the derived packaging build (`uv build` / `<pm> pack` / `cargo package`) ---
+
+
+def test_e2e_packaging_build_is_uv_build_for_a_python_project(run_detect):
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["packaging_build"] == "uv build"
+    assert out["packaging_language"] == "python"
+
+
+def test_e2e_packaging_build_is_pnpm_pack_for_a_pnpm_package(run_detect):
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": '{"name": "x"}\n',
+            "packages/ts/pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+            "packages/ts/src/widget.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["packaging_build"] == "pnpm pack --pack-destination dist"
+    assert out["packaging_language"] == "typescript"
+
+
+def test_e2e_packaging_build_is_npm_pack_for_an_npm_package(run_detect):
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": '{"name": "x"}\n',
+            "packages/ts/package-lock.json": "{}\n",
+            "packages/ts/src/widget.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["packaging_build"] == "npm pack --pack-destination dist"
+
+
+def test_e2e_packaging_build_is_cargo_package_for_a_crate(run_detect):
+    out = run_detect(
+        sources={"Cargo.toml": '[package]\nname = "x"\n', "src/lib.rs": "pub fn f() {}\n"},
+    )
+    assert out["packaging_build"] == "cargo package"
+    assert out["packaging_language"] == "rust"
+
+
+def test_e2e_packaging_build_prefers_the_wheel_for_a_pyo3_binding(run_detect):
+    # A binding carries two manifests; the published artifact is the wheel, not the core crate.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/Cargo.toml": '[package]\nname = "core"\n',
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["packaging_build"] == "uv build"
+    assert out["packaging_language"] == "python"
+
+
+def test_e2e_packaging_build_empty_when_the_manifest_cant_state_it(run_detect):
+    # A pyproject with no [project] table (tool config only) can't be `uv build`-ed from the
+    # manifest alone — no packaging build is derived, and the job falls back to a committed dist.
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": "[tool.black]\nline-length = 100\n",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["packaging_build"] == ""
+    assert out["packaging_language"] == ""
+
+
+def test_e2e_packaging_build_empty_on_a_malformed_cargo(run_detect):
+    # A malformed Cargo.toml never crashes detect — read_cargo falls back to empty, so no
+    # `[package]` is seen and no build is derived.
+    out = run_detect(
+        sources={"Cargo.toml": "not valid toml [[[", "src/lib.rs": "pub fn f() {}\n"},
+    )
+    assert out["packaging_build"] == ""
+
+
+def test_e2e_packaging_build_empty_when_no_manifest_names_a_language(run_detect):
+    # No pyproject / package.json / Cargo.toml at the package root — the primary language is
+    # unresolved, so the dispatch table names no builder and no build is derived (the empty
+    # branch of `derive_packaging`).
+    out = run_detect(sources={"src/widget.py": "x = 1\n"})
+    assert out["packaging_build"] == ""
+    assert out["packaging_language"] == ""
+
+
+def test_e2e_build_command_is_read_from_the_typescript_table(run_detect):
+    # #335: `build_command` reads the package's primary-language table — a TS package's
+    # `[typescript].build_command` (the compile-before-pack), not `[python]`.
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": '{"name": "x"}\n',
+            "packages/ts/testing-conventions.toml": '[typescript]\nbuild_command = "pnpm build"\n',
+            "packages/ts/src/widget.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["build_command"] == "pnpm build"

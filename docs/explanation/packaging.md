@@ -26,8 +26,31 @@ The check unpacks each distribution and scans for the language's test pattern:
 - **Rust** — no crate-root `tests/` directory in the `.crate`. Inline `#[cfg(test)]` units compile
   out of the consumer artifact for free; only the integration `tests/` needs a Cargo `exclude`.
 
-In the [workflow](../reference/workflow) the check is **locate-or-skip**: it runs over a
-conventional `dist/` found in the checkout, or over a built artifact you upload and name via the
-`packaging_artifact` input — and is skipped, never failed, when neither exists, so the drop-in is
-safe on a repository that hasn't built anything yet. A named artifact holding no recognized
-distribution is a misconfigured upload, and that fails.
+## How the workflow gets an artifact to scan
+
+In the [workflow](../reference/workflow) the check is **build-then-scan**: the packaging job
+derives the distribution build from the package's own manifest, runs it, and scans what it wrote.
+The build the tool derives, from `path` and the manifest alone:
+
+- **Python** (a `pyproject.toml` with a `[project]` table) → `uv build`, writing `dist/*.whl` and
+  `*.tar.gz`. The PEP 517 build resolves its own build dependencies and compiles a maturin/PyO3
+  core along the way.
+- **TypeScript** (a `package.json`) → `<pnpm|npm> pack --pack-destination dist`, which runs the
+  package's own `prepare` / `prepack` lifecycle. A compile that lives in a bare `build` script —
+  a name npm doesn't standardize — is named once in `[typescript].build_command` and runs first.
+- **Rust** (a `Cargo.toml` with a `[package]` table) → `cargo package`, writing
+  `target/package/*.crate`.
+
+So a native monorepo adopts the gate with `gates: ["packaging"]` and no bespoke build job: the job
+provisions the toolchain, builds, and scans on its own. The primary language is derived from the
+manifest — a PyO3 binding (`pyproject.toml` + `Cargo.toml`) publishes a Python wheel, a napi
+binding (`package.json` + `Cargo.toml`) publishes an npm tarball — so a binding's second, private
+manifest doesn't misroute the build.
+
+The job still runs when you supply a prebuilt distribution instead: a built artifact you upload and
+name via the `packaging_artifact` input is scanned as-is, and a conventional `dist/` already
+committed in the checkout is scanned in place. When the manifest structurally can't state a build
+(a workspace-only `Cargo.toml`, a non-`[project]` pyproject), the job falls back to that committed
+`dist/`. It is skipped — never failed — when none of the three holds, so the drop-in is safe on a
+repository that hasn't built anything yet. A named artifact holding no recognized distribution is a
+misconfigured upload, and that fails.

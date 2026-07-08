@@ -1,0 +1,5 @@
+# First-party package `myproject`. The barrel test below imports the package's own
+# re-export surface (`from . import …`) — the unit under test, never a collaborator.
+[project]
+name = "myproject"
+version = "0.0.0"

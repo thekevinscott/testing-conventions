@@ -234,12 +234,22 @@ impl Visitor for UnitIsolationVisitor<'_> {
                     }),
                     // `from . import sub` — each name is a submodule.
                     None => {
+                        // A re-export barrel is tested by importing its public surface: in
+                        // `__init___test.py` (base `__init__`), a bare `from . import …`
+                        // (`level == 1`) names the package's own `__init__.py` — the unit
+                        // under test — so every bound name is the SUT, never a collaborator
+                        // (`__all__` / `__version__` included, since they live in the SUT).
+                        // Parity with TS's `index.test.ts` / `import … from './index.js'`
+                        // (#382). Scoped exactly: a `from .. import …` (`level == 2`) reaches
+                        // the *parent* package, and a `from .core import …` takes the `Some`
+                        // branch above — both stay collaborators.
+                        let barrel_sut = self.base == "__init__" && level == 1;
                         for alias in &node.names {
                             let name = alias.name.as_str();
                             self.imports.push(ImportRecord {
                                 display: format!("{dots}{name}"),
                                 line,
-                                is_uut: name == self.base,
+                                is_uut: barrel_sut || name == self.base,
                                 symbols: vec![name.to_string()],
                                 module: None,
                             });
@@ -1206,6 +1216,37 @@ mod tests {
                 "myproject",
                 "from . import ledger\nfrom . import widget\n"
             ),
+            vec![".ledger".to_string()]
+        );
+    }
+
+    #[test]
+    fn visitor_treats_barrel_reexport_import_as_the_unit_under_test() {
+        // #382: in `__init___test.py` (base `__init__`), a bare `from . import …`
+        // imports the package's own re-export surface — the SUT — so no name is a
+        // collaborator, `__all__` / `__version__` included (they live in the SUT).
+        assert!(unmocked(
+            "__init__",
+            "myproject",
+            "from . import Thing, __all__, __version__\n"
+        )
+        .is_empty());
+        // Reaching AROUND the barrel into a sibling module directly is still a
+        // collaborator (the `module: Some("core")` branch, `core != __init__`).
+        assert_eq!(
+            unmocked("__init__", "myproject", "from .core import Thing\n"),
+            vec![".core".to_string()]
+        );
+        // `from .. import x` (level 2) resolves to the PARENT package, not the SUT
+        // file — still a collaborator even inside a barrel test.
+        assert_eq!(
+            unmocked("__init__", "myproject", "from .. import sibling\n"),
+            vec!["..sibling".to_string()]
+        );
+        // The barrel shortcut is scoped to the `__init__` base: an ordinary
+        // `widget_test.py` doing `from . import ledger` is still a collaborator.
+        assert_eq!(
+            unmocked("widget", "myproject", "from . import ledger\n"),
             vec![".ledger".to_string()]
         );
     }

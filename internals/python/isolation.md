@@ -112,6 +112,17 @@ it internally. So the rule keys off imports:
 - The **unit under test** is the import whose module's last segment equals the
   test's base name (`widget_test.py` → `widget`; `from pkg.widget import build`,
   `from .widget import build`, and `import pkg.widget` all match). Never flagged.
+  A **re-export barrel** is the one shape where that comparison can't succeed: a
+  barrel is tested by importing its public surface, and `__init___test.py` → base
+  `__init__` is never spelled by any re-exported name. So a bare, level-1
+  `from . import …` in `__init___test.py` names the package's own `__init__.py`
+  surface — the SUT itself — and is never flagged (`__all__` / `__version__`
+  included, since they live in the SUT). This is the Python twin of TypeScript's
+  `index.test.ts` / `import … from './index.js'` (#382). The scope is exact: only
+  the bare `from . import …` (`module: None`, `level == 1`) resolves to the SUT
+  file. A sibling-direct import (`from .core import …`, the `module: Some("core")`
+  branch, `core != __init__`) still names a collaborator and is still flagged, and
+  a `from .. import …` (`level == 2`) resolves to the *parent* package, not the SUT.
 - An import is **first-party** when it's relative (`from . import x`,
   `from .mod import y`) or its head segment is the dist package (slice 1's
   `pyproject.toml` discovery).

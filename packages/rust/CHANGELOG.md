@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`unit mutation --language rust`: concurrent invocations no longer each duplicate the
+  cargo-mutants install** (#385, found investigating #370/epic #366). Provisioning the pinned
+  `cargo-mutants` binary was a bare "does it exist; if not, `cargo install`" check with no
+  locking — under the old single-binary-at-a-time test harness this never raced, but any
+  concurrent invocation (a monorepo's per-package matrix, a test runner that parallelizes across
+  binaries) that hits a cold provisioning cache now had every caller launch its own full
+  from-source install simultaneously. `provision` now takes an advisory file lock around the
+  install, re-checking for the binary after acquiring it (another caller may have just finished),
+  so concurrent callers wait for one install instead of each duplicating it. No CLI or config
+  change.
+
 - **`unit lint` (Python): a re-export barrel's own test no longer flags its SUT as an unmocked
   collaborator** (#382). A barrel is tested by importing its public surface, so `__init___test.py`
   doing `from . import Thing, __all__, __version__` names the package's own `__init__.py` — the

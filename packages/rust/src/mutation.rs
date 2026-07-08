@@ -1216,6 +1216,53 @@ mod tests {
     }
 
     #[test]
+    fn provision_does_not_duplicate_the_install_under_concurrent_callers() {
+        // #385: on a cold cache, N concurrent callers must share one install, not each run
+        // their own — cargo-mutants' from-source compile duplicated N times (instead of once)
+        // is what turned a ~1-minute cold-cache cost into ~7 minutes under nextest (#370). A
+        // barrier forces both threads to observe the absent binary together, and the install
+        // closure sleeps briefly to widen the race window so this reproduces deterministically
+        // rather than flakily.
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+        use std::time::Duration;
+
+        let tmp = unique_tmp();
+        let bin = tmp.join("bin").join("cargo-mutants");
+        let install_count = Arc::new(AtomicU64::new(0));
+        let barrier = Arc::new(Barrier::new(2));
+
+        let handles: Vec<_> = (0..2)
+            .map(|_| {
+                let bin = bin.clone();
+                let install_count = Arc::clone(&install_count);
+                let barrier = Arc::clone(&barrier);
+                thread::spawn(move || {
+                    barrier.wait();
+                    provision(&bin, || {
+                        install_count.fetch_add(1, Ordering::SeqCst);
+                        thread::sleep(Duration::from_millis(50));
+                        std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
+                        std::fs::write(&bin, b"binary").unwrap();
+                        Ok(())
+                    })
+                })
+            })
+            .collect();
+
+        for h in handles {
+            h.join().expect("provisioning thread must not panic").unwrap();
+        }
+
+        assert_eq!(
+            install_count.load(Ordering::SeqCst),
+            1,
+            "two concurrent callers on a cold cache must share one install, not each run their own"
+        );
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
     fn resolve_cache_base_prefers_xdg_then_home_then_temp() {
         let xdg = |s: &str| Some(OsString::from(s));
         // XDG wins when set and non-empty.

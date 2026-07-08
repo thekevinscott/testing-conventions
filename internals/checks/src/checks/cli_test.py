@@ -18,6 +18,10 @@ def test_build_hermetic_cli_is_registered():
     assert "build-hermetic-cli" in main.commands
 
 
+def test_colocated_rust_red_is_registered():
+    assert "colocated-rust-red" in main.commands
+
+
 def test_colocated_rust_wired_is_registered():
     assert "colocated-rust-wired" in main.commands
 
@@ -116,6 +120,10 @@ def test_packaging_red_is_registered():
 
 def test_python_mutation_clean_is_registered():
     assert "python-mutation-clean" in main.commands
+
+
+def test_red_path_hermetic_wired_is_registered():
+    assert "red-path-hermetic-wired" in main.commands
 
 
 def test_rolling_release_wired_is_registered():

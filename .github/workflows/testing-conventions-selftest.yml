@@ -244,6 +244,7 @@ jobs:
 
   integration-lint-new-arms-trip:
     name: The TypeScript and Rust integration-lint arms fail on a violation
+    needs: [build-cli]
     # The fail path for the new arms (#126): a `uses:` call that fails would fail the
     # whole run, so drive the published command directly — the exact invocation the
     # workflow's rust/typescript arms run — and assert the non-zero exit that fails a
@@ -251,6 +252,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v6
       - name: The rust/typescript integration-lint arms trip on a violation and pass when clean
         # The assertion (drive each published invocation, then pass/fail on its exit code) is a
@@ -260,9 +263,12 @@ jobs:
 
   below-floor:
     name: Below-floor suite trips the coverage gate
+    needs: [build-cli]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v6
       - uses: actions/setup-python@v6
         with:
@@ -278,9 +284,12 @@ jobs:
 
   mutation-gate:
     name: An un-exempted survivor trips the mutation gate
+    needs: [build-cli]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v6
       - uses: dtolnay/rust-toolchain@stable
       # The published CLI provisions cargo-mutants itself now (#242); only the cargo
@@ -299,6 +308,7 @@ jobs:
 
   python-mutation-clean:
     name: A clean Python library passes `unit mutation`
+    needs: [build-cli]
     # #258 regression guard. `unit mutation --language python` spawns the mutation adapter
     # (`python3 -m testing_conventions.mutation.main`, #248), resolved from the Python
     # environment. The published npm binary (`npx`) does not put that module on the path — it
@@ -312,6 +322,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v6
       - uses: actions/setup-python@v5
         with:
@@ -427,6 +439,7 @@ jobs:
 
   isolation-red:
     name: A crate with an un-isolated unit trips the lint check
+    needs: [build-cli]
     # The fail path: a `uses:` call that fails would fail the whole run, so drive the
     # published `unit lint` command directly on a crate whose unit test reaches out of
     # its module (effectful `std::fs`) and assert the non-zero exit that fails a
@@ -434,6 +447,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v6
       - name: A crate with an out-of-module unit-test call must fail `unit lint`
         # The assertion (drive the published `unit lint`, then pass/fail on its non-zero exit) is a
@@ -469,12 +484,15 @@ jobs:
 
   packaging-red:
     name: A built artifact shipping a test file trips the packaging check
+    needs: [build-cli]
     # The fail path: a `uses:` call that fails would fail the whole run, so drive the
     # published `packaging` command directly on a committed wheel that ships
     # widget/core_test.py and assert the non-zero exit that fails a consumer's build.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v6
       - name: A wheel that ships a `*_test.py` must fail `packaging`
         # The assertion (drive the published `packaging`, then pass/fail on its non-zero exit) is a
@@ -514,6 +532,7 @@ jobs:
 
   coverage-rust-red:
     name: A below-floor Rust crate trips the coverage arm
+    needs: [build-cli]
     # The fail path for #171: a `uses:` call that fails would fail the whole run, so
     # drive the published `unit coverage --language rust` directly — the exact
     # invocation the workflow's rust coverage arm runs — on a sub-floor crate and
@@ -521,6 +540,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -854,22 +875,23 @@ jobs:
 
   colocated-rust-red:
     name: A crate with an untested fn trips the rust colocated-test arm
+    needs: [build-cli]
     # The fail path for #274: a `uses:` call that fails would fail the whole run, so
-    # drive the published `unit colocated-test --language rust` directly — the exact
+    # drive the hermetic `unit colocated-test --language rust` directly — the exact
     # invocation the workflow's rust arm runs — on a crate whose bodied `fn` has no
     # inline `#[cfg(test)]` module, and assert the non-zero exit that fails a
     # consumer's build.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        uses: ./.github/actions/download-hermetic-cli
+      - uses: astral-sh/setup-uv@v6
       - name: A bodied fn with no inline test module must fail `unit colocated-test`
-        run: |
-          if npx -y testing-conventions unit colocated-test --language rust \
-            .github/selftest/colocated-rust/red; then
-            echo "::error::expected the orphan crate to fail the rust colocated-test arm, but it passed"
-            exit 1
-          fi
-          echo "orphan crate correctly tripped the rust colocated-test arm"
+        # The assertion (drive the hermetic `unit colocated-test --language rust`, then pass/fail on
+        # its non-zero exit) is a tested check in the repo-only checks package (internals/checks,
+        # #321/#328/#379); `uv run` syncs it and runs the subcommand.
+        run: uv run --project internals/checks tc-checks colocated-rust-red
 
   # ---- #277: the monorepo package-root primitive ----
   #
@@ -1015,6 +1037,7 @@ jobs:
 
   packaging-package-root-red:
     name: A per-package dist/ shipping a test file trips the packaging check
+    needs: [build-cli]
     # The fail path for #280: a `uses:` call that fails would fail the whole run (the same
     # constraint `packaging-red` documents), so drive the published `packaging` command
     # directly on the committed tarball at `red/dist/` — the exact artifact a per-package
@@ -1022,6 +1045,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v6
       - name: A per-package dist/ shipping a test file must fail packaging
         # The assertion (drive the published `packaging` on the per-package tarball, then pass/fail
@@ -1111,3 +1136,21 @@ jobs:
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks uv-provisioning-wired
+
+  # ---- #379: the direct-drive red-path jobs run the hermetic CLI, not the published npx ----
+
+  red-path-hermetic-wired:
+    name: The direct-drive red-path jobs consume the hermetic CLI
+    # Red→green wiring signal for #379: every failure-path job that drives the CLI by hand (to
+    # assert a non-zero exit a `uses:` call can't) must download the hermetic-cli artifact and run
+    # the HEAD binary, or the merge gate still validates those assertions against npm-latest. A
+    # static check over this workflow, so it tracks the file regardless of what the published
+    # binary ships; each red-path job's own run proves the hermetic binary actually resolves.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
+      - name: every direct-drive red-path job must download the hermetic CLI
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks red-path-hermetic-wired

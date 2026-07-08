@@ -1,7 +1,11 @@
-"""The mutation-gate check — repo-only (#302 #309, #321, #328).
+"""The colocated-rust-red check — repo-only (#274, #379).
 
-Backs the `tc-checks mutation-gate` subcommand: the `mutation-gate` job in
-`.github/workflows/testing-conventions-selftest.yml` drives the hermetic-CLI (built-from-HEAD) `unit mutation --language rust` command over a clean crate that must pass and a survivor crate that must fail, and asserts each exit code (#302 #309).
+Backs the `tc-checks colocated-rust-red` subcommand: the `colocated-rust-red` job in
+`.github/workflows/testing-conventions-selftest.yml` drives the hermetic-CLI (built-from-HEAD)
+`unit colocated-test --language rust` command over a crate whose bodied `fn` has no inline
+`#[cfg(test)]` module and asserts the non-zero exit that fails a consumer's build (#274). Moved
+off the inline `run: |` bash the job carried into a tested check (#379), which also routes it
+through the hermetic binary rather than the published npx.
 
 A standalone, colocated-tested check rather than an inline `run: |` bash block: inline workflow
 bash is untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:`
@@ -20,14 +24,9 @@ from checks.utils.run_checks import run_checks
 
 CHECKS = [
     (
-        [*HERMETIC_CLI, "unit", "mutation", "--language", "rust", ".github/selftest/mutation/clean"],
-        False,
-        "clean crate passes unit mutation",
-    ),
-    (
-        [*HERMETIC_CLI, "unit", "mutation", "--language", "rust", ".github/selftest/mutation/survivor"],
+        [*HERMETIC_CLI, "unit", "colocated-test", "--language", "rust", ".github/selftest/colocated-rust/red"],
         True,
-        "survivor crate trips the mutation gate",
+        "orphan crate trips the rust colocated-test arm",
     ),
 ]
 

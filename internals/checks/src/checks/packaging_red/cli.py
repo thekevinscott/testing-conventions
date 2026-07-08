@@ -1,7 +1,7 @@
 """The packaging-red check — repo-only (#302 #309, #321, #328).
 
 Backs the `tc-checks packaging-red` subcommand: the `packaging-red` job in
-`.github/workflows/testing-conventions-selftest.yml` drives the published `packaging` command over a built wheel that ships a `*_test.py` and asserts the non-zero exit that fails a consumer's build (#302 #309).
+`.github/workflows/testing-conventions-selftest.yml` drives the hermetic-CLI (built-from-HEAD) `packaging` command over a built wheel that ships a `*_test.py` and asserts the non-zero exit that fails a consumer's build (#302 #309).
 
 A standalone, colocated-tested check rather than an inline `run: |` bash block: inline workflow
 bash is untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:`
@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import click
 
+from checks.config import HERMETIC_CLI
 from checks.utils.run_checks import run_checks
 
 CHECKS = [
     (
-        ["npx", "-y", "testing-conventions", "packaging", ".github/selftest/packaging/red/widget-0.1.0-py3-none-any.whl", "--language", "python"],
+        [*HERMETIC_CLI, "packaging", ".github/selftest/packaging/red/widget-0.1.0-py3-none-any.whl", "--language", "python"],
         True,
         "red wheel trips the packaging check",
     ),

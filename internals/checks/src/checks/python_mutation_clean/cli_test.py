@@ -12,7 +12,7 @@ from checks.python_mutation_clean.cli import CHECKS, cli
 def test_checks_are_the_expected_invocations():
     assert CHECKS == [
     (
-        ["npx", "-y", "testing-conventions", "unit", "mutation", "--language", "python", ".github/selftest/mutation/python-clean"],
+        ["./hermetic-cli/testing-conventions", "unit", "mutation", "--language", "python", ".github/selftest/mutation/python-clean"],
         False,
         "clean Python library passes unit mutation",
     ),

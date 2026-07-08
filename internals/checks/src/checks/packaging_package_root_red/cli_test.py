@@ -12,7 +12,7 @@ from checks.packaging_package_root_red.cli import CHECKS, cli
 def test_checks_are_the_expected_invocations():
     assert CHECKS == [
     (
-        ["npx", "-y", "testing-conventions", "packaging", ".github/selftest/packaging-package-root/red/dist/packaging-package-root-fixture-0.0.0.tgz", "--language", "typescript"],
+        ["./hermetic-cli/testing-conventions", "packaging", ".github/selftest/packaging-package-root/red/dist/packaging-package-root-fixture-0.0.0.tgz", "--language", "typescript"],
         True,
         "red per-package dist tarball trips the packaging check",
     ),

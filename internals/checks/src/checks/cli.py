@@ -10,6 +10,7 @@ import click
 from checks.below_floor.cli import cli as below_floor
 from checks.build_command_wired.cli import cli as build_command_wired
 from checks.build_hermetic_cli.cli import cli as build_hermetic_cli
+from checks.colocated_rust_red.cli import cli as colocated_rust_red
 from checks.colocated_rust_wired.cli import cli as colocated_rust_wired
 from checks.coverage_package_root_wired.cli import cli as coverage_package_root_wired
 from checks.coverage_rust_red.cli import cli as coverage_rust_red
@@ -35,6 +36,7 @@ from checks.packaging_package_root_red.cli import cli as packaging_package_root_
 from checks.packaging_package_root_wired.cli import cli as packaging_package_root_wired
 from checks.packaging_red.cli import cli as packaging_red
 from checks.python_mutation_clean.cli import cli as python_mutation_clean
+from checks.red_path_hermetic_wired.cli import cli as red_path_hermetic_wired
 from checks.rolling_release_wired.cli import cli as rolling_release_wired
 from checks.rust_toolchain_wired.cli import cli as rust_toolchain_wired
 from checks.uv_provisioning_wired.cli import cli as uv_provisioning_wired
@@ -51,6 +53,7 @@ def main() -> None:
 main.add_command(below_floor, name="below-floor")
 main.add_command(build_command_wired, name="build-command-wired")
 main.add_command(build_hermetic_cli, name="build-hermetic-cli")
+main.add_command(colocated_rust_red, name="colocated-rust-red")
 main.add_command(colocated_rust_wired, name="colocated-rust-wired")
 main.add_command(coverage_package_root_wired, name="coverage-package-root-wired")
 main.add_command(coverage_rust_red, name="coverage-rust-red")
@@ -76,6 +79,7 @@ main.add_command(packaging_package_root_red, name="packaging-package-root-red")
 main.add_command(packaging_package_root_wired, name="packaging-package-root-wired")
 main.add_command(packaging_red, name="packaging-red")
 main.add_command(python_mutation_clean, name="python-mutation-clean")
+main.add_command(red_path_hermetic_wired, name="red-path-hermetic-wired")
 main.add_command(rolling_release_wired, name="rolling-release-wired")
 main.add_command(rust_toolchain_wired, name="rust-toolchain-wired")
 main.add_command(uv_provisioning_wired, name="uv-provisioning-wired")

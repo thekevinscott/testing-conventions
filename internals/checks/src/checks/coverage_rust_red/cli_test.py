@@ -12,7 +12,7 @@ from checks.coverage_rust_red.cli import CHECKS, cli
 def test_checks_are_the_expected_invocations():
     assert CHECKS == [
     (
-        ["npx", "-y", "testing-conventions", "unit", "coverage", "--language", "rust", "--config", ".github/selftest/coverage-rust/below/testing-conventions.toml", ".github/selftest/coverage-rust/below"],
+        ["./hermetic-cli/testing-conventions", "unit", "coverage", "--language", "rust", "--config", ".github/selftest/coverage-rust/below/testing-conventions.toml", ".github/selftest/coverage-rust/below"],
         True,
         "below-floor crate trips the rust coverage gate",
     ),

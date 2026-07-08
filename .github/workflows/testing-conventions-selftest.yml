@@ -1111,3 +1111,21 @@ jobs:
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks uv-provisioning-wired
+
+  # ---- #379: the direct-drive red-path jobs run the hermetic CLI, not the published npx ----
+
+  red-path-hermetic-wired:
+    name: The direct-drive red-path jobs consume the hermetic CLI
+    # Red→green wiring signal for #379: every failure-path job that drives the CLI by hand (to
+    # assert a non-zero exit a `uses:` call can't) must download the hermetic-cli artifact and run
+    # the HEAD binary, or the merge gate still validates those assertions against npm-latest. A
+    # static check over this workflow, so it tracks the file regardless of what the published
+    # binary ships; each red-path job's own run proves the hermetic binary actually resolves.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
+      - name: every direct-drive red-path job must download the hermetic CLI
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks red-path-hermetic-wired

@@ -118,6 +118,10 @@ def test_python_mutation_clean_is_registered():
     assert "python-mutation-clean" in main.commands
 
 
+def test_red_path_hermetic_wired_is_registered():
+    assert "red-path-hermetic-wired" in main.commands
+
+
 def test_rolling_release_wired_is_registered():
     assert "rolling-release-wired" in main.commands
 

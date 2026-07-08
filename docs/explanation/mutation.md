@@ -92,7 +92,7 @@ runner that runs your own suite:
 | Language | Engine | You provide |
 | --- | --- | --- |
 | TypeScript | [Stryker](https://stryker-mutator.io/), driven via its Node API by an adapter bundled in the npm package | `vitest` |
-| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray), driven via its library API by an adapter bundled in the wheel, with a baseline check guarding against a broken suite reporting a false pass | `pytest` |
+| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray), driven via its library API by an adapter bundled in the wheel, with a baseline check guarding against a broken suite reporting a false pass; each mutant's run ends at its first failing test | `pytest` |
 | Rust | [cargo-mutants](https://github.com/sourcefrog/cargo-mutants), provisioned on first use (a pinned `cargo install` into the tool's own cache) and run from there | the cargo toolchain that builds and tests your crate |
 
 A run lists each survivor with its file, line, and mutation, and fails on any un-exempted one.

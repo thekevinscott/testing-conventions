@@ -33,9 +33,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - run: pip install maturin
+      - uses: astral-sh/setup-uv@v6
       - name: Build wheel
-        run: maturin build --release -o dist
+        # uv provisions maturin and builds the wheel from disk — no pip. `--no-project` keeps
+        # `packages/python`'s own `[project]` table out of the run env (maturin reads it as build
+        # config instead), so this stays a build-tooling invocation, not a project sync.
+        run: uv run --with maturin --no-project maturin build --release -o dist
         working-directory: packages/python
       - uses: actions/upload-artifact@v7
         with:

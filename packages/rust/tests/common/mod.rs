@@ -1,4 +1,4 @@
-//! Shared test helper for the mutation suites (#202, #203).
+//! Shared test helper for the mutation suites.
 //!
 //! The engines write into the project dir — Stryker its sandbox, cosmic-ray mutates
 //! files in place — so two runs in the same fixture would collide when cargo runs tests
@@ -6,7 +6,7 @@
 //! TypeScript, with the runner-only `node_modules` symlinked rather than copied) so every
 //! test gets a pristine, isolated project and the committed fixtures are never written to.
 //!
-//! TypeScript also drives the bundled Node mutation adapter (#246): the rule spawns
+//! TypeScript also drives the bundled Node mutation adapter: the rule spawns
 //! `packages/node/dist/mutation-cli.js`, whose path it receives explicitly. The integration
 //! tests pass [`ts_adapter`] straight to [`testing_conventions::mutation::measure_typescript`];
 //! the e2e tests pass it to the spawned binary as `--ts-mutation-adapter`.
@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// The freshly-built TypeScript mutation adapter (`packages/node/dist/mutation/main.js`),
-/// which the rule spawns for the TS arm (#246). `CARGO_MANIFEST_DIR` is `packages/rust`,
+/// which the rule spawns for the TS arm. `CARGO_MANIFEST_DIR` is `packages/rust`,
 /// so the sibling node package is one level up. Requires the node package to be built
 /// (`npm run build` in `packages/node`, deps installed) — the Rust CI integration job does
 /// both before the suite runs.

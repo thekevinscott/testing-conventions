@@ -1,4 +1,4 @@
-//! Integration tests for the packaging rule's foundation (#70): exercise the
+//! Integration tests for the packaging rule's foundation: exercise the
 //! `packaging::scan` library API over fixture "artifact" trees. The rule (README
 //! "Packaging"): test files must never ship in a built artifact. Each fixture
 //! stands in for an unpacked built artifact (a wheel, a `dist/`).

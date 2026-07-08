@@ -1,5 +1,5 @@
 //! Integration tests for diff-scoped TypeScript coverage — `unit coverage
-//! --language typescript --base` (#162).
+//! --language typescript --base`.
 //!
 //! The TypeScript twin of `coverage_base.rs`: with `--base`, the SAME configured
 //! vitest floors (lines / branches / functions / statements) are measured over the
@@ -7,10 +7,10 @@
 //! implicit-100% `unit patch-coverage` it replaces, a changed line is judged
 //! against the configured floor — a diff that clears it passes even with an
 //! uncovered line, and one below it fails however small the diff (no small-diff
-//! carve-out, per the #162 decision).
+//! carve-out).
 //!
-//! Each test builds a throwaway git repo (the codebases are the fixtures, per the
-//! #3 guardrail) and runs REAL vitest over it via the SDK
+//! Each test builds a throwaway git repo (the codebases are the fixtures) and
+//! runs REAL vitest over it via the SDK
 //! (`patch_coverage::measure_typescript`) and the CLI (`run`). Requires `git` + a
 //! Node toolchain with vitest installed; the repo symlinks the fixtures'
 //! `node_modules` so `npx vitest` resolves (the same install `unit coverage`'s
@@ -203,8 +203,6 @@ fn baseline(repo: &TempRepo) -> String {
     repo.head()
 }
 
-// ---- The floor is measured over the diff (SDK `measure_typescript`) -------
-
 #[test]
 fn ts_a_diff_below_the_floor_fails() {
     // The core red case: the known-ratio diff (min metric 50%) is below an 80 floor,
@@ -272,7 +270,7 @@ test('widget', () => {
 
 #[test]
 fn ts_a_tiny_below_floor_diff_is_not_exempted() {
-    // The #162 decision: there is no small-diff carve-out. A single untested helper
+    // There is no small-diff carve-out. A single untested helper
     // (a brand-new file the suite never imports → 0% on its few lines) fails the 80
     // floor just like a large diff would.
     let repo = TempRepo::new("tiny");
@@ -323,12 +321,10 @@ fn ts_an_unknown_base_ref_is_an_error() {
     );
 }
 
-// ---- Exit codes via the CLI (`run`) --------------------------------------
-
 #[test]
 fn ts_cli_exits_nonzero_on_a_below_floor_diff() {
     // No config, so the diff is judged against the default TypeScript floors — now all
-    // four at 100 (#194); the known-ratio diff (functions 50%, statements 66.67%) is
+    // four at 100; the known-ratio diff (functions 50%, statements 66.67%) is
     // below them → exit 1.
     let repo = TempRepo::new("cli-red");
     let base = baseline(&repo);
@@ -390,12 +386,10 @@ fn ts_cli_a_lower_configured_floor_lets_the_same_diff_pass() {
     );
 }
 
-// ---- Exemptions (#32 machinery, rule `coverage`) -------------------------
-
 #[test]
 fn ts_a_coverage_exemption_lifts_a_below_floor_change() {
     // A `coverage` exemption excludes a file from the run, so its changed lines drop
-    // out of the diff ratios — the same waiver the whole-tree floor (#31) honors.
+    // out of the diff ratios — the same waiver the whole-tree floor honors.
     let repo = TempRepo::new("exempt");
     repo.write(
         "testing-conventions.toml",

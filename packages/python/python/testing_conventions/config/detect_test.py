@@ -1,4 +1,4 @@
-"""Unit tests for the coverage-config detection (#218).
+"""Unit tests for the coverage-config detection.
 
 Pin the precedence contract — the plugin applies a default only where the
 consumer set nothing — across every config source coverage.py reads, plus the

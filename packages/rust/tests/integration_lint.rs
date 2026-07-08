@@ -1,6 +1,5 @@
-//! Integration tests for the Python integration-test lints
-//! (#19; rules #48–#52). Per the #3 guardrail, each lint ships a red fixture
-//! (a violation — must be reported) and a clean fixture (must pass).
+//! Integration tests for the Python integration-test lints. Each lint ships a
+//! red fixture (a violation — must be reported) and a clean fixture (must pass).
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -51,8 +50,6 @@ fn lint_exit_with_config(fixture_name: &str, config_name: &str) -> i32 {
     run(argv).expect("a readable tree should not error")
 }
 
-// ---- R1: forbid `monkeypatch` (#49) --------------------------------------
-
 #[test]
 fn monkeypatch_red_reports_a_violation() {
     let violations = find_violations(fixture("monkeypatch/red"))
@@ -85,7 +82,7 @@ fn monkeypatch_clean_exits_zero() {
 
 #[test]
 fn monkeypatch_waived_exits_zero() {
-    // Same monkeypatch use as the red fixture, but the file is waived in the config (#123).
+    // Same monkeypatch use as the red fixture, but the file is waived in the config.
     assert_eq!(
         lint_exit_with_config(
             "monkeypatch/waived",
@@ -94,8 +91,6 @@ fn monkeypatch_waived_exits_zero() {
         0
     );
 }
-
-// ---- R2: patches must live in fixtures, not inline (#50) -----------------
 
 #[test]
 fn inline_patch_red_flags_the_with_form() {
@@ -143,7 +138,7 @@ fn inline_patch_clean_exits_zero() {
 
 #[test]
 fn inline_patch_waived_exits_zero() {
-    // Same inline `with patch(...)` as the red fixture, but the file is waived (#123).
+    // Same inline `with patch(...)` as the red fixture, but the file is waived.
     assert_eq!(
         lint_exit_with_config(
             "inline_patch/waived",
@@ -152,8 +147,6 @@ fn inline_patch_waived_exits_zero() {
         0
     );
 }
-
-// ---- R3: env via patch.dict(os.environ, …) (#51) -------------------------
 
 #[test]
 fn environ_red_flags_subscript_assignment() {
@@ -215,14 +208,12 @@ fn environ_clean_exits_zero() {
 
 #[test]
 fn environ_waived_exits_zero() {
-    // Same os.environ mutation as the red fixture, but the file is waived (#123).
+    // Same os.environ mutation as the red fixture, but the file is waived.
     assert_eq!(
         lint_exit_with_config("environ/waived", "environ/waived/testing-conventions.toml"),
         0
     );
 }
-
-// ---- R4: don't patch module-global config constants (#52, waivable) -------
 
 #[test]
 fn constant_patch_red_reports_a_violation() {
@@ -260,8 +251,6 @@ fn constant_patch_waived_exits_zero() {
         0
     );
 }
-
-// ---- Integration isolation: no first-party patch (#42) -------------------
 
 #[test]
 fn first_party_patch_red_reports_a_violation() {
@@ -309,12 +298,10 @@ fn first_party_patch_waived_exits_zero() {
     );
 }
 
-// ---- #145: a legacy `test_*.py` is source, not scanned -------------------
-
 #[test]
 fn legacy_test_prefix_is_not_scanned() {
-    // After #112 a unit test is `*_test.py` and a legacy `test_*.py` is ordinary
-    // source. The integration lints must agree: this `test_widget.py` carries a
+    // A unit test is `*_test.py` and a legacy `test_*.py` is ordinary source. The
+    // integration lints must agree: this `test_widget.py` carries a
     // `no-monkeypatch` violation, but it is source — so nothing is reported.
     let violations =
         find_violations(fixture("legacy_prefix")).expect("walking a readable tree should succeed");
@@ -329,8 +316,6 @@ fn legacy_test_prefix_is_not_scanned() {
 fn legacy_test_prefix_exits_zero() {
     assert_eq!(lint_exit("legacy_prefix"), 0);
 }
-
-// ---- CLI surface ---------------------------------------------------------
 
 #[test]
 fn integration_lint_requires_language() {

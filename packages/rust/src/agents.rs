@@ -1,4 +1,4 @@
-//! `install` (#232): write the testing contract into the repository's agent
+//! `install`: write the testing contract into the repository's agent
 //! context file (`AGENTS.md`) as a marker-delimited, hash-versioned block —
 //! the beads (`bd init`) pattern. Idempotent: re-running refreshes the owned
 //! region and touches nothing outside it.

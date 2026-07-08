@@ -1,8 +1,7 @@
-//! Integration tests for the Rust `integration lint` rule (#44) —
+//! Integration tests for the Rust `integration lint` rule —
 //! `no-first-party-double`: a `tests/` integration crate runs first-party code for
-//! real, so doubling a first-party item with `#[double]` is a violation. Per the
-//! #3 guardrail, ships a red fixture (must be flagged) and a clean fixture (must
-//! pass).
+//! real, so doubling a first-party item with `#[double]` is a violation. Ships a
+//! red fixture (must be flagged) and a clean fixture (must pass).
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -59,8 +58,6 @@ fn red_exits_nonzero() {
 fn clean_exits_zero() {
     assert_eq!(lint_exit("clean"), 0);
 }
-
-// ---- waivers: config-driven `exempt` list (#102) -------------------------
 
 #[test]
 fn waived_first_party_double_exits_zero() {

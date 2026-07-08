@@ -1,4 +1,4 @@
-"""Map a cosmic-ray work item + result onto the normalized mutation schema (#245).
+"""Map a cosmic-ray work item + result onto the normalized mutation schema.
 
 The rust core gates over one engine-agnostic representation
 (``{file, line, status, mutator}``); this turns cosmic-ray's per-mutant outcome into it,

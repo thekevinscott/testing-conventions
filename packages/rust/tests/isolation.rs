@@ -1,8 +1,8 @@
-//! Integration tests for the Rust `unit lint` rule (#44). Two detectors: D1
+//! Integration tests for the Rust `unit lint` rule. Two detectors: D1
 //! flags a call out of an inline `#[cfg(test)]` module's own module
 //! (`no-out-of-module-call`); D2 flags a foreign `use` import
-//! (`no-out-of-module-import`). Per the #3 guardrail, each ships a red fixture
-//! (every out-of-module form, must be flagged) and a clean fixture (must pass).
+//! (`no-out-of-module-import`). Each ships a red fixture (every out-of-module
+//! form, must be flagged) and a clean fixture (must pass).
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -91,8 +91,6 @@ fn clean_exits_zero() {
     assert_eq!(iso_exit("unit/clean"), 0);
 }
 
-// ---- D2: foreign imports (#44) -------------------------------------------
-
 /// `true` when scanning `fixture_name` yields a `no-out-of-module-import`
 /// violation in the file ending `file_suffix`.
 fn import_flagged(fixture_name: &str, file_suffix: &str) -> bool {
@@ -167,8 +165,6 @@ fn isolation_requires_language() {
         clap::error::ErrorKind::MissingRequiredArgument
     );
 }
-
-// ---- waivers: config-driven `exempt` list (#102) -------------------------
 
 /// Exit code of `unit lint --language rust --config <config> <fixture>`.
 fn iso_exit_config(fixture_name: &str, config_rel: &str) -> i32 {

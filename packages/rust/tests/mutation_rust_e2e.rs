@@ -1,6 +1,6 @@
-//! E2E tests for the Rust mutation rule (#201): drive the built CLI binary
+//! E2E tests for the Rust mutation rule: drive the built CLI binary
 //! end-to-end (no mocks) against the fixture crates and assert the exit code.
-//! Requires only a cargo toolchain — the tool provisions cargo-mutants itself (#242).
+//! Requires only a cargo toolchain — the tool provisions cargo-mutants itself.
 //!
 //! The gate is **on by default and binary**: an un-exempted surviving mutant fails the
 //! run, and the only way to pass with a survivor present is a reason-required

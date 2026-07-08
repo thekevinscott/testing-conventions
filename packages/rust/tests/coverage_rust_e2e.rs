@@ -1,4 +1,4 @@
-//! E2E tests for the Rust coverage rule (#37): drive the built CLI binary
+//! E2E tests for the Rust coverage rule: drive the built CLI binary
 //! end-to-end (no mocks) against the fixture crates and assert the exit code.
 //! Requires `cargo-llvm-cov`.
 
@@ -39,7 +39,7 @@ fn below_exits_zero_against_a_lower_floor() {
 #[test]
 fn padded_exits_nonzero_against_a_100_floor() {
     // `padded`'s `shift` unit is covered only by its integration test; the floor
-    // measures the unit suite alone, so the crate fails 100 end-to-end (#265).
+    // measures the unit suite alone, so the crate fails 100 end-to-end.
     assert_eq!(unit_coverage_exit("padded", "rust_full.toml"), 1);
 }
 
@@ -47,17 +47,17 @@ fn padded_exits_nonzero_against_a_100_floor() {
 fn exempt_cov_exits_zero_with_the_shim_exempted() {
     // The config exempts src/shim.rs from coverage, so the built binary omits it
     // from the denominator (via `--ignore-filename-regex`) and clears the 100
-    // floor end-to-end (#32).
+    // floor end-to-end.
     assert_eq!(
         unit_coverage_exit("exempt_cov", "rust_full_exempt_shim.toml"),
         0
     );
 }
 
-// Zero-config (#206): a `--config` pointing at a file that doesn't exist falls
+// Zero-config: a `--config` pointing at a file that doesn't exist falls
 // back to the default Rust floor — the same way a brand-new crate with no
 // `testing-conventions.toml` runs. That default is `lines = 100` with `regions`
-// opt-in (#206), so a fully-covered crate clears it while a below-floor crate
+// opt-in, so a fully-covered crate clears it while a below-floor crate
 // fails — Rust no longer errors out demanding an explicit `[rust].coverage` table.
 
 #[test]

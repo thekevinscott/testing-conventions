@@ -1,12 +1,12 @@
-//! Integration tests for the Rust mutation rule (#201).
+//! Integration tests for the Rust mutation rule.
 //!
 //! These run REAL `cargo mutants` over the fixture crates via the SDK
-//! ([`mutation::measure_rust`]) and assert the surviving-mutant set. Per the #3
-//! guardrail the *crates themselves* are the fixtures: `killed` (every mutant caught
+//! ([`mutation::measure_rust`]) and assert the surviving-mutant set. The *crates
+//! themselves* are the fixtures: `killed` (every mutant caught
 //! by an asserting test) reports no survivors, and `survivors` (an assertion-light
 //! test that runs the code but pins nothing) reports several — the gap mutation
 //! testing exposes that coverage can't. Requires only a cargo toolchain — the tool
-//! provisions cargo-mutants itself (#242).
+//! provisions cargo-mutants itself.
 
 use std::path::PathBuf;
 

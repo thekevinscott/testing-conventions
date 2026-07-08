@@ -1,5 +1,4 @@
-//! The unit `colocated-test` check (Python — issue #15; TypeScript — issue #18;
-//! exemptions — issue #32).
+//! The unit `colocated-test` check.
 //!
 //! Convention (README "Colocated Test"; `internals/*/testing.md`): a source
 //! file is unit-tested by a *colocated* test named after it — `foo.py` →
@@ -8,7 +7,7 @@
 //! source file with no such sibling — an "orphan". Test files are what the
 //! check looks *for*, never subjects.
 //!
-//! Two things are not orphans even without a colocated test (issue #32): a file
+//! Two things are not orphans even without a colocated test: a file
 //! that holds no code (empty or comment-only — e.g. a bare `__init__.py`), which
 //! is not a subject at all, and a file listed in the config `exempt` table,
 //! which is a deliberate, reason-required omission. Everything else must be
@@ -32,8 +31,8 @@ pub enum Language {
     TypeScript,
     /// Rust units are inline `#[cfg(test)]` modules, not separate files, so the
     /// file-pairing walk below does not apply to Rust; its arm of the rule checks
-    /// inline-`#[cfg(test)]` *presence* instead ([`missing_inline_tests`], #40). The
-    /// variant is also accepted by the other `--language` rules (e.g. `packaging`, #74).
+    /// inline-`#[cfg(test)]` *presence* instead ([`missing_inline_tests`]). The
+    /// variant is also accepted by the other `--language` rules (e.g. `packaging`).
     #[value(name = "rust")]
     Rust,
 }
@@ -71,7 +70,6 @@ impl Language {
     /// `true` when `path` is test *support* — not a unit under test, but not a
     /// subject either. Python's `conftest.py` (pytest fixtures) is the only such
     /// file: there is no `conftest_test.py`, and it is never a coverage subject.
-    /// (#112)
     pub(crate) fn is_support(self, path: &Path) -> bool {
         match self {
             Language::Python => file_name_of(path) == "conftest.py",
@@ -82,7 +80,7 @@ impl Language {
     /// `true` when `source` (the file's contents) holds at least one line of
     /// code — anything beyond blank lines and comments. An empty or comment-only
     /// file (e.g. a bare `__init__.py`) carries no logic, so it is never a
-    /// unit-test subject and needs no exemption (issue #32).
+    /// unit-test subject and needs no exemption.
     pub(crate) fn has_code(self, source: &str) -> bool {
         match self {
             Language::Python => python_has_code(source),
@@ -178,7 +176,7 @@ fn collect_files(dir: &Path, language: Language, out: &mut Vec<PathBuf>) -> Resu
 /// behavior — a function with a body, outside any `#[cfg(test)]` module — but
 /// carries no inline `#[cfg(test)]` module, sorted for deterministic output.
 ///
-/// The Rust arm of the colocated-test rule (#40): Rust units are inline
+/// The Rust arm of the colocated-test rule: Rust units are inline
 /// `#[cfg(test)]` modules, so "colocated" means a test module in the *same file*,
 /// not a sibling file. A file with no testable function (only `mod` / `use`
 /// declarations, types, or constants) is not a subject; integration crates under
@@ -247,7 +245,7 @@ fn collect_rust_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
 }
 
 /// Walks a parsed Rust file to answer two questions for the inline-`#[cfg(test)]`
-/// presence rule (#40): does the file define testable behavior — a function with a
+/// presence rule: does the file define testable behavior — a function with a
 /// body outside any `#[cfg(test)]` module — and does it carry an inline
 /// `#[cfg(test)]` module? `test_depth` tracks nesting inside test modules so the
 /// test functions themselves never count as subjects.
@@ -392,7 +390,7 @@ mod tests {
 
     #[test]
     fn python_conftest_is_support_not_a_subject() {
-        // conftest.py holds pytest fixtures — support, never a subject (#112).
+        // conftest.py holds pytest fixtures — support, never a subject.
         assert!(Language::Python.is_support(Path::new("conftest.py")));
         assert!(Language::Python.is_support(Path::new("pkg/conftest.py")));
         assert!(!Language::Python.is_support(Path::new("widget.py")));
@@ -504,7 +502,7 @@ mod tests {
     }
 
     /// `(has_testable_fn, has_test_module)` for a Rust source snippet — the two
-    /// signals the inline-`#[cfg(test)]` presence rule (#40) decides on.
+    /// signals the inline-`#[cfg(test)]` presence rule decides on.
     fn presence(src: &str) -> (bool, bool) {
         let ast = syn::parse_file(src).expect("snippet parses");
         let mut visitor = PresenceVisitor::default();

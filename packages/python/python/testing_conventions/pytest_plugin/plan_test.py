@@ -1,4 +1,4 @@
-"""Unit tests for the coverage-default decision (#218)."""
+"""Unit tests for the coverage-default decision."""
 from testing_conventions.pytest_plugin.plan import FAIL_UNDER, OMIT, decide
 
 

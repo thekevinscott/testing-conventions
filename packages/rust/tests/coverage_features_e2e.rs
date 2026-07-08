@@ -1,5 +1,5 @@
-//! E2E tests for cargo-feature passthrough in `unit coverage --language rust`
-//! (#266): drive the built CLI binary end-to-end (no mocks) against the
+//! E2E tests for cargo-feature passthrough in `unit coverage --language rust`:
+//! drive the built CLI binary end-to-end (no mocks) against the
 //! feature-gated fixture crates and assert the exit code and message.
 //!
 //! A `[rust] features` list names the cargo features the coverage run enables

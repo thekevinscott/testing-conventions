@@ -1,4 +1,4 @@
-//! E2E tests for the Python mutation rule (#203 / #248): drive the built CLI binary
+//! E2E tests for the Python mutation rule: drive the built CLI binary
 //! end-to-end (no mocks) against the fixture projects and assert the exit code. The binary
 //! spawns the bundled Python adapter (`python3 -m testing_conventions.mutation.main`), which
 //! drives cosmic-ray in-process. Requires a `python3` with cosmic-ray + pytest installed and

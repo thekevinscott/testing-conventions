@@ -1,11 +1,11 @@
 //! E2E tests for diff-scoped Rust coverage — `unit coverage --language rust
-//! --base` (#162): drive the built CLI binary as a real subprocess against
+//! --base`: drive the built CLI binary as a real subprocess against
 //! throwaway cargo crates (each a git repo) and assert the exit code (and, for a red
 //! case, the failure on stderr). Complements the in-process integration tests in
 //! `coverage_base_rust.rs`. Each crate carries its own `[workspace]` so `cargo
 //! llvm-cov` measures it in isolation; every case commits a `[rust.coverage]` table
 //! to pin a known floor rather than lean on the zero-config default (`lines = 100`,
-//! regions off, #206), which these calibrated diff cases aren't sized to. Requires `git` + `cargo-llvm-cov`
+//! regions off), which these calibrated diff cases aren't sized to. Requires `git` + `cargo-llvm-cov`
 //! on PATH (the runs are slow — building and instrumenting each crate from scratch).
 
 use std::path::{Path, PathBuf};
@@ -102,7 +102,7 @@ const CARGO_TOML: &str =
 
 /// A `[rust.coverage]` config at the given uniform floor — committed so the
 /// measurement pins a known floor, not the zero-config default (`lines = 100`,
-/// regions off, #206).
+/// regions off).
 fn config_toml(level: u8) -> String {
     format!("[rust.coverage]\nregions = {level}\nlines = {level}\n")
 }
@@ -229,7 +229,7 @@ fn rust_a_lower_configured_floor_lets_the_same_diff_pass() {
 
 #[test]
 fn rust_a_tiny_below_floor_diff_still_exits_nonzero() {
-    // No small-diff carve-out (#162): a single untested module (the suite never
+    // No small-diff carve-out: a single untested module (the suite never
     // exercises it → 0% on its lines) fails an 80 floor.
     let repo = TempRepo::new("tiny");
     repo.write("testing-conventions.toml", &config_toml(80));

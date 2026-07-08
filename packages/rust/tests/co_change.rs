@@ -1,8 +1,8 @@
-//! Integration tests for the commit-scoped `co-change` check (#33), folded into
-//! `unit colocated-test --base` (#161).
+//! Integration tests for the commit-scoped `co-change` check, folded into
+//! `unit colocated-test --base`.
 //!
 //! When a source file is **modified** (e.g. a function removed) or **deleted** in
-//! a `<base>...HEAD` diff, its colocated test (the #15/#18 pairing — `foo.py` →
+//! a `<base>...HEAD` diff, its colocated test (the pairing — `foo.py` →
 //! `foo_test.py`, `foo.ts` → `foo.test.ts`) must change in the same diff;
 //! `stale_sources` returns the sources whose test went stale, and
 //! `unit colocated-test --base` turns a non-empty result into a non-zero exit on
@@ -11,7 +11,7 @@
 //! empty/comment-only file holds no logic, and a `co-change`-exempt source needn't
 //! co-change.
 //!
-//! Each test builds a throwaway git repo (per the #3 guardrail: red cases — a
+//! Each test builds a throwaway git repo (per the guardrail: red cases — a
 //! changed source with no test change — and clean cases).
 
 use std::collections::BTreeSet;
@@ -104,7 +104,7 @@ fn stale(repo: &TempRepo, base: &str, language: Language) -> Vec<String> {
 }
 
 /// Result of `unit colocated-test <repo> --language <lang> --base <base> [--config
-/// <repo>/<config>]`, run in-process. Since #161 the commit-scoped co-change check
+/// <repo>/<config>]`, run in-process. The commit-scoped co-change check
 /// rides on `colocated-test`'s opt-in `--base` flag (presence + co-change), so
 /// these cases drive that command.
 fn run_co_change(
@@ -131,7 +131,7 @@ fn run_co_change(
 }
 
 /// Result of `unit colocated-test <repo> --language <lang>` with **no** `--base`:
-/// the presence-only scope. `--base` is opt-in (#161), so this ignores a
+/// the presence-only scope. `--base` is opt-in, so this ignores a
 /// stale-but-present source that the `--base` form flags.
 fn run_colocated_presence(repo: &TempRepo, language: &str) -> anyhow::Result<i32> {
     run([
@@ -147,8 +147,6 @@ fn run_colocated_presence(repo: &TempRepo, language: &str) -> anyhow::Result<i32
 const WIDGET_PY: &str = "def widget():\n    return 1\n";
 const WIDGET_PY_TEST: &str =
     "from widget import widget\n\n\ndef test_widget():\n    assert widget() == 1\n";
-
-// ---- Python (#15 pairing) ------------------------------------------------
 
 #[test]
 fn python_modified_source_without_its_test_is_stale() {
@@ -234,7 +232,7 @@ fn python_deleting_source_and_test_together_is_clean() {
 #[test]
 fn python_deleting_a_barrel_without_a_test_is_clean() {
     // A package barrel (`__init__.py`) has no colocated test, so deleting it can
-    // never bring `__init___test.py` into the diff — it must not be flagged (#252).
+    // never bring `__init___test.py` into the diff — it must not be flagged.
     // The base tree, not HEAD, decides: the barrel had no sibling test to orphan.
     let repo = TempRepo::new("py-del-barrel");
     repo.write(
@@ -254,7 +252,7 @@ fn python_deleting_a_barrel_without_a_test_is_clean() {
 
 #[test]
 fn python_deleting_an_exempt_barrel_passes_base_after_dropping_its_entry() {
-    // The bug (#252): an exempt barrel was undeletable under `--base`. Keeping its
+    // The bug: an exempt barrel was undeletable under `--base`. Keeping its
     // `colocated-test` exempt entry made the stale-exempt scan reject it (gone in
     // HEAD); dropping the entry — the documented move — made co-change flag the
     // deletion. With co-change pairing against the base tree, deleting the barrel
@@ -274,7 +272,6 @@ fn python_deleting_an_exempt_barrel_passes_base_after_dropping_its_entry() {
     repo.commit("base");
     let base = repo.head();
 
-    // Delete the barrel and drop its now-stale exempt entry.
     repo.remove("cli/interpret/__init__.py");
     repo.write("testing-conventions.toml", "");
     repo.commit("demolish the barrel");
@@ -322,7 +319,7 @@ fn python_modifying_only_the_test_is_allowed() {
 #[test]
 fn python_modified_empty_file_is_not_a_subject() {
     // An empty / comment-only file carries no logic, so editing it needs no test
-    // co-change — consistent with the colocated-test rule (#32).
+    // co-change — consistent with the colocated-test rule.
     let repo = TempRepo::new("py-empty");
     repo.write("pkg/__init__.py", "");
     repo.write("widget.py", WIDGET_PY);
@@ -338,7 +335,7 @@ fn python_modified_empty_file_is_not_a_subject() {
 
 #[test]
 fn python_conftest_is_not_a_subject() {
-    // conftest.py is pytest support, never a colocated-test subject (#112).
+    // conftest.py is pytest support, never a colocated-test subject.
     let repo = TempRepo::new("py-conftest");
     repo.write("conftest.py", "import pytest\n");
     repo.write("widget.py", WIDGET_PY);
@@ -384,8 +381,6 @@ fn python_subcommand_exits_zero_when_every_change_co_changes() {
 
     assert_eq!(run_co_change(&repo, "python", &base, None).unwrap(), 0);
 }
-
-// ---- Exemptions (#32 machinery, rule `co-change`) ------------------------
 
 #[test]
 fn python_a_co_change_exemption_lifts_a_stale_source() {
@@ -435,8 +430,6 @@ fn a_stale_exempt_entry_is_an_error() {
     assert!(run_co_change(&repo, "python", &base, Some("testing-conventions.toml")).is_err());
 }
 
-// ---- TypeScript (#18 pairing) --------------------------------------------
-
 #[test]
 fn typescript_modified_source_without_its_test_is_stale() {
     let repo = TempRepo::new("ts-mod");
@@ -478,7 +471,7 @@ fn typescript_modified_source_with_its_test_is_clean() {
 #[test]
 fn typescript_deleting_a_barrel_without_a_test_is_clean() {
     // A `index.ts` re-export barrel has no colocated test — deleting it can't bring
-    // `index.test.ts` into the diff, so it must not be flagged (#252).
+    // `index.test.ts` into the diff, so it must not be flagged.
     let repo = TempRepo::new("ts-del-barrel");
     repo.write("cli/interpret/index.ts", "export * from './widget';\n");
     repo.write(
@@ -497,8 +490,6 @@ fn typescript_deleting_a_barrel_without_a_test_is_clean() {
 
     assert!(stale(&repo, &base, Language::TypeScript).is_empty());
 }
-
-// ---- CLI surface & errors ------------------------------------------------
 
 #[test]
 fn an_unknown_base_ref_is_an_error() {
@@ -527,8 +518,6 @@ fn co_change_rejects_rust() {
     let err = run_co_change(&repo, "rust", &base, None).unwrap_err();
     assert!(err.to_string().contains("inline"), "got: {err}");
 }
-
-// ---- `--base` folds co-change into colocated-test (#161) -----------------
 
 #[test]
 fn base_adds_co_change_on_top_of_presence() {

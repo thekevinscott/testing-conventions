@@ -1,7 +1,7 @@
-//! Integration tests for line-scoped exemptions in the config schema (#226).
+//! Integration tests for line-scoped exemptions in the config schema.
 //!
 //! Today an exemption is file-scoped: `[[<lang>.exempt]] rules = ["coverage"]` lifts a
-//! rule for an *entire* file. #226 adds an optional `lines` key that narrows a
+//! rule for an *entire* file. An optional `lines` key narrows a
 //! `coverage` / `mutation` exemption to the exact lines it covers, so a single stubborn
 //! line (an equivalent mutant, a cross-version import shim) no longer forces the whole
 //! module past the gate. This pins the loader half of that contract through real
@@ -20,7 +20,7 @@ fn fixture(name: &str) -> PathBuf {
 #[test]
 fn loads_a_line_scoped_exemption() {
     // `lines = [9, 10, "12-13"]` on a coverage/mutation exemption parses into single
-    // lines and an inclusive range — the motivating tomlcompat.py case from #218.
+    // lines and an inclusive range — the motivating tomlcompat.py case.
     let config = load_config(fixture("exempt_lines.toml")).expect("a line-scoped exemption loads");
     let exempt = &config.python.expect("[python] table").exempt[0];
     assert_eq!(exempt.path, "src/tomlcompat.py");

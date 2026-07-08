@@ -1,5 +1,5 @@
 //! E2E tests for the `functions` and `branch` floors on `unit coverage
-//! --language rust` (#267): drive the built CLI binary end-to-end (no mocks)
+//! --language rust`: drive the built CLI binary end-to-end (no mocks)
 //! against the fixture crates and assert the exit code and message.
 //!
 //! `[rust].coverage` takes two more opt-in floors alongside `regions`:
@@ -46,8 +46,6 @@ fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
-// ---- functions (stable) ----------------------------------------------------
-
 #[test]
 fn an_uncalled_function_fails_a_functions_floor() {
     // `funcs`'s `triple` is never called: functions coverage is 2/3 while lines
@@ -69,8 +67,6 @@ fn the_same_functions_coverage_clears_a_lower_floor() {
     let out = run("funcs", "rust_functions_mid.toml");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
 }
-
-// ---- branch (nightly via the fixture's rust-toolchain.toml) ----------------
 
 #[test]
 fn the_branch_floor_gates_the_measured_branches() {

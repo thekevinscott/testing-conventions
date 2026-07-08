@@ -1,4 +1,4 @@
-//! Integration tests for cargo-feature passthrough in the config (#266): a
+//! Integration tests for cargo-feature passthrough in the config: a
 //! `[rust] features` list is part of the schema, accepted by the loader's
 //! self-guard alongside `coverage` and `exempt`.
 //!

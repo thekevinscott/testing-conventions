@@ -1,4 +1,4 @@
-//! Integration tests for the Rust packaging slice (#74): exercise the
+//! Integration tests for the Rust packaging slice: exercise the
 //! `packaging::inspect` library API over pre-built `cargo package` **crate
 //! tarball** fixtures (`.crate`). Rule (README "Packaging"): the source tarball
 //! must not ship the crate-root `tests/` directory.

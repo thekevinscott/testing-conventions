@@ -1,9 +1,9 @@
-//! Integration tests for `e2e attest` (#17, slice #67).
+//! Integration tests for `e2e attest`.
 //!
 //! `attest` reads HEAD and commits, so each test builds a throwaway git repo
 //! with one seed commit (the "code commit"), runs `attest`, and asserts it
 //! recorded the run against that commit, wrote the attestation file, and
-//! committed it on top. Per the #3 guardrail these are the clean (passing
+//! committed it on top. These are the clean (passing
 //! command) and red (failing command) cases.
 //!
 //! These start red against the stub in `src/e2e.rs` and go green once `attest`

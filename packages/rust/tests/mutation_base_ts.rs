@@ -1,17 +1,17 @@
 //! Integration test for diff-scoped TypeScript mutation — `unit mutation --language
-//! typescript --base` (#202).
+//! typescript --base`.
 //!
 //! With `--base`, only mutants on the `<base>...HEAD` changed lines are tested. Stryker
 //! has no native git-diff scoping, so the changed lines become `--mutate
 //! <file>:<line>-<line>` ranges (line granularity, matching cargo-mutants' `--in-diff`
 //! in the Rust arm). Builds a throwaway TypeScript project in a git repo (the codebase
-//! is the fixture, per the #3 guardrail): a fully-tested baseline, then a commit that
+//! is the fixture): a fully-tested baseline, then a commit that
 //! adds an assertion-light function. The diff scopes the run to the added lines, whose
 //! mutants survive — while the unchanged, well-tested `add` isn't mutated at all.
 //!
 //! The project's `node_modules` is symlinked to the fixtures' runner-only toolchain so the
 //! out-of-tree repo resolves vitest without a second install; Stryker is bundled with and
-//! driven by the Node adapter (#246), whose path ([`common::ts_adapter`]) is passed to the
+//! driven by the Node adapter, whose path ([`common::ts_adapter`]) is passed to the
 //! rule. Requires `git`, the built node adapter, and that toolchain (`npm ci` in
 //! `tests/fixtures/unit_mutation/typescript`).
 

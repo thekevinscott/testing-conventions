@@ -1,4 +1,4 @@
-//! E2E tests for the TypeScript coverage rule (#31): drive the built CLI binary
+//! E2E tests for the TypeScript coverage rule: drive the built CLI binary
 //! end-to-end (no mocks) against the fixture codebases and assert the exit code.
 //! Requires Node with the fixtures' vitest toolchain installed (see the suite's
 //! `package.json`).
@@ -79,15 +79,15 @@ fn below_exits_nonzero_against_the_mid_floor() {
 #[test]
 fn exempt_cov_exits_zero_with_the_shim_exempted() {
     // The config exempts shim.ts from coverage, so the built binary omits it from
-    // the denominator and clears the 100 floor end-to-end (#32).
+    // the denominator and clears the 100 floor end-to-end.
     assert_eq!(
         unit_coverage_exit("exempt_cov", "ts_full_exempt_shim.toml"),
         0
     );
 }
 
-// Zero-config (#80): a `--config` pointing at a file that doesn't exist falls
-// back to the default TypeScript floors — now all four metrics at 100 (#194), the
+// Zero-config: a `--config` pointing at a file that doesn't exist falls
+// back to the default TypeScript floors — now all four metrics at 100, the
 // same floors as `ts_full.toml`. So only `full` (100% on all four) clears the
 // default; `above` (which cleared the old 80/75 default) and `below` both fail.
 
@@ -98,7 +98,7 @@ fn full_exits_zero_with_no_config_via_the_default_floor() {
 
 #[test]
 fn above_exits_nonzero_with_no_config_via_the_default_floor() {
-    // Cleared the old 80/75 default; the strict 100 default (#194) fails it.
+    // Cleared the old 80/75 default; the strict 100 default fails it.
     assert_eq!(unit_coverage_exit("above", "no-such-config.toml"), 1);
 }
 

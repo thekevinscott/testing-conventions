@@ -1,4 +1,4 @@
-//! E2E tests for `e2e attest` (#17, slice #67): drive the built CLI binary in a
+//! E2E tests for `e2e attest`: drive the built CLI binary in a
 //! throwaway git repo (no mocks) and assert it force-runs the command, exits
 //! `0`, and commits an attestation on top.
 //!

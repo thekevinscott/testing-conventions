@@ -1,5 +1,5 @@
-//! E2E tests for the commit-scoped `co-change` check (#33), folded into
-//! `unit colocated-test --base` (#161): drive the built CLI binary as a real
+//! E2E tests for the commit-scoped `co-change` check, folded into
+//! `unit colocated-test --base`: drive the built CLI binary as a real
 //! subprocess against throwaway git repos and assert the exit code (and, for the
 //! red case, the named offender). Complements the in-process integration tests in
 //! `co_change.rs`.
@@ -74,7 +74,7 @@ fn git(dir: &Path, args: &[&str]) {
 
 /// Exit code + stderr of `unit colocated-test <repo> --language <lang> --base
 /// <base> [--config <repo>/<config>]`, run as a real subprocess against the built
-/// binary. Since #161 the commit-scoped co-change check rides on `--base`.
+/// binary. The commit-scoped co-change check rides on `--base`.
 fn co_change(repo: &TempRepo, language: &str, base: &str, config: Option<&str>) -> (i32, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
     cmd.arg("unit").arg("colocated-test").arg(&repo.0).args([
@@ -158,7 +158,7 @@ fn deleted_source_without_deleting_its_test_exits_nonzero() {
 
 #[test]
 fn deleting_a_barrel_without_a_test_exits_zero() {
-    // #252: a package barrel with no colocated test can be deleted cleanly — the
+    // A package barrel with no colocated test can be deleted cleanly — the
     // deletion can't bring a sibling test into the diff, so co-change no longer
     // flags it (nor needs an exemption to silence it).
     let repo = TempRepo::new("del-barrel");
@@ -221,7 +221,7 @@ fn rust_is_rejected() {
 
 #[test]
 fn base_still_enforces_tree_wide_presence() {
-    // #161: `--base` adds co-change *on top of* presence. An orphan source with no
+    // `--base` adds co-change *on top of* presence. An orphan source with no
     // colocated test is flagged even when the diff itself co-changes cleanly.
     let repo = TempRepo::new("base-presence");
     repo.write("widget.py", WIDGET_PY);

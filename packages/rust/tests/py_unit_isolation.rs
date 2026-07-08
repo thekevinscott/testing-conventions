@@ -1,7 +1,7 @@
 //! Integration tests for the Python unit-isolation check
-//! (#42 slice 2: `unmocked-collaborator`). Per the #3 guardrail, the rule ships a
-//! red fixture (an imported, un-mocked first-party collaborator — must be flagged)
-//! and a clean fixture (the canonical patched-by-string form — must pass).
+//! (`unmocked-collaborator`). The rule ships a red fixture (an imported,
+//! un-mocked first-party collaborator — must be flagged) and a clean fixture
+//! (the canonical patched-by-string form — must pass).
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -93,13 +93,11 @@ fn waived_exits_zero() {
     );
 }
 
-// ---- #145: a legacy `test_*.py` is source, not scanned -------------------
-
 #[test]
 fn legacy_test_prefix_is_not_scanned() {
-    // After #112 a unit test is `*_test.py` and a legacy `test_*.py` is ordinary
-    // source. `unit lint` must agree: this `test_widget.py` imports an
-    // un-mocked first-party collaborator, but it is source — so nothing is reported.
+    // A unit test is `*_test.py` and a legacy `test_*.py` is ordinary source.
+    // `unit lint` must agree: this `test_widget.py` imports an un-mocked
+    // first-party collaborator, but it is source — so nothing is reported.
     let violations = find_unit_isolation_violations(fixture("legacy_prefix"))
         .expect("walking a readable tree should succeed");
     assert!(
@@ -113,8 +111,6 @@ fn legacy_test_prefix_is_not_scanned() {
 fn legacy_test_prefix_exits_zero() {
     assert_eq!(isolation_exit("legacy_prefix"), 0);
 }
-
-// ---- external & effectful-stdlib deps (#121, slice 3) --------------------
 
 #[test]
 fn external_red_flags_unmocked_external_deps() {
@@ -169,8 +165,6 @@ fn external_waived_exits_zero() {
         0
     );
 }
-
-// ---- #382: a barrel test importing its own package surface ---------------
 
 #[test]
 fn barrel_reexport_import_is_the_unit_under_test() {

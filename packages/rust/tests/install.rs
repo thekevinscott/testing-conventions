@@ -1,6 +1,6 @@
-//! Integration tests for `install`'s managed block content (#353 follow-up).
+//! Integration tests for `install`'s managed block content.
 //!
-//! The docs site reorganized around workflow adoption (#353) and removed the
+//! The docs site reorganized around workflow adoption and removed the
 //! CLI guide page, so the block `install` writes must point only at pages that
 //! exist: the docs site root and the machine-readable contract (`llms.txt`).
 //! These start red against the template that still links the removed

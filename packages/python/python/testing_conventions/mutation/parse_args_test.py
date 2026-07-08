@@ -1,4 +1,4 @@
-"""Unit tests for the mutation adapter's argument parsing (#248)."""
+"""Unit tests for the mutation adapter's argument parsing."""
 import pytest
 
 from testing_conventions.mutation.parse_args import parse_args

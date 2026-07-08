@@ -1,4 +1,4 @@
-//! Rust unit-isolation lint (#44): an inline `#[cfg(test)] mod` may call only into
+//! Rust unit-isolation lint: an inline `#[cfg(test)] mod` may call only into
 //! the unit under test — its parent module, reached via `super::`. A call *out of
 //! the test's own module* — into another first-party module (`crate::…`), an
 //! external crate, or effectful `std` — is a violation. Inject a trait double
@@ -40,7 +40,7 @@ const RULE_IMPORT: &str = "no-out-of-module-import";
 /// Rule id reported for doubling a first-party item in an integration test.
 const RULE_DOUBLE: &str = "no-first-party-double";
 
-/// A language whose unit-isolation convention can be checked (Python #42 is a
+/// A language whose unit-isolation convention can be checked (Python is a
 /// separate detector). Each detector lives in its own module; this enum is the
 /// shared `unit lint` language selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -48,12 +48,12 @@ pub enum Language {
     /// Inline `#[cfg(test)]` modules in `*.rs` files (`no-out-of-module-call`).
     #[value(name = "rust")]
     Rust,
-    /// `*.test.{ts,tsx,mts,cts}` unit tests (`unmocked-collaborator`, #43 / #76);
+    /// `*.test.{ts,tsx,mts,cts}` unit tests (`unmocked-collaborator`);
     /// the detector lives in [`crate::ts`].
     #[value(name = "typescript")]
     TypeScript,
-    /// `*_test.py` / `test_*.py` colocated unit tests (`unmocked-collaborator`,
-    /// #42); the detector lives in [`crate::lint`].
+    /// `*_test.py` / `test_*.py` colocated unit tests (`unmocked-collaborator`);
+    /// the detector lives in [`crate::lint`].
     #[value(name = "python")]
     Python,
 }
@@ -365,7 +365,7 @@ fn classify_use(segs: &[String], is_glob: bool, deps: &BTreeSet<String>) -> Opti
         "crate" => Some("first-party module"),
         "std" if is_effectful_std(segs) => Some("effectful std"),
         // Pure `std` / `core` / `alloc`: a named import is in-module, but a glob of
-        // anything but `super` is foreign (the issue's bright line).
+        // anything but `super` is foreign.
         "std" | "core" | "alloc" => is_glob.then_some("glob import"),
         other => {
             if deps.contains(other) {
@@ -409,7 +409,7 @@ fn render_path(path: &syn::Path) -> String {
 
 /// `true` when `attrs` carries a `#[cfg(test)]` gate (including `cfg(all(test, …))`
 /// / `cfg(any(test, …))`) — the signal for an inline unit-test module. Shared with
-/// the colocated-test presence rule ([`crate::colocated_test::missing_inline_tests`], #40).
+/// the colocated-test presence rule ([`crate::colocated_test::missing_inline_tests`]).
 pub(crate) fn has_cfg_test(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
         attr.path().is_ident("cfg")

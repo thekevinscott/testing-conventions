@@ -1,11 +1,11 @@
-//! Integration tests for the config schema + loader (issue #12).
+//! Integration tests for the config schema + loader.
 //!
 //! These pin the contract from the README's "Configuration" section: one config
 //! file is read into the in-memory `Config`, and the self-guard rejects a config
 //! that fails its own validation (unknown keys, malformed TOML) rather than
 //! silently accepting it.
 //!
-//! Per the #3 guardrail, the loader ships a clean fixture (`valid.toml`, must
+//! Per the guardrail, the loader ships a clean fixture (`valid.toml`, must
 //! load) and red fixtures (`unknown_key.toml` / `malformed.toml`, must fail).
 
 use std::path::PathBuf;
@@ -97,12 +97,12 @@ fn errors_on_a_missing_file() {
 #[test]
 fn loads_exemptions_with_optional_coverage() {
     // `exempt.toml` declares exemptions but no coverage thresholds — both keys
-    // are optional (issue #32).
+    // are optional.
     let config = load_config(fixture("exempt.toml")).expect("an exempt-only config should load");
     let python = config.python.expect("[python] table present");
     assert!(python.coverage.is_none(), "coverage is optional");
     // A whole-file presence exemption and a separate line-scoped coverage exemption for
-    // the same file — `coverage` requires `lines`, so the two can't share one entry (#226).
+    // the same file — `coverage` requires `lines`, so the two can't share one entry.
     assert_eq!(python.exempt.len(), 2);
     assert_eq!(python.exempt[0].path, "src/cli.py");
     assert_eq!(python.exempt[0].rules, vec![Rule::ColocatedTest]);
@@ -139,7 +139,7 @@ fn rejects_an_exemption_with_a_blank_reason_self_guard() {
 
 #[test]
 fn loads_a_python_build_command_with_a_reason() {
-    // #289: `[python].build_command` (plus a required `reason`) is a valid config key. The
+    // `[python].build_command` (plus a required `reason`) is a valid config key. The
     // binary never runs it — detect derives it and the workflow's jobs do — but the schema
     // must accept it, since `deny_unknown_fields` otherwise rejects a consumer's config.
     let config = load_config(fixture("python_build_command.toml"))
@@ -154,8 +154,8 @@ fn loads_a_python_build_command_with_a_reason() {
 
 #[test]
 fn a_python_build_command_with_no_reason_loads() {
-    // #335: `build_command` needs no reason — it supplies a necessary build fact rather than
-    // waiving a check, so a bare command (reason absent or blank) loads, where #289 rejected it.
+    // `build_command` needs no reason — it supplies a necessary build fact rather than
+    // waiving a check, so a bare command (reason absent or blank) loads.
     assert!(
         load_config(fixture("python_build_command_no_reason.toml")).is_ok(),
         "a [python].build_command with no reason must load (reason is optional)"
@@ -168,11 +168,10 @@ fn a_python_build_command_with_no_reason_loads() {
 
 #[test]
 fn loads_a_typescript_build_command_with_a_reason() {
-    // #335: `build_command` generalizes from `[python]`-only to all three language tables — a
+    // `build_command` generalizes from `[python]`-only to all three language tables — a
     // necessary build declaration for a build the manifest structurally can't express (npm defines
     // no standard build command; the TS compile-before-pack is a project-specific script `pnpm
-    // pack` doesn't run). Started red: the schema had no `build_command` on the `[typescript]`
-    // table, so `deny_unknown_fields` rejected it.
+    // pack` doesn't run).
     let config = load_config(fixture("typescript_build_command.toml"))
         .expect("a [typescript].build_command must load once the schema generalizes");
     let ts = config.typescript.expect("[typescript] table present");
@@ -186,7 +185,7 @@ fn loads_a_typescript_build_command_with_a_reason() {
 
 #[test]
 fn loads_a_rust_build_command_with_a_reason() {
-    // #335: the same generalization for `[rust]`.
+    // The same generalization for `[rust]`.
     let config = load_config(fixture("rust_build_command.toml"))
         .expect("a [rust].build_command with a reason must load once the schema generalizes");
     let rust = config.rust.expect("[rust] table present");
@@ -209,11 +208,10 @@ fn a_typescript_build_command_with_a_blank_reason_loads() {
 
 #[test]
 fn loads_an_e2e_extra_scope_and_exclude_table() {
-    // #333: `[e2e].extra_scope` / `exclude` are valid config keys. The binary never uses them —
+    // `[e2e].extra_scope` / `exclude` are valid config keys. The binary never uses them —
     // detect renders them into repeated `--extra-scope`/`--exclude` arguments the e2e-verify job
     // appends — but the schema must accept the table, since `deny_unknown_fields` otherwise
-    // rejects a consumer's config (exactly like `[python].build_command`). Starts red: the schema
-    // has no `[e2e]` table yet, so the load errors until it does.
+    // rejects a consumer's config (exactly like `[python].build_command`).
     let config = load_config(fixture("e2e_extra_scope.toml"))
         .expect("an [e2e] extra_scope/exclude config must load (the schema must accept the table)");
     let e2e = config.e2e.expect("[e2e] table present");
@@ -248,7 +246,7 @@ fn rejects_an_unknown_e2e_key_self_guard() {
 #[test]
 fn partial_coverage_tables_inherit_defaults() {
     // Each table sets only one field; the rest fall back to the language's default
-    // floor (#216). Previously a partial table errored on the required fields.
+    // floor.
     let config = load_config(fixture("partial_coverage.toml"))
         .expect("a partial coverage table should load, filling defaults");
     assert_eq!(

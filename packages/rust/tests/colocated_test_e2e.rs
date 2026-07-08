@@ -1,4 +1,4 @@
-//! E2E tests for `unit colocated-test` exemptions (#32): drive the built CLI
+//! E2E tests for `unit colocated-test` exemptions: drive the built CLI
 //! binary end-to-end (a real subprocess) against fixture trees and their configs,
 //! and assert the exit code. Complements the in-process integration tests in
 //! `colocated_test.rs`.
@@ -35,7 +35,7 @@ fn config_exemptions_clear_the_tree() {
 fn a_blank_reason_exemption_makes_the_binary_error() {
     // bad_exempt's config carries an exemption with an empty `reason`. The binary
     // must reject it on load (exit 1), never silently accept a reasonless
-    // omission. (#32 — "every exemption must say why".)
+    // omission — every exemption must say why.
     assert_eq!(unit_colocated_test_exit("bad_exempt", "python"), 1);
 }
 
@@ -43,11 +43,9 @@ fn a_blank_reason_exemption_makes_the_binary_error() {
 fn conftest_is_not_an_orphan() {
     // python_conftest holds a conftest.py (pytest fixtures) beside a paired
     // source/test. conftest.py is support, never a subject, so the binary reports
-    // no orphans and exits zero. (#112)
+    // no orphans and exits zero.
     assert_eq!(unit_colocated_test_exit("python_conftest", "python"), 0);
 }
-
-// ---- Rust (#40 — inline `#[cfg(test)]` presence) -------------------------
 
 /// Exit code + stderr of the same invocation, for assertions that inspect the
 /// reported orphan (not just the exit code).

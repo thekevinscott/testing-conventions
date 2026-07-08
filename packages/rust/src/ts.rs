@@ -1,15 +1,15 @@
-//! TypeScript isolation analysis (issue #43), parsed with `oxc`.
+//! TypeScript isolation analysis, parsed with `oxc`.
 //!
-//! This is the TypeScript counterpart to the Python [`crate::lint`] module. The
-//! *integration direction* (#75) lands first: an integration test runs
-//! first-party code for real, so it may mock third-party packages and Node
-//! built-ins but **never** a first-party module.
+//! This is the TypeScript counterpart to the Python [`crate::lint`] module. In
+//! the *integration direction*, an integration test runs first-party code for
+//! real, so it may mock third-party packages and Node built-ins but **never** a
+//! first-party module.
 //!
 //! Detection is AST-based — each `*.test.{ts,tsx,mts,cts}` file is parsed with
 //! `oxc_parser` and walked for `vi.mock()` / `vi.doMock()` calls whose target
 //! specifier is first-party. The specifier [`classify`]-ication (first-party /
 //! Node-builtin / third-party) is the shared foundation the unit-direction
-//! slices (#76, #77) build on.
+//! slices build on.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -131,7 +131,7 @@ pub fn find_integration_violations(root: impl AsRef<Path>) -> Result<Vec<Violati
 }
 
 /// Scan the unit test files under `root` and return every isolation violation —
-/// a runtime import that isn't `vi.mock()`-ed (#76) — sorted by `(file, line)`.
+/// a runtime import that isn't `vi.mock()`-ed — sorted by `(file, line)`.
 /// The TypeScript arm of `unit lint`
 /// ([`crate::isolation::Language::TypeScript`]).
 ///
@@ -244,10 +244,10 @@ impl<'a> Visit<'a> for UnitCollector<'_> {
         if let Some(spec) = vi_mock_target(call) {
             // A factory *function* (2nd arg) that doesn't anchor to the real
             // module's type via `vi.importActual<…>()` lets the double drift from
-            // the source (#77). The 2nd arg is only a factory when it's a function:
+            // the source. The 2nd arg is only a factory when it's a function:
             // a bare `vi.mock(spec)` is an auto-mock (typed from the real module),
             // and so is the options form `vi.mock(spec, { spy: true })`, which spies
-            // on the real module and can't drift (#111) — neither is flagged.
+            // on the real module and can't drift — neither is flagged.
             if let Some(factory) = call.arguments.get(1) {
                 if is_factory(factory) && !factory_is_typed(factory) {
                     self.untyped
@@ -296,7 +296,7 @@ fn is_test_runner(spec: &str) -> bool {
 /// `function` expression. Vitest's other 2nd-arg form is an options object
 /// (`vi.mock(spec, { spy: true })`), which is **not** a factory: it spies on the
 /// real module, so the double can't drift, exactly like a bare `vi.mock(spec)`
-/// auto-mock (#111). Only a function factory can return a hand-built double that
+/// auto-mock. Only a function factory can return a hand-built double that
 /// needs a `vi.importActual<…>` type anchor.
 fn is_factory(arg: &Argument) -> bool {
     matches!(
@@ -306,7 +306,7 @@ fn is_factory(arg: &Argument) -> bool {
 }
 
 /// `true` when a `vi.mock` factory anchors to the real module's type — i.e. its
-/// body contains a `vi.importActual<…>()` call carrying a type argument (#77).
+/// body contains a `vi.importActual<…>()` call carrying a type argument.
 /// The conventional form is `vi.importActual<typeof import('<spec>')>()`.
 fn factory_is_typed(factory: &Argument) -> bool {
     let mut finder = ImportActualFinder { typed: false };
@@ -583,7 +583,7 @@ mod tests {
     fn unit_options_object_mock_is_not_a_factory() {
         // Vitest's options form `vi.mock(spec, { spy: true })` is not a factory —
         // it spies on the real module (can't drift), like a bare auto-mock — so it
-        // must not be flagged `untyped-mock` (#111).
+        // must not be flagged `untyped-mock`.
         let found = unit_violations(
             "widget.test.ts",
             "import { x } from './x';\nvi.mock('./x', { spy: true });\n",

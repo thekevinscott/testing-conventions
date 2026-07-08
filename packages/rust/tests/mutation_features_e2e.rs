@@ -1,5 +1,5 @@
-//! E2E tests for cargo-feature passthrough in `unit mutation --language rust`
-//! (#266): drive the built CLI binary end-to-end (no mocks) against the
+//! E2E tests for cargo-feature passthrough in `unit mutation --language rust`:
+//! drive the built CLI binary end-to-end (no mocks) against the
 //! feature-gated fixture crate and assert the exit code.
 //!
 //! A `[rust] features` list names the cargo features the mutation run enables
@@ -11,7 +11,7 @@
 //! Red until feature passthrough lands: today the `features` key is rejected by
 //! the config self-guard, so the run exits non-zero with an "unknown field"
 //! error rather than the clean pass asserted here. Requires only a cargo
-//! toolchain — the tool provisions cargo-mutants itself (#242).
+//! toolchain — the tool provisions cargo-mutants itself.
 
 use std::path::PathBuf;
 use std::process::Command;

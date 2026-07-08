@@ -1,4 +1,4 @@
-//! Integration tests for the TypeScript packaging slice (#73): exercise the
+//! Integration tests for the TypeScript packaging slice: exercise the
 //! `packaging::inspect` library API over the pre-built `npm pack` **tarball**
 //! fixtures (`.tgz`). Rule (README "Packaging"): test files must never ship in
 //! the built artifact.

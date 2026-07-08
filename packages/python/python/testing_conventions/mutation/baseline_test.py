@@ -1,4 +1,4 @@
-"""Unit tests for the mutation adapter's baseline check (#248)."""
+"""Unit tests for the mutation adapter's baseline check."""
 from types import SimpleNamespace
 
 import pytest

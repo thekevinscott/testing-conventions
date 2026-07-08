@@ -1,4 +1,4 @@
-"""Unit tests for the pytest plugin wiring (#218).
+"""Unit tests for the pytest plugin wiring.
 
 Each function is driven directly — the hook as a plain generator, the coverage
 patch with an injected fake ``Coverage`` — so nothing here needs a live pytest

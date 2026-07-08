@@ -1,4 +1,4 @@
-//! Integration tests for the Python packaging slice (#72): exercise the
+//! Integration tests for the Python packaging slice: exercise the
 //! `packaging::inspect` library API over the pre-built **wheel** fixtures. The
 //! rule (README "Packaging"): test files must never ship in the built artifact.
 //!

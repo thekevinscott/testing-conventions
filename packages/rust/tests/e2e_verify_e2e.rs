@@ -1,4 +1,4 @@
-//! E2E tests for `e2e verify` (#17, slice #68): drive the built CLI binary in a
+//! E2E tests for `e2e verify`: drive the built CLI binary in a
 //! throwaway git repo (no mocks) and assert it gates on the committed
 //! attestation — exit `0` when fresh, non-zero with the run-`attest` hint when
 //! the code has moved on. Never runs e2e.
@@ -115,7 +115,7 @@ fn verify_exits_nonzero_with_the_attest_hint_when_stale() {
     );
 }
 
-// --- #281: `e2e verify <path>` behaves identically to running with cwd
+// `e2e verify <path>` behaves identically to running with cwd
 // `<path>` — proven end-to-end by spawning the built binary with cwd fixed at
 // the *repo root* while the path argument names the package subdirectory
 // carrying the attestation. Before the CLI grows the `path` argument, passing
@@ -170,7 +170,7 @@ fn verify_with_path_argument_exits_nonzero_when_the_package_attestation_is_stale
     );
 }
 
-// --- #294: `e2e verify <path> --scope <dir>` narrows the freshness walk to
+// `e2e verify <path> --scope <dir>` narrows the freshness walk to
 // `<dir>` while still reading the attestation from `<path>`.
 
 #[test]
@@ -205,7 +205,7 @@ fn verify_with_scope_ignores_a_commit_outside_it() {
 
 #[test]
 fn verify_with_no_scope_is_unchanged_from_today() {
-    // Regression guard: omitting --scope stays byte-identical to #281's
+    // Regression guard: omitting --scope stays byte-identical to the
     // whole-path freshness walk.
     let repo = TempRepo::new();
     let package_rel = "packages/widget";
@@ -227,7 +227,7 @@ fn verify_with_no_scope_is_unchanged_from_today() {
 #[test]
 fn verify_with_no_argument_is_unchanged_from_today() {
     // Regression guard: `e2e verify` with no argument stays byte-identical —
-    // the default `.` resolves against cwd, exactly like the pre-#281 behavior
+    // the default `.` resolves against cwd, exactly like the behavior
     // covered above.
     let repo = TempRepo::new();
     run_cli(&repo.0, &["e2e", "attest", "true"]);
@@ -238,7 +238,7 @@ fn verify_with_no_argument_is_unchanged_from_today() {
     );
 }
 
-// --- #319: `e2e verify <path> --scope <dir> --base <ref>` restricts freshness to
+// `e2e verify <path> --scope <dir> --base <ref>` restricts freshness to
 // the commits this branch introduced (`<base>..HEAD`), the squash-safe form the
 // reusable job needs. A PR that didn't touch the scoped source passes (exit 0)
 // even when the attestation is stale against absolute history; a PR that changed
@@ -318,7 +318,7 @@ fn verify_with_base_fails_when_the_branch_changed_scoped_source() {
     );
 }
 
-// --- #333: `e2e verify <path> --base <ref> [--extra-scope <dir>]...
+// `e2e verify <path> --base <ref> [--extra-scope <dir>]...
 // [--exclude <dir>]...` joins extra freshness roots (a shared source tree that is
 // a sibling of the package) into the walk. A non-excluded change under an extra
 // root stales the attestation; a change only under an excluded subtree stays

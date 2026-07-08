@@ -33,8 +33,8 @@ pub struct Cli {
 enum Command {
     /// Check the repository against its testing-conventions config.
     Check,
-    /// Write the testing contract into the repository's agent context file
-    /// (#232): a marker-delimited, hash-versioned block in `AGENTS.md` that a
+    /// Write the testing contract into the repository's agent context file:
+    /// a marker-delimited, hash-versioned block in `AGENTS.md` that a
     /// coding agent reads before writing code. Idempotent — re-running
     /// refreshes the owned region and touches nothing outside it.
     Install {
@@ -60,9 +60,9 @@ enum Command {
         #[arg(long, value_enum)]
         language: colocated_test::Language,
     },
-    /// Workflow guard (private — hidden from `--help`, #191): every `testing-conventions`
+    /// Workflow guard (private — hidden from `--help`): every `testing-conventions`
     /// invocation in a CI workflow must name a subcommand this binary still exposes
-    /// (guards the `@v0` path, #92). Run from our own CI, not a documented consumer command;
+    /// (guards the `@v0` path). Run from our own CI, not a documented consumer command;
     /// it stays in the binary because the guard needs the in-process command tree.
     #[command(hide = true)]
     Workflow {
@@ -81,7 +81,7 @@ enum Command {
 enum UnitRule {
     /// Check that every source file has a colocated, matching-named unit test
     /// (tree-wide presence). With `--base`, additionally run the commit-scoped
-    /// `co-change` check over `<base>...HEAD` (#33): a modified or deleted source
+    /// `co-change` check over `<base>...HEAD`: a modified or deleted source
     /// whose colocated test is not in the diff fails. Presence always runs;
     /// `--base` *adds* the diff-scoped check.
     ColocatedTest {
@@ -90,7 +90,7 @@ enum UnitRule {
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
         language: colocated_test::Language,
-        /// Opt-in commit-scoped co-change check (#33): diff `<base>...HEAD` and
+        /// Opt-in commit-scoped co-change check: diff `<base>...HEAD` and
         /// also flag a modified or deleted source whose colocated test didn't
         /// co-change. Absent means presence-only — there is no default. Python /
         /// TypeScript only: `--base --language rust` is rejected (inline
@@ -104,7 +104,7 @@ enum UnitRule {
     },
     /// Check that the unit suite meets the configured coverage floor. With
     /// `--base`, the same configured floor is measured over the `<base>...HEAD`
-    /// diff (the changed lines) instead of the whole tree (#162) — a changed line
+    /// diff (the changed lines) instead of the whole tree — a changed line
     /// below the floor fails, no matter how small the diff.
     Coverage {
         /// Directory whose unit suite is run and measured.
@@ -112,7 +112,7 @@ enum UnitRule {
         /// Language convention to enforce (required).
         #[arg(long, value_enum)]
         language: colocated_test::Language,
-        /// Opt-in diff-scoped coverage (#162): diff `<base>...HEAD` and measure the
+        /// Opt-in diff-scoped coverage: diff `<base>...HEAD` and measure the
         /// configured floor over only the changed lines, instead of the whole tree.
         /// Absent means whole-tree — there is no default. This is the patch-scoped
         /// check the old `unit patch-coverage` command did, re-homed onto the floor
@@ -139,17 +139,17 @@ enum UnitRule {
         config: PathBuf,
     },
     /// Run mutation testing over the unit suite and fail on any surviving mutant not
-    /// lifted by a `mutation` exemption — the rung above coverage (#201). The gate is
+    /// lifted by a `mutation` exemption — the rung above coverage. The gate is
     /// on by default (no report-only mode). All three languages (Python, TypeScript,
     /// Rust) are at parity and wired into the reusable workflow as a diff-scoped,
-    /// PR-only job (#204).
+    /// PR-only job.
     Mutation {
         /// Crate whose unit suite is mutated.
         path: PathBuf,
         /// Language convention to enforce (required): `python`, `typescript`, or `rust`.
         #[arg(long, value_enum)]
         language: colocated_test::Language,
-        /// Opt-in diff-scoping (#201): restrict to mutants on lines a `<base>...HEAD`
+        /// Opt-in diff-scoping: restrict to mutants on lines a `<base>...HEAD`
         /// diff added or modified, via cargo-mutants' `--in-diff`. Absent means the
         /// whole crate (slower).
         #[arg(long)]
@@ -200,7 +200,7 @@ enum IntegrationRule {
     },
 }
 
-/// E2E attestation commands (#17): record a local e2e run and (later, #68)
+/// E2E attestation commands: record a local e2e run and (later)
 /// verify in CI that the latest code commit is attested.
 #[derive(Subcommand, Debug)]
 enum E2eCommand {
@@ -219,7 +219,7 @@ enum E2eCommand {
         /// this flag existed). Must be `path` or a descendant of it.
         #[arg(long)]
         scope: Option<PathBuf>,
-        /// Opt-in diff-scoping (#319): restrict freshness to the commits this
+        /// Opt-in diff-scoping: restrict freshness to the commits this
         /// branch introduced (`<base>..HEAD`) rather than all reachable history.
         /// A branch that didn't touch the scoped source passes with nothing to
         /// re-attest — the way the changed-line coverage/mutation gates pass on an
@@ -227,7 +227,7 @@ enum E2eCommand {
         /// Absent means the whole history (byte-identical to before this flag).
         #[arg(long)]
         base: Option<String>,
-        /// Extra freshness roots (#333): repo-root-relative directories outside
+        /// Extra freshness roots: repo-root-relative directories outside
         /// `path` whose commits join the freshness walk — a shared source tree
         /// beside the package (a native core bound into several bindings) that no
         /// `--scope` at-or-below `path` can reach. Repeatable; the attestation
@@ -235,8 +235,8 @@ enum E2eCommand {
         /// and every `--extra-scope`. Absent means the walk covers only `--scope`.
         #[arg(long = "extra-scope")]
         extra_scope: Vec<PathBuf>,
-        /// Feature-gated subtrees carved back out of the `--extra-scope` union
-        /// (#333): repo-root-relative directories (a core `cli/` compiled out of
+        /// Feature-gated subtrees carved back out of the `--extra-scope` union:
+        /// repo-root-relative directories (a core `cli/` compiled out of
         /// the bindings) whose commits must not stale the attestation. Repeatable.
         #[arg(long = "exclude")]
         exclude: Vec<PathBuf>,
@@ -319,7 +319,7 @@ where
 }
 
 /// The binary's own clap command tree — the source of truth for which subcommands
-/// it exposes. The `workflow` guard (#92) checks a workflow's invocations against
+/// it exposes. The `workflow` guard checks a workflow's invocations against
 /// it, so a renamed or removed subcommand is caught the moment they diverge.
 pub fn command() -> clap::Command {
     Cli::command()
@@ -328,7 +328,7 @@ pub fn command() -> clap::Command {
 /// Run the unit colocated-test check over `root` for `language`. Always runs the
 /// tree-wide **presence** check (every source file has its colocated test; Rust:
 /// an inline `#[cfg(test)]` module). When `base` is `Some`, *additionally* runs the
-/// commit-scoped **co-change** check (#33) over `<base>...HEAD` — a modified or
+/// commit-scoped **co-change** check over `<base>...HEAD` — a modified or
 /// deleted source whose colocated test didn't co-change — and the run fails if
 /// either check does. Returns `0` only when both pass.
 ///
@@ -376,7 +376,7 @@ fn report_colocated_presence(
     let exempt = colocated_test_exemptions(root, language, config_path)?;
     let orphans = match language {
         // Rust units are inline `#[cfg(test)]` modules, so "colocated" means a test
-        // module in the same file, not a sibling file (#40).
+        // module in the same file, not a sibling file.
         colocated_test::Language::Rust => colocated_test::missing_inline_tests(root, &exempt)?,
         _ => colocated_test::missing_unit_tests(root, language, &exempt)?,
     };
@@ -421,7 +421,7 @@ fn colocated_test_exemptions(
     )
 }
 
-/// The commit-scoped **co-change** check (#33) over `root`, diffing `<base>...HEAD`:
+/// The commit-scoped **co-change** check over `root`, diffing `<base>...HEAD`:
 /// every modified or deleted source whose colocated test didn't co-change. Prints
 /// each stale source to stderr and returns `Ok(false)` when any are found,
 /// `Ok(true)` when clean.
@@ -470,7 +470,7 @@ fn co_change_exemptions(
     config::resolve_exempt(root, config.exemptions(language), config::Rule::CoChange)
 }
 
-/// Split a resolved exempt-scope map (#226) into the whole-file paths and the
+/// Split a resolved exempt-scope map into the whole-file paths and the
 /// line-scoped sets — the two shapes the `coverage` / `mutation` measure functions
 /// take. A [`config::LineScope::WholeFile`] becomes a path in the first vec; a
 /// [`config::LineScope::Lines`] a `path → lines` entry in the second map.
@@ -498,17 +498,17 @@ fn split_scopes(
 /// `1` otherwise.
 ///
 /// With `base` set, the same configured floor is measured over the
-/// `<base>...HEAD` diff (the changed lines) rather than the whole tree (#162),
+/// `<base>...HEAD` diff (the changed lines) rather than the whole tree,
 /// via the diff-scoped [`patch_coverage::measure`] / `measure_typescript` /
 /// `measure_rust`; without it, the whole-tree [`coverage::measure`] family runs.
 ///
-/// Coverage is zero-config by default for Python and TypeScript (#80): a missing
+/// Coverage is zero-config by default for Python and TypeScript: a missing
 /// config file — or a config with no `[<language>].coverage` table — falls back to
 /// the language's sane default floor ([`config::PythonCoverage::default`] /
 /// [`config::TypeScriptCoverage::default`]), the same way `unit colocated-test` and
 /// `integration lint` treat an absent config as "nothing exempt". A present
 /// `coverage` table overrides the default; `coverage`-rule exemptions still apply.
-/// Rust (#206) is zero-config too: a missing `[rust].coverage` table falls back to
+/// Rust is zero-config too: a missing `[rust].coverage` table falls back to
 /// [`config::RustCoverage::default`] (`lines = 100`, `regions` opt-in, no branch).
 fn run_unit_coverage(
     root: &Path,
@@ -579,7 +579,7 @@ fn run_unit_coverage(
         }
         colocated_test::Language::Rust => {
             let rust = config.rust.unwrap_or_default();
-            // Zero-config (#206): a missing `[rust].coverage` table falls back to the
+            // Zero-config: a missing `[rust].coverage` table falls back to the
             // default Rust floor (`lines = 100`, with `regions` opt-in and no branch
             // component) — matching Python/TypeScript — rather than erroring for a
             // required table. A present table overrides it.
@@ -626,7 +626,7 @@ fn run_unit_coverage(
     }
 }
 
-/// Run `unit mutation` over `root` (#201, #202): run the per-language engine and fail
+/// Run `unit mutation` over `root`: run the per-language engine and fail
 /// on any surviving mutant not lifted by a `mutation` exemption.
 ///
 /// The gate is **on by default and binary** — "no *unexplained* surviving mutant":
@@ -780,7 +780,7 @@ fn run_integration_lint(
 /// varying piece between the `unit lint` and `integration lint` waiver paths.
 type ExemptSelect = fn(&config::Config) -> &[config::Exemption];
 
-/// Drop the violations waived by the config's `exempt` list (#32/#102). A
+/// Drop the violations waived by the config's `exempt` list. A
 /// violation is waived when its `rule` is a known [`config::Rule`] and its
 /// `root`-relative path is exempt for that rule. `exemptions` selects the
 /// language's `[[<lang>.exempt]]` table from the loaded config. A missing config
@@ -833,8 +833,8 @@ fn apply_waivers(
 /// globs.
 ///
 /// `artifact` is either an already-unpacked directory or a packed artifact the
-/// rule unpacks itself — a Python wheel (`.whl`) today; the TypeScript (#73) and
-/// Rust (#74) archives follow. Returns `0` when no test file is present, `1`
+/// rule unpacks itself — a Python wheel (`.whl`) today; the TypeScript and
+/// Rust archives follow. Returns `0` when no test file is present, `1`
 /// otherwise (after printing each offending path, relative to the artifact root).
 fn run_packaging(artifact: &Path, language: colocated_test::Language) -> anyhow::Result<i32> {
     let globs = match language {
@@ -885,7 +885,7 @@ fn run_workflow(path: &Path) -> anyhow::Result<i32> {
 }
 
 /// Run `command` as an e2e suite and write a committed attestation naming the
-/// current commit (#67). Force-runs: the attestation is written regardless of
+/// current commit. Force-runs: the attestation is written regardless of
 /// the command's exit code, so this exits `0` once the attestation is recorded.
 fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
     let repo = std::env::current_dir()?;
@@ -897,21 +897,21 @@ fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
     Ok(0)
 }
 
-/// Verify the committed e2e attestation names the latest code commit (#68) — the
+/// Verify the committed e2e attestation names the latest code commit — the
 /// CI side of the nudge. Exits `0` when fresh; otherwise prints the actionable
 /// hint and exits `1`. Never runs e2e, never judges the recorded run.
 ///
 /// `path` is the directory whose committed `e2e-attestation.json` is checked
-/// (#281) — the default `.` resolves against the current directory, so a
-/// no-argument call behaves exactly like the pre-#281 `current_dir()` read.
+/// — the default `.` resolves against the current directory, so a
+/// no-argument call behaves exactly like the `current_dir()` read.
 /// Passing a package subdirectory scopes discovery to it, matching a call made
 /// with that directory as cwd. `scope`, when set, narrows the "latest code
 /// commit" freshness walk to a directory under `path` instead of all of it
-/// (#294) — `None` behaves exactly like passing `path` itself. `base`, when set,
+/// — `None` behaves exactly like passing `path` itself. `base`, when set,
 /// restricts the walk to the commits this branch introduced (`<base>..HEAD`)
-/// instead of all history (#319) — `None` behaves exactly like before the flag.
+/// instead of all history — `None` behaves exactly like before the flag.
 /// `extra_scopes` join repo-root-relative sibling trees into the walk and
-/// `excludes` carve feature-gated subtrees back out (#333) — both empty behaves
+/// `excludes` carve feature-gated subtrees back out — both empty behaves
 /// exactly like before those flags.
 fn run_e2e_verify(
     path: &Path,

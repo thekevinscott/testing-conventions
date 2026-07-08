@@ -1,4 +1,4 @@
-//! E2E tests for the workflow guard (#92): drive the built CLI binary against the
+//! E2E tests for the workflow guard: drive the built CLI binary against the
 //! fixture workflows and assert the exit code. The guard: a `testing-conventions`
 //! invocation in a workflow must name a subcommand the binary still exposes, so a
 //! rename can't strand the `@v0` consumption path.
@@ -47,7 +47,7 @@ fn help_stdout() -> String {
 
 #[test]
 fn help_does_not_list_the_private_workflow_command() {
-    // `workflow` is the private #92 drift guard (#191): it must not be listed as a command
+    // `workflow` is the private drift guard: it must not be listed as a command
     // in `--help`. `clean_workflow_exits_zero` above proves it still runs when invoked
     // explicitly (hidden, not removed).
     let help = help_stdout();

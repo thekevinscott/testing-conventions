@@ -12,7 +12,7 @@ from checks.isolation_red.cli import CHECKS, cli
 def test_checks_are_the_expected_invocations():
     assert CHECKS == [
     (
-        ["npx", "-y", "testing-conventions", "unit", "lint", "--language", "rust", ".github/selftest/isolation/rust-red"],
+        ["./hermetic-cli/testing-conventions", "unit", "lint", "--language", "rust", ".github/selftest/isolation/rust-red"],
         True,
         "un-isolated crate trips unit lint",
     ),

@@ -1,4 +1,4 @@
-"""Colocated unit tests for the mutation-gate check (isolation — no CliRunner, no subprocess mocks).
+"""Colocated unit tests for the colocated-rust-red check (isolation — no CliRunner, no subprocess mocks).
 
 Imports only the unit under test: this check's own `CHECKS` data and `cli` command. The shared
 orchestration and exit-code decision are covered once beside `run_checks` / `failure_reason`.
@@ -6,20 +6,15 @@ Here we pin this check's `CHECKS` and drive `cli` through its `.callback` over t
 `true`/`false` builtins (the trailing-command seam), asserting the raise path against the
 propagated exception's `.message` — so no `click.testing` or `CheckFailed` is imported.
 """
-from checks.mutation_gate.cli import CHECKS, cli
+from checks.colocated_rust_red.cli import CHECKS, cli
 
 
 def test_checks_are_the_expected_invocations():
     assert CHECKS == [
     (
-        ["./hermetic-cli/testing-conventions", "unit", "mutation", "--language", "rust", ".github/selftest/mutation/clean"],
-        False,
-        "clean crate passes unit mutation",
-    ),
-    (
-        ["./hermetic-cli/testing-conventions", "unit", "mutation", "--language", "rust", ".github/selftest/mutation/survivor"],
+        ["./hermetic-cli/testing-conventions", "unit", "colocated-test", "--language", "rust", ".github/selftest/colocated-rust/red"],
         True,
-        "survivor crate trips the mutation gate",
+        "orphan crate trips the rust colocated-test arm",
     ),
 ]
 

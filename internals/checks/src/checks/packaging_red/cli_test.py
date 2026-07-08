@@ -12,7 +12,7 @@ from checks.packaging_red.cli import CHECKS, cli
 def test_checks_are_the_expected_invocations():
     assert CHECKS == [
     (
-        ["npx", "-y", "testing-conventions", "packaging", ".github/selftest/packaging/red/widget-0.1.0-py3-none-any.whl", "--language", "python"],
+        ["./hermetic-cli/testing-conventions", "packaging", ".github/selftest/packaging/red/widget-0.1.0-py3-none-any.whl", "--language", "python"],
         True,
         "red wheel trips the packaging check",
     ),

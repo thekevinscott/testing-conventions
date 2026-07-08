@@ -1,7 +1,7 @@
 """End-to-end tests for the coverage-rust-red check: the real entry point, click's CliRunner, no mocks.
 
 `cli` runs a subprocess per check, so it runs here (the package-root e2e suite), not the isolated
-unit suite. A trailing benign command stands in for the real npx invocation: `false` (exit 1) makes
+unit suite. A trailing benign command stands in for the real hermetic-CLI invocation: `false` (exit 1) makes
 the red-path check hold; `true` (exit 0) violates it. CliRunner captures the exit code and output.
 """
 from click.testing import CliRunner

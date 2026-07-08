@@ -12,17 +12,17 @@ from checks.integration_lint_new_arms_trip.cli import CHECKS, cli
 def test_checks_are_the_expected_invocations():
     assert CHECKS == [
     (
-        ["npx", "-y", "testing-conventions", "integration", "lint", "--language", "rust", ".github/selftest/integration-rust/red"],
+        ["./hermetic-cli/testing-conventions", "integration", "lint", "--language", "rust", ".github/selftest/integration-rust/red"],
         True,
         "red Rust crate trips integration lint",
     ),
     (
-        ["npx", "-y", "testing-conventions", "integration", "lint", "--language", "typescript", ".github/selftest/integration-typescript/red"],
+        ["./hermetic-cli/testing-conventions", "integration", "lint", "--language", "typescript", ".github/selftest/integration-typescript/red"],
         True,
         "red TypeScript suite trips integration lint",
     ),
     (
-        ["npx", "-y", "testing-conventions", "integration", "lint", "--language", "typescript", ".github/selftest/integration-typescript/clean"],
+        ["./hermetic-cli/testing-conventions", "integration", "lint", "--language", "typescript", ".github/selftest/integration-typescript/clean"],
         False,
         "clean TypeScript suite passes integration lint",
     ),

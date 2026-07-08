@@ -1,4 +1,4 @@
-"""End-to-end tests for the python-mutation-clean check: the real entry point, click's CliRunner, no mocks.
+"""End-to-end tests for the colocated-rust-red check: the real entry point, click's CliRunner, no mocks.
 
 `cli` runs a subprocess per check, so it runs here (the package-root e2e suite), not the isolated
 unit suite. A trailing benign command stands in for the real hermetic-CLI invocation: `false` (exit 1) makes
@@ -6,7 +6,7 @@ the red-path check hold; `true` (exit 0) violates it. CliRunner captures the exi
 """
 from click.testing import CliRunner
 
-from checks.python_mutation_clean.cli import cli
+from checks.colocated_rust_red.cli import cli
 
 
 def test_red_check_passes_when_the_command_fails():

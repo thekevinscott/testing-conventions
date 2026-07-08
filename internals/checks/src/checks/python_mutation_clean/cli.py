@@ -1,7 +1,7 @@
 """The python-mutation-clean check — repo-only (#302 #309, #321, #328).
 
 Backs the `tc-checks python-mutation-clean` subcommand: the `python-mutation-clean` job in
-`.github/workflows/testing-conventions-selftest.yml` drives the published `unit mutation --language python` command over a mutation-clean fixture and asserts the zero exit that proves the wheel-shipped adapter resolves (#258).
+`.github/workflows/testing-conventions-selftest.yml` drives the hermetic-CLI (built-from-HEAD) `unit mutation --language python` command over a mutation-clean fixture and asserts the zero exit that proves the wheel-shipped adapter resolves (#258).
 
 A standalone, colocated-tested check rather than an inline `run: |` bash block: inline workflow
 bash is untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:`
@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import click
 
+from checks.config import HERMETIC_CLI
 from checks.utils.run_checks import run_checks
 
 CHECKS = [
     (
-        ["npx", "-y", "testing-conventions", "unit", "mutation", "--language", "python", ".github/selftest/mutation/python-clean"],
+        [*HERMETIC_CLI, "unit", "mutation", "--language", "python", ".github/selftest/mutation/python-clean"],
         False,
         "clean Python library passes unit mutation",
     ),

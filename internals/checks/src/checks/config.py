@@ -20,3 +20,9 @@ PY_FIXTURE_CONFIG = ".github/selftest/monorepo/packages/py/testing-conventions.t
 # the called workflow's rule jobs download it.
 SELFTEST_WORKFLOW = ".github/workflows/testing-conventions-selftest.yml"
 DOGFOOD_WORKFLOW = ".github/workflows/dogfood.yml"
+
+# The CLI-invocation prefix the direct-drive red-path checks run (#379): the hermetic binary the
+# caller's `build-cli` job stages and each red-path job downloads to `./hermetic-cli/`, so the
+# self-test validates this branch's CLI, not the published npm-latest one. Spliced ahead of each
+# check's subcommand argv (`[*HERMETIC_CLI, "unit", "coverage", …]`).
+HERMETIC_CLI = ["./hermetic-cli/testing-conventions"]

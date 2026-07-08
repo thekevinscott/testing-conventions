@@ -661,6 +661,16 @@ flags; and Rust coverage anchors each whole-file `coverage` exemption to its ful
 for `src/a.rs` no longer over-matches a workspace member's `member/src/a.rs`. All three are private
 (`agents::install`'s signature is unchanged; the guard and `ignore_filename_regex` are internal), so
 there is no public-API break — see **Behavior changes without code changes**.
+Corrects the `unit lint` isolation rule across all three languages (#393): one Python false green
+and two false reds (TypeScript, Rust). Python's `unmocked-collaborator` no longer clears a
+`from pkg.mod import a, b` import when only one symbol — or a same-last-segment patch of a
+*different* module (`patch("other.record")`, `patch("json.dumps")`) — is patched; a patch mocks an
+imported symbol only when its target names that import's own source module, and every imported
+symbol must be individually patched. TypeScript's mock matching normalizes the module extension on
+both sides, so a `.js` import mocked bare (and the inverse) resolves to the same Vitest module.
+Rust's scan reuses the colocated-test source walk, skipping `tests/`/`benches/`/`examples/`/`target/`
+and `build.rs`, so a locally-built crate is scanned the same as a fresh checkout. No public API
+change; the lint's *verdicts* change (see **Behavior changes without code changes**).
 
 ### Required changes
 
@@ -1100,6 +1110,20 @@ Exemptions (#32) change runtime behavior:
   earlier "keep the exempt entry and the stale-path check rejects it / drop it and co-change flags it"
   deadlock is gone. A deletion whose colocated test *did* exist in base is still flagged when that test
   isn't removed or updated. No API or config change.
+- `unit lint` isolation now returns correct verdicts where it previously did not (#393); no API or
+  config change, but the set of files a run flags shifts:
+  - **Python** — an un-mocked collaborator that a previously-accepted patch silently cleared now
+    surfaces as `unmocked-collaborator`. A `from pkg.mod import a, b` is cleared only when every
+    symbol is patched at that import's own module (`patch("pkg.mod.a")`, `patch("pkg.mod.b")`); a
+    partial patch, a patch of a different module sharing the last segment (`patch("other.a")`,
+    `patch("json.dumps")`), or the old "consuming-module" spelling (`patch("pkg.consumer.a")`) no
+    longer clears it. Patch each imported collaborator at its own source module, follow the canonical
+    form (patch by string, don't import the collaborator), or waive the file with a reason.
+  - **TypeScript** — a `.js`-carrying import mocked with a bare `vi.mock('./x')` (or the inverse) is
+    now recognized as mocked and no longer false-flagged.
+  - **Rust** — `unit lint --language rust` on a locally-built crate no longer aborts on an unparsable
+    `.rs` under `tests/` nor false-flags `#[cfg(test)]` modules under `tests/`/`target/`; only the
+    crate's own unit source is scanned.
 
 ### Verification
 

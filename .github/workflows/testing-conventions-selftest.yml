@@ -375,6 +375,21 @@ jobs:
       - name: move-major-tag.yml is gated and release.yml moves no tag inline
         run: uv run --project internals/checks tc-checks rolling-release-wired
 
+  verify-release-wired:
+    name: The major tag advances only after the version-pinned verification passes
+    # The red→green signal for #357. Publish-gating (rolling-release-wired) proves the binary
+    # published; it does not prove the combination the tag move is about to bless — the new
+    # workflow file, the published binary, the current @v0 detect — is green over the consumer
+    # surface. Assert the promotion is gated statically: move-major-tag.yml runs the layout check
+    # and dispatches the version-pinned self-test + dogfood suites before the move, and the job
+    # that advances @v0 needs those verification jobs (fail closed).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
+      - name: move-major-tag.yml gates @v0 on the pre-move verification
+        run: uv run --project internals/checks tc-checks verify-release-wired
+
   github-helpers-wired:
     name: The .github helpers are dogfooded through every Python arm
     # Red→green wiring signal for #237's last arm: dogfood-github-helpers.yml holds the

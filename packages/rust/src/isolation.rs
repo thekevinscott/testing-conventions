@@ -62,14 +62,18 @@ pub enum Language {
 /// sorted by `(file, line)` for deterministic output.
 ///
 /// `root` is the crate root: its `Cargo.toml` names the external crates whose
-/// calls are out-of-module. Every `*.rs` file under it is parsed; a file that
-/// cannot be read or parsed is an error.
+/// calls are out-of-module. The scan reuses the colocated-test unit-source walk, so
+/// it reads only the crate's own unit source (`src/`, `lib.rs`, `main.rs`) and skips
+/// the non-unit trees — `tests/` integration crates, `benches/`, `examples/`, and the
+/// `target/` build directory — exactly as the presence rule does. A locally-built
+/// crate is therefore scanned the same as a fresh checkout: a `target/` build artifact
+/// or a broken fixture under `tests/` neither aborts the rule nor is false-flagged.
 pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     let root = root.as_ref();
     let deps = external_deps(root)?;
 
     let mut files = Vec::new();
-    collect_rust_files(root, &mut files)?;
+    crate::colocated_test::collect_rust_source_files(root, &mut files)?;
     files.sort();
 
     let mut violations = Vec::new();

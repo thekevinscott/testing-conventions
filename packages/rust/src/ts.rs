@@ -185,11 +185,19 @@ fn unit_violations_in(file: &Path, source: &str) -> Result<Vec<Violation>> {
     collector.visit_program(&ret.program);
 
     let unit = unit_under_test_specifier(file);
+    // Vitest resolves `./formatter` and `./formatter.js` to the same module, so a mock
+    // matches its import by resolved module — the extension may differ between the two.
+    // Normalize the module extension on both sides of the comparison.
+    let mocked_modules: BTreeSet<&str> = collector
+        .mocked
+        .iter()
+        .map(|m| strip_module_ext(m))
+        .collect();
     let mut violations = Vec::new();
     for (spec, line) in &collector.imports {
         if is_unit_under_test(spec, &unit)
             || is_test_runner(spec)
-            || collector.mocked.contains(spec)
+            || mocked_modules.contains(strip_module_ext(spec))
         {
             continue;
         }

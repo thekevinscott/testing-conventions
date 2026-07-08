@@ -221,8 +221,10 @@ pub fn missing_inline_tests(
 /// Recursively collect `*.rs` unit-source files under `dir` into `out`, skipping
 /// the non-unit trees — `tests/` (integration crates), `benches/`, `examples/`,
 /// `target/` — and the `build.rs` build script. Inline `#[cfg(test)]` tests live in
-/// the library/binary source, so only those files are presence subjects.
-fn collect_rust_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+/// the library/binary source, so only those files are presence subjects. Shared with
+/// the unit-isolation scan ([`crate::isolation::find_violations`]), which walks the
+/// same unit source.
+pub(crate) fn collect_rust_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
     for entry in entries {

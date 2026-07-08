@@ -135,31 +135,32 @@ def test_raises_when_a_callers_uses_call_lacks_the_needs_edge(tmp_path):
     try:
         cli.callback(workflow=workflow, callers=(caller,))
     except Exception as error:  # noqa: BLE001
-        assert "2 `uses:` call(s)" in error.message
-        assert "only 1 carry" in error.message
+        assert "clean" in error.message
+        assert "packaging-clean" not in error.message
         assert "races" in error.message
     else:
         raise AssertionError("a uses: call without needs: [build-cli] must raise")
 
 
-def test_raises_when_a_caller_has_more_needs_edges_than_uses_calls(tmp_path):
-    # The uses/needs count check must catch a mismatch in either direction, not just
-    # uses > needs: an extra needs: [... build-cli ...] line with no matching uses: call is
-    # just as much a wiring drift as a missing one.
+def test_names_the_unwired_job_even_when_an_unrelated_job_has_the_edge(tmp_path):
+    # The false negative a file-wide uses/needs *count* comparison missed: an unrelated job
+    # carrying `needs: [build-cli]` with no `uses:` call of its own numerically balances a
+    # different job that's genuinely unwired, so a count-based check would pass while the race
+    # is still real. Checking per job (not per file) can't be fooled this way.
     workflow = _write(tmp_path, "wf.yml", WIRED)
     caller = _write(
         tmp_path,
         "caller.yml",
-        CALLER_WIRED + "  extra:\n    needs: [build-cli]\n    run: echo hi\n",
+        CALLER_MISSING_NEEDS + "  extra:\n    needs: [build-cli]\n    run: echo hi\n",
     )
     try:
         cli.callback(workflow=workflow, callers=(caller,))
     except Exception as error:  # noqa: BLE001
-        assert "2 `uses:` call(s)" in error.message
-        assert "only 3 carry" in error.message
+        assert "clean" in error.message
+        assert "packaging-clean" not in error.message
         assert "races" in error.message
     else:
-        raise AssertionError("more needs: [build-cli] edges than uses: calls must raise")
+        raise AssertionError("an unrelated job's needs: edge must not mask a different job's missing edge")
 
 
 def test_declares_the_workflow_argument_and_variadic_callers():

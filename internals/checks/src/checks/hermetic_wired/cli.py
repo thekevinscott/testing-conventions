@@ -21,9 +21,12 @@ exist:
 
 And two must not: any `inputs.hermetic` reference (the rejected flag design), and any
 `build-cli:` job (the rejected consumer-visible-row design). In each caller workflow, a
-`build-cli:` job must exist and every `uses:` call of the reusable workflow must
-`needs: [build-cli]` — without the edge the build races the download and fails flaky instead of
-deterministically.
+`build-cli:` job must exist and every job that `uses:` the reusable workflow must carry
+`needs: [... build-cli ...]` on that same job — without the edge the build races the download and
+fails flaky instead of deterministically. Checked per job (`iter_job_blocks`), not as two
+file-wide counts: counting `uses:` lines against `needs: [... build-cli ...]` lines separately
+would pass on a false negative — an unrelated job's edge, or a duplicated edge on one job,
+numerically balances a different job that's missing its edge entirely, while the race stays real.
 
 A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
 untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:` text is
@@ -39,6 +42,7 @@ import click
 
 from checks.config import DOGFOOD_WORKFLOW, REUSABLE_WORKFLOW, SELFTEST_WORKFLOW
 from checks.utils.check_failed import CheckFailed
+from checks.utils.job_block import iter_job_blocks
 
 GUARD = "github.repository == 'thekevinscott/testing-conventions' && inputs.version == ''"
 
@@ -95,12 +99,15 @@ def cli(workflow: str, callers: tuple[str, ...]) -> None:
                 "`./.github/actions/build-hermetic-cli` composite action — inlining the build "
                 "steps here instead lets this caller's build drift from the other caller's (#356)"
             )
-        uses = len(USES_LINE.findall(caller_text))
-        needs = len(NEEDS_BUILD_CLI.findall(caller_text))
-        if uses != needs:
+        unwired = [
+            name
+            for name, block in iter_job_blocks(caller_text)
+            if USES_LINE.search(block) and not NEEDS_BUILD_CLI.search(block)
+        ]
+        if unwired:
             raise CheckFailed(
-                f"{caller} wires {uses} `uses:` call(s) of the reusable workflow but only "
-                f"{needs} carry `needs: [... build-cli ...]` — without the edge the build races "
+                f"{caller} calls the reusable workflow from {', '.join(unwired)} with no "
+                "`needs: [... build-cli ...]` on that job — without the edge the build races "
                 "the artifact download and fails flaky instead of deterministically (#356)"
             )
     click.echo("hermetic build-from-HEAD mode is derived, caller-built, and fully wired")

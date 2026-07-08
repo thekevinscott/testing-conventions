@@ -879,9 +879,14 @@ jobs:
       # other rule job always checks out first, but this one skips it on the
       # packaging_artifact path above, so on the hermetic path that path needs its own
       # (otherwise-redundant) checkout for ./.github/actions/download-hermetic-cli to resolve.
+      # `clean: false`: actions/checkout defaults to `git clean -ffdx` before fetching, which
+      # would delete the untracked _packaging_artifact/ the step above just downloaded — this
+      # checkout only needs the repo's own files on disk, not a pristine workspace.
       - name: Check out the repository to resolve the hermetic-cli download action
         if: inputs.packaging_artifact != '' && needs.detect.outputs.cli_command != ''
         uses: actions/checkout@v6
+        with:
+          clean: false
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli

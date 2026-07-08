@@ -652,6 +652,16 @@ is unchanged.
 one) that failed to load under #289 now loads — the reason is optional. No config needs editing;
 existing configs that carry a `reason` keep it (as an optional note).
 
+Corrects three helper defects with no public-API change (#396): `install` refuses an `AGENTS.md`
+whose managed block carries a begin marker with no matching end marker (rather than appending and
+orphaning it, which let the next run delete surrounding prose); the private workflow guard reads a
+`testing-conventions` token as an invocation only in command position (so `pip install
+testing-conventions pytest` is not mis-flagged) and validates the subcommand across leading global
+flags; and Rust coverage anchors each whole-file `coverage` exemption to its full path, so an entry
+for `src/a.rs` no longer over-matches a workspace member's `member/src/a.rs`. All three are private
+(`agents::install`'s signature is unchanged; the guard and `ignore_filename_regex` are internal), so
+there is no public-API break — see **Behavior changes without code changes**.
+
 ### Required changes
 
 `config::PythonConfig` gains `build_command: Option<String>` and `reason: String` (#289). Both
@@ -912,6 +922,18 @@ test module — so a source file whose only cfg-gated module is `not(test)` now 
 and production calls inside a `#[cfg(not(test))]` module are no longer flagged as out-of-module
 unit-test calls (they previously exited 1). `#[cfg(test)]` and `#[cfg(all(test, …))]` modules are
 scored exactly as before. No public API change. Required changes: None.
+
+`install` refuses an `AGENTS.md` whose managed block has a `testing-conventions:begin` marker with
+no matching `:end` marker (#396), erroring and leaving the file untouched instead of appending a
+fresh block. A well-formed block (both markers present) upserts exactly as before, and a file with
+no marker still appends — only the damaged-block case changes, and it changes from silent corruption
+to a clear error. The workflow guard no longer flags a package-install line
+(`pip install testing-conventions pytest`) and now validates a subcommand that follows a leading
+global flag; both are internal-guard corrections with no consumer-facing invocation change. Rust
+`unit coverage` anchors each whole-file `coverage` exemption to its full path, so an exemption for
+`src/a.rs` drops only that file, not a workspace member's `member/src/a.rs`; a single-crate consumer
+with no same-named files across members sees identical results. No API or config change in any of
+the three.
 
 `unit mutation --language rust` no longer duplicates the `cargo-mutants` provisioning install
 under concurrent invocations (#385). A cold provisioning cache previously cost one from-source

@@ -520,7 +520,7 @@ def test_e2e_build_command_derived_from_the_package_root_config(run_detect):
 def test_e2e_multiline_build_command_round_trips_through_github_output(run_detect):
     # A multi-line `build_command` (a legal TOML `"""…"""` string) must survive
     # GITHUB_OUTPUT intact — the heredoc form, not a raw `name=value` line a newline
-    # would split into a corrupt file-command / bogus output (#396).
+    # would split into a corrupt file-command / bogus output.
     build = "cp a.tmpl a.py\ncp b.tmpl b.py"
     out = run_detect(
         scan_path="packages/py/src",

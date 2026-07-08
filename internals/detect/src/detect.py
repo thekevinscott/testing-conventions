@@ -26,6 +26,7 @@ Inputs come from the environment (set by the workflow):
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tomllib
@@ -532,6 +533,39 @@ def compute_outputs(
     }
 
 
+def _output_delimiter(value: str) -> str:
+    """A heredoc delimiter that appears on no line of `value`. Derived from the value's
+    hash so it's deterministic, then bumped until it can't collide with the content."""
+    base = "ghadelimiter_" + hashlib.sha256(value.encode()).hexdigest()[:32]
+    delim = base
+    body = value.split("\n")
+    counter = 0
+    while delim in body:
+        counter += 1
+        delim = f"{base}_{counter}"
+    return delim
+
+
+def render_github_output(outputs: dict[str, str]) -> str:
+    """Render `outputs` as the text appended to `GITHUB_OUTPUT`. A single-line value is a
+    `name=value` line; a value carrying a newline (a `build_command` declared as a TOML
+    multi-line string) uses the runner's heredoc form — `name<<DELIM`, the value, then
+    `DELIM` on its own line — with a collision-free delimiter. A raw `name=value` line for a
+    multi-line value would corrupt the file: the embedded newline ends the file-command line
+    early and the remaining lines parse as bogus outputs.
+    """
+    lines: list[str] = []
+    for name, value in outputs.items():
+        if "\n" in value:
+            delim = _output_delimiter(value)
+            lines.append(f"{name}<<{delim}")
+            lines.append(value)
+            lines.append(delim)
+        else:
+            lines.append(f"{name}={value}")
+    return "".join(f"{line}\n" for line in lines)
+
+
 def main() -> int:
     languages = os.environ.get("LANGUAGES", "")
     scan_path = os.environ.get("SCAN_PATH", ".")
@@ -549,8 +583,7 @@ def main() -> int:
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
         with open(github_output, "a", encoding="utf-8") as handle:
-            for name, value in outputs.items():
-                handle.write(f"{name}={value}\n")
+            handle.write(render_github_output(outputs))
     summary = ", ".join(f"{name} {value}" for name, value in outputs.items())
     print(f"languages='{languages}' under '{scan_path}' -> {summary}")
     return 0

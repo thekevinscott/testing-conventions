@@ -98,7 +98,7 @@ fn install_refuses_a_begin_marker_with_no_end_marker() {
     // begin marker. Appending a fresh block would then bracket the orphaned begin and
     // the new end, so the *next* run replaces everything between them — silently
     // deleting all user prose in that span. install refuses instead, leaving the file
-    // byte-for-byte intact so the consumer can restore the marker (#396).
+    // byte-for-byte intact so the consumer can restore the marker.
     let dir = TempDir::new();
     let damaged = "# My project\n\n\
          <!-- testing-conventions:begin v1 hash=000000000000 -->\n\

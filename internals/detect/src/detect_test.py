@@ -97,7 +97,7 @@ def test_render_github_output_writes_single_line_values_as_name_equals_value():
 def test_render_github_output_round_trips_a_multiline_value():
     # A multi-line value (a legal TOML `"""…"""` build_command) must round-trip through
     # GITHUB_OUTPUT via the heredoc `name<<EOF` form; a raw `name=value` line would let
-    # the embedded newline split it into a bogus second output (#396).
+    # the embedded newline split it into a bogus second output.
     outputs = {
         "build_command": "cp a.tmpl a.py\ncp b.tmpl b.py",
         "languages": '["python"]',

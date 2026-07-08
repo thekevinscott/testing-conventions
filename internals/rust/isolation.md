@@ -47,10 +47,14 @@ name-resolution precision").
 
 ## Unit detection
 
-**Scope.** Parse each `src/**/*.rs` with `syn::parse_file`. Walk every
-`#[cfg(test)] mod <name>` item (conventionally `mod tests`). The module *is* "the
-test's own module"; its parent (`super`) is the unit under test. Files under
-`tests/` are integration crates — out of scope for the unit rule.
+**Scope.** Parse the crate's own unit source with `syn::parse_file`. The file walk is
+shared with the colocated-test presence rule
+(`colocated_test::collect_rust_source_files`), so it skips the non-unit trees —
+`tests/` (integration crates), `benches/`, `examples/`, and the `target/` build
+directory — and the `build.rs` script; a locally-built crate is scanned the same as a
+fresh checkout (#393). Walk every `#[cfg(test)] mod <name>` item (conventionally
+`mod tests`). The module *is* "the test's own module"; its parent (`super`) is the
+unit under test.
 
 Two detectors run over each test module's body:
 

@@ -149,32 +149,57 @@ struct ImportRecord {
     line: usize,
     /// `true` when this import *is* the unit under test (never a collaborator).
     is_uut: bool,
-    /// For `from X import a, b` — the bound symbols (matched against a patch's last
-    /// dotted segment). Empty for a plain module import.
+    /// For `from X import a, b` — the bound symbols. Each must be individually
+    /// mocked. Empty for a plain module import.
     symbols: Vec<String>,
+    /// For an **absolute** `from X import a, b` — the source module `X`, which a
+    /// mocking patch's target must name (`patch("X.a")`). `None` for a relative
+    /// `from`-import (no absolute module to compare a patch against) and for a plain
+    /// `import X.Y` (which mocks via [`module`](Self::module)).
+    source: Option<String>,
     /// For `import X.Y` — the module path (a patch reaching into it counts as a mock).
     module: Option<String>,
 }
 
 impl ImportRecord {
-    /// `true` when some `patch("…")` target mocks this import: a matching last
-    /// segment for a `from`-import symbol, or a patch reaching into a module import.
+    /// `true` when some `patch("…")` target mocks this import.
+    ///
+    /// - A plain `import X.Y` is mocked by a patch that reaches into the module —
+    ///   `patch("X.Y")` or `patch("X.Y.attr")`.
+    /// - A `from <module> import a, b` is mocked only when **every** bound symbol is
+    ///   individually mocked. A symbol `s` is mocked by a target whose last dotted
+    ///   segment is `s` **and**, for an absolute import, whose module path is the
+    ///   import's own [`source`](Self::source): `from pkg.ledger import record`
+    ///   needs `patch("pkg.ledger.record")`, not merely any `"….record"`. A relative
+    ///   import has no absolute module to compare, so a matching last segment alone
+    ///   is accepted (name resolution stays a documented non-goal).
     fn is_mocked(&self, patch_targets: &[String]) -> bool {
-        let symbol_mocked = patch_targets.iter().any(|target| {
-            let last = target.rsplit('.').next().unwrap_or(target);
-            self.symbols.iter().any(|symbol| symbol == last)
-        });
-        if symbol_mocked {
-            return true;
+        if let Some(module) = &self.module {
+            let prefix = format!("{module}.");
+            return patch_targets
+                .iter()
+                .any(|target| target == module || target.starts_with(&prefix));
         }
-        match &self.module {
-            Some(module) => {
-                let prefix = format!("{module}.");
-                patch_targets
-                    .iter()
-                    .any(|target| target == module || target.starts_with(&prefix))
-            }
-            None => false,
+        if self.symbols.is_empty() {
+            return false;
+        }
+        self.symbols.iter().all(|symbol| {
+            patch_targets
+                .iter()
+                .any(|target| self.symbol_is_mocked(target, symbol))
+        })
+    }
+
+    /// `true` when `target` patches `symbol` for this `from`-import: the target's
+    /// last dotted segment is `symbol` and — for an absolute import — its module
+    /// path equals the import's own [`source`](Self::source).
+    fn symbol_is_mocked(&self, target: &str, symbol: &str) -> bool {
+        let Some(module) = target.strip_suffix(&format!(".{symbol}")) else {
+            return false;
+        };
+        match &self.source {
+            Some(source) => module == source,
+            None => true,
         }
     }
 }
@@ -204,6 +229,7 @@ impl Visitor for UnitIsolationVisitor<'_> {
                         line,
                         is_uut: last_segment(module) == self.base,
                         symbols: Vec::new(),
+                        source: None,
                         module: Some(module.to_string()),
                     });
                 }
@@ -225,11 +251,15 @@ impl Visitor for UnitIsolationVisitor<'_> {
                 let dots = ".".repeat(level);
                 match module {
                     // `from <module> import a, b` — the bound symbols are collaborators.
+                    // An absolute import (`level == 0`) records its source module so a
+                    // mocking patch must name it; a relative import has no absolute
+                    // module to compare (`source: None`).
                     Some(module) => self.imports.push(ImportRecord {
                         display: format!("{dots}{module}"),
                         line,
                         is_uut: last_segment(module) == self.base,
                         symbols: node.names.iter().map(|a| a.name.to_string()).collect(),
+                        source: (level == 0).then(|| module.to_string()),
                         module: None,
                     }),
                     // `from . import sub` — each name is a submodule.
@@ -251,6 +281,7 @@ impl Visitor for UnitIsolationVisitor<'_> {
                                 line,
                                 is_uut: barrel_sut || name == self.base,
                                 symbols: vec![name.to_string()],
+                                source: None,
                                 module: None,
                             });
                         }
@@ -1043,6 +1074,70 @@ mod tests {
         assert_eq!(patch_string_target(&empty_call), None);
     }
 
+    /// Build a `from <source> import <symbols>` record (`source: None` → relative).
+    fn from_import(source: Option<&str>, symbols: &[&str]) -> ImportRecord {
+        ImportRecord {
+            display: source.unwrap_or(".rel").to_string(),
+            line: 1,
+            is_uut: false,
+            symbols: symbols.iter().map(|s| (*s).to_string()).collect(),
+            source: source.map(str::to_string),
+            module: None,
+        }
+    }
+
+    fn targets(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn is_mocked_requires_every_symbol_at_the_import_module() {
+        let rec = from_import(Some("pkg.ledger"), &["record", "erase"]);
+        // Only `record` patched → the un-mocked `erase` leaves the import un-mocked (1a).
+        assert!(!rec.is_mocked(&targets(&["pkg.ledger.record"])));
+        // Both symbols patched at the import's own module → mocked.
+        assert!(rec.is_mocked(&targets(&["pkg.ledger.record", "pkg.ledger.erase"])));
+    }
+
+    #[test]
+    fn is_mocked_rejects_a_last_segment_match_in_another_module() {
+        let rec = from_import(Some("pkg.ledger"), &["record"]);
+        // Same last segment, different module → not mocked (1b).
+        assert!(!rec.is_mocked(&targets(&["otherpkg.unrelated.record"])));
+        // A stdlib target sharing only the last segment likewise (`json.dumps`).
+        let dumps = from_import(Some("pkg.formatter"), &["dumps"]);
+        assert!(!dumps.is_mocked(&targets(&["json.dumps"])));
+        // The exact module path clears it.
+        assert!(rec.is_mocked(&targets(&["pkg.ledger.record"])));
+    }
+
+    #[test]
+    fn is_mocked_relative_import_accepts_a_last_segment_match() {
+        // A relative import has no absolute module to compare, so a matching last
+        // segment alone is accepted (documented non-goal).
+        let rec = from_import(None, &["record"]);
+        assert!(rec.is_mocked(&targets(&["pkg.ledger.record"])));
+        assert!(!rec.is_mocked(&targets(&["pkg.ledger.other"])));
+    }
+
+    #[test]
+    fn is_mocked_module_import_matches_a_patch_reaching_in() {
+        let rec = ImportRecord {
+            display: "pkg.db".to_string(),
+            line: 1,
+            is_uut: false,
+            symbols: Vec::new(),
+            source: None,
+            module: Some("pkg.db".to_string()),
+        };
+        assert!(rec.is_mocked(&targets(&["pkg.db.connect"])));
+        assert!(rec.is_mocked(&targets(&["pkg.db"])));
+        assert!(!rec.is_mocked(&targets(&["pkg.other.connect"])));
+        // A `from`-import with no symbols and no module is never mocked.
+        let empty = from_import(Some("pkg.mod"), &[]);
+        assert!(!empty.is_mocked(&targets(&["pkg.mod.thing"])));
+    }
+
     #[test]
     fn patches_first_party_matches_head_segment() {
         assert!(patches_first_party("myproject.ledger.record", "myproject"));
@@ -1138,32 +1233,6 @@ mod tests {
     }
 
     #[test]
-    fn is_mocked_matches_symbol_last_segment_and_module_prefix() {
-        let symbol = ImportRecord {
-            display: "myproject.ledger".into(),
-            line: 1,
-            is_uut: false,
-            symbols: vec!["record".into()],
-            module: None,
-        };
-        // The consuming-module patch and the source patch both mock it.
-        assert!(symbol.is_mocked(&["myproject.widget.record".into()]));
-        assert!(symbol.is_mocked(&["myproject.ledger.record".into()]));
-        assert!(!symbol.is_mocked(&["myproject.widget.other".into()]));
-
-        let module = ImportRecord {
-            display: "myproject.db".into(),
-            line: 1,
-            is_uut: false,
-            symbols: Vec::new(),
-            module: Some("myproject.db".into()),
-        };
-        assert!(module.is_mocked(&["myproject.db.conn".into()])); // reaches into it
-        assert!(module.is_mocked(&["myproject.db".into()])); // the module itself
-        assert!(!module.is_mocked(&["myproject.dbx.y".into()])); // a different module
-    }
-
-    #[test]
     fn visitor_flags_first_party_and_external_collaborators() {
         // The UUT is left alone; the first-party collaborator and the third-party
         // import are both flagged (slice 3 broadened the rule to external deps).
@@ -1182,13 +1251,45 @@ mod tests {
 
     #[test]
     fn visitor_clears_a_mocked_collaborator() {
-        // The imported `record` is patched (consuming-module name) → not flagged.
+        // The imported `record` is patched at its own source module → not flagged.
         let found = unmocked(
             "widget",
             "myproject",
-            "from myproject.ledger import record\npatch(\"myproject.widget.record\")\n",
+            "from myproject.ledger import record\npatch(\"myproject.ledger.record\")\n",
         );
         assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    #[test]
+    fn visitor_flags_a_wrong_module_patch() {
+        // A patch that shares only the last segment but names a different module does
+        // not mock the import (#393, 1b): `record` stays an un-mocked collaborator.
+        let found = unmocked(
+            "widget",
+            "myproject",
+            "from myproject.ledger import record\npatch(\"otherpkg.unrelated.record\")\n",
+        );
+        assert_eq!(found, vec!["myproject.ledger".to_string()]);
+    }
+
+    #[test]
+    fn visitor_flags_a_partly_mocked_multi_symbol_import() {
+        // Every imported symbol must be mocked (#393, 1a): patching only `record`
+        // leaves the sibling `erase` a real collaborator, so the import is flagged.
+        let found = unmocked(
+            "widget",
+            "myproject",
+            "from myproject.ledger import record, erase\npatch(\"myproject.ledger.record\")\n",
+        );
+        assert_eq!(found, vec!["myproject.ledger".to_string()]);
+        // Patching both symbols at their module clears it.
+        let both = unmocked(
+            "widget",
+            "myproject",
+            "from myproject.ledger import record, erase\n\
+             patch(\"myproject.ledger.record\")\npatch(\"myproject.ledger.erase\")\n",
+        );
+        assert!(both.is_empty(), "got: {both:?}");
     }
 
     #[test]

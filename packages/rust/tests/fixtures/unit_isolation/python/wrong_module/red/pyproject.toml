@@ -1,0 +1,6 @@
+# First-party package `myproject`. The unit test below patches targets whose last
+# dotted segment matches an imported symbol, but whose module path is a DIFFERENT
+# module — so no local collaborator is actually mocked.
+[project]
+name = "myproject"
+version = "0.0.0"

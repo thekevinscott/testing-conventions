@@ -100,12 +100,14 @@ imported **first-party collaborator** that isn't mocked is the violation
 waiver `Rule` already covers it).
 
 **The bright line for "is this import mocked?"** `vi.mock('./x')` names the import
-specifier, but Python's `patch("pkg.mod.name")` names a *symbol*, and the
-convention patches the name in the **consuming** module (`patch("pkg.foo.thing")`,
-not `patch("pkg.other.thing")`) — the name-resolution #19 ruled a non-goal. The
-deterministic signal the convention *does* give us: a mocked collaborator is
-**patched by string** and, in the canonical form, **not imported** — the unit uses
-it internally. So the rule keys off imports:
+specifier, but Python's `patch("pkg.mod.name")` names a *symbol*. The deterministic
+signal the convention gives us: a mocked collaborator is **patched by string** and,
+in the canonical form, **not imported** — the unit uses it internally. When a
+collaborator *is* imported, a patch mocks it only when the target names it **at its
+own module** — `from pkg.ledger import record` is mocked by
+`patch("pkg.ledger.record")`, the parity of how TypeScript's `vi.mock()` names the
+collaborator's own module (a target that merely shares a last segment with a
+different module was the #393 over-match). So the rule keys off imports:
 
 - Scan `*_test.py` only (not `conftest.py` — that holds fixtures, not units; and
   not a legacy `test_*.py`, which is ordinary source — #145).
@@ -126,10 +128,17 @@ it internally. So the rule keys off imports:
 - An import is **first-party** when it's relative (`from . import x`,
   `from .mod import y`) or its head segment is the dist package (slice 1's
   `pyproject.toml` discovery).
-- An import is **mocked** when some `patch("…")` target in the file has a **last
-  dotted segment** equal to the imported symbol: `from pkg.other import thing` +
-  `patch("pkg.widget.thing")` → last segment `thing` matches (catches the
-  consuming-module patch); `patch("pkg.other.thing")` matches too.
+- An import is **mocked** when some `patch("…")` target in the file names it at its
+  own module. For an absolute `from <module> import a, b`, **every** bound symbol
+  must be patched, and a symbol `s` is patched only by a target whose module path
+  equals the import's source and whose last segment is `s`:
+  `from pkg.ledger import record, erase` needs both `patch("pkg.ledger.record")` and
+  `patch("pkg.ledger.erase")`. A target that merely shares a last segment with a
+  *different* module (`patch("other.record")`, `patch("json.dumps")`) does **not**
+  mock it (#393). A **relative** import (`from .mod import x`) has no absolute module
+  to compare a patch against, so a matching last segment alone is accepted (the same
+  name-resolution non-goal). A plain `import X.Y` is mocked by a patch reaching into
+  the module (`patch("X.Y")` or `patch("X.Y.attr")`).
 - **Flag** a first-party import that is neither the unit under test nor mocked.
 
 Pure stdlib, the test framework (`pytest`, `unittest`, `unittest.mock`),

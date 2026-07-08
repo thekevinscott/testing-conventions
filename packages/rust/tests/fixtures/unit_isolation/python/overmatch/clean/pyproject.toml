@@ -1,0 +1,5 @@
+# Same first-party package as the over-match red fixture. Here BOTH imported symbols
+# are patched at their own module path, so the collaborator import is fully mocked.
+[project]
+name = "myproject"
+version = "0.0.0"

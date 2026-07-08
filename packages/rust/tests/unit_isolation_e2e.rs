@@ -49,3 +49,10 @@ fn untyped_clean_exits_zero() {
 fn spy_option_clean_exits_zero() {
     assert_eq!(isolation_exit("untyped_mock/spy_clean"), 0);
 }
+
+// #393: a `.js` import mocked bare (and the inverse) resolves to the same module, so
+// the collaborator is mocked and the tree passes.
+#[test]
+fn ext_normalize_clean_exits_zero() {
+    assert_eq!(isolation_exit("ext_normalize/clean"), 0);
+}

@@ -70,6 +70,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   --no-ext-diff` and force `--src-prefix=a/ --dst-prefix=b/` (so a custom `diff.mnemonicPrefix` /
   `diff.noprefix` can't break the `b/` strip), and any residual C-quoted path is decoded to its
   real UTF-8 form. No CLI or config change.
+- **`unit lint` isolation matching corrected across all three languages** (#393). Three
+  independent defects, one per language, each a false result the isolation gate should never
+  produce:
+  - **Python `unmocked-collaborator` over-matched (false green).** A `from pkg.ledger import
+    record, erase` was marked fully mocked when *any* one symbol matched *any* patch's last dotted
+    segment — so a fixture patching only `record` cleared the un-mocked `erase`, and a patch of an
+    unrelated module (`patch("other.record")`, or even `patch("json.dumps")` clearing a
+    `from x import dumps`) counted as mocking a local import. A patch now mocks an imported symbol
+    only when the target's **module path** corresponds to the import's source, and **every** imported
+    symbol must be individually patched.
+  - **TypeScript mock specifier compared literally (false red).** `import { f } from './formatter.js';
+    vi.mock('./formatter');` (standard nodenext ESM: imports carry `.js`, mocks written bare) was
+    flagged as an un-mocked collaborator, and the inverse spelling likewise. The module extension is
+    now normalized on **both** sides of the mock-target comparison, matching how Vitest resolves the
+    module.
+  - **Rust isolation walk recursed `tests/`/`target/` and aborted on an unparsable `.rs` (false
+    red).** `unit lint --language rust` on a locally-built crate walked `target/` build artifacts and
+    a crate's own `tests/fixtures/`, so an intentionally-broken fixture `.rs` aborted the whole rule
+    and `#[cfg(test)]` modules under those trees were false-flagged. The scan now reuses the
+    colocated-test source walk (skipping `tests/`/`benches/`/`examples/`/`target/`), so a
+    locally-built crate is scanned the same as a fresh checkout. No CLI or config change.
 
 - **`unit mutation --language rust`: concurrent invocations no longer each duplicate the
   cargo-mutants install** (#385, found investigating #370/epic #366). Provisioning the pinned

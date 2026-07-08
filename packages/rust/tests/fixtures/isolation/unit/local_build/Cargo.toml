@@ -1,0 +1,16 @@
+# Fixture crate for #393: the unit-isolation source walk must scan only the crate's
+# own unit source (`src/`), skipping `tests/` (integration crates) and `target/` (built
+# artifacts), exactly like the colocated-test presence walk. Parsed by `syn`, never
+# compiled — `[workspace]` keeps cargo from absorbing it into the tool's build.
+[package]
+name = "iso_local_build"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8"
+
+[dev-dependencies]
+mockall = "0.13"
+
+[workspace]

@@ -204,3 +204,69 @@ fn barrel_sibling_direct_import_still_flagged() {
 fn barrel_red_exits_nonzero() {
     assert_eq!(isolation_exit("barrel/red"), 1);
 }
+
+// ---- #393: module-qualified, per-symbol mock matching --------------------
+
+#[test]
+fn overmatch_red_flags_partly_mocked_import() {
+    // 1a (any-symbol-clears-all): `from myproject.ledger import record, erase` with a
+    // fixture patching only `…ledger.record` must NOT clear the whole import — the
+    // un-mocked sibling `erase` is a real collaborator, so the import is flagged.
+    let violations = find_unit_isolation_violations(fixture("overmatch/red"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "unmocked-collaborator" && v.message.contains("myproject.ledger")),
+        "a multi-symbol import with an un-mocked symbol must be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn overmatch_red_exits_nonzero() {
+    assert_eq!(isolation_exit("overmatch/red"), 1);
+}
+
+#[test]
+fn overmatch_clean_reports_no_violations() {
+    // Every imported symbol is patched at its own module path (`myproject.ledger.record`
+    // and `myproject.ledger.erase`), so the collaborator import is fully mocked.
+    let violations = find_unit_isolation_violations(fixture("overmatch/clean"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "a multi-symbol import is mocked when every symbol is patched; got {violations:?}"
+    );
+}
+
+#[test]
+fn overmatch_clean_exits_zero() {
+    assert_eq!(isolation_exit("overmatch/clean"), 0);
+}
+
+#[test]
+fn wrong_module_red_flags_last_segment_only_match() {
+    // 1b (last-segment match against any target): a patch mocks an import only when its
+    // module path corresponds to the import's source. `patch("otherpkg.unrelated.record")`
+    // and `patch("json.dumps")` share only a last segment with the local imports, so
+    // neither is mocked — both imports are flagged.
+    let violations = find_unit_isolation_violations(fixture("wrong_module/red"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "unmocked-collaborator" && v.message.contains("myproject.ledger")),
+        "a wrong-module patch must not clear `myproject.ledger`; got {violations:?}"
+    );
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.message.contains("myproject.formatter")),
+        "a stdlib `json.dumps` patch must not clear `myproject.formatter`; got {violations:?}"
+    );
+}
+
+#[test]
+fn wrong_module_red_exits_nonzero() {
+    assert_eq!(isolation_exit("wrong_module/red"), 1);
+}

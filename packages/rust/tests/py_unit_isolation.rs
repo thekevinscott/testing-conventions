@@ -169,3 +169,44 @@ fn external_waived_exits_zero() {
         0
     );
 }
+
+// ---- #382: a barrel test importing its own package surface ---------------
+
+#[test]
+fn barrel_reexport_import_is_the_unit_under_test() {
+    // `__init___test.py` doing `from . import Thing, __all__, __version__` imports
+    // the package's own `__init__.py` surface — the unit under test — so nothing is
+    // a collaborator (parity with TS's `index.test.ts` importing `./index.js`).
+    let violations = find_unit_isolation_violations(fixture("barrel/clean"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "a barrel test's `from . import …` names its own SUT surface, never a \
+         collaborator; got {violations:?}"
+    );
+}
+
+#[test]
+fn barrel_clean_exits_zero() {
+    assert_eq!(isolation_exit("barrel/clean"), 0);
+}
+
+#[test]
+fn barrel_sibling_direct_import_still_flagged() {
+    // Reaching AROUND the barrel into a sibling module (`from .core import Thing` in
+    // `__init___test.py`) is still a collaborator — the exemption is only for the
+    // bare `from . import …` that resolves to the SUT file itself.
+    let violations = find_unit_isolation_violations(fixture("barrel/red"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "unmocked-collaborator" && v.message.contains(".core")),
+        "a sibling-direct import from a barrel test must still be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn barrel_red_exits_nonzero() {
+    assert_eq!(isolation_exit("barrel/red"), 1);
+}

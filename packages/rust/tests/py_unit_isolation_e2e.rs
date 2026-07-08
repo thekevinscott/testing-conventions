@@ -79,3 +79,15 @@ fn external_waived_exits_zero() {
         0
     );
 }
+
+// #382: a barrel test's `from . import …` names the SUT's own surface, not a
+// collaborator; a sibling-direct import (`from .core import …`) is still flagged
+#[test]
+fn barrel_clean_exits_zero() {
+    assert_eq!(isolation_exit("barrel/clean"), 0);
+}
+
+#[test]
+fn barrel_red_exits_nonzero() {
+    assert_eq!(isolation_exit("barrel/red"), 1);
+}

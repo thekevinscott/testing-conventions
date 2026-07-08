@@ -45,7 +45,13 @@ The unit suite's side: every collaborator is mocked.
   mock, both first-party and external (a third-party package, or effectful stdlib such as
   `socket`, `subprocess`, `random`). Never collaborators: the unit under test, the test framework,
   pure stdlib, and type-only imports. The canonical unit test imports only the unit under test and
-  patches collaborators by string in a fixture — so it has no collaborator imports at all.
+  patches collaborators by string in a fixture — so it has no collaborator imports at all. A
+  re-export barrel is the unit under test too: in `__init___test.py`, a bare `from . import …`
+  names the package's own `__init__.py` surface — `Thing`, `__all__`, `__version__` — so those
+  names are what the test verifies, never collaborators. (Reaching around the barrel into a sibling
+  module — `from .core import Thing` in `__init___test.py` — imports a real collaborator and is
+  flagged.) This matches TypeScript, where `index.test.ts` importing `./index.js` is the unit under
+  test.
 - **Rust** — the same intent, structurally: `no-out-of-module-call` and `no-out-of-module-import`
   flag a unit test (an inline `#[cfg(test)]` module) that reaches out of its own module —
   `crate::…`, an external crate, or effectful `std` (`fs`, `net`, `process`, `env`, `thread`, the

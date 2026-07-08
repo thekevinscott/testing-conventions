@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Fixed
+
+- **`unit lint` (Python): a re-export barrel's own test no longer flags its SUT as an unmocked
+  collaborator** (#382). A barrel is tested by importing its public surface, so `__init___test.py`
+  doing `from . import Thing, __all__, __version__` names the package's own `__init__.py` — the
+  unit under test — yet the rule reported one `unmocked-collaborator` per imported name (including
+  `__all__` / `__version__`, defined in the SUT itself). The rule decided "is this the SUT?" by
+  comparing each name against the filename-derived base (`__init___test.py` → `__init__`), which no
+  re-exported name is ever spelled, so every name was flagged. A bare, level-1 `from . import …` in
+  `__init___test.py` is now recognized as importing the SUT's own surface and is never a
+  collaborator — parity with TypeScript, where `index.test.ts` importing `./index.js` is already
+  the unit under test. The rule is unweakened elsewhere: a sibling-direct import (`from .core import
+  Thing` in `__init___test.py`) and a parent-package import (`from .. import …`) still name real
+  collaborators and are still flagged, and a non-barrel `widget_test.py` doing `from . import
+  ledger` is unchanged.
+
 ### Added
 
 - **`build_command` generalizes from `[python]`-only to all three language tables, and no longer

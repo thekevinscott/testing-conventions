@@ -1211,6 +1211,37 @@ mod tests {
     }
 
     #[test]
+    fn visitor_treats_barrel_reexport_import_as_the_unit_under_test() {
+        // #382: in `__init___test.py` (base `__init__`), a bare `from . import …`
+        // imports the package's own re-export surface — the SUT — so no name is a
+        // collaborator, `__all__` / `__version__` included (they live in the SUT).
+        assert!(unmocked(
+            "__init__",
+            "myproject",
+            "from . import Thing, __all__, __version__\n"
+        )
+        .is_empty());
+        // Reaching AROUND the barrel into a sibling module directly is still a
+        // collaborator (the `module: Some("core")` branch, `core != __init__`).
+        assert_eq!(
+            unmocked("__init__", "myproject", "from .core import Thing\n"),
+            vec![".core".to_string()]
+        );
+        // `from .. import x` (level 2) resolves to the PARENT package, not the SUT
+        // file — still a collaborator even inside a barrel test.
+        assert_eq!(
+            unmocked("__init__", "myproject", "from .. import sibling\n"),
+            vec!["..sibling".to_string()]
+        );
+        // The barrel shortcut is scoped to the `__init__` base: an ordinary
+        // `widget_test.py` doing `from . import ledger` is still a collaborator.
+        assert_eq!(
+            unmocked("widget", "myproject", "from . import ledger\n"),
+            vec![".ledger".to_string()]
+        );
+    }
+
+    #[test]
     fn visitor_skips_type_checking_imports() {
         // A first-party import guarded by TYPE_CHECKING is type-only — not a runtime
         // collaborator; the runtime `else` import is still seen.

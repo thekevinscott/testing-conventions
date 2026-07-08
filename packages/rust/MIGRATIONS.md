@@ -882,6 +882,17 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`unit lint --language python` no longer reports a re-export barrel's own test (`__init___test.py`)
+as importing unmocked collaborators when it imports the barrel's public surface (#382). A bare,
+level-1 `from . import Thing, __all__, __version__` in `__init___test.py` is now the unit under
+test, so a package with such a barrel test that previously exited 1 (one `unmocked-collaborator` per
+imported name, `__all__` / `__version__` included) now exits 0 with no findings — and any file-level
+`unmocked-collaborator` exemption kept solely for this shape can be deleted. The rule is unchanged
+everywhere else: a sibling-direct import from a barrel test (`from .core import Thing` in
+`__init___test.py`), a parent-package import (`from .. import …`), and a non-barrel `widget_test.py`
+doing `from . import ledger` all still name collaborators and are still flagged. No API or config
+change.
+
 The reusable workflow's `e2e-verify` job now checks out the PR's head commit
 (`github.event.pull_request.head.sha`) instead of the default `pull_request`-event ref (the
 ephemeral merge commit). A PR whose attestation was reported stale purely because the base moved

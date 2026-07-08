@@ -882,6 +882,20 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`e2e verify` now rejects a `--scope` (or `--extra-scope`) that resolves to no tracked path, where
+before it silently reported `Fresh` (#391). The documented "`--scope` must be `path` or a descendant
+of it" constraint was never enforced, so a typo'd or outside scope resolved to a git pathspec
+matching nothing — and with `--base` set that empty walk read as `Fresh`, waving a permanently stale
+attestation through. `verify` now confirms each `--scope`/`--extra-scope` names at least one tracked
+path (`git ls-files`) before walking, and errors non-zero naming the bad scope when one matches
+nothing. **Breaking runtime behavior at the same API:** a workflow or call whose `--scope` /
+`--extra-scope` matched nothing used to exit 0 (falsely fresh) and now exits non-zero until the
+scope is corrected to name `path` or a tracked directory beneath it (for `--scope`) or a tracked
+repo-root-relative directory (for `--extra-scope`). A valid descendant scope with a stale
+attestation still reports `Stale`; a scope with tracked files but no in-range commits still passes
+on an empty `<base>..HEAD` diff. No public API signature change — the library entry points
+(`verify`, `verify_scoped`, `verify_since`, `verify_extra_scoped`) are unchanged in shape.
+
 `unit mutation --language rust` no longer duplicates the `cargo-mutants` provisioning install
 under concurrent invocations (#385). A cold provisioning cache previously cost one from-source
 `cargo install` per concurrent caller that observed the binary absent (a monorepo's per-package

@@ -38,7 +38,10 @@ The mechanism is a pair:
   reusable workflow passes the package's own root for `path` (a manifest's natural home for its
   attestation) but the caller's own `path` input for `--scope`, so a commit touching the package's
   `tests/`, docs, or config — outside what the caller actually scoped their call to — doesn't trip a
-  false-stale.
+  false-stale. `--scope` names `path` or a directory beneath it that git tracks; a `--scope` that
+  resolves to no tracked path (a typo, or a directory outside `path`) is an error that names the bad
+  scope and exits non-zero, so a misconfigured freshness walk fails loudly at the gate rather than
+  waving a stale attestation through (#391).
 
 Push new code without re-attesting, and the recorded SHA no longer names the latest code commit —
 `verify` fails with a message naming the fix (re-run `attest`). That staleness is the whole nudge:
@@ -76,6 +79,10 @@ walk. A binding declares the shared core as an extra scope, and a core change st
 the same way a change to its own source would. The flag is repeatable; each occurrence adds one
 root. Freshness keeps its single definition — the exact-match rule is unchanged — so the attestation
 must name the newest in-range commit touching the **union** of `--scope` and every `--extra-scope`.
+Each `--extra-scope` names a repo-root-relative directory that git tracks; one resolving to no
+tracked path (a misspelled core path) is an error that names the bad root and exits non-zero, so a
+shared tree that would otherwise stale the attestation stays wired to the walk rather than silently
+dropping out of it (#391).
 
 `--exclude <dir>` carves a feature-gated subtree back out. dirsql's core `cli/` and `bin/` are
 compiled out of both bindings, so a `cli`-only core change should *not* stale them: declaring

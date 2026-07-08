@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`e2e verify`: a `--scope` (or `--extra-scope`) that resolves to no tracked path is now an error
+  instead of a silent false `Fresh`** (#391). The documented "`--scope` must be `path` or a
+  descendant of it" constraint was never enforced: a typo'd or outside `--scope` fell through as a
+  git pathspec matching nothing, and with `--base` set that empty walk reported `Fresh` — so a
+  misconfigured gate waved a permanently stale attestation through, forever. `verify` now confirms
+  each `--scope` and `--extra-scope` names at least one path git tracks (via `git ls-files`) before
+  the freshness walk, erroring loudly and naming the bad scope when one matches nothing. A valid
+  descendant scope with a stale attestation still reports `Stale`, and a scope with tracked files
+  but no in-range commits still passes on an empty `<base>..HEAD` diff — unchanged. **Breaking:** a
+  workflow or call passing a `--scope`/`--extra-scope` that matched nothing used to pass (falsely);
+  it now fails until the scope is corrected. See `MIGRATIONS.md`.
+
 - **`unit mutation --language rust`: concurrent invocations no longer each duplicate the
   cargo-mutants install** (#385, found investigating #370/epic #366). Provisioning the pinned
   `cargo-mutants` binary was a bare "does it exist; if not, `cargo install`" check with no

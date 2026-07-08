@@ -44,7 +44,7 @@ def test_writes_the_normalized_results_to_out(cosmic_ray, tmp_path):
     assert json.loads(out.read_text()) == [
         {"file": "calc.py", "line": 6, "status": "survived", "mutator": "Op"}
     ]
-    # #395: the clean suite is measured under the generous ceiling (300s), then each mutant's
+    # The clean suite is measured under the generous ceiling (300s), then each mutant's
     # timeout is scoped to the observed runtime — a near-instant fake run floors to 10s — rather
     # than a fixed 30s. Both rendered configs reach cosmic-ray, proving the two-timeout wiring.
     rendered = [call.args[0] for call in cosmic_ray.deserialize_config.call_args_list]

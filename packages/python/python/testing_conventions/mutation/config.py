@@ -16,7 +16,7 @@ EXCLUDES = ["*_test.py", "test_*.py", "conftest.py"]
 # ceiling: a mutant whose run outlasts the clean suite by more than ``TIMEOUT_MULTIPLIER`` is
 # judged hung (an inconclusive timeout), while a suite that is merely slow earns a
 # proportionally larger budget. A fixed 30s instead timed out any suite slower than 30s — and,
-# before the baseline guard tightened, false-greened it (#395).
+# before the baseline guard tightened, false-greened it.
 TIMEOUT_MULTIPLIER = 3.0
 # A floor so a sub-second suite still gets a usable budget across process startup and jitter.
 MIN_TIMEOUT = 10.0

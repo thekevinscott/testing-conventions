@@ -23,7 +23,7 @@ def mutation_cli(argv):
         args = parse_args(argv)
         # Measure the clean suite once under a generous ceiling, then scope each mutant's
         # timeout to its observed runtime — a slow suite earns a larger budget instead of
-        # false-greening on a fixed 30s (#395).
+        # false-greening on a fixed 30s.
         observed = check_baseline(build_config(args.modules, MEASURE_TIMEOUT))
         config = build_config(args.modules, derive_timeout(observed))
         results = [

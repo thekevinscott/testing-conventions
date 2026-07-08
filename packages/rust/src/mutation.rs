@@ -1431,8 +1431,6 @@ mod tests {
         );
     }
 
-    // --- exit-code classification (#395) ---
-
     #[cfg(unix)]
     #[test]
     fn classify_mutants_exit_accepts_the_caught_and_survivor_exits() {
@@ -1444,7 +1442,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn classify_mutants_exit_accepts_a_timeout_exit_3() {
-        // #395: cargo-mutants exits 3 when mutants timed out and none were missed — an
+        // cargo-mutants exits 3 when mutants timed out and none were missed — an
         // inconclusive-not-fatal outcome (this module's own `Timeout` semantics). It still
         // wrote an outcomes.json, so the run is a pass, not the "baseline failure" bail.
         classify_mutants_exit(Path::new("/crate"), &fake_output(3, ""))

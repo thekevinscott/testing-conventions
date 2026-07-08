@@ -17,7 +17,7 @@ def check_baseline(config, clock=time.monotonic):
     would falsely ``die`` on the already-red suite and a clean pass be reported), or a timeout /
     abnormal / no-test run (``test_outcome`` is ``None`` or otherwise not ``survived``) — a suite
     too slow for its budget would otherwise time out silently, every mutant then time out and
-    drop, and an empty survivor set slip through as a false green (#395)."""
+    drop, and an empty survivor set slip through as a false green."""
     import tempfile
     from pathlib import Path
 

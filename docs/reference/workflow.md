@@ -40,27 +40,29 @@ offending files in the log. Each links to its explanation page.
 | [`unit coverage`](../explanation/coverage) | always | The language's [default floor](./config#coverage), plus the changed-line (`--base`) job on pull requests. |
 | [`unit lint`](../explanation/isolation) | always | Python, TypeScript, Rust. |
 | [`integration lint`](../explanation/isolation) | always | Python, TypeScript, Rust. |
-| [`unit mutation`](../explanation/mutation) | pull requests only | Diff-scoped to the `<base>...HEAD` changed lines; a binary gate — any un-exempted survivor on a changed line fails. Installs and runs from the derived package root: TypeScript picks `npm ci` or `pnpm install --frozen-lockfile` from the package's own manifest/lockfile; Python runs `uv sync` plus an adapter/pytest install into the project's own venv for a `uv`-managed package, or the existing global `pytest` + `testing-conventions` wheel install otherwise. |
+| [`unit mutation`](../explanation/mutation) | pull requests only | Diff-scoped to the `<base>...HEAD` changed lines; a binary gate — any un-exempted survivor on a changed line fails. Installs and runs from the derived package root: TypeScript picks `npm ci` or `pnpm install --frozen-lockfile` from the package's own manifest/lockfile; Python is provisioned with uv, identically to the coverage jobs (see below). |
 | [`packaging`](../explanation/packaging) | when a build is derivable, an artifact is named, or a dist is committed | **Build-then-scan** (#335): derives the distribution build from the package's own manifest — `uv build` (Python `[project]`), `<pm> pack --pack-destination dist` (TypeScript), `cargo package` (Rust `[package]`) — provisions the toolchain, runs it at the derived package root, and scans the result (`dist/` for a wheel/sdist/tarball, `target/package/` for a crate). So a native monorepo adopts with `gates: ["packaging"]` and no bespoke build job. A named `packaging_artifact` is scanned as-is instead, and a committed `dist/` is scanned in place when the manifest can't state a build; **skipped, never failed** when none of the three holds. A `path`-scoped call builds and inspects only its own package. Needs a `testing-conventions` release whose `detect` derives `packaging_build` — a `version` pinned older falls back to locate-or-skip. |
 | [`e2e verify`](../explanation/e2e) | when an attestation is present, on pull requests | Runs when a committed `e2e-attestation.json` sits at the [package root](../monorepo) (`path`'s nearest manifest directory, the repo root for a single-package repo); **skipped, never failed** otherwise. Diff-scoped like the changed-line coverage/mutation jobs, so it runs on `pull_request` only: freshness is measured over the scoped source this branch changed (`<base>..HEAD`), not the newest scoped commit in all history (#319) — a branch that changed none of it passes, so an unrelated PR stays green and a squash-merging repo can adopt the gate. The walk is also scoped to the caller's own `path`, not the (possibly broader) package root (#294) — a commit outside `path` but inside the package root doesn't trip a false-stale. A package whose e2e artifact is compiled from a shared source tree beside it (a native core bound into several bindings) declares that tree as an [extra freshness root](../explanation/e2e#a-shared-source-tree-beside-the-package) — `[e2e] extra_scope` / `exclude` in its own `testing-conventions.toml` — so `e2e verify` also accepts a repeatable `--extra-scope <dir>` / `--exclude <dir>` (#333), and the job appends the detected values as those flags — `detect` reads `[e2e] extra_scope` / `exclude` from the package's own config and renders them, so a package declaring neither is byte-identical to before. `run_e2e` forces it on. Needs a `testing-conventions` release carrying the `e2e verify <path> --scope <dir> --base <ref>` arguments (#281, #294, #319) — a `version` pinned older verifies the checkout root instead. |
 
 The suite-executing jobs (`unit coverage`, changed-line coverage, `unit mutation`) install,
 provision, and build at the [derived package root](../monorepo#everything-derives-from-the-package) — `.`
-for a single-package repo, so an existing single-package call is unaffected. Python runs under
-`coverage.py` (for the coverage jobs): `coverage` + `pytest` for a plain package, or `uv sync`
-(installing the project's own dependencies and building/installing the project itself) plus
-`coverage` + `pytest` for a package with its own `[project]` table. TypeScript runs under `vitest`
+for a single-package repo, so an existing single-package call is unaffected. Python is provisioned
+by **uv** in all three jobs, with identical steps: an installable package (a `pyproject.toml` with
+a `[project]` table) is synced first — `uv sync` installs the project's own dependencies and
+builds/installs the project itself — while a plain package gets a fresh `uv venv`; the suite
+toolchain (`coverage`, `pytest`, and the `testing-conventions` adapter wheel) then installs into
+that same `.venv`, which goes on the suite's `PATH` — so cosmic-ray's spawned pytest (for
+`unit mutation`) and the coverage run import the project's dependencies and the adapter together.
+uv reads its own index/network configuration (`UV_INDEX_URL`, `uv.toml`); a private index is
+declared there. TypeScript runs under `vitest`
 v8 coverage, installed with the package's own lockfile (`pnpm install --frozen-lockfile` or
-`npm ci`, per its manifest). Rust runs under `cargo llvm-cov --lib` (the unit suite only) and needs
+`npm ci`, per its manifest); for `unit mutation` those project dependencies must include
+`@stryker-mutator/core` and a runner plugin. Rust runs under `cargo llvm-cov --lib` (the unit
+suite only) and needs
 no install step of its own; a [`[rust].coverage` `branch` floor](./config#coverage) adds `--branch`,
 which uses the nightly toolchain the crate pins in its own `rust-toolchain.toml` (with
 `llvm-tools-preview`) — the coverage run reads that pin directly, so the job provisions nothing
-extra for it. `unit mutation` installs the same way: TypeScript's project
-dependencies (must include `@stryker-mutator/core` and a runner plugin) install with `npm ci` or
-`pnpm install --frozen-lockfile`, whichever the package's own manifest/lockfile names; Python
-installs `pytest` + the `testing-conventions` wheel globally for a `pip`-only project, or runs
-`uv sync` and installs both into the project's own `.venv` for a `uv`-managed one, so cosmic-ray's
-spawned pytest can import the project's dependencies and the adapter together.
+extra for it.
 
 A Python package whose suite imports a compiled module builds it first via a
 [`[python] build_command`](./config#build_command) in its own `testing-conventions.toml`,

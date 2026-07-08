@@ -23,12 +23,16 @@ jobs:
         working-directory: packages/node
     steps:
       - uses: actions/checkout@v6
+      # pnpm must be on PATH before setup-node's cache: pnpm runs `pnpm store path` to
+      # resolve what to cache (#372, epic #366) — action-setup stays ahead of setup-node.
       - uses: pnpm/action-setup@v5
         with:
           version: 10.33.0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: pnpm
+          cache-dependency-path: packages/node/pnpm-lock.yaml
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm run lint
 
@@ -46,6 +50,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: pnpm
+          cache-dependency-path: packages/node/pnpm-lock.yaml
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm run typecheck
 
@@ -63,6 +69,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: pnpm
+          cache-dependency-path: packages/node/pnpm-lock.yaml
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm test
 
@@ -81,6 +89,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: pnpm
+          cache-dependency-path: packages/node/pnpm-lock.yaml
       - name: Build rust binary
         run: cargo build --release
         working-directory: packages/rust

@@ -178,3 +178,20 @@ consumer-facing check each was actually testing — `pip install` + `--version` 
 toolchain, `rust-cache`, or `maturin` installed anymore; they only need Python and the
 already-built wheel. `plugin` still checks out the repo (unlike `build`) because it runs
 `pytest tests/` against the checked-out integration-test files, which aren't part of the wheel.
+
+## Node CI: cache the pnpm store (#372)
+
+`node.yml`'s four jobs (`lint`, `typecheck`, `test`, `build`) each ran `pnpm install
+--no-frozen-lockfile` from a cold store — the same dependency set fetched and linked four times
+per PR. Each job now sets `cache: pnpm` / `cache-dependency-path:
+packages/node/pnpm-lock.yaml` on its `actions/setup-node@v6` step, so the store restores from a
+key hashed on the lockfile instead of re-downloading every run. `pnpm/action-setup@v5` already
+ran before `setup-node` in every job (needed regardless, to put `pnpm` on `PATH` before `pnpm
+install`) — that ordering is also what `cache: pnpm` needs, since `setup-node` shells out to
+`pnpm store path` to resolve what to cache, so no step reordering was required, just the two new
+`with:` keys.
+
+Left alone: the `--no-frozen-lockfile` flag. The issue asked to confirm whether it's deliberate
+before switching to `--frozen-lockfile` (faster, and stricter about the lockfile being
+authoritative) — no comment or history explains the choice, and the issue frames this as
+optional (the caching win stands either way), so it's untouched here rather than guessed at.

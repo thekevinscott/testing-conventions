@@ -130,12 +130,14 @@ name: Testing Conventions
 # auto-derivation.
 #
 # Hermetic self-gating (#356): when this repo's own CI calls this workflow with no explicit
-# `version` (`github.repository` belongs to the *calling* run, so this can never hold for a
-# consumer), `detect` runs HEAD's `./.github/actions/detect` instead of `@v0`, and every rule job
-# runs the CLI built from HEAD by the `build-cli` job instead of the published npm binary — so a
-# PR changing detect or a rule is gated by its own commit, not by whatever `@v0`/npm currently
-# resolve to. There is no input for this: it is derived from the caller, and the published path
-# above is byte-for-byte what every consumer gets. See internals/repo.md, "Hermetic mode".
+# `version`, detect derives it (from `github.repository`, which belongs to the *calling* run —
+# so this can never hold for a consumer) and emits `cli_command`: the rule jobs then download
+# the `hermetic-cli` artifact the repo-only caller workflow's build-cli job staged, and run the
+# CLI built from HEAD instead of the published npm binary — a PR changing detect or a rule is
+# gated by its own commit, not by whatever `@v0`/npm currently resolve to. There is no input
+# and no job for this: the derivation lives in tested Python (internals/detect), the build in
+# the caller workflows, and this file carries only guarded *steps* — a consumer's checks UI
+# and execution path are byte-for-byte unchanged. See internals/repo.md, "Hermetic mode".
 
 on:
   workflow_call:
@@ -243,10 +245,12 @@ jobs:
       # package declares none, so a package that declares nothing is byte-identical to before.
       e2e_extra_scope: ${{ steps.scan_hermetic.outputs.e2e_extra_scope || steps.scan_published.outputs.e2e_extra_scope }}
       e2e_exclude: ${{ steps.scan_hermetic.outputs.e2e_exclude || steps.scan_published.outputs.e2e_exclude }}
-      # The hermetic CLI invocation (#356): the path every rule job's `${CLI_COMMAND:-npx …}`
-      # runs when this repo gates itself, empty for every other caller (the npx fallback).
-      # Derived, not declared — see build-cli.
-      cli_command: ${{ (github.repository == 'thekevinscott/testing-conventions' && inputs.version == '') && './hermetic-cli/testing-conventions' || '' }}
+      # The hermetic CLI invocation and the mutation job's pre-rendered adapter argument (#356),
+      # decided in detect.py (tested Python — see internals/repo.md, "Hermetic mode"), not here:
+      # the artifact path when this repo gates itself, empty (-> the run lines' npx fallback)
+      # for every other caller. Plain coalescing like every output above — no logic in YAML.
+      cli_command: ${{ steps.scan_hermetic.outputs.cli_command || steps.scan_published.outputs.cli_command }}
+      ts_mutation_adapter_args: ${{ steps.scan_hermetic.outputs.ts_mutation_adapter_args || steps.scan_published.outputs.ts_mutation_adapter_args }}
     steps:
       - uses: actions/checkout@v6
       - id: scan_hermetic
@@ -258,6 +262,8 @@ jobs:
           languages: ${{ inputs.languages }}
           path: ${{ inputs.path }}
           config: ${{ inputs.config }}
+          caller_repository: ${{ github.repository }}
+          version: ${{ inputs.version }}
       - id: scan_published
         # The published action at the same @v0 the consumer pins — the path every external
         # caller takes, and this repo's own path when an explicit `version` is under test (#357).
@@ -267,64 +273,12 @@ jobs:
           languages: ${{ inputs.languages }}
           path: ${{ inputs.path }}
           config: ${{ inputs.config }}
-
-  build-cli:
-    name: Build the CLI from HEAD (hermetic, #356)
-    # Hermetic merge-gating (#356, epic #353): when this repo's own CI calls this workflow
-    # (self-test, dogfood) with no explicit `version`, the only binary that can truthfully gate
-    # the commit under test is the one built from it — so build it here and hand it to every
-    # rule job as the `hermetic-cli` artifact. The guard is derivation, not an input:
-    # `github.repository` belongs to the *calling* run of a reusable workflow, so this job runs
-    # for this repo's own callers and never for a consumer, who always gets the published `npx`
-    # path. An explicit `version` also wins — that is #357's post-publish verification path,
-    # which must exercise the published artifact. The artifact stages the release binary at its
-    # root and packages/node's dist/ beside it: the TS mutation adapter (dist/mutation/main.js)
-    # is normally handed to the binary by the npm launcher, which the hermetic path bypasses.
-    if: ${{ github.repository == 'thekevinscott/testing-conventions' && inputs.version == '' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Cache the Rust build (cargo registry + target)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            packages/rust/target
-          key: hermetic-cli-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            hermetic-cli-build-${{ runner.os }}-
-      - name: Build the release binary from HEAD
-        run: cargo build --release --manifest-path packages/rust/Cargo.toml --bin testing-conventions
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.0
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - name: Build the TS mutation adapter from HEAD
-        working-directory: packages/node
-        run: |
-          set -euo pipefail
-          pnpm install --no-frozen-lockfile
-          pnpm run build
-      - name: Stage the hermetic CLI artifact
-        # install -m 755 keeps the exec bit through the upload; download-artifact still drops
-        # it on the way back down, so every consumer job re-chmods after download.
-        run: |
-          set -euo pipefail
-          mkdir -p hermetic-cli-stage
-          install -m 755 packages/rust/target/release/testing-conventions hermetic-cli-stage/testing-conventions
-          cp -r packages/node/dist hermetic-cli-stage/dist
-      - uses: actions/upload-artifact@v7
-        with:
-          name: hermetic-cli
-          path: hermetic-cli-stage/
+          caller_repository: ${{ github.repository }}
+          version: ${{ inputs.version }}
 
   colocated-test:
     name: Colocated test (${{ matrix.language }})
-    needs: [detect, build-cli]
+    needs: detect
     # Only the requested languages with sources present (#94); skip the job
     # entirely when that leaves nothing, or when a `gates` allowlist leaves the
     # colocated-test gate out (#262). The matrix is `colocated_test_languages`
@@ -333,10 +287,7 @@ jobs:
     # release moves `@v0` to a detect that emits it (this PR's own run still pins
     # the old `@v0`), it's empty — fall back to `languages` (the python/typescript
     # set) so the matrix stays valid, the #204 `mutation_languages` pattern.
-    # !failure()/!cancelled(): run when build-cli was *skipped* (the published path — a plain
-    # `needs` would skip this job too), skip when detect or build-cli *failed* (hermetic breakage
-    # fails closed, never falls back to npm) or the run was cancelled (#356).
-    if: ${{ !failure() && !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && (needs.detect.outputs.colocated_test_languages || needs.detect.outputs.languages) != '[]' }}
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && (needs.detect.outputs.colocated_test_languages || needs.detect.outputs.languages) != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -369,16 +320,13 @@ jobs:
 
   colocated-test-changed:
     name: Colocated test — co-change (${{ matrix.language }})
-    needs: [detect, build-cli]
+    needs: detect
     # Diff-scoped co-change (#161): on a PR, a modified or deleted source whose
     # colocated test didn't co-change fails. Rust is excluded by the rule (inline
     # `#[cfg(test)]` units can't go stale), so this rides the python/typescript
     # `languages` set. PR-only — it needs a base ref and full history. Rides the
     # colocated-test gate: a gate's diff-scoped variant travels with it (#262).
-    # !failure()/!cancelled(): run when build-cli was *skipped* (the published path — a plain
-    # `needs` would skip this job too), skip when detect or build-cli *failed* (hermetic breakage
-    # fails closed, never falls back to npm) or the run was cancelled (#356).
-    if: ${{ !failure() && !cancelled() && github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && needs.detect.outputs.languages != '[]' }}
+    if: ${{ github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && needs.detect.outputs.languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -411,7 +359,7 @@ jobs:
 
   unit-lint:
     name: Unit lint (${{ matrix.language }})
-    needs: [detect, build-cli]
+    needs: detect
     # `unit lint` is a static AST check (no language toolchain), like
     # colocated-test — a cheap matrix job, not a toolchain-heavy one like coverage.
     # It enforces the rule for Python (#42), TypeScript (#43/#76/#77), and Rust (#44).
@@ -420,10 +368,7 @@ jobs:
     # skipped, not failed. #56 (config-driven `check`) will later drive which
     # rules/languages run here; a `gates` allowlist that leaves unit-lint out
     # skips the job (#262).
-    # !failure()/!cancelled(): run when build-cli was *skipped* (the published path — a plain
-    # `needs` would skip this job too), skip when detect or build-cli *failed* (hermetic breakage
-    # fails closed, never falls back to npm) or the run was cancelled (#356).
-    if: ${{ !failure() && !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"unit-lint"')) && needs.detect.outputs.isolation_languages != '[]' }}
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"unit-lint"')) && needs.detect.outputs.isolation_languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -454,7 +399,7 @@ jobs:
 
   unit-coverage:
     name: Unit-test coverage (${{ matrix.language }})
-    needs: [detect, build-cli]
+    needs: detect
     # `unit coverage` enforces the Python (#26), TypeScript (#31), and Rust (#37)
     # floors. The matrix is `coverage_languages` — the requested languages with
     # sources present (#94), plus rust whenever a crate is here (Rust coverage is
@@ -462,10 +407,7 @@ jobs:
     # language is skipped rather than erroring. #56 (config-driven `check`) will
     # eventually drive this from the config file. A `gates` allowlist that leaves
     # unit-coverage out skips the job (#262).
-    # !failure()/!cancelled(): run when build-cli was *skipped* (the published path — a plain
-    # `needs` would skip this job too), skip when detect or build-cli *failed* (hermetic breakage
-    # fails closed, never falls back to npm) or the run was cancelled (#356).
-    if: ${{ !failure() && !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"unit-coverage"')) && needs.detect.outputs.coverage_languages != '[]' }}
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"unit-coverage"')) && needs.detect.outputs.coverage_languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -585,16 +527,13 @@ jobs:
 
   coverage-changed:
     name: Unit-test coverage — changed lines (${{ matrix.language }})
-    needs: [detect, build-cli]
+    needs: detect
     # Diff-scoped changed-line coverage (#162): on a PR, the configured floor is
     # measured over only the `<base>...HEAD` changed lines, so a changed line below
     # the floor fails no matter how small the diff. Mirrors the whole-tree
     # unit-coverage job's per-language toolchain setup; PR-only (needs the base ref).
     # Rides the unit-coverage gate: a gate's diff-scoped variant travels with it (#262).
-    # !failure()/!cancelled(): run when build-cli was *skipped* (the published path — a plain
-    # `needs` would skip this job too), skip when detect or build-cli *failed* (hermetic breakage
-    # fails closed, never falls back to npm) or the run was cancelled (#356).
-    if: ${{ !failure() && !cancelled() && github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"unit-coverage"')) && needs.detect.outputs.coverage_languages != '[]' }}
+    if: ${{ github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"unit-coverage"')) && needs.detect.outputs.coverage_languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -707,7 +646,7 @@ jobs:
 
   mutation:
     name: Unit mutation — changed lines (${{ matrix.language }})
-    needs: [detect, build-cli]
+    needs: detect
     # `unit mutation` (#204) — the rung above coverage: a test that *runs* a changed
     # line still passes if you delete its assertions, and a surviving mutant proves it.
     # The gate is binary and on by default (no report-only mode): an un-exempted survivor
@@ -720,10 +659,7 @@ jobs:
     # detect that emits it (this PR's own run still pins the old `@v0`), it's empty — fall
     # back to `coverage_languages` (the identical set) so the matrix stays valid. A `gates`
     # allowlist that leaves mutation out skips the job (#262).
-    # !failure()/!cancelled(): run when build-cli was *skipped* (the published path — a plain
-    # `needs` would skip this job too), skip when detect or build-cli *failed* (hermetic breakage
-    # fails closed, never falls back to npm) or the run was cancelled (#356).
-    if: ${{ !failure() && !cancelled() && github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"mutation"')) && (needs.detect.outputs.mutation_languages || needs.detect.outputs.coverage_languages) != '[]' }}
+    if: ${{ github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"mutation"')) && (needs.detect.outputs.mutation_languages || needs.detect.outputs.coverage_languages) != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -852,17 +788,16 @@ jobs:
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
-          # The npm launcher appends this argument on the published path; the hermetic path runs
-          # the raw binary, so the workflow appends it instead. Deliberately unquoted below (the
-          # $EXTRA_SCOPE pattern): empty on the published path, word-split into the flag+path
-          # hermetically. Harmless on the python/rust arms — the option is parsed for every
-          # language and read only by the TS arm.
-          TS_ADAPTER: ${{ needs.detect.outputs.cli_command != '' && '--ts-mutation-adapter ./hermetic-cli/dist/mutation/main.js' || '' }}
-        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit mutation --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH" $TS_ADAPTER
+          # detect pre-renders the hermetic `--ts-mutation-adapter <path>` argument (#356) — the
+          # npm launcher appends it on the published path, and the hermetic path bypasses the
+          # launcher. Deliberately unquoted below (the $EXTRA_SCOPE pattern): empty on the
+          # published path, word-split into the flag+path hermetically.
+          TS_MUTATION_ADAPTER_ARGS: ${{ needs.detect.outputs.ts_mutation_adapter_args }}
+        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit mutation --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH" $TS_MUTATION_ADAPTER_ARGS
 
   integration-lint:
     name: Integration lint (${{ matrix.language }})
-    needs: [detect, build-cli]
+    needs: detect
     # `integration lint` (mocking mechanism & style) ships for Python (#58),
     # TypeScript (#43/#75), and Rust (#44), so the matrix fans out over every
     # requested language with sources present — the `integration_lint_languages` set,
@@ -870,10 +805,7 @@ jobs:
     # failed — when that set is empty, or when a `gates` allowlist leaves
     # integration-lint out (#262). #56 (config-driven `check`) will eventually
     # drive which rules/languages run here.
-    # !failure()/!cancelled(): run when build-cli was *skipped* (the published path — a plain
-    # `needs` would skip this job too), skip when detect or build-cli *failed* (hermetic breakage
-    # fails closed, never falls back to npm) or the run was cancelled (#356).
-    if: ${{ !failure() && !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"integration-lint"')) && needs.detect.outputs.integration_lint_languages != '[]' }}
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"integration-lint"')) && needs.detect.outputs.integration_lint_languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -904,7 +836,7 @@ jobs:
 
   e2e-verify:
     name: E2E attestation freshness (e2e verify)
-    needs: [detect, build-cli]
+    needs: detect
     # Diff-scoped freshness, verify-if-present (#186, #319): on a PR, verify the
     # committed attestation covers the scoped source *this branch changed*
     # (`<base>..HEAD`) rather than the newest scoped commit in all history — the
@@ -920,10 +852,7 @@ jobs:
     # on. Never runs the e2e suite itself. The `gates` allowlist is authoritative
     # (#262): checked first, so a scoped call that leaves e2e-verify out skips the
     # job even when `run_e2e` is set.
-    # !failure()/!cancelled(): run when build-cli was *skipped* (the published path — a plain
-    # `needs` would skip this job too), skip when detect or build-cli *failed* (hermetic breakage
-    # fails closed, never falls back to npm) or the run was cancelled (#356).
-    if: ${{ !failure() && !cancelled() && github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"e2e-verify"')) && (inputs.run_e2e || needs.detect.outputs.e2e_attestation == 'true') }}
+    if: ${{ github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"e2e-verify"')) && (inputs.run_e2e || needs.detect.outputs.e2e_attestation == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -974,7 +903,7 @@ jobs:
 
   packaging:
     name: Packaging (no test files in the built artifact)
-    needs: [detect, build-cli]
+    needs: detect
     # Default-on, build-then-scan (#186, #335): packaging inspects the *built distribution*,
     # not the source tree, so it doesn't ride the source matrix — but it runs by default. It
     # provisions the toolchain and builds the distribution from the manifest alone
@@ -987,10 +916,7 @@ jobs:
     # distribution's language is inferred from its extension. The `gates` allowlist is
     # authoritative (#262): checked first, so a scoped call that leaves packaging out skips
     # the job even when `packaging_artifact` is set.
-    # !failure()/!cancelled(): run when build-cli was *skipped* (the published path — a plain
-    # `needs` would skip this job too), skip when detect or build-cli *failed* (hermetic breakage
-    # fails closed, never falls back to npm) or the run was cancelled (#356).
-    if: ${{ !failure() && !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"packaging"')) && (inputs.packaging_artifact != '' || needs.detect.outputs.packaging_build != '' || needs.detect.outputs.packaging_dist == 'true') }}
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"packaging"')) && (inputs.packaging_artifact != '' || needs.detect.outputs.packaging_build != '' || needs.detect.outputs.packaging_dist == 'true') }}
     runs-on: ubuntu-latest
     steps:
       # Acquire the distributions one of two ways: a named upload artifact (scanned as-is),

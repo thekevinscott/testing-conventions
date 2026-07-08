@@ -58,19 +58,62 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  build-cli:
+    name: Build the CLI from HEAD (hermetic, #356)
+    # Hermetic merge-gating (#356, epic #353): every `uses:` call in this file runs in this
+    # repo's own CI, so the reusable workflow derives the hermetic path and its rule jobs
+    # download the `hermetic-cli` artifact this job stages — the binary and TS mutation adapter
+    # built from the commit under test, not the published npm release. The build lives HERE, in
+    # a repo-only caller workflow: a guarded job in the reusable workflow would render a skipped
+    # row in every consumer's checks UI. One build per run — the artifact is run-scoped, and
+    # every `uses:` call shares it via `needs: [build-cli]` (a called workflow's jobs start only
+    # after the caller's needs are met). Build/stage logic is the colocated-tested
+    # `tc-checks build-hermetic-cli` (internals/checks); this job holds toolchain setup and one
+    # command.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache the Rust build (cargo registry + target)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/rust/target
+          key: hermetic-cli-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            hermetic-cli-build-${{ runner.os }}-
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: astral-sh/setup-uv@v6
+      - name: Build and stage the hermetic CLI artifact
+        run: uv run --project internals/checks tc-checks build-hermetic-cli hermetic-cli-stage
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hermetic-cli
+          path: hermetic-cli-stage/
+
   conventions:
     name: Shipped reusable workflow over the Python plugin source
     # #175 / #218: consume our own shipped reusable workflow over a real package — the
     # Python plugin source under packages/python/python. Everything is unit-tested (the
     # pytest hook via its pluggy metadata, the coverage monkeypatch via an injected
     # module, the version shim via a forced import fallback), so it runs zero-config with
-    # no exemptions. The published binary it runs is current (it auto-publishes on merge).
+    # no exemptions. This call runs `detect` + the CLI hermetically from HEAD (#356), not the
+    # published binary, so a regression here is caught in this PR's own CI.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       path: packages/python/python
 
   colocated-test:
     name: Colocated test (packages/node/src)
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       path: packages/node/src
@@ -82,6 +125,7 @@ jobs:
     # via `path` and to just this gate via `gates` — replaces the old bespoke
     # build-from-source job now that the reusable workflow's e2e-verify job accepts a
     # package subdirectory instead of only the checkout root.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       path: packages/node
@@ -102,6 +146,7 @@ jobs:
     # `*_test.py` e2e file inside the scan would be read as an un-isolated unit test. The
     # package root (internals/checks, where the pyproject lives) is still derived for the
     # coverage/mutation venv.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       path: internals/checks/src

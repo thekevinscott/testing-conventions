@@ -141,8 +141,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build-cli:
+    name: Build the CLI from HEAD (hermetic, #356)
+    # Hermetic merge-gating (#356, epic #353): every `uses:` call in this file runs in this
+    # repo's own CI, so the reusable workflow derives the hermetic path and its rule jobs
+    # download the `hermetic-cli` artifact this job stages — the binary and TS mutation adapter
+    # built from the commit under test, not the published npm release. The build lives HERE, in
+    # a repo-only caller workflow: a guarded job in the reusable workflow would render a skipped
+    # row in every consumer's checks UI. One build per run — the artifact is run-scoped, and
+    # every `uses:` call shares it via `needs: [build-cli]` (a called workflow's jobs start only
+    # after the caller's needs are met). Build/stage logic is the colocated-tested
+    # `tc-checks build-hermetic-cli` (internals/checks); this job holds toolchain setup and one
+    # command.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache the Rust build (cargo registry + target)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/rust/target
+          key: hermetic-cli-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            hermetic-cli-build-${{ runner.os }}-
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: astral-sh/setup-uv@v6
+      - name: Build and stage the hermetic CLI artifact
+        run: uv run --project internals/checks tc-checks build-hermetic-cli hermetic-cli-stage
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hermetic-cli
+          path: hermetic-cli-stage/
+
   clean:
     name: Clean suite passes the reusable workflow
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'
@@ -157,6 +198,7 @@ jobs:
     # Python jobs alone. Before #94 the TypeScript coverage job fired and errored on
     # the empty input (a `pnpm install` with no project, an empty vitest
     # denominator), failing the whole call.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python", "typescript"]'
@@ -170,6 +212,7 @@ jobs:
     # library with no sources for any requested language must pass with every
     # language's jobs skipped — never failed. Mirrored here with a source-free
     # fixture and the zero-config default.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python", "typescript"]'
@@ -184,6 +227,7 @@ jobs:
     # entry in a *non-default* config path. The whole `uses:` call passes only when
     # the job forwards `--config` (#126): before it did, the job dropped the flag, so
     # the waiver was ignored, the violation was reported, and the call failed.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'
@@ -202,6 +246,7 @@ jobs:
     # detect action is still fetched at the old `@v0`, which omits
     # `colocated_test_languages`, so the job falls back to the python/typescript set
     # and skips rust until a release advances the tag — the #204 pattern.)
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["rust"]'
@@ -382,6 +427,7 @@ jobs:
     # Exercises the Rust path end to end: ["rust"] over a clean crate, so `detect`
     # recognizes the crate and fans the lint job over `rust` (#125); the source-matrix
     # jobs skip on this rust-only fixture.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["rust"]'
@@ -422,7 +468,7 @@ jobs:
     # uploaded wheel and inspect it. `path` points at the source-free fixture so the
     # source-matrix jobs all skip (#94) and only the packaging job runs — the whole
     # call must pass.
-    needs: upload-clean-dist
+    needs: [upload-clean-dist, build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'
@@ -467,6 +513,7 @@ jobs:
     # unit-coverage job over rust, which clears the 100 floor — alongside the
     # unit-lint and integration-lint rust jobs, which the well-isolated,
     # `tests/`-free crate also passes. Source-matrix python/typescript jobs skip.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["rust"]'
@@ -570,6 +617,7 @@ jobs:
     # On a PR the `*-changed` jobs run — co-change excuses the added file but
     # requires its colocated test to exist, and the added lines clear the coverage
     # floor — so the whole call passes.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'
@@ -687,6 +735,7 @@ jobs:
     # three named static gates run for real over the fixture — colocated-test (plus its
     # co-change job, which rides the gate), unit-lint, and integration-lint — and the
     # unnamed e2e-verify gate is skipped despite this repo's committed attestation.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'
@@ -714,7 +763,7 @@ jobs:
     # win and the packaging job skip: the call passes only because it does. `path` points
     # at the source-free fixture so the one named gate has nothing to run and skips too
     # (#94) — every job but detect skips, and the run passes.
-    needs: upload-red-dist
+    needs: [upload-red-dist, build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'
@@ -755,13 +804,12 @@ jobs:
     # the build — and with it every suite-executing job — succeeds only because `rust_toolchain:
     # true` provisioned the toolchain ahead of the build step. The whole `uses:` call passing is
     # the green signal that cargo is present (and cached) in the python arm, where only
-    # setup-python runs otherwise. The build hook now lives in the package's own config as
-    # `[python].build_command` (#289), read by the reusable workflow's own `detect` job — which is
-    # pinned to `actions/detect@v0` (internals/repo.md), not the local action, and driven by the
-    # *published* binary. So this call only fully validates once a release moves `@v0` to a detect
-    # that emits `build_command` AND publishes a binary that accepts the config key; until then the
-    # old detect emits nothing, the build step is skipped, and the old binary rejects the config —
-    # the call is expected to fail pre-release, exactly as mutation-monorepo-ts/py document.
+    # setup-python runs otherwise. The build hook lives in the package's own config as
+    # `[python].build_command` (#289), read by `detect` — which this call (an in-repo `uses:`
+    # with no pinned `version`) now runs hermetically from HEAD (#356), not the published
+    # `actions/detect@v0`/npx binary, so the call validates this commit's own detect + CLI
+    # directly, not the previously-documented pre-release lag.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'
@@ -779,11 +827,12 @@ jobs:
     # (without it, pytest fails at import). The static colocated-test / lint jobs run without the
     # build and never see the generated module, so they pass as-is. `base: origin/main` exercises
     # the diff-scoped jobs over this PR-added fixture (its tests pin exact values, so every
-    # changed-line mutant is killed). The build hook now lives in the package's own config as
-    # `[python].build_command` (#289), read by the reusable workflow's `@v0`-pinned `detect` job
-    # and run by the *published* binary — so, like rust-toolchain-clean and mutation-monorepo-ts/py,
-    # this call is expected to fail pre-release (the old detect emits no `build_command` and the old
-    # binary rejects the config key) and greens once a release moves `@v0` and publishes the binary.
+    # changed-line mutant is killed). The build hook lives in the package's own config as
+    # `[python].build_command` (#289), read by `detect` — which this call (an in-repo `uses:`
+    # with no pinned `version`) now runs hermetically from HEAD (#356), not the published
+    # `actions/detect@v0`/npx binary, so the call validates this commit's own detect + CLI
+    # directly, not the previously-documented pre-release lag.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'
@@ -914,12 +963,11 @@ jobs:
     # Runtime half of #278, for the fixture from dirsql PR #410's motivating scenario: a TS
     # package with its own package-lock.json and no root manifest. Only `path` is set — the
     # #278 goal for a per-package call (`languages`/`config` are optional refinements; config
-    # is already derived from the package root by #277). This job invokes the LOCAL workflow
-    # file (this branch's edits), but that file's own `detect` job still pins
-    # `actions/detect@v0` — the published action, which doesn't yet emit `package_root` /
-    # `ts_package_manager` — so this can't truly exercise the new wiring until a release moves
-    # the tag (internals/repo.md). Included anyway, syntactically valid and semantically
-    # correct, so it starts passing for real the moment `@v0` advances.
+    # is already derived from the package root by #277). This call (an in-repo `uses:` with no
+    # pinned `version`) runs `detect` hermetically from HEAD (#356), so it exercises this
+    # commit's own `package_root` / `ts_package_manager` derivation directly, not the
+    # previously-documented `@v0` pre-release lag.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       path: .github/selftest/monorepo/packages/ts
@@ -927,9 +975,10 @@ jobs:
 
   monorepo-coverage-py:
     name: The monorepo uv Python fixture passes unit-coverage from its own package root
-    # Same @v0-lag caveat as monorepo-coverage-ts: the fixture's `attrs` third-party
-    # dependency is never installed until the reusable workflow's own `detect` job resolves
-    # `python_env` post-release. Only `path` is set.
+    # Same hermetic derivation as monorepo-coverage-ts (#356): this call runs `detect` from
+    # HEAD, so the fixture's `attrs` third-party dependency is installed via this commit's own
+    # `python_env` resolution, not a pre-release-lagged `@v0`. Only `path` is set.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       path: .github/selftest/monorepo/packages/py
@@ -966,6 +1015,7 @@ jobs:
     # call must pass. `gates` scopes the call to packaging alone (this fixture carries no
     # source, so every other gate's matrix is empty and would skip regardless — this just keeps
     # the job fast and its intent explicit).
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       path: .github/selftest/packaging-package-root/clean
@@ -1015,14 +1065,12 @@ jobs:
     # scope to — the whole fixture is new relative to `main` (it landed in the
     # still-unmerged #277), and `add()`'s existing test kills every default mutant.
     # Like `detect-package-root-ts`, this exercises `package_root` /
-    # `ts_package_manager` — but through the reusable workflow's own `detect` job,
-    # which is pinned to `actions/detect@v0` (internals/repo.md), not the local
-    # action. So this call only fully validates once a release moves `@v0` to a
-    # detect build that emits these outputs; until then the old detect emits none of
-    # them, `working-directory` resolves to the checkout root, and the install step
-    # there has no root `package.json` for this per-package-lockfile fixture — the
-    # call is expected to fail pre-release, exactly as build-command-clean and
-    # rust-toolchain-clean documented for their own new inputs.
+    # `ts_package_manager` — through `detect`, which this call (an in-repo `uses:`
+    # with no pinned `version`) now runs hermetically from HEAD (#356), not the
+    # published `actions/detect@v0`, so it validates this commit's own
+    # `package_root` / `ts_package_manager` derivation directly, not the
+    # previously-documented pre-release lag.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["typescript"]'
@@ -1039,12 +1087,12 @@ jobs:
     # `base: origin/main` gives the diff-scoped mutation gate real changed lines —
     # the whole fixture is new relative to `main` — and `Point.shift`'s existing
     # test (an exact-value assertion) kills every default mutant. Exercises
-    # `package_root` / `python_env` through the reusable workflow's `@v0`-pinned
-    # detect job, same @v0 lag as mutation-monorepo-ts above: until a release moves
-    # the tag, the old detect emits no `python_env`, so this installs `pytest` +
-    # the wheel globally rather than via `uv sync` into the project's own venv — the
-    # project's own `attrs` dependency is then never installed, and the adapter
-    # cannot import `widget`, so the call is expected to fail pre-release.
+    # `package_root` / `python_env` through `detect`, which this call (an in-repo
+    # `uses:` with no pinned `version`) now runs hermetically from HEAD (#356), not
+    # the published `actions/detect@v0`, so it installs via this commit's own
+    # `uv sync` resolution into the project's own venv directly, not the
+    # previously-documented pre-release lag.
+    needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       languages: '["python"]'

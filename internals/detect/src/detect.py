@@ -17,6 +17,11 @@ Inputs come from the environment (set by the workflow):
   CONFIG         the config file `--config` should receive (default 'testing-conventions.toml');
                  the derived value is the caller's value verbatim unless it equals the default,
                  in which case a package-root testing-conventions.toml wins if present (#277).
+  CALLER_REPOSITORY  the calling run's `github.repository` (#356) — for a reusable workflow this
+                 always belongs to the *caller*, so hermetic mode is derivable only for this
+                 repo's own workflows; empty (the default) means the published path.
+  VERSION        the workflow's `version` input (#356): an explicit published version always wins
+                 over hermetic mode (the #357 post-publish verification path).
   GITHUB_OUTPUT  file the detected sets are appended to (`name=value` lines).
 """
 from __future__ import annotations
@@ -411,13 +416,35 @@ def eligible(languages_input: str, language: str) -> bool:
     return restrictor in ("", "[]") or f'"{language}"' in restrictor
 
 
+_HERMETIC_CALLER = "thekevinscott/testing-conventions"
+_HERMETIC_CLI_COMMAND = "./hermetic-cli/testing-conventions"
+_HERMETIC_TS_ADAPTER_ARGS = "--ts-mutation-adapter ./hermetic-cli/dist/mutation/main.js"
+
+
+def hermetic(caller_repository: str, version: str) -> bool:
+    """Whether this run gates the commit under test hermetically (#356).
+
+    True iff the calling run is this repository's own (`caller_repository` is the reusable
+    workflow's `github.repository`, which for a reusable workflow always belongs to the
+    *caller*) and no explicit `version` was requested — an explicit version names the published
+    artifact (the #357 post-publish verification path) and always wins. Every other caller takes
+    the published `npx` path, so a consumer can neither trigger nor observe hermetic mode.
+    """
+    return caller_repository == _HERMETIC_CALLER and version == ""
+
+
 def _to_json(languages: list[str]) -> str:
     """Compact JSON array, matching what the matrix `fromJSON(...)` consumes (`[]` when empty)."""
     return json.dumps(languages, separators=(",", ":"))
 
 
 def compute_outputs(
-    languages_input: str, scan_root: str, repo_root: str = ".", config_input: str = _CONFIG_DEFAULT
+    languages_input: str,
+    scan_root: str,
+    repo_root: str = ".",
+    config_input: str = _CONFIG_DEFAULT,
+    caller_repository: str = "",
+    version: str = "",
 ) -> dict[str, str]:
     """The detected sets, as `name -> value` strings for GITHUB_OUTPUT.
 
@@ -493,6 +520,15 @@ def compute_outputs(
         # arguments the e2e-verify run step appends; empty when the package declares none.
         "e2e_extra_scope": derive_e2e_extra_scope(config),
         "e2e_exclude": derive_e2e_exclude(config),
+        # #356: the hermetic CLI invocation — the path where the caller workflows' build-cli job
+        # staged this commit's own binary — when this repo gates itself with no pinned version;
+        # empty (-> the run line's npx fallback) for every other caller. The TS mutation adapter
+        # argument rides along pre-rendered (the #333 e2e_extra_scope pattern): the npm launcher
+        # normally appends it, and the hermetic path bypasses the launcher.
+        "cli_command": _HERMETIC_CLI_COMMAND if hermetic(caller_repository, version) else "",
+        "ts_mutation_adapter_args": (
+            _HERMETIC_TS_ADAPTER_ARGS if hermetic(caller_repository, version) else ""
+        ),
     }
 
 
@@ -500,7 +536,15 @@ def main() -> int:
     languages = os.environ.get("LANGUAGES", "")
     scan_path = os.environ.get("SCAN_PATH", ".")
     config_input = os.environ.get("CONFIG", _CONFIG_DEFAULT)
-    outputs = compute_outputs(languages, scan_path, config_input=config_input)
+    caller_repository = os.environ.get("CALLER_REPOSITORY", "")
+    version = os.environ.get("VERSION", "")
+    outputs = compute_outputs(
+        languages,
+        scan_path,
+        config_input=config_input,
+        caller_repository=caller_repository,
+        version=version,
+    )
 
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:

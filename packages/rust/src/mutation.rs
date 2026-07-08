@@ -863,11 +863,9 @@ fn strip_llvm_cov_env(command: &mut Command) {
 /// which forwards it to the cargo build/test runs — so `#[cfg(feature = ...)]` code is
 /// compiled and its mutants exercised.
 ///
-/// cargo-mutants exits `0` when every mutant is caught and `2` when some survive (or
-/// time out / are unviable) — both are normal here, since survivors are the rule's
-/// *output*, not an error. Any other code (usage error, or a baseline that didn't
-/// build/pass) is fatal. The outer instrumentation env is stripped so a nested run (this
-/// rule's own tests under `cargo llvm-cov`) doesn't re-enter the rustc wrapper and hang.
+/// The exit code is classified by [`classify_mutants_exit`] (`0`/`2`/`3` normal, else fatal).
+/// The outer instrumentation env is stripped so a nested run (this rule's own tests under
+/// `cargo llvm-cov`) doesn't re-enter the rustc wrapper and hang.
 fn run_cargo_mutants(
     engine: &Path,
     root: &Path,
@@ -889,9 +887,23 @@ fn run_cargo_mutants(
     }
     strip_llvm_cov_env(&mut command);
     let output = command.output().context("running cargo-mutants")?;
+    classify_mutants_exit(root, &output)
+}
+
+/// Classify a finished cargo-mutants run's exit code as a normal outcome or a fatal error.
+/// Split from [`run_cargo_mutants`] so the exit-code handling is unit-tested with an injected
+/// [`Output`] rather than a real (and, for a timeout, a genuinely slow) engine run.
+///
+/// cargo-mutants exits `0` when every mutant is caught, `2` when some are missed (survivors),
+/// and `3` when some mutants **timed out** and none were missed — all three write an
+/// `outcomes.json` the gate reads, and a timeout is inconclusive (this module's own `Timeout`
+/// semantics), not a survivor. Any other code — a usage error, or a baseline that didn't
+/// build/pass (exit 4) — is fatal.
+fn classify_mutants_exit(root: &Path, output: &Output) -> Result<()> {
     match output.status.code() {
-        // 0 = all caught, 2 = some survived/timed out: both produce a report to read.
-        Some(0) | Some(2) => Ok(()),
+        // 0 = all caught, 2 = some missed (survivors), 3 = some timed out with none missed:
+        // all three produce an outcomes.json to read, and a timeout is inconclusive.
+        Some(0) | Some(2) | Some(3) => Ok(()),
         _ => bail!(
             "cargo-mutants did not run cleanly in `{}` (baseline build/test failure?):\n{}{}",
             root.display(),
@@ -1415,6 +1427,37 @@ mod tests {
         .unwrap_err();
         assert!(
             err.to_string().contains("is cargo installed?"),
+            "got: {err}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn classify_mutants_exit_accepts_the_caught_and_survivor_exits() {
+        // 0 (all caught) and 2 (some missed/survived) both leave an outcomes.json to read.
+        classify_mutants_exit(Path::new("/crate"), &fake_output(0, "")).unwrap();
+        classify_mutants_exit(Path::new("/crate"), &fake_output(2, "")).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn classify_mutants_exit_accepts_a_timeout_exit_3() {
+        // cargo-mutants exits 3 when mutants timed out and none were missed — an
+        // inconclusive-not-fatal outcome (this module's own `Timeout` semantics). It still
+        // wrote an outcomes.json, so the run is a pass, not the "baseline failure" bail.
+        classify_mutants_exit(Path::new("/crate"), &fake_output(3, ""))
+            .expect("a timeout (exit 3) is inconclusive, not fatal");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn classify_mutants_exit_is_fatal_on_a_baseline_failure() {
+        // Exit 4 (the clean/baseline build or test failed) — and any other code — stays fatal.
+        let err = classify_mutants_exit(Path::new("/crate"), &fake_output(4, "baseline broke"))
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("did not run cleanly")
+                && err.to_string().contains("baseline broke"),
             "got: {err}"
         );
     }

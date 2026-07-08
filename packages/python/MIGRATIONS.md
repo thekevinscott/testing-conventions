@@ -42,9 +42,20 @@ cosmic-ray classifies outcomes by the test command's exit status, not its output
 surviving mutant's all-green run is unaffected and the survivor set is unchanged — only the
 wall-clock cost of killed mutants drops.
 
+Hardens the mutation baseline against slow suites (#395). The baseline guard raised only on a
+`killed` outcome, so a baseline that timed out (or ended abnormally, `test_outcome=None`) passed
+silently; with a fixed 30s per-run timeout, any suite slower than 30s timed the baseline out, then
+every mutant timed out and dropped, and the adapter emitted an empty survivor set — a false green.
+The guard now requires the clean suite to *pass* (`survived`), and the per-mutant timeout is derived
+from the clean suite's observed runtime rather than the fixed 30s. The spawned adapter interface
+(`python3 -m testing_conventions.mutation.main`) is unchanged; the internal `config`/`baseline`
+helpers gained a `timeout` argument and an observed-runtime return.
+
 ### Required changes
 
-None.
+None for consumers — the spawned adapter CLI is unchanged. (Internally, `config.render_config` /
+`config.build_config` take a `timeout`, and `baseline.check_baseline` returns the observed runtime
+and accepts an injectable `clock`; these modules are not a public surface.)
 
 ### Deprecations removed
 
@@ -56,6 +67,12 @@ None.
 instead of running the whole suite. A killed mutant's captured test output may show fewer
 results than before; the killed/survived classification, the survivor set, and the gate's
 pass/fail verdict are unchanged.
+
+`unit mutation --language python`'s baseline is now stricter and its per-mutant timeout adaptive
+(#395). A previously-silent baseline timeout or abnormal outcome now fails the run loudly (the
+clean suite must report `survived`), so a suite too slow for its budget surfaces as an error rather
+than an empty, falsely-green survivor set. The per-mutant timeout scales with the clean suite's
+measured runtime instead of a fixed 30s, so a legitimately slow suite keeps its budget.
 
 ### Verification
 

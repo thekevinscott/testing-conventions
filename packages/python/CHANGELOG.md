@@ -41,3 +41,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Removed
 
 ### Fixed
+
+- **The mutation baseline no longer false-greens on a slow suite** (#395). The baseline guard
+  raised only when the unmutated run reported `killed`, so a baseline that timed out (or ended
+  abnormally, `test_outcome=None`) passed silently; combined with a fixed 30s per-run timeout, any
+  suite slower than 30s made the baseline time out, then every mutant time out and drop, and the
+  adapter wrote an empty survivor set — a green gate over zero mutants. The guard now requires the
+  clean suite to *pass* (`survived`): a `killed`, timed-out, or abnormal baseline is a loud error.
+  The per-mutant timeout is derived from the clean suite's observed runtime (`observed x
+  multiplier`, floored) instead of the fixed 30s, so a legitimately slow suite earns a
+  proportionally larger budget. The spawned `python3 -m testing_conventions.mutation.main` interface
+  is unchanged.

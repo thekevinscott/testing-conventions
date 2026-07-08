@@ -91,6 +91,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     and `#[cfg(test)]` modules under those trees were false-flagged. The scan now reuses the
     colocated-test source walk (skipping `tests/`/`benches/`/`examples/`/`target/`), so a
     locally-built crate is scanned the same as a fresh checkout. No CLI or config change.
+- **`unit mutation --language rust`: a cargo-mutants timeout run no longer errors** (#395).
+  cargo-mutants exits `3` when some mutants time out and none were missed — an
+  inconclusive-not-fatal outcome the rule already models as a non-survivor — but the gate accepted
+  only exit `0`/`2` and bailed exit `3` as a "baseline build/test failure". A diff-scoped run where
+  every mutant on the touched lines times out under a slow suite now passes with zero survivors
+  instead of a false error; a genuine baseline failure (exit `4`) or usage error stays fatal. The
+  exit-code handling is split into a unit-tested `classify_mutants_exit`. No CLI or config change.
 
 - **`unit mutation --language rust`: concurrent invocations no longer each duplicate the
   cargo-mutants install** (#385, found investigating #370/epic #366). Provisioning the pinned

@@ -101,6 +101,35 @@ is file-scoped, so a real exemption is also isolated to the smallest possible fi
 bar: the entire #218 pytest plugin ended up needing **zero** exemptions. (The deterministic form of
 "keep it minimal" would be line-scoped exemptions — #226.)
 
+## CI hermeticity: a required check depends only on the commit under test
+
+**A required check may depend only on the commit under test. Any input that can change without a
+commit — a floating tag (`@v0`), a published package (`npx testing-conventions`), "the last
+release" — must itself be gated by that same check.** A check that reads a mutable external
+reference validates `(this commit) × (whatever that reference happens to be right now)`, so it can
+pass on the PR that introduces a break and go red later when the reference moves, with no commit to
+blame — a green gate that tested the wrong thing.
+
+The worked cautionary case is the #351 packaging flip: the change stayed green in its own PR's
+self-test (still running the old `@v0`) and turned `main` red only when the next release advanced
+`@v0` into the new-workflow × new-behavior combination — a red `main` with no commit to point at,
+and every consumer red on their next run. The epic that closed this class (#353) enforces the
+invariant in two layers, and new CI work stays inside them:
+
+- **Layer 1 — hermetic merge gate (#356).** Every PR's self-test and dogfood build `detect` and the
+  CLI from HEAD and run *those*, so the merge gate is `(HEAD workflow × HEAD detect × HEAD-built
+  binary)` — the commit under test, end to end. A break goes red in the PR that introduces it.
+- **Layer 2 — gated `@v0` promotion (#357).** The one input Layer 1 structurally can't pin — the
+  `@v0` a consumer runs the instant the tag moves — is gated at promotion instead: between publish
+  and tag-move, the full self-test + dogfood surface runs pinned to the just-published immutable
+  version, and `@v0` advances only if green (fail closed).
+
+So when adding or changing a required check, ask what mutable reference it reads. If the answer is a
+tag, a package, or "the last release," either pin it to the commit under test (Layer 1) or gate the
+thing that moves it (Layer 2) — a required check never depends on state that can change without a
+commit. `internals/repo.md` carries the mechanics ("Hermetic mode", "Validated promotion") and the
+full worked-example history ("Self-test and the `@v0` path").
+
 ## Two-step rollout for workflow-consumed CLI changes
 
 The reusable workflow (`.github/workflows/testing-conventions.yml`) never runs this repo's own
@@ -121,6 +150,15 @@ Land these as two PRs, not one:
 This isn't a deferral in the "Now over later" sense — the wiring lands the moment it *can*, not on
 a hypothetical later cleanup. It's sequencing around a hard constraint: the workflow-under-test and
 the binary-under-test can't change atomically.
+
+The two layers of the CI-hermeticity invariant (above) change the *consequence* of getting this
+wrong, not the constraint. The workflow-under-test and the binary-under-test still can't change in
+one atomic release, so this stays a two-PR sequence. What moved is the failure: a same-commit
+CLI-plus-workflow change that reaches a job running the **published** binary is now caught in-PR
+where a job builds from HEAD (Layer 1), and for the consumer-path jobs that deliberately keep `npx
+testing-conventions` (`dogfood-github-helpers.yml`, `python.yml`), the gated promotion (Layer 2)
+catches the skew before `@v0` moves. Either way the break surfaces before a consumer sees it, rather
+than poisoning `main`/dogfood silently and going red only on the next release.
 
 ## Never pass data through the environment
 

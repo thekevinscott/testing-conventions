@@ -1,52 +1,121 @@
 name: Move major tag
 
-# Advance the moving major tag `@v0` to the just-released commit — the rolling-release
-# mechanism (#235). Consumers pin `…/testing-conventions.yml@v0` and `…/actions/detect@v0`,
-# and this force-moves `@v0` forward so every consumer tracks `main` on its next run.
+# Verify a release, then advance the moving major tag `@v0` to it — the validated-promotion
+# mechanism (#235, #357). Consumers pin `…/testing-conventions.yml@v0` and `…/actions/detect@v0`,
+# and the tag is force-moved forward on each release so every consumer tracks `main`.
 #
-# Gated on a successful publish: it triggers on the `Release` workflow *completing*, not on a
-# bare push. The reusable workflow runs the *published* npm binary (`npx testing-conventions`)
-# while its own file is frozen at the tag, so advancing `@v0` ahead of the publish would point
-# consumers at a new workflow calling a binary that isn't on npm yet — the `unrecognized
-# subcommand` strand a rename caused at 0.0.7 (#55). Publishing the binary is this repo's analog
-# of committing a built `dist/`: ship the runtime first, then move the tag. Replaces the inline
-# `advance-major-tag` job from #92.
+# Gated two ways, both non-negotiable:
+#   * on a successful publish (#235): triggers on the `Release` workflow *completing*, so the
+#     binary is on npm before the tag moves — a consumer never gets new-workflow + old-binary
+#     (the #55 `unrecognized subcommand` stranding);
+#   * on a green verification (#357): before the move, the exact combination the tag is about to
+#     bless — the new workflow file, the published binary, the current `@v0` detect — is run over
+#     the full self-test + dogfood surface, pinned to the just-published version, and the layout
+#     of the remote `detect` action fetch is checked at the release commit. A red verification
+#     leaves `@v0` where it is (fail closed).
 #
-# The forward-only logic lives in the repo-only, pytest-covered helper
-# `.github/scripts/move-major-tag/move_major_tag.py` (tested by `move-major-tag-tests.yml`),
-# not inline here — so this workflow only wires the trigger, the checkout, and the env.
+# The narrow scope (detect stays at the current `@v0`, not re-pinned to the release) is
+# structurally forced — the new-workflow × detect-at-the-new-tag combination is unconstructable
+# until the tag moves (`uses:` refs can't be dynamic) — and the coverage it would give is already
+# proven pre-merge by Layer 1's hermetic gate (#356). See internals/repo.md, "Validated
+# promotion". All logic is in the colocated-tested `.github/scripts/verify-release` and
+# `.github/scripts/move-major-tag` helpers; this workflow wires triggers, checkouts, and env.
 
 on:
   workflow_run:
     workflows: [Release]
     types: [completed]
 
-# Least privilege: only the contents:write needed to push the tag.
-permissions:
-  contents: write
+permissions: {}
 
-# Newest release wins; a stale in-flight move is cancelled before it can race the tag push.
+# Newest release wins; a stale in-flight verify+move is cancelled before it can race the tag push.
 concurrency:
   group: move-major-tag
   cancel-in-progress: true
 
 jobs:
-  move-v0:
+  context:
     # Only when the Release actually published, and only on main. A failed or cancelled release
     # leaves `@v0` where it is — never advanced ahead of a publish that did not happen.
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ github.event.workflow_run.head_sha }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v6
         with:
           # The released commit (a workflow_run checkout defaults to the default-branch HEAD),
-          # with full history + tags so the helper's forward-only ancestry check can resolve `v0`.
+          # with full history + tags so the helper can resolve the published version and the
+          # forward-only ancestry check can resolve `v0`.
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
-      - name: Advance @v0 (forward-only) to the released commit
+          fetch-tags: true
+      - name: Resolve the just-published version to pin the verification to
+        id: version
+        run: echo "version=$(python3 .github/scripts/verify-release/verify_release.py resolve-version "${{ github.event.workflow_run.head_sha }}")" >> "$GITHUB_OUTPUT"
+
+  verify-layout:
+    # The remote-action-fetch provenance the version-pinned suite can't cover (it runs
+    # detect@v0, the old tag): git archive the release commit and assert action.yml and the
+    # detect.py it reaches are present, so a consumer's `detect@v0` fetch won't resolve a broken
+    # action the moment @v0 moves.
+    needs: context
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.context.outputs.sha }}
+          fetch-depth: 0
+      - name: The release archive carries the detect action's fetch targets
+        run: python3 .github/scripts/verify-release/verify_release.py check-layout "${{ needs.context.outputs.sha }}"
+
+  verify-suite:
+    # The full self-test + dogfood surface, pinned to the just-published version (the published
+    # consumer path, per #356's version-input seam). Dispatched at the release commit via a
+    # throwaway tag (workflow_dispatch takes a branch/tag ref, never a SHA), polled to completion,
+    # fail closed. contents:write for the temp tag push; actions:write to dispatch.
+    needs: context
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.context.outputs.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Verify the version-pinned self-test + dogfood suites at the release commit
         env:
-          SHA: ${{ github.event.workflow_run.head_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 .github/scripts/verify-release/verify_release.py dispatch-and-wait
+          "${{ needs.context.outputs.sha }}" "${{ needs.context.outputs.version }}"
+          testing-conventions-selftest.yml dogfood.yml
+
+  move-v0:
+    # Advance @v0 only after both the layout check and the version-pinned suites are green — a
+    # red verification leaves @v0 where it is (the needs: edges are the fail-closed gate). The
+    # forward-only tag logic stays the move_major_tag.py helper, unchanged.
+    needs: [context, verify-layout, verify-suite]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.context.outputs.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Advance @v0 (forward-only) to the verified release commit
+        env:
+          SHA: ${{ needs.context.outputs.sha }}
           TAG: v0
         run: python3 .github/scripts/move-major-tag/move_major_tag.py

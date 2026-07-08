@@ -145,6 +145,11 @@ on:
       - '.github/workflows/testing-conventions-selftest.yml'
       - '.github/selftest/**'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'testing-conventions version to verify against, e.g. 0.0.67. Empty (the default, on pull_request) runs the #356 hermetic build-from-HEAD path unchanged; the verify-and-promote workflow (#357) dispatches this at the release SHA with the just-published version pinned, forcing the published consumer path.'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -176,6 +181,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["python"]'
       path: .github/selftest/clean
       config: .github/selftest/clean/testing-conventions.toml
@@ -191,6 +197,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["python", "typescript"]'
       path: .github/selftest/clean
       config: .github/selftest/clean/testing-conventions.toml
@@ -205,6 +212,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["python", "typescript"]'
       path: .github/selftest/no-sources
 
@@ -220,6 +228,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["python"]'
       path: .github/selftest/integration-waiver
       config: .github/selftest/integration-waiver/testing-conventions.toml
@@ -239,6 +248,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["rust"]'
       path: .github/selftest/integration-rust/clean
 
@@ -449,6 +459,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["rust"]'
       path: .github/selftest/isolation/rust-clean
 
@@ -493,6 +504,7 @@ jobs:
     needs: [upload-clean-dist, build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["python"]'
       path: .github/selftest/no-sources
       packaging_artifact: selftest-clean-dist
@@ -541,6 +553,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["rust"]'
       path: .github/selftest/coverage-rust/clean
       config: .github/selftest/coverage-rust/clean/testing-conventions.toml
@@ -648,6 +661,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["python"]'
       path: .github/selftest/diff-clean
       config: .github/selftest/diff-clean/testing-conventions.toml
@@ -766,6 +780,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["python"]'
       path: .github/selftest/build-command
       config: .github/selftest/build-command/testing-conventions.toml
@@ -794,6 +809,7 @@ jobs:
     needs: [upload-red-dist, build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["python"]'
       path: .github/selftest/no-sources
       packaging_artifact: selftest-red-dist
@@ -840,6 +856,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["python"]'
       path: .github/selftest/build-command
       config: .github/selftest/build-command/rust-toolchain.toml
@@ -863,6 +880,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["python"]'
       path: .github/selftest/build-command
       config: .github/selftest/build-command/build-command.toml
@@ -999,6 +1017,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       path: .github/selftest/monorepo/packages/ts
       gates: '["unit-coverage"]'
 
@@ -1010,6 +1029,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       path: .github/selftest/monorepo/packages/py
       gates: '["unit-coverage"]'
   # ---- #280: packaging discovers dist/ at the derived package root, not the checkout root ----
@@ -1047,6 +1067,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       path: .github/selftest/packaging-package-root/clean
       gates: '["packaging"]'
 
@@ -1105,6 +1126,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["typescript"]'
       path: .github/selftest/monorepo/packages/ts/src
       config: .github/selftest/monorepo/packages/ts/testing-conventions.toml
@@ -1127,6 +1149,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       languages: '["python"]'
       path: .github/selftest/monorepo/packages/py/src
       config: .github/selftest/monorepo/packages/py/testing-conventions.toml

@@ -22,8 +22,11 @@ def boundary():
     with patch.object(v, "dispatch") as dispatch, \
             patch.object(v, "list_runs") as list_runs, \
             patch.object(v, "watch_conclusion") as watch, \
+            patch.object(v, "create_ref") as create_ref, \
+            patch.object(v, "delete_ref") as delete_ref, \
             patch.object(v, "now_iso", return_value="2026-07-08T10:00:00Z"):
-        yield SimpleNamespace(dispatch=dispatch, list_runs=list_runs, watch=watch)
+        yield SimpleNamespace(dispatch=dispatch, list_runs=list_runs, watch=watch,
+                              create_ref=create_ref, delete_ref=delete_ref)
 
 
 def _run(sha="abc", created="2026-07-08T10:00:01Z", db=7):
@@ -31,45 +34,57 @@ def _run(sha="abc", created="2026-07-08T10:00:01Z", db=7):
             "status": "in_progress", "createdAt": created}
 
 
-def test_dispatch_and_wait_dispatches_then_returns_the_runs_conclusion(boundary):
-    boundary.list_runs.return_value = [_run()]
-    boundary.watch.return_value = "success"
-    assert v.dispatch_and_wait("selftest.yml", "abc", "0.0.67") == "success"
-    boundary.dispatch.assert_called_once_with("selftest.yml", "abc", "0.0.67")
-    boundary.watch.assert_called_once_with(7)
+def test_verify_suites_creates_the_ref_dispatches_all_then_returns_conclusions(boundary):
+    # Two workflows: distinct run ids by workflow, distinct conclusions.
+    boundary.list_runs.side_effect = lambda wf, **kw: [_run(db=1 if wf == "a.yml" else 2)]
+    boundary.watch.side_effect = lambda rid, **kw: {1: "success", 2: "failure"}[rid]
+    result = v.verify_suites("abc", "0.0.67", ["a.yml", "b.yml"])
+    assert result == {"a.yml": "success", "b.yml": "failure"}
+    boundary.create_ref.assert_called_once_with("verify-release-abc", "abc")
+    # Both dispatched at the temp tag before either was awaited (parallel), then cleaned up.
+    assert [c.args[0] for c in boundary.dispatch.call_args_list] == ["a.yml", "b.yml"]
+    assert boundary.dispatch.call_args_list[0].args[1] == "verify-release-abc"
+    boundary.delete_ref.assert_called_once_with("verify-release-abc")
 
 
-def test_dispatch_and_wait_retries_until_the_run_registers(boundary):
+def test_verify_suites_deletes_the_ref_even_when_a_dispatch_raises(boundary):
+    boundary.dispatch.side_effect = RuntimeError("gh boom")
+    with pytest.raises(RuntimeError):
+        v.verify_suites("abc", "0.0.67", ["a.yml"])
+    boundary.delete_ref.assert_called_once_with("verify-release-abc")  # finally cleanup ran
+
+
+def test_await_run_retries_until_the_run_registers(boundary):
     # First poll: the dispatched run hasn't appeared yet (empty list). Second poll: it's there.
     boundary.list_runs.side_effect = [[], [_run()]]
-    boundary.watch.return_value = "success"
     sleeps = []
-    assert v.dispatch_and_wait("selftest.yml", "abc", "0.0.67", sleep=sleeps.append) == "success"
+    assert v.await_run("selftest.yml", "abc", "2026-07-08T09:00:00Z", sleep=sleeps.append) == 7
     assert sleeps  # it waited between polls rather than giving up on the first empty list
     assert boundary.list_runs.call_count == 2
 
 
-def test_dispatch_and_wait_times_out_if_the_run_never_registers(boundary):
+def test_await_run_times_out_if_the_run_never_registers(boundary):
     boundary.list_runs.return_value = []  # never appears
     # A no-op sleep that advances a fake monotonic clock past the deadline on its first call.
     ticks = iter([0.0, v._RUN_APPEAR_TIMEOUT_S + 1])
     with patch.object(v.time, "monotonic", side_effect=lambda: next(ticks)):
         with pytest.raises(TimeoutError):
-            v.dispatch_and_wait("selftest.yml", "abc", "0.0.67", sleep=lambda _s: None)
-    boundary.watch.assert_not_called()
+            v.await_run("selftest.yml", "abc", "2026-07-08T09:00:00Z", sleep=lambda _s: None)
 
 
-def test_main_dispatch_and_wait_exits_zero_on_success(boundary, capsys):
+def test_main_dispatch_and_wait_exits_zero_when_all_suites_pass(boundary, capsys):
     boundary.list_runs.return_value = [_run()]
     boundary.watch.return_value = "success"
-    assert v.main(["verify_release.py", "dispatch-and-wait", "selftest.yml", "abc", "0.0.67"]) == 0
+    assert v.main(["verify_release.py", "dispatch-and-wait", "abc", "0.0.67", "selftest.yml"]) == 0
 
 
-def test_main_dispatch_and_wait_exits_nonzero_and_fails_closed_on_a_red_run(boundary, capsys):
+def test_main_dispatch_and_wait_exits_nonzero_and_fails_closed_on_a_red_suite(boundary, capsys):
     boundary.list_runs.return_value = [_run()]
     boundary.watch.return_value = "failure"
-    assert v.main(["verify_release.py", "dispatch-and-wait", "selftest.yml", "abc", "0.0.67"]) == 1
-    assert "refusing to promote" in capsys.readouterr().out
+    assert v.main(["verify_release.py", "dispatch-and-wait", "abc", "0.0.67", "selftest.yml", "dogfood.yml"]) == 1
+    out = capsys.readouterr().out
+    assert "refusing to promote" in out
+    assert "selftest.yml" in out
 
 
 def test_main_check_layout_exits_zero_when_the_action_paths_are_present(capsys):
@@ -119,6 +134,28 @@ def test_list_runs_parses_the_gh_json_into_dicts():
     runs = v.list_runs("selftest.yml", run=fake)
     assert runs == [{"databaseId": 1, "headSha": "abc", "event": "workflow_dispatch",
                      "status": "completed", "conclusion": "success", "createdAt": "2026-07-08T10:00:00Z"}]
+
+
+def test_create_ref_pushes_the_temp_tag_at_the_sha():
+    seen = []
+
+    def fake(argv, **kwargs):
+        seen.append(argv)
+        return SimpleNamespace(returncode=0)
+
+    v.create_ref("verify-release-abc", "abc", run=fake)
+    assert seen[0] == ["git", "push", "origin", "abc:refs/tags/verify-release-abc"]
+
+
+def test_delete_ref_deletes_the_temp_tag():
+    seen = []
+
+    def fake(argv, **kwargs):
+        seen.append(argv)
+        return SimpleNamespace(returncode=0)
+
+    v.delete_ref("verify-release-abc", run=fake)
+    assert seen[0] == ["git", "push", "origin", ":refs/tags/verify-release-abc"]
 
 
 def test_watch_conclusion_returns_the_conclusion_once_completed():

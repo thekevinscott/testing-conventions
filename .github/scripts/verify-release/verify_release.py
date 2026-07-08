@@ -130,6 +130,21 @@ def dispatch(workflow: str, ref: str, version: str, run=subprocess.run) -> None:
     )
 
 
+def create_ref(tag: str, sha: str, run=subprocess.run) -> None:
+    """Create the throwaway tag `tag` at `sha` on the remote.
+
+    `workflow_dispatch` accepts a branch or tag ref, never a bare SHA, so a temporary tag at the
+    exact release commit is the ref that pins a dispatched run to it. No workflow triggers on
+    `push: tags:`, so creating it fires nothing.
+    """
+    run(["git", "push", "origin", f"{sha}:refs/tags/{tag}"], check=True)
+
+
+def delete_ref(tag: str, run=subprocess.run) -> None:
+    """Delete the throwaway tag `tag` from the remote (the `finally` cleanup)."""
+    run(["git", "push", "origin", f":refs/tags/{tag}"], check=True)
+
+
 def list_runs(workflow: str, run=subprocess.run) -> list[dict]:
     """The recent runs of `workflow` as dicts (databaseId, headSha, event, status, conclusion, createdAt)."""
     import json
@@ -162,21 +177,23 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# The throwaway tag naming the release commit for dispatch (created at the release SHA, deleted
+# after). The SHA in the name keeps concurrent verifications from colliding on the ref.
+TEMP_TAG_PREFIX = "verify-release-"
+
+
 # --- orchestration (real; only the boundary is mocked in integration) ---
 
-def dispatch_and_wait(workflow: str, sha: str, version: str, *, sleep=time.sleep) -> str:
-    """Dispatch `workflow` at `sha` with `version`, find the run it created, and return its conclusion.
+def await_run(workflow: str, sha: str, since: str, *, sleep=time.sleep) -> int:
+    """Poll `workflow`'s runs until the dispatched one at `sha` (created at/after `since`) registers.
 
-    Records a pre-dispatch timestamp so `select_dispatched_run` can pin to *this* run, then polls
-    the run list until it registers (a dispatch is asynchronous) before watching it to completion.
+    A dispatch is asynchronous — the run doesn't appear instantly — so retry until it does or the
+    timeout elapses. Returns the run's databaseId.
     """
-    since = now_iso()
-    dispatch(workflow, sha, version)
     deadline = time.monotonic() + _RUN_APPEAR_TIMEOUT_S
     while True:
         try:
-            run = select_dispatched_run(list_runs(workflow), sha, since)
-            break
+            return select_dispatched_run(list_runs(workflow), sha, since)["databaseId"]
         except LookupError:
             if time.monotonic() >= deadline:
                 raise TimeoutError(
@@ -184,7 +201,26 @@ def dispatch_and_wait(workflow: str, sha: str, version: str, *, sleep=time.sleep
                     f"{_RUN_APPEAR_TIMEOUT_S}s (#357)"
                 )
             sleep(_RUN_POLL_INTERVAL_S)
-    return watch_conclusion(run["databaseId"])
+
+
+def verify_suites(sha: str, version: str, workflows: list[str], *, sleep=time.sleep) -> dict:
+    """Dispatch every workflow in `workflows` at `sha` with `version`, and return `{workflow: conclusion}`.
+
+    Creates one throwaway tag at `sha` (the dispatch ref), dispatches all workflows at it *before*
+    waiting on any, so they run in parallel, then watches each to completion. The tag is deleted in
+    a `finally` so a failure or timeout still cleans it up. A pre-dispatch timestamp pins each
+    lookup to the run this verification just triggered.
+    """
+    tag = f"{TEMP_TAG_PREFIX}{sha}"
+    create_ref(tag, sha)
+    try:
+        since = now_iso()
+        for workflow in workflows:
+            dispatch(workflow, tag, version)
+        run_ids = {workflow: await_run(workflow, sha, since, sleep=sleep) for workflow in workflows}
+        return {workflow: watch_conclusion(run_id) for workflow, run_id in run_ids.items()}
+    finally:
+        delete_ref(tag)
 
 
 def main(argv: list[str]) -> int:
@@ -207,12 +243,18 @@ def main(argv: list[str]) -> int:
         print(f"detect action layout present in the archive of {sha}")
         return 0
     if command == "dispatch-and-wait":
-        workflow, sha, version = args
-        conclusion = dispatch_and_wait(workflow, sha, version)
-        if conclusion != "success":
-            print(f"::error::{workflow} at {sha} concluded '{conclusion}', not success; refusing to promote (#357)")
+        sha, version, *workflows = args
+        conclusions = verify_suites(sha, version, workflows)
+        failed = [f"{wf} ({conclusion or 'no conclusion'})"
+                  for wf, conclusion in conclusions.items() if conclusion != "success"]
+        if failed:
+            print(
+                "::error::the version-pinned verification failed for "
+                + ", ".join(failed)
+                + f" at {sha}; refusing to promote (#357)"
+            )
             return 1
-        print(f"{workflow} at {sha} passed the version-pinned verification")
+        print(f"the version-pinned verification passed for {', '.join(conclusions)} at {sha}")
         return 0
     print(f"::error::unknown command {command!r}")
     return 2

@@ -6,6 +6,10 @@ on:
 permissions:
   checks: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   monitor:
     name: 'CI Gate'

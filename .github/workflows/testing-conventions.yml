@@ -128,6 +128,16 @@ name: Testing Conventions
 # manifest does not express, or for `unit mutation`, which does not yet derive it. The rust
 # matrix arm always carries its own toolchain. `false` (the default) adds nothing beyond
 # auto-derivation.
+#
+# Hermetic self-gating (#356): when this repo's own CI calls this workflow with no explicit
+# `version`, detect derives it (from `github.repository`, which belongs to the *calling* run —
+# so this can never hold for a consumer) and emits `cli_command`: the rule jobs then download
+# the `hermetic-cli` artifact the repo-only caller workflow's build-cli job staged, and run the
+# CLI built from HEAD instead of the published npm binary — a PR changing detect or a rule is
+# gated by its own commit, not by whatever `@v0`/npm currently resolve to. There is no input
+# and no job for this: the derivation lives in tested Python (internals/detect), the build in
+# the caller workflows, and this file carries only guarded *steps* — a consumer's checks UI
+# and execution path are byte-for-byte unchanged. See internals/repo.md, "Hermetic mode".
 
 on:
   workflow_call:
@@ -181,71 +191,90 @@ jobs:
       # `path` — the matrix the co-change `*-changed` job fans out over (rust units
       # are inline `#[cfg(test)]` modules, so a sibling test can't go stale and
       # co-change doesn't apply).
-      languages: ${{ steps.scan.outputs.languages }}
+      languages: ${{ steps.scan_hermetic.outputs.languages || steps.scan_published.outputs.languages }}
       # The same set plus rust — the whole-tree colocated-test matrix (#274): the
       # rust arm checks inline `#[cfg(test)]` presence (#40).
-      colocated_test_languages: ${{ steps.scan.outputs.colocated_test_languages }}
+      colocated_test_languages: ${{ steps.scan_hermetic.outputs.colocated_test_languages || steps.scan_published.outputs.colocated_test_languages }}
       # The same set plus rust — the matrix the integration-lint job fans out over
       # (#126).
-      integration_lint_languages: ${{ steps.scan.outputs.integration_lint_languages }}
+      integration_lint_languages: ${{ steps.scan_hermetic.outputs.integration_lint_languages || steps.scan_published.outputs.integration_lint_languages }}
       # `unit lint` (#125): python/typescript + rust, also kept off the coverage matrix.
-      isolation_languages: ${{ steps.scan.outputs.isolation_languages }}
+      isolation_languages: ${{ steps.scan_hermetic.outputs.isolation_languages || steps.scan_published.outputs.isolation_languages }}
       # `unit coverage` (#37/#171): present python/typescript, plus rust whenever a
       # crate is present — Rust coverage is zero-config now (`lines = 100` by default,
       # #206) — the matrix the whole-tree and changed-line coverage jobs fan out over.
       # Kept as its own set so a future coverage-less language can diverge.
-      coverage_languages: ${{ steps.scan.outputs.coverage_languages }}
+      coverage_languages: ${{ steps.scan_hermetic.outputs.coverage_languages || steps.scan_published.outputs.coverage_languages }}
       # `unit mutation` (#204): the same set as coverage now that all three arms are at
       # parity (#201/#202/#203) — the matrix the diff-scoped mutation job fans out over.
-      mutation_languages: ${{ steps.scan.outputs.mutation_languages }}
+      mutation_languages: ${{ steps.scan_hermetic.outputs.mutation_languages || steps.scan_published.outputs.mutation_languages }}
       # Whether a built distribution is discoverable at the derived package_root (#280;
       # the checkout root for every single-package consumer), and whether a committed
       # e2e-attestation.json is present at the checkout root (#186) — the packaging and
       # e2e-verify jobs gate on these so they run by default and skip (never fail) when
       # absent.
-      packaging_dist: ${{ steps.scan.outputs.packaging_dist }}
-      e2e_attestation: ${{ steps.scan.outputs.e2e_attestation }}
+      packaging_dist: ${{ steps.scan_hermetic.outputs.packaging_dist || steps.scan_published.outputs.packaging_dist }}
+      e2e_attestation: ${{ steps.scan_hermetic.outputs.e2e_attestation || steps.scan_published.outputs.e2e_attestation }}
       # The monorepo primitive (#277): everything a suite-executing job needs to install,
       # build, and run at the right directory, derived from `path` and the package's own
       # manifest rather than a second, consumer-facing scoping input.
-      package_root: ${{ steps.scan.outputs.package_root }}
-      ts_package_manager: ${{ steps.scan.outputs.ts_package_manager }}
-      python_env: ${{ steps.scan.outputs.python_env }}
-      provision_rust: ${{ steps.scan.outputs.provision_rust }}
+      package_root: ${{ steps.scan_hermetic.outputs.package_root || steps.scan_published.outputs.package_root }}
+      ts_package_manager: ${{ steps.scan_hermetic.outputs.ts_package_manager || steps.scan_published.outputs.ts_package_manager }}
+      python_env: ${{ steps.scan_hermetic.outputs.python_env || steps.scan_published.outputs.python_env }}
+      provision_rust: ${{ steps.scan_hermetic.outputs.provision_rust || steps.scan_published.outputs.provision_rust }}
       # The config file every job's `--config` should receive (#277): `inputs.config`
       # verbatim unless it's the default, in which case a package-root
       # testing-conventions.toml wins if present — so a per-package call stops naming it.
-      config: ${{ steps.scan.outputs.config }}
+      config: ${{ steps.scan_hermetic.outputs.config || steps.scan_published.outputs.config }}
       # The `build_command` declaration (#289, #335), read from the package's primary-language
       # table of that discovered config file rather than passed on the `uses:` call — the
       # suite-executing and packaging jobs run it before the suite/build. Empty when none is
       # declared (no build step).
-      build_command: ${{ steps.scan.outputs.build_command }}
+      build_command: ${{ steps.scan_hermetic.outputs.build_command || steps.scan_published.outputs.build_command }}
       # The distribution build the packaging job runs before scanning (#335) — `uv build` /
       # `<pm> pack --pack-destination dist` / `cargo package`, derived from the package-root
       # manifest — and the language whose toolchain to provision for it. Both empty when the
       # manifest structurally can't state a build, so the job falls back to a committed dist/
       # or a packaging_artifact, exactly as before.
-      packaging_build: ${{ steps.scan.outputs.packaging_build }}
-      packaging_language: ${{ steps.scan.outputs.packaging_language }}
+      packaging_build: ${{ steps.scan_hermetic.outputs.packaging_build || steps.scan_published.outputs.packaging_build }}
+      packaging_language: ${{ steps.scan_hermetic.outputs.packaging_language || steps.scan_published.outputs.packaging_language }}
       # Extra e2e freshness roots and their feature-gated excludes (#333), read from that same
       # discovered config — a shared source tree beside the package (a native core bound into
       # several bindings) that no `--scope` at-or-below the package root can reach. Rendered as
       # repeated `--extra-scope`/`--exclude` arguments the e2e-verify job appends; empty when the
       # package declares none, so a package that declares nothing is byte-identical to before.
-      e2e_extra_scope: ${{ steps.scan.outputs.e2e_extra_scope }}
-      e2e_exclude: ${{ steps.scan.outputs.e2e_exclude }}
+      e2e_extra_scope: ${{ steps.scan_hermetic.outputs.e2e_extra_scope || steps.scan_published.outputs.e2e_extra_scope }}
+      e2e_exclude: ${{ steps.scan_hermetic.outputs.e2e_exclude || steps.scan_published.outputs.e2e_exclude }}
+      # The hermetic CLI invocation and the mutation job's pre-rendered adapter argument (#356),
+      # decided in detect.py (tested Python — see internals/repo.md, "Hermetic mode"), not here:
+      # the artifact path when this repo gates itself, empty (-> the run lines' npx fallback)
+      # for every other caller. Plain coalescing like every output above — no logic in YAML.
+      cli_command: ${{ steps.scan_hermetic.outputs.cli_command || steps.scan_published.outputs.cli_command }}
+      ts_mutation_adapter_args: ${{ steps.scan_hermetic.outputs.ts_mutation_adapter_args || steps.scan_published.outputs.ts_mutation_adapter_args }}
     steps:
       - uses: actions/checkout@v6
-      - id: scan
-        # Detection lives in the repo-only composite action (.github/actions/detect),
-        # tested by pytest (#189). The reusable workflow uses it at the same @v0 the
-        # consumer pins, so GitHub fetches the action's files without a checkout hack.
+      - id: scan_hermetic
+        # HEAD's composite action: when the guard holds, the caller is this repo, so the
+        # checkout above IS the commit under test and the local path resolves to it (#356).
+        if: ${{ github.repository == 'thekevinscott/testing-conventions' && inputs.version == '' }}
+        uses: ./.github/actions/detect
+        with:
+          languages: ${{ inputs.languages }}
+          path: ${{ inputs.path }}
+          config: ${{ inputs.config }}
+          caller_repository: ${{ github.repository }}
+          version: ${{ inputs.version }}
+      - id: scan_published
+        # The published action at the same @v0 the consumer pins — the path every external
+        # caller takes, and this repo's own path when an explicit `version` is under test (#357).
+        if: ${{ !(github.repository == 'thekevinscott/testing-conventions' && inputs.version == '') }}
         uses: thekevinscott/testing-conventions/.github/actions/detect@v0
         with:
           languages: ${{ inputs.languages }}
           path: ${{ inputs.path }}
           config: ${{ inputs.config }}
+          caller_repository: ${{ github.repository }}
+          version: ${{ inputs.version }}
 
   colocated-test:
     name: Colocated test (${{ matrix.language }})
@@ -266,6 +295,9 @@ jobs:
         language: ${{ fromJSON(needs.detect.outputs.colocated_test_languages || needs.detect.outputs.languages) }}
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        if: needs.detect.outputs.cli_command != ''
+        uses: ./.github/actions/download-hermetic-cli
       - name: Check colocated test
         # node/npx ship on ubuntu-latest; `-y` skips the install prompt and
         # `${VERSION:+@...}` pins the version only when one was requested.
@@ -276,7 +308,8 @@ jobs:
           # Forward the config so `exempt` entries apply to the whole-tree check,
           # matching every other job (lint / coverage / co-change / mutation).
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
+        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit colocated-test --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   colocated-test-changed:
     name: Colocated test — co-change (${{ matrix.language }})
@@ -297,6 +330,9 @@ jobs:
         with:
           # Co-change diffs `<base>...HEAD`, so the base ref must be reachable.
           fetch-depth: 0
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        if: needs.detect.outputs.cli_command != ''
+        uses: ./.github/actions/download-hermetic-cli
       - name: Check co-change vs ${{ inputs.base }}
         env:
           LANGUAGE: ${{ matrix.language }}
@@ -304,7 +340,8 @@ jobs:
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit colocated-test --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
+          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
+        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit colocated-test --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
 
   unit-lint:
     name: Unit lint (${{ matrix.language }})
@@ -325,6 +362,9 @@ jobs:
         language: ${{ fromJSON(needs.detect.outputs.isolation_languages) }}
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        if: needs.detect.outputs.cli_command != ''
+        uses: ./.github/actions/download-hermetic-cli
       - name: Check unit lint
         # Static check — just the binary via npx, no toolchain. `--config` applies
         # the #102 `[[<language>.exempt]]` waivers, like the other unit jobs.
@@ -333,7 +373,8 @@ jobs:
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
+        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   unit-coverage:
     name: Unit-test coverage (${{ matrix.language }})
@@ -353,6 +394,9 @@ jobs:
         language: ${{ fromJSON(needs.detect.outputs.coverage_languages) }}
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        if: needs.detect.outputs.cli_command != ''
+        uses: ./.github/actions/download-hermetic-cli
       # Unlike the static colocated-test / lint checks, `unit coverage` shells out
       # to the language's coverage tool — so its toolchain, and the project's own
       # test deps, must be present. Rust provisioning comes first (#278): `uv sync`
@@ -450,7 +494,8 @@ jobs:
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit coverage --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
+        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit coverage --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   coverage-changed:
     name: Unit-test coverage — changed lines (${{ matrix.language }})
@@ -472,6 +517,9 @@ jobs:
           # Changed-line coverage diffs `<base>...HEAD`, so the base ref must be
           # reachable.
           fetch-depth: 0
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        if: needs.detect.outputs.cli_command != ''
+        uses: ./.github/actions/download-hermetic-cli
       # Mirrors the whole-tree unit-coverage job's setup order and derivation (#278):
       # Rust provisioning first (`uv sync` / an npm `prepare` script may compile a
       # Rust core), then the language env, then `build_command` — all at the
@@ -558,7 +606,8 @@ jobs:
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit coverage --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
+          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
+        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit coverage --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
 
   mutation:
     name: Unit mutation — changed lines (${{ matrix.language }})
@@ -586,6 +635,9 @@ jobs:
         with:
           # `--base` diffs `<base>...HEAD`, so the base ref must be reachable.
           fetch-depth: 0
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        if: needs.detect.outputs.cli_command != ''
+        uses: ./.github/actions/download-hermetic-cli
       # Provision cargo (+ cache) for a build_command that compiles a Rust core (#263)
       # BEFORE the language-env steps below — a maturin/PyO3 build triggered by `uv sync`
       # (not just an explicit `build_command`) needs cargo already on PATH. Auto-provisions
@@ -693,7 +745,13 @@ jobs:
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" unit mutation --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
+          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
+          # detect pre-renders the hermetic `--ts-mutation-adapter <path>` argument (#356) — the
+          # npm launcher appends it on the published path, and the hermetic path bypasses the
+          # launcher. Deliberately unquoted below (the $EXTRA_SCOPE pattern): empty on the
+          # published path, word-split into the flag+path hermetically.
+          TS_MUTATION_ADAPTER_ARGS: ${{ needs.detect.outputs.ts_mutation_adapter_args }}
+        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit mutation --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH" $TS_MUTATION_ADAPTER_ARGS
 
   integration-lint:
     name: Integration lint (${{ matrix.language }})
@@ -713,6 +771,9 @@ jobs:
         language: ${{ fromJSON(needs.detect.outputs.integration_lint_languages) }}
     steps:
       - uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        if: needs.detect.outputs.cli_command != ''
+        uses: ./.github/actions/download-hermetic-cli
       - name: Lint integration tests
         # `--config` so a consumer's #102 waivers are honored, matching the
         # unit-coverage job (an absent file waives nothing).
@@ -721,7 +782,8 @@ jobs:
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" integration lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
+        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} integration lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   e2e-verify:
     name: E2E attestation freshness (e2e verify)
@@ -753,6 +815,9 @@ jobs:
           # never name (it's rebuilt fresh on every push) — #293.
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        if: needs.detect.outputs.cli_command != ''
+        uses: ./.github/actions/download-hermetic-cli
       - name: Verify the e2e attestation is current
         env:
           VERSION: ${{ inputs.version }}
@@ -764,6 +829,7 @@ jobs:
           # roots, so the invocation is byte-identical to before for every current consumer.
           EXTRA_SCOPE: ${{ needs.detect.outputs.e2e_extra_scope }}
           EXCLUDE: ${{ needs.detect.outputs.e2e_exclude }}
+          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
         # The attestation file lives at the derived package root (#281), matching
         # `detect`'s package-scoped `e2e_attestation` flag above; the freshness walk
         # is scoped to the caller's own `path` (#294) — narrower than the package
@@ -777,7 +843,7 @@ jobs:
         # to accept `--base` / `--extra-scope` (published by the #319 and #333 CLI PRs,
         # landed ahead of this one per AGENTS.md's "Two-step rollout for
         # workflow-consumed CLI changes").
-        run: npx -y "testing-conventions${VERSION:+@$VERSION}" e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE" $EXTRA_SCOPE $EXCLUDE
+        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE" $EXTRA_SCOPE $EXCLUDE
 
   packaging:
     name: Packaging (no test files in the built artifact)
@@ -797,18 +863,29 @@ jobs:
     if: ${{ (inputs.gates == '' || contains(inputs.gates, '"packaging"')) && (inputs.packaging_artifact != '' || needs.detect.outputs.packaging_build != '' || needs.detect.outputs.packaging_dist == 'true') }}
     runs-on: ubuntu-latest
     steps:
+      # A local `uses: ./...` action reference (the hermetic-cli download below) resolves from
+      # the job's own checkout — every other rule job always checks out first, so it just works
+      # there; this job normally skips checkout on the packaging_artifact path (nothing to
+      # build), so it needs its own checkout whenever the hermetic path also needs one. This
+      # must run BEFORE the artifact download below: actions/checkout always deletes the
+      # workspace's existing contents before initializing its own checkout (regardless of the
+      # `clean` input, which only controls git-clean *after* a checkout is already in place) —
+      # checking out after the download would wipe the artifact it just fetched.
+      - name: Check out the repository to build/inspect its distribution, or just to resolve the hermetic-cli download action
+        if: inputs.packaging_artifact == '' || needs.detect.outputs.cli_command != ''
+        uses: actions/checkout@v6
       # Acquire the distributions one of two ways: a named upload artifact (scanned as-is),
-      # or the consumer checkout — where the build steps below produce the distribution, or a
-      # committed dist/ already sits (#186).
+      # or the consumer checkout above — where the build steps below produce the distribution,
+      # or a committed dist/ already sits (#186).
       - name: Download the uploaded distributions
         if: inputs.packaging_artifact != ''
         uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.packaging_artifact }}
           path: _packaging_artifact
-      - name: Check out the repository to build and inspect its distribution
-        if: inputs.packaging_artifact == ''
-        uses: actions/checkout@v6
+      - name: Download the CLI built from HEAD (hermetic, #356)
+        if: needs.detect.outputs.cli_command != ''
+        uses: ./.github/actions/download-hermetic-cli
       # --- Provision the toolchain and build the distribution (#335) ---
       # Skipped entirely when a `packaging_artifact` was uploaded (it's already built) or
       # detect derived no `packaging_build` (the manifest can't state one — fall back to a
@@ -880,6 +957,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           PACKAGING_ARTIFACT: ${{ inputs.packaging_artifact }}
           PACKAGE_ROOT: ${{ needs.detect.outputs.package_root }}
+          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
         run: |
           set -euo pipefail
           # nullglob: an unmatched glob expands to nothing (not the literal);
@@ -898,7 +976,7 @@ jobs:
             local lang="$1"; shift
             for dist in "$@"; do
               echo "::group::packaging --language $lang $dist"
-              npx -y "testing-conventions${VERSION:+@$VERSION}" packaging "$dist" --language "$lang"
+              ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} packaging "$dist" --language "$lang"
               echo "::endgroup::"
               checked=$((checked + 1))
             done

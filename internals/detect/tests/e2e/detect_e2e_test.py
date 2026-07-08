@@ -33,6 +33,8 @@ def run_detect(tmp_path):
         github_output="github_output",
         scan_path="scan",
         config="testing-conventions.toml",
+        caller_repository="",
+        version="",
     ):
         scan = Path(scan_path)
         scan.mkdir(parents=True, exist_ok=True)
@@ -52,6 +54,8 @@ def run_detect(tmp_path):
             "SCAN_PATH": scan_path,
             "GITHUB_OUTPUT": github_output,
             "CONFIG": config,
+            "CALLER_REPOSITORY": caller_repository,
+            "VERSION": version,
         }
         with patch.dict(os.environ, env):
             try:
@@ -908,3 +912,25 @@ def test_e2e_build_command_is_read_from_the_typescript_table(run_detect):
         },
     )
     assert out["build_command"] == "pnpm build"
+
+
+def test_hermetic_outputs_for_this_repos_own_caller(run_detect):
+    outputs = run_detect(caller_repository="thekevinscott/testing-conventions")
+    assert outputs["cli_command"] == "./hermetic-cli/testing-conventions"
+    assert (
+        outputs["ts_mutation_adapter_args"]
+        == "--ts-mutation-adapter ./hermetic-cli/dist/mutation/main.js"
+    )
+
+
+def test_published_outputs_for_another_caller(run_detect):
+    outputs = run_detect(caller_repository="someone/else")
+    assert outputs["cli_command"] == ""
+    assert outputs["ts_mutation_adapter_args"] == ""
+
+
+def test_published_outputs_when_a_version_is_pinned(run_detect):
+    outputs = run_detect(
+        caller_repository="thekevinscott/testing-conventions", version="0.3.0"
+    )
+    assert outputs["cli_command"] == ""

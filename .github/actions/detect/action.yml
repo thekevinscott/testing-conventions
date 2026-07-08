@@ -20,6 +20,14 @@ inputs:
     description: 'Config file passed to `--config`; the default is refined to a package-root testing-conventions.toml when one exists there (#277).'
     required: false
     default: 'testing-conventions.toml'
+  caller_repository:
+    description: 'The calling run''s `github.repository` (#356) — for a reusable workflow this is always the *caller''s* repo, so detect derives hermetic mode from it: only thekevinscott/testing-conventions'' own workflows can match. Empty (the default) means the published path.'
+    required: false
+    default: ''
+  version:
+    description: 'The workflow''s `version` input (#356): an explicit published version always wins over hermetic mode (the #357 post-publish verification path).'
+    required: false
+    default: ''
 
 outputs:
   languages:
@@ -76,6 +84,12 @@ outputs:
   e2e_exclude:
     description: 'The `[e2e].exclude` feature-gated subtrees (#333) read from the discovered config file, rendered as repeated `--exclude <dir>` arguments the e2e-verify job appends, or empty when none are declared.'
     value: ${{ steps.scan.outputs.e2e_exclude }}
+  cli_command:
+    description: 'The hermetic CLI invocation (#356): `./hermetic-cli/testing-conventions` when this repo gates itself with no pinned version, else empty — the rule jobs fall back to the published `npx` line.'
+    value: ${{ steps.scan.outputs.cli_command }}
+  ts_mutation_adapter_args:
+    description: 'The pre-rendered `--ts-mutation-adapter <path>` argument the mutation job appends on the hermetic path (#356) — the npm launcher normally supplies it, and the hermetic path bypasses the launcher. Empty on the published path.'
+    value: ${{ steps.scan.outputs.ts_mutation_adapter_args }}
 
 runs:
   using: composite
@@ -86,6 +100,8 @@ runs:
         LANGUAGES: ${{ inputs.languages }}
         SCAN_PATH: ${{ inputs.path }}
         CONFIG: ${{ inputs.config }}
+        CALLER_REPOSITORY: ${{ inputs.caller_repository }}
+        VERSION: ${{ inputs.version }}
       # `$GITHUB_ACTION_PATH` is this action's directory. The implementation itself lives at
       # internals/detect/src/detect.py (#363) — a repo-only helper, not a published action, so
       # it's found relative to this directory whether the action is used locally

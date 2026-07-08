@@ -1,0 +1,173 @@
+"""Colocated unit tests for the hermetic-wired check (isolation — no `CliRunner`).
+
+The `cli` command is driven through its `.callback` (the undecorated function), so no
+`click.testing` collaborator is imported. Only the unit under test is imported — the raise path is
+asserted against the propagated exception's `.message`.
+"""
+from checks.hermetic_wired.cli import GUARD, REUSABLE_WORKFLOW, cli
+
+WIRED = f"""
+jobs:
+  detect:
+    steps:
+      - id: scan_hermetic
+        if: ${{{{ {GUARD} }}}}
+        uses: ./.github/actions/detect
+    outputs:
+      cli_command: x
+  unit-lint:
+    steps:
+      - uses: ./.github/actions/download-hermetic-cli
+      - run: ${{CLI_COMMAND:-npx -y "testing-conventions"}} unit lint
+"""
+
+UNWIRED = "jobs:\n  detect:\n    steps:\n      - uses: thekevinscott/testing-conventions/.github/actions/detect@v0\n"
+
+CALLER_WIRED = """
+jobs:
+  build-cli:
+    steps:
+      - uses: ./.github/actions/build-hermetic-cli
+  clean:
+    needs: [build-cli]
+    uses: ./.github/workflows/testing-conventions.yml
+  packaging-clean:
+    needs: [upload-clean-dist, build-cli]
+    uses: ./.github/workflows/testing-conventions.yml
+"""
+
+CALLER_MISSING_NEEDS = CALLER_WIRED.replace("    needs: [build-cli]\n", "")
+
+
+def _write(tmp_path, name, text):
+    path = tmp_path / name
+    path.write_text(text)
+    return str(path)
+
+
+def test_echoes_on_a_wired_workflow_with_wired_callers(tmp_path, capsys):
+    workflow = _write(tmp_path, "wf.yml", WIRED)
+    caller = _write(tmp_path, "caller.yml", CALLER_WIRED)
+    cli.callback(workflow=workflow, callers=(caller,))
+    assert "derived, caller-built, and fully wired" in capsys.readouterr().out
+
+
+def test_raises_on_an_unwired_workflow(tmp_path):
+    workflow = _write(tmp_path, "wf.yml", UNWIRED)
+    try:
+        cli.callback(workflow=workflow, callers=())
+    except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
+        assert "the derivation guard" in error.message
+        assert "a local" in error.message
+        assert "a `cli_command`" in error.message
+        assert "the `${CLI_COMMAND:-` npx fallback" in error.message
+        assert "a `hermetic-cli` artifact download" in error.message
+    else:
+        raise AssertionError("an unwired workflow must raise")
+
+
+def test_raises_with_only_the_missing_pieces_named(tmp_path):
+    workflow = _write(tmp_path, "wf.yml", WIRED.replace("cli_command: x", ""))
+    try:
+        cli.callback(workflow=workflow, callers=())
+    except Exception as error:  # noqa: BLE001
+        assert "a `cli_command`" in error.message
+        assert "the derivation guard" not in error.message
+    else:
+        raise AssertionError("a workflow missing only cli_command must raise")
+
+
+def test_raises_on_a_flag_shaped_workflow_even_when_fully_wired(tmp_path):
+    workflow = _write(tmp_path, "wf.yml", WIRED + "      - run: echo ${{ inputs.hermetic }}\n")
+    try:
+        cli.callback(workflow=workflow, callers=())
+    except Exception as error:  # noqa: BLE001
+        assert "inputs.hermetic" in error.message
+        assert "never declared by an input" in error.message
+    else:
+        raise AssertionError("a workflow referencing inputs.hermetic must raise")
+
+
+def test_raises_on_a_build_job_in_the_reusable_workflow(tmp_path):
+    workflow = _write(tmp_path, "wf.yml", WIRED + "  build-cli:\n    runs-on: ubuntu-latest\n")
+    try:
+        cli.callback(workflow=workflow, callers=())
+    except Exception as error:  # noqa: BLE001
+        assert "declares a `build-cli` job" in error.message
+        assert "skipped row" in error.message
+    else:
+        raise AssertionError("a build-cli job in the reusable workflow must raise")
+
+
+def test_raises_when_a_caller_has_no_build_job(tmp_path):
+    workflow = _write(tmp_path, "wf.yml", WIRED)
+    caller = _write(tmp_path, "caller.yml", "jobs:\n  clean:\n    uses: ./.github/workflows/testing-conventions.yml\n")
+    try:
+        cli.callback(workflow=workflow, callers=(caller,))
+    except Exception as error:  # noqa: BLE001
+        assert "has no `build-cli` job" in error.message
+    else:
+        raise AssertionError("a caller without a build-cli job must raise")
+
+
+def test_raises_when_a_caller_inlines_the_build_steps_instead_of_the_composite_action(tmp_path):
+    workflow = _write(tmp_path, "wf.yml", WIRED)
+    caller = _write(
+        tmp_path,
+        "caller.yml",
+        CALLER_WIRED.replace(
+            "      - uses: ./.github/actions/build-hermetic-cli\n",
+            "      - run: uv run --project internals/checks tc-checks build-hermetic-cli hermetic-cli-stage\n",
+        ),
+    )
+    try:
+        cli.callback(workflow=workflow, callers=(caller,))
+    except Exception as error:  # noqa: BLE001
+        assert "doesn't call the shared" in error.message
+        assert "build-hermetic-cli" in error.message
+    else:
+        raise AssertionError("a caller inlining the build steps instead of the composite action must raise")
+
+
+def test_raises_when_a_callers_uses_call_lacks_the_needs_edge(tmp_path):
+    workflow = _write(tmp_path, "wf.yml", WIRED)
+    caller = _write(tmp_path, "caller.yml", CALLER_MISSING_NEEDS)
+    try:
+        cli.callback(workflow=workflow, callers=(caller,))
+    except Exception as error:  # noqa: BLE001
+        assert "clean" in error.message
+        assert "packaging-clean" not in error.message
+        assert "races" in error.message
+    else:
+        raise AssertionError("a uses: call without needs: [build-cli] must raise")
+
+
+def test_names_the_unwired_job_even_when_an_unrelated_job_has_the_edge(tmp_path):
+    # The false negative a file-wide uses/needs *count* comparison missed: an unrelated job
+    # carrying `needs: [build-cli]` with no `uses:` call of its own numerically balances a
+    # different job that's genuinely unwired, so a count-based check would pass while the race
+    # is still real. Checking per job (not per file) can't be fooled this way.
+    workflow = _write(tmp_path, "wf.yml", WIRED)
+    caller = _write(
+        tmp_path,
+        "caller.yml",
+        CALLER_MISSING_NEEDS + "  extra:\n    needs: [build-cli]\n    run: echo hi\n",
+    )
+    try:
+        cli.callback(workflow=workflow, callers=(caller,))
+    except Exception as error:  # noqa: BLE001
+        assert "clean" in error.message
+        assert "packaging-clean" not in error.message
+        assert "races" in error.message
+    else:
+        raise AssertionError("an unrelated job's needs: edge must not mask a different job's missing edge")
+
+
+def test_declares_the_workflow_argument_and_variadic_callers():
+    # Assert click's own registered metadata (the decorators) — `.callback` bypasses arg
+    # parsing, so this is what pins them without a CliRunner collaborator.
+    workflow, callers = cli.params
+    assert workflow.name == "workflow"
+    assert workflow.default == REUSABLE_WORKFLOW
+    assert callers.name == "callers"
+    assert callers.nargs == -1

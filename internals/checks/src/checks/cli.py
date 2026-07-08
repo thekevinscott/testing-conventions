@@ -9,6 +9,7 @@ import click
 
 from checks.below_floor.cli import cli as below_floor
 from checks.build_command_wired.cli import cli as build_command_wired
+from checks.build_hermetic_cli.cli import cli as build_hermetic_cli
 from checks.colocated_rust_wired.cli import cli as colocated_rust_wired
 from checks.coverage_package_root_wired.cli import cli as coverage_package_root_wired
 from checks.coverage_rust_red.cli import cli as coverage_rust_red
@@ -22,6 +23,7 @@ from checks.e2e_verify_scope_wired.cli import cli as e2e_verify_scope_wired
 from checks.e2e_verify_wired.cli import cli as e2e_verify_wired
 from checks.gates_wired.cli import cli as gates_wired
 from checks.github_helpers_wired.cli import cli as github_helpers_wired
+from checks.hermetic_wired.cli import cli as hermetic_wired
 from checks.integration_lint_new_arms_trip.cli import cli as integration_lint_new_arms_trip
 from checks.isolation_red.cli import cli as isolation_red
 from checks.isolation_wired.cli import cli as isolation_wired
@@ -47,6 +49,7 @@ def main() -> None:
 
 main.add_command(below_floor, name="below-floor")
 main.add_command(build_command_wired, name="build-command-wired")
+main.add_command(build_hermetic_cli, name="build-hermetic-cli")
 main.add_command(colocated_rust_wired, name="colocated-rust-wired")
 main.add_command(coverage_package_root_wired, name="coverage-package-root-wired")
 main.add_command(coverage_rust_red, name="coverage-rust-red")
@@ -60,6 +63,7 @@ main.add_command(e2e_verify_scope_wired, name="e2e-verify-scope-wired")
 main.add_command(e2e_verify_wired, name="e2e-verify-wired")
 main.add_command(gates_wired, name="gates-wired")
 main.add_command(github_helpers_wired, name="github-helpers-wired")
+main.add_command(hermetic_wired, name="hermetic-wired")
 main.add_command(integration_lint_new_arms_trip, name="integration-lint-new-arms-trip")
 main.add_command(isolation_red, name="isolation-red")
 main.add_command(isolation_wired, name="isolation-wired")

@@ -1,0 +1,28 @@
+name: 'Download the hermetic CLI'
+description: >-
+  Repo-only helper for the reusable testing-conventions workflow (#356): downloads the
+  `hermetic-cli` artifact staged by the caller's `build-cli` job and marks the binary
+  executable (`actions/download-artifact` drops the exec bit). A thin wrapper so the
+  reusable workflow's nine rule jobs don't each repeat the same two steps — call this
+  behind the existing `if: needs.detect.outputs.cli_command != ''` guard, unchanged.
+  IMPORTANT — that guard is load-bearing beyond gating whether the download runs at all: a
+  local `uses: ./...` reference resolves from the calling job's own checkout, and every rule
+  job's checkout is nominally the *consumer's* repo (this reusable workflow's `uses:` runs in
+  the caller's checkout) — a checkout that, for an external consumer, doesn't carry this
+  repo's `.github/actions/` tree at all. Two things keep this safe rather than just usually
+  working: `cli_command` is non-empty only when `caller_repository` is this repo (#356), so
+  whenever this reference is actually resolved, the job's checkout of "the consumer" already
+  IS this repo (the same reason the guarded `scan_hermetic` detect step resolves with no
+  separate checkout of its own) — and for every other caller, the step is skipped outright, so
+  the reference is never even attempted. Referencing this action from a step whose `if:`
+  isn't scoped to `cli_command`/the hermetic guard would 404 for every external consumer.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v8
+      with:
+        name: hermetic-cli
+        path: hermetic-cli
+    - shell: bash
+      run: chmod +x ./hermetic-cli/testing-conventions

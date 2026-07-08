@@ -29,7 +29,7 @@ the reusable workflow at `thekevinscott/putitoutthere`. Edits under
 - `changelog.yml` enforces `CHANGELOG.md` + `MIGRATIONS.md` updates on PRs that touch package code.
 - `docs.yml` builds + deploys the VitePress site (which also emits the generated `llms.txt` / `llms-full.txt` agent digest, per [llmstxt.org](https://llmstxt.org)).
 - `testing-conventions-selftest.yml` smoke-tests the reusable `testing-conventions.yml` against fixtures in `.github/selftest/` (a clean suite passes; a below-floor suite trips the coverage gate).
-- `pr-monitor.yml` gates merge on the aggregate CI status.
+- `pr-monitor.yml` gates merge on the aggregate CI status, with `timeout: '20'` (minutes) so the gate outlasts the full per-language + selftest fan-out instead of the action's 10-minute default.
 
 ## Public-API surface
 

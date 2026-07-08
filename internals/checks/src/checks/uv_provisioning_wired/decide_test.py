@@ -39,10 +39,26 @@ def test_a_setup_python_fails_even_with_identical_arms():
     assert not decide(workflow() + "      - uses: actions/setup-python@v6\n")
 
 
-def test_a_drifted_python_arm_fails():
-    drifted = PYTHON_ARM.replace("uv sync", "uv venv")
-    assert not decide(workflow(mutation=drifted))
-    assert not decide(workflow(coverage_changed=drifted))
+def test_a_lexicographically_greater_drift_fails():
+    # "uv zzzz" sorts after "uv sync" — an arm that is *greater* than the canonical one, so a
+    # `==` mutated to `>=` would wrongly accept it. Drift each rest position.
+    greater = PYTHON_ARM.replace("uv sync", "uv zzzz")
+    assert not decide(workflow(mutation=greater))
+    assert not decide(workflow(coverage_changed=greater))
+
+
+def test_a_lexicographically_lesser_drift_fails():
+    # "uv aaaa" sorts before "uv sync" — an arm that is *less* than the canonical one, so a
+    # `==` mutated to `<=` would wrongly accept it.
+    lesser = PYTHON_ARM.replace("uv sync", "uv aaaa")
+    assert not decide(workflow(mutation=lesser))
+    assert not decide(workflow(coverage_changed=lesser))
+
+
+def test_a_drifted_unit_coverage_arm_fails():
+    # Drift the *first* arm: the two others still match each other but not it, so a comparison
+    # anchored on the wrong arm would wrongly accept.
+    assert not decide(workflow(unit_coverage=PYTHON_ARM.replace("uv sync", "uv zzzz")))
 
 
 def test_jobs_with_no_python_arm_fail():

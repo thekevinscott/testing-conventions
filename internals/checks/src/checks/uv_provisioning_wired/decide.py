@@ -43,5 +43,5 @@ def decide(text: str) -> bool:
     suite-executing jobs."""
     if "python -m pip install" in text or "actions/setup-python" in text:
         return False
-    whole, changed, mutation = (python_steps(extract_job_block(text, start, end)) for start, end in SUITE_JOBS)
-    return bool(whole) and whole == changed and changed == mutation
+    first, *rest = [python_steps(extract_job_block(text, start, end)) for start, end in SUITE_JOBS]
+    return bool(first) and all(arm == first for arm in rest)

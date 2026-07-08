@@ -398,3 +398,93 @@ fn verify_with_extra_scope_exits_zero_on_an_excluded_change() {
         "a change only under --exclude should not trip freshness"
     );
 }
+
+// --- #391: `e2e verify <path> --scope <bogus> --base <ref>` errors (non-zero)
+// instead of silently reporting the attestation Fresh. The documented "`scope`
+// must be `repo` or a descendant of it" constraint was never enforced, so a typo'd
+// `--scope` (a sibling package, or a path that isn't a descendant of `path`)
+// resolved to a pathspec matching nothing — and with `--base` set, an empty walk
+// reads as Fresh, a stale attestation that passes forever. Before the fix these
+// exit 0; after it they exit non-zero, naming the bad scope.
+
+#[test]
+fn verify_with_a_scope_matching_no_tracked_path_errors_rather_than_reporting_fresh() {
+    // The issue's exact scenario: `--scope packages/ts-utils` is a typo — not a
+    // descendant of `packages/widget` and matching no tracked path — passed
+    // alongside `--base`, so the empty walk would otherwise report Fresh.
+    let repo = TempRepo::new();
+    let package_rel = "packages/widget";
+    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
+    repo.commit_code(
+        &format!("{package_rel}/src/widget.rs"),
+        "pub fn widget() {}\n",
+    );
+    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
+    let base = rev_parse(&repo.0, "HEAD");
+    // A genuinely stale scoped change the attestation does not name.
+    repo.commit_code(
+        &format!("{package_rel}/src/widget.rs"),
+        "pub fn widget() { /* v2 */ }\n",
+    );
+
+    let (code, stderr) = run_cli(
+        &repo.0,
+        &[
+            "e2e",
+            "verify",
+            package_rel,
+            "--scope",
+            "packages/ts-utils",
+            "--base",
+            &base,
+        ],
+    );
+    assert_ne!(
+        code, 0,
+        "a --scope matching no tracked path must fail, not report Fresh; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("scope"),
+        "the failure should name --scope; got: {stderr}"
+    );
+}
+
+#[test]
+fn verify_with_a_valid_descendant_scope_still_reports_stale() {
+    // The other required case: a valid descendant `--scope` with a stale
+    // attestation still fails (Stale), proving validation doesn't over-reject.
+    let repo = TempRepo::new();
+    let package_rel = "packages/widget";
+    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
+    repo.commit_code(
+        &format!("{package_rel}/src/widget.rs"),
+        "pub fn widget() {}\n",
+    );
+    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
+    let base = rev_parse(&repo.0, "HEAD");
+    repo.commit_code(
+        &format!("{package_rel}/src/widget.rs"),
+        "pub fn widget() { /* v2 */ }\n",
+    );
+
+    let (code, stderr) = run_cli(
+        &repo.0,
+        &[
+            "e2e",
+            "verify",
+            package_rel,
+            "--scope",
+            &format!("{package_rel}/src"),
+            "--base",
+            &base,
+        ],
+    );
+    assert_ne!(
+        code, 0,
+        "a stale valid-descendant scope must still fail; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("attest"),
+        "the failure should hint to re-run attest; got: {stderr}"
+    );
+}

@@ -695,3 +695,106 @@ fn cli_verify_with_extra_scope_passes_on_an_excluded_change() {
         "a change only under --exclude should pass verify",
     );
 }
+
+// --- #391: a `--scope` (or `--extra-scope`) that resolves to no tracked path is
+// rejected loudly instead of silently walking nothing. The documented constraint
+// — `scope` must be `repo` or a descendant of it — was never enforced: a typo'd or
+// outside scope fell through as a pathspec matching nothing, and with `--base` set
+// that empty walk reported `Fresh` — a stale attestation that passes forever. The
+// fix errors on a scope that matches no tracked path, in every entry point.
+
+#[test]
+fn verify_since_errors_on_a_scope_below_path_that_matches_no_tracked_path() {
+    // A `--scope` that is a descendant of `path` (so the pathspec strips cleanly)
+    // but names a directory git tracks nothing under — a typo. Before the fix this
+    // walks nothing, and with `--base` returns a false `Fresh` despite a genuinely
+    // stale attestation.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    // The base is the attested commit; a later scoped change makes the attestation
+    // genuinely stale within `<base>..HEAD`.
+    let base = rev_parse(&repo.0, "HEAD");
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+
+    let bogus = package.join("ghost");
+    let err = verify_since(&package, &bogus, Some(&base))
+        .expect_err("a --scope matching no tracked path must error, not report Fresh");
+    assert!(
+        err.to_string().contains("scope"),
+        "the error should name --scope; got: {err}",
+    );
+}
+
+#[test]
+fn verify_since_errors_on_a_scope_outside_the_repo() {
+    // An absolute `--scope` pointing entirely outside the repo — git rejects the
+    // pathspec as outside the repository. It must error, not fall through to a
+    // false `Fresh`.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    let base = rev_parse(&repo.0, "HEAD");
+
+    let outside = std::env::temp_dir().join("tc-391-outside-any-repo");
+    let err = verify_since(&package, &outside, Some(&base))
+        .expect_err("a --scope outside the repo must error");
+    assert!(
+        err.to_string().contains("scope"),
+        "the error should name --scope; got: {err}",
+    );
+}
+
+#[test]
+fn verify_extra_scoped_errors_on_an_extra_root_that_matches_no_tracked_path() {
+    // A typo'd `--extra-scope` (the shared core's path misspelled) silently joins
+    // nothing to the walk today, so a core change never stales the binding — a
+    // false `Fresh`. It must error instead.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/python");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/python/src/lib.rs", "pub fn binding() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    let base = rev_parse(&repo.0, "HEAD");
+
+    // `packages/rust/src` is never created — a repo-root-relative root matching
+    // no tracked path.
+    let extra = [PathBuf::from("packages/rust/src")];
+    let err = verify_extra_scoped(&package, &package, Some(&base), &extra, &[])
+        .expect_err("an --extra-scope matching no tracked path must error");
+    assert!(
+        err.to_string().contains("extra-scope"),
+        "the error should name --extra-scope; got: {err}",
+    );
+}
+
+#[test]
+fn verify_since_still_reports_stale_for_a_valid_descendant_scope() {
+    // Guard the other direction: validation must not over-reject. A real
+    // descendant scope with a stale attestation still reports Stale.
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    attest(&package, "true").expect("attest should succeed");
+    let attested = rev_parse(&repo.0, "HEAD^");
+    let base = rev_parse(&repo.0, "HEAD");
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    let latest = rev_parse(&repo.0, "HEAD");
+
+    assert_eq!(
+        verify_since(&package, &package.join("src"), Some(&base)).unwrap(),
+        Verification::Stale { attested, latest },
+        "a valid descendant scope with a stale attestation must still be Stale",
+    );
+}

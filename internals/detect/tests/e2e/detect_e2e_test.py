@@ -64,15 +64,38 @@ def run_detect(tmp_path):
                 pass
         if not out_path:
             return {}
-        return dict(
-            line.split("=", 1)
-            for line in out_path.read_text().splitlines() if "=" in line
-        )
+        return _parse_output_file(out_path.read_text())
 
     try:
         yield run
     finally:
         os.chdir(origin_cwd)
+
+
+def _parse_output_file(text):
+    """Parse a GITHUB_OUTPUT file the way the Actions runner does: `name=value` lines
+    plus the heredoc `name<<DELIM` / body / `DELIM` form for multi-line values."""
+    result = {}
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if "<<" in line and "=" not in line.split("<<", 1)[0]:
+            name, delim = line.split("<<", 1)
+            i += 1
+            body = []
+            while i < len(lines) and lines[i] != delim:
+                body.append(lines[i])
+                i += 1
+            result[name] = "\n".join(body)
+            i += 1  # skip the closing delimiter
+        elif "=" in line:
+            name, value = line.split("=", 1)
+            result[name] = value
+            i += 1
+        else:
+            i += 1  # blank/trailing line
+    return result
 
 
 def test_e2e_explicit_python(run_detect):
@@ -492,6 +515,25 @@ def test_e2e_build_command_derived_from_the_package_root_config(run_detect):
     )
     assert out["config"] == "packages/py/testing-conventions.toml"
     assert out["build_command"] == "uv run maturin develop"
+
+
+def test_e2e_multiline_build_command_round_trips_through_github_output(run_detect):
+    # A multi-line `build_command` (a legal TOML `"""…"""` string) must survive
+    # GITHUB_OUTPUT intact — the heredoc form, not a raw `name=value` line a newline
+    # would split into a corrupt file-command / bogus output (#396).
+    build = "cp a.tmpl a.py\ncp b.tmpl b.py"
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/testing-conventions.toml": (
+                '[python]\nbuild_command = """cp a.tmpl a.py\ncp b.tmpl b.py"""\n'
+                'reason = "the backend has no pre-build shell hook"\n'
+            ),
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["build_command"] == build
 
 
 def test_e2e_build_command_from_an_explicit_config_override(run_detect):

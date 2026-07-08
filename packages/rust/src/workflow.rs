@@ -317,6 +317,59 @@ mod tests {
     }
 
     #[test]
+    fn line_invocation_ignores_a_package_install_line() {
+        // `testing-conventions` as an *argument* to a package manager — the tool
+        // being installed as a dependency, not run — is not an invocation (#396). A
+        // `pip install testing-conventions pytest` line would otherwise read
+        // `pytest` as a subcommand and spuriously flag it.
+        assert_eq!(
+            line_invocation("- run: pip install testing-conventions pytest"),
+            None
+        );
+        assert_eq!(
+            line_invocation("- run: npm install -D testing-conventions"),
+            None
+        );
+        assert_eq!(
+            line_invocation("- run: cargo install testing-conventions"),
+            None
+        );
+        // The real command-position forms still read as invocations.
+        assert_eq!(
+            line_invocation("- run: testing-conventions check"),
+            Some(vec!["check".to_string()])
+        );
+        assert_eq!(
+            line_invocation("- run: npx -y testing-conventions check"),
+            Some(vec!["check".to_string()])
+        );
+    }
+
+    #[test]
+    fn unknown_subcommands_validates_across_leading_global_flags() {
+        // A global flag (and its value) before the subcommand must not stop the
+        // walk: the subcommand after it is still validated (#396). Modeled with a
+        // small command tree carrying a value-taking `--config` global.
+        let root = clap::Command::new("tc")
+            .arg(
+                clap::Arg::new("config")
+                    .long("config")
+                    .action(clap::ArgAction::Set),
+            )
+            .subcommand(clap::Command::new("unit").subcommand(clap::Command::new("coverage")));
+        // `location` is not a `unit` subcommand — flagged despite the leading
+        // `--config x`.
+        let flagged = unknown_subcommands(&[inv(1, &["--config", "x", "unit", "location"])], &root);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert!(flagged[0].message.contains("location"), "{}", flagged[0].message);
+        // A live subcommand after the same flag stays clean — the flag's value `x`
+        // is not mistaken for a subcommand.
+        assert!(
+            unknown_subcommands(&[inv(2, &["--config", "x", "unit", "coverage"])], &root).is_empty()
+        );
+    }
+
+    #[test]
     fn invocations_scans_a_file_and_a_directory() {
         let tree = TempTree::new(&[
             ("ci.yml", "- run: testing-conventions check\n"),

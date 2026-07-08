@@ -1820,4 +1820,39 @@ mod tests {
             Some(r"src/shim\.rs|src/gen\.rs")
         );
     }
+
+    /// Model llvm-cov's substring `--ignore-filename-regex` for the fully-escaped,
+    /// optionally end-anchored literals this tool emits: unescape the literal, honor a
+    /// trailing `$` end-anchor, else substring-match. One matching alternative ignores
+    /// the file.
+    fn llvm_would_ignore(regex: &str, filename: &str) -> bool {
+        regex.split('|').any(|alt| {
+            let (lit, anchored) = match alt.strip_suffix('$') {
+                Some(head) => (head, true),
+                None => (alt, false),
+            };
+            let lit = lit.replace('\\', "");
+            if anchored {
+                filename.ends_with(&lit)
+            } else {
+                filename.contains(&lit)
+            }
+        })
+    }
+
+    #[test]
+    fn rust_ignore_regex_does_not_over_match_a_member_with_the_same_suffix() {
+        // llvm-cov's `--ignore-filename-regex` is a substring search, so an entry for a
+        // top-level `src/a.rs` must not also drop a workspace member's `member/src/a.rs`
+        // — nor a nested `src/xsrc/a.rs` that merely shares the suffix (#396).
+        let regex = ignore_filename_regex(&["src/a.rs".to_string()]).unwrap();
+        assert!(
+            !llvm_would_ignore(&regex, "member/src/a.rs"),
+            "`src/a.rs` over-matched `member/src/a.rs`: {regex}"
+        );
+        assert!(
+            !llvm_would_ignore(&regex, "src/xsrc/a.rs"),
+            "`src/a.rs` over-matched `src/xsrc/a.rs`: {regex}"
+        );
+    }
 }

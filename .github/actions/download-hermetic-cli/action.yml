@@ -1,0 +1,17 @@
+name: 'Download the hermetic CLI'
+description: >-
+  Repo-only helper for the reusable testing-conventions workflow (#356): downloads the
+  `hermetic-cli` artifact staged by the caller's `build-cli` job and marks the binary
+  executable (`actions/download-artifact` drops the exec bit). A thin wrapper so the
+  reusable workflow's nine rule jobs don't each repeat the same two steps — call this
+  behind the existing `if: needs.detect.outputs.cli_command != ''` guard, unchanged.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v8
+      with:
+        name: hermetic-cli
+        path: hermetic-cli
+    - shell: bash
+      run: chmod +x ./hermetic-cli/testing-conventions

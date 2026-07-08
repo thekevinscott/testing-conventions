@@ -17,9 +17,7 @@ jobs:
       cli_command: x
   unit-lint:
     steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: hermetic-cli
+      - uses: ./.github/actions/download-hermetic-cli
       - run: ${{CLI_COMMAND:-npx -y "testing-conventions"}} unit lint
 """
 
@@ -29,7 +27,7 @@ CALLER_WIRED = """
 jobs:
   build-cli:
     steps:
-      - run: uv run --project internals/checks tc-checks build-hermetic-cli hermetic-cli-stage
+      - uses: ./.github/actions/build-hermetic-cli
   clean:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
@@ -110,6 +108,25 @@ def test_raises_when_a_caller_has_no_build_job(tmp_path):
         assert "has no `build-cli` job" in error.message
     else:
         raise AssertionError("a caller without a build-cli job must raise")
+
+
+def test_raises_when_a_caller_inlines_the_build_steps_instead_of_the_composite_action(tmp_path):
+    workflow = _write(tmp_path, "wf.yml", WIRED)
+    caller = _write(
+        tmp_path,
+        "caller.yml",
+        CALLER_WIRED.replace(
+            "      - uses: ./.github/actions/build-hermetic-cli\n",
+            "      - run: uv run --project internals/checks tc-checks build-hermetic-cli hermetic-cli-stage\n",
+        ),
+    )
+    try:
+        cli.callback(workflow=workflow, callers=(caller,))
+    except Exception as error:  # noqa: BLE001
+        assert "doesn't call the shared" in error.message
+        assert "build-hermetic-cli" in error.message
+    else:
+        raise AssertionError("a caller inlining the build steps instead of the composite action must raise")
 
 
 def test_raises_when_a_callers_uses_call_lacks_the_needs_edge(tmp_path):

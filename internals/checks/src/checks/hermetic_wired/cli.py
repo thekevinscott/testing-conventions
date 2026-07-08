@@ -16,7 +16,8 @@ exist:
 - a `cli_command` detect output;
 - the `${CLI_COMMAND:-` fallback (transition-safe: an old `@v0` detect emits no `cli_command`,
   and the consumer path must stay byte-for-byte today's npx line);
-- a `hermetic-cli` artifact download.
+- a `hermetic-cli` artifact download, via the shared `./.github/actions/download-hermetic-cli`
+  composite action (the download + chmod trio the nine rule jobs would otherwise each repeat).
 
 And two must not: any `inputs.hermetic` reference (the rejected flag design), and any
 `build-cli:` job (the rejected consumer-visible-row design). In each caller workflow, a
@@ -71,8 +72,8 @@ def cli(workflow: str, callers: tuple[str, ...]) -> None:
         missing.append("a `cli_command` detect output")
     if "${CLI_COMMAND:-" not in text:
         missing.append("the `${CLI_COMMAND:-` npx fallback")
-    if "name: hermetic-cli" not in text:
-        missing.append("a `hermetic-cli` artifact download")
+    if "uses: ./.github/actions/download-hermetic-cli" not in text:
+        missing.append("a `hermetic-cli` artifact download (./.github/actions/download-hermetic-cli)")
     if missing:
         raise CheckFailed(
             "the reusable workflow has no derived hermetic (build-from-HEAD) mode — missing "
@@ -87,6 +88,12 @@ def cli(workflow: str, callers: tuple[str, ...]) -> None:
                 f"{caller} has no `build-cli` job — every repo-only caller of the reusable "
                 "workflow must build and stage the hermetic-cli artifact its hermetic rule jobs "
                 "download (#356)"
+            )
+        if "uses: ./.github/actions/build-hermetic-cli" not in caller_text:
+            raise CheckFailed(
+                f"{caller}'s `build-cli` job doesn't call the shared "
+                "`./.github/actions/build-hermetic-cli` composite action — inlining the build "
+                "steps here instead lets this caller's build drift from the other caller's (#356)"
             )
         uses = len(USES_LINE.findall(caller_text))
         needs = len(NEEDS_BUILD_CLI.findall(caller_text))

@@ -99,19 +99,23 @@ name: Testing Conventions (self-test)
 #                         Expected to fail pre-release, same `@v0`/binary lag as build-command-clean.
 #
 # hermetic mode (#356, epic #353) — building detect + the CLI from HEAD instead of `@v0`/npx:
-#   build-cli       builds and stages the hermetic-cli artifact once per run (the colocated-
-#                   tested `tc-checks build-hermetic-cli`); every `uses:` call below needs it,
-#                   so the reusable workflow's hermetic steps download this commit's own
-#                   binary + detect. The job lives HERE — a repo-only caller — because a
-#                   guarded job in the reusable workflow would render a skipped row in every
-#                   consumer's checks UI.
+#   build-cli       checks out the repo and calls the shared
+#                   ./.github/actions/build-hermetic-cli composite action (also used by
+#                   dogfood.yml, so the two builds can't drift) to build and stage the
+#                   hermetic-cli artifact once per run; every `uses:` call below needs it, so
+#                   the reusable workflow's hermetic steps download this commit's own binary +
+#                   detect. The job lives HERE — a repo-only caller — because a guarded job in
+#                   the reusable workflow would render a skipped row in every consumer's checks
+#                   UI.
 #   hermetic-wired  asserts the whole contract statically: the derivation guard literal, the
 #                   local detect step, the cli_command output, the ${CLI_COMMAND:- fallback,
-#                   and the hermetic-cli download in the reusable workflow (and that it has
-#                   no `inputs.hermetic` and no `build-cli:` job); a build-cli job here and
-#                   in dogfood.yml; and a needs: [build-cli] edge on every `uses:` call.
-#                   There is no separate acceptance job: every `uses:` call IS the acceptance
-#                   test — each one builds and runs this commit's own detect + CLI.
+#                   and the hermetic-cli download (via ./.github/actions/download-hermetic-cli)
+#                   in the reusable workflow (and that it has no `inputs.hermetic` and no
+#                   `build-cli:` job); a build-cli job here and in dogfood.yml that calls
+#                   ./.github/actions/build-hermetic-cli rather than inlining the steps; and a
+#                   needs: [build-cli] edge on every `uses:` call. There is no separate
+#                   acceptance job: every `uses:` call IS the acceptance test — each one builds
+#                   and runs this commit's own detect + CLI.
 #
 # rust colocated-test (#274) — the presence arm fans over rust:
 #   colocated-rust-wired  asserts the whole-tree colocated-test job fans out over the
@@ -150,36 +154,13 @@ jobs:
     # a repo-only caller workflow: a guarded job in the reusable workflow would render a skipped
     # row in every consumer's checks UI. One build per run — the artifact is run-scoped, and
     # every `uses:` call shares it via `needs: [build-cli]` (a called workflow's jobs start only
-    # after the caller's needs are met). Build/stage logic is the colocated-tested
-    # `tc-checks build-hermetic-cli` (internals/checks); this job holds toolchain setup and one
-    # command.
+    # after the caller's needs are met). Toolchain provisioning + build/stage/upload is the
+    # shared `./.github/actions/build-hermetic-cli` composite action (also used by dogfood.yml)
+    # so the two builds can't drift; this job holds only the checkout.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Cache the Rust build (cargo registry + target)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            packages/rust/target
-          key: hermetic-cli-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            hermetic-cli-build-${{ runner.os }}-
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.0
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - uses: astral-sh/setup-uv@v6
-      - name: Build and stage the hermetic CLI artifact
-        run: uv run --project internals/checks tc-checks build-hermetic-cli hermetic-cli-stage
-      - uses: actions/upload-artifact@v7
-        with:
-          name: hermetic-cli
-          path: hermetic-cli-stage/
+      - uses: ./.github/actions/build-hermetic-cli
 
   clean:
     name: Clean suite passes the reusable workflow

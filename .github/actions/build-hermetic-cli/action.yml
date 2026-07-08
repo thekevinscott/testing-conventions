@@ -1,0 +1,38 @@
+name: 'Build the hermetic CLI'
+description: >-
+  Repo-only helper (#356): provisions the rust/node/uv toolchains, builds the CLI binary
+  and the TS mutation adapter from HEAD via the colocated-tested `tc-checks
+  build-hermetic-cli` (internals/checks), and uploads both as the `hermetic-cli` artifact
+  the reusable workflow's rule jobs download. Shared by every repo-only caller workflow
+  (testing-conventions-selftest.yml, dogfood.yml) so the two builds can't drift — each
+  caller's own `build-cli:` job still holds the checkout (composite actions run in the
+  context of a checkout already taken) and calls this action for everything after it.
+
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@stable
+    - name: Cache the Rust build (cargo registry + target)
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          packages/rust/target
+        key: hermetic-cli-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          hermetic-cli-build-${{ runner.os }}-
+    - uses: pnpm/action-setup@v5
+      with:
+        version: 10.33.0
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 24
+    - uses: astral-sh/setup-uv@v6
+    - name: Build and stage the hermetic CLI artifact
+      shell: bash
+      run: uv run --project internals/checks tc-checks build-hermetic-cli hermetic-cli-stage
+    - uses: actions/upload-artifact@v7
+      with:
+        name: hermetic-cli
+        path: hermetic-cli-stage/

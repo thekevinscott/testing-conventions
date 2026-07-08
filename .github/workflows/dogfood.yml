@@ -67,36 +67,14 @@ jobs:
     # a repo-only caller workflow: a guarded job in the reusable workflow would render a skipped
     # row in every consumer's checks UI. One build per run — the artifact is run-scoped, and
     # every `uses:` call shares it via `needs: [build-cli]` (a called workflow's jobs start only
-    # after the caller's needs are met). Build/stage logic is the colocated-tested
-    # `tc-checks build-hermetic-cli` (internals/checks); this job holds toolchain setup and one
-    # command.
+    # after the caller's needs are met). Toolchain provisioning + build/stage/upload is the
+    # shared `./.github/actions/build-hermetic-cli` composite action (also used by
+    # testing-conventions-selftest.yml) so the two builds can't drift; this job holds only the
+    # checkout.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Cache the Rust build (cargo registry + target)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            packages/rust/target
-          key: hermetic-cli-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            hermetic-cli-build-${{ runner.os }}-
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.0
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - uses: astral-sh/setup-uv@v6
-      - name: Build and stage the hermetic CLI artifact
-        run: uv run --project internals/checks tc-checks build-hermetic-cli hermetic-cli-stage
-      - uses: actions/upload-artifact@v7
-        with:
-          name: hermetic-cli
-          path: hermetic-cli-stage/
+      - uses: ./.github/actions/build-hermetic-cli
 
   conventions:
     name: Shipped reusable workflow over the Python plugin source

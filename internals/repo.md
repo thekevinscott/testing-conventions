@@ -113,14 +113,18 @@ false `if:` still renders a skipped row in every consumer's checks UI. The `herm
 fails on either reappearing.)
 
 **The build lives in the callers.** `testing-conventions-selftest.yml` and `dogfood.yml` — repo-
-only files no consumer references — each carry a `build-cli` job whose single `run:` line invokes
-the colocated-tested `tc-checks build-hermetic-cli` (internals/checks): build the release binary
-from HEAD (the same binary `packages/node/scripts/build.ts` stages for the npm packages), build
-`packages/node`'s `dist/` (the TS mutation adapter), and stage both as the `hermetic-cli`
-artifact — binary at the artifact root, `dist/` beside it, exec bit restored on download (artifact
-transfer drops it). Every `uses:` call in those files declares `needs: [build-cli]`: a called
-reusable workflow runs inside the caller's run, so its jobs start only after the caller's `needs`
-are met and share the run-scoped artifact store. One build per run, shared by every call.
+only files no consumer references — each carry a `build-cli` job that checks out the repo and
+calls the shared `./.github/actions/build-hermetic-cli` composite action for everything else:
+provision rust/pnpm/node/uv, build the release binary from HEAD (the same binary
+`packages/node/scripts/build.ts` stages for the npm packages) and `packages/node`'s `dist/` (the
+TS mutation adapter) via the colocated-tested `tc-checks build-hermetic-cli` (internals/checks),
+and stage both as the `hermetic-cli` artifact — binary at the artifact root, `dist/` beside it,
+exec bit restored on download (artifact transfer drops it). One composite action, `uses:`'d by
+both callers, so the two builds can't drift; `hermetic-wired` asserts each caller's `build-cli`
+job calls it rather than inlining the steps. Every `uses:` call of the reusable workflow in those
+files declares `needs: [build-cli]`: a called reusable workflow runs inside the caller's run, so
+its jobs start only after the caller's `needs` are met and share the run-scoped artifact store.
+One build per run, shared by every call.
 
 **The reusable workflow carries only the consumption side, all step-level** (steps render no
 checks rows, so a consumer's checks UI is unchanged):
@@ -132,7 +136,9 @@ checks rows, so a consumer's checks UI is unchanged):
   expression can make (`uses:` cannot be dynamic). Every job output coalesces whichever ran
   (`steps.scan_hermetic.outputs.x || steps.scan_published.outputs.x`).
 - Each rule job downloads the `hermetic-cli` artifact (and re-chmods the binary) when
-  `cli_command` is non-empty, and runs
+  `cli_command` is non-empty via the shared `./.github/actions/download-hermetic-cli` composite
+  action — one `uses:` line instead of the download-artifact-plus-chmod pair repeated across all
+  nine rule jobs — and runs
   `${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} <subcommand> …`. The
   fallback token is deliberate and load-bearing: the workflow and action `@v0` refs are resolved
   at different moments, so a consumer can transiently pair a new workflow with an old detect that

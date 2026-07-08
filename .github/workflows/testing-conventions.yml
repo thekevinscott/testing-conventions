@@ -297,14 +297,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
-        uses: actions/download-artifact@v8
-        with:
-          name: hermetic-cli
-          path: hermetic-cli
-      - name: Mark the hermetic CLI executable
-        # actions/download-artifact drops the exec bit.
-        if: needs.detect.outputs.cli_command != ''
-        run: chmod +x ./hermetic-cli/testing-conventions
+        uses: ./.github/actions/download-hermetic-cli
       - name: Check colocated test
         # node/npx ship on ubuntu-latest; `-y` skips the install prompt and
         # `${VERSION:+@...}` pins the version only when one was requested.
@@ -339,14 +332,7 @@ jobs:
           fetch-depth: 0
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
-        uses: actions/download-artifact@v8
-        with:
-          name: hermetic-cli
-          path: hermetic-cli
-      - name: Mark the hermetic CLI executable
-        # actions/download-artifact drops the exec bit.
-        if: needs.detect.outputs.cli_command != ''
-        run: chmod +x ./hermetic-cli/testing-conventions
+        uses: ./.github/actions/download-hermetic-cli
       - name: Check co-change vs ${{ inputs.base }}
         env:
           LANGUAGE: ${{ matrix.language }}
@@ -378,14 +364,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
-        uses: actions/download-artifact@v8
-        with:
-          name: hermetic-cli
-          path: hermetic-cli
-      - name: Mark the hermetic CLI executable
-        # actions/download-artifact drops the exec bit.
-        if: needs.detect.outputs.cli_command != ''
-        run: chmod +x ./hermetic-cli/testing-conventions
+        uses: ./.github/actions/download-hermetic-cli
       - name: Check unit lint
         # Static check — just the binary via npx, no toolchain. `--config` applies
         # the #102 `[[<language>.exempt]]` waivers, like the other unit jobs.
@@ -417,14 +396,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
-        uses: actions/download-artifact@v8
-        with:
-          name: hermetic-cli
-          path: hermetic-cli
-      - name: Mark the hermetic CLI executable
-        # actions/download-artifact drops the exec bit.
-        if: needs.detect.outputs.cli_command != ''
-        run: chmod +x ./hermetic-cli/testing-conventions
+        uses: ./.github/actions/download-hermetic-cli
       # Unlike the static colocated-test / lint checks, `unit coverage` shells out
       # to the language's coverage tool — so its toolchain, and the project's own
       # test deps, must be present. Rust provisioning comes first (#278): `uv sync`
@@ -547,14 +519,7 @@ jobs:
           fetch-depth: 0
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
-        uses: actions/download-artifact@v8
-        with:
-          name: hermetic-cli
-          path: hermetic-cli
-      - name: Mark the hermetic CLI executable
-        # actions/download-artifact drops the exec bit.
-        if: needs.detect.outputs.cli_command != ''
-        run: chmod +x ./hermetic-cli/testing-conventions
+        uses: ./.github/actions/download-hermetic-cli
       # Mirrors the whole-tree unit-coverage job's setup order and derivation (#278):
       # Rust provisioning first (`uv sync` / an npm `prepare` script may compile a
       # Rust core), then the language env, then `build_command` — all at the
@@ -672,14 +637,7 @@ jobs:
           fetch-depth: 0
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
-        uses: actions/download-artifact@v8
-        with:
-          name: hermetic-cli
-          path: hermetic-cli
-      - name: Mark the hermetic CLI executable
-        # actions/download-artifact drops the exec bit.
-        if: needs.detect.outputs.cli_command != ''
-        run: chmod +x ./hermetic-cli/testing-conventions
+        uses: ./.github/actions/download-hermetic-cli
       # Provision cargo (+ cache) for a build_command that compiles a Rust core (#263)
       # BEFORE the language-env steps below — a maturin/PyO3 build triggered by `uv sync`
       # (not just an explicit `build_command`) needs cargo already on PATH. Auto-provisions
@@ -815,14 +773,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
-        uses: actions/download-artifact@v8
-        with:
-          name: hermetic-cli
-          path: hermetic-cli
-      - name: Mark the hermetic CLI executable
-        # actions/download-artifact drops the exec bit.
-        if: needs.detect.outputs.cli_command != ''
-        run: chmod +x ./hermetic-cli/testing-conventions
+        uses: ./.github/actions/download-hermetic-cli
       - name: Lint integration tests
         # `--config` so a consumer's #102 waivers are honored, matching the
         # unit-coverage job (an absent file waives nothing).
@@ -866,14 +817,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
-        uses: actions/download-artifact@v8
-        with:
-          name: hermetic-cli
-          path: hermetic-cli
-      - name: Mark the hermetic CLI executable
-        # actions/download-artifact drops the exec bit.
-        if: needs.detect.outputs.cli_command != ''
-        run: chmod +x ./hermetic-cli/testing-conventions
+        uses: ./.github/actions/download-hermetic-cli
       - name: Verify the e2e attestation is current
         env:
           VERSION: ${{ inputs.version }}
@@ -933,14 +877,7 @@ jobs:
         uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
-        uses: actions/download-artifact@v8
-        with:
-          name: hermetic-cli
-          path: hermetic-cli
-      - name: Mark the hermetic CLI executable
-        # actions/download-artifact drops the exec bit.
-        if: needs.detect.outputs.cli_command != ''
-        run: chmod +x ./hermetic-cli/testing-conventions
+        uses: ./.github/actions/download-hermetic-cli
       # --- Provision the toolchain and build the distribution (#335) ---
       # Skipped entirely when a `packaging_artifact` was uploaded (it's already built) or
       # detect derived no `packaging_build` (the manifest can't state one — fall back to a

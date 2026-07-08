@@ -183,15 +183,18 @@ already-built wheel. `plugin` still checks out the repo (unlike `build`) because
 
 `node.yml`'s four jobs (`lint`, `typecheck`, `test`, `build`) each ran `pnpm install
 --no-frozen-lockfile` from a cold store — the same dependency set fetched and linked four times
-per PR. Each job now sets `cache: pnpm` / `cache-dependency-path:
-packages/node/pnpm-lock.yaml` on its `actions/setup-node@v6` step, so the store restores from a
-key hashed on the lockfile instead of re-downloading every run. `pnpm/action-setup@v5` already
+per PR. Each job now sets `cache: pnpm` on its `actions/setup-node@v6` step, so the store
+restores from a hashed key instead of re-downloading every run. `pnpm/action-setup@v5` already
 ran before `setup-node` in every job (needed regardless, to put `pnpm` on `PATH` before `pnpm
 install`) — that ordering is also what `cache: pnpm` needs, since `setup-node` shells out to
-`pnpm store path` to resolve what to cache, so no step reordering was required, just the two new
-`with:` keys.
+`pnpm store path` to resolve what to cache, so no step reordering was required.
 
-Left alone: the `--no-frozen-lockfile` flag. The issue asked to confirm whether it's deliberate
-before switching to `--frozen-lockfile` (faster, and stricter about the lockfile being
-authoritative) — no comment or history explains the choice, and the issue frames this as
-optional (the caching win stands either way), so it's untouched here rather than guessed at.
+**`cache-dependency-path` points at `package.json`, not `pnpm-lock.yaml`.** First attempt used
+the lockfile (the obvious hash input, and what the action's docs lead with) and it broke CI:
+`.gitignore` has a blanket `pnpm-lock.yaml` rule — **no pnpm lockfile is committed anywhere in
+this repo** — so there was nothing in the checkout for `cache-dependency-path` to hash
+("Some specified paths were not resolved, unable to cache dependencies"). `package.json` is the
+closest committed proxy for "did the intended dependency set change." This also retroactively
+answers the issue's other question — whether `--no-frozen-lockfile` is deliberate: it has to be,
+since `--frozen-lockfile` requires a lockfile to freeze against, and none is ever committed.
+Left untouched, now with a real reason on record rather than an absence of one.

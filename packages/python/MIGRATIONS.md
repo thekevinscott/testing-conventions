@@ -36,6 +36,12 @@ recommended coverage floor to a local `pytest --cov` run unless the consumer has
 configured it themselves. Purely additive: the CLI binary and its behavior are
 unchanged, and the plugin only engages when a coverage run is active.
 
+The mutation adapter's per-mutant `pytest` command gains `-x` (#380, epic #366): a killed
+mutant's suite run now stops at the test that kills it instead of running to completion.
+cosmic-ray classifies outcomes by the test command's exit status, not its output, so a
+surviving mutant's all-green run is unaffected and the survivor set is unchanged — only the
+wall-clock cost of killed mutants drops.
+
 ### Required changes
 
 None.
@@ -46,7 +52,10 @@ None.
 
 ### Behavior changes without code changes
 
-None.
+`unit mutation --language python`'s per-mutant test run now stops at the first failing test
+instead of running the whole suite. A killed mutant's captured test output may show fewer
+results than before; the killed/survived classification, the survivor set, and the gate's
+pass/fail verdict are unchanged.
 
 ### Verification
 

@@ -226,3 +226,31 @@ fn a_tiny_below_floor_diff_still_exits_nonzero() {
         "a tiny diff below the floor is not exempted; stderr: {stderr}"
     );
 }
+
+#[test]
+fn a_plus_plus_line_keeps_the_uncovered_change_in_scope() {
+    // #392: an added line `++ 1` renders as `+++ 1` in the unified diff. It must be
+    // read as hunk body, not as a `+++` file header — otherwise the file's later added
+    // lines (here an untested `never_run`) are diverted to a bogus key, dropped from
+    // scoping, and the below-floor change passes as a false green. With the fix, the
+    // uncovered `return 999` stays in scope and the diff fails the default 100 floor.
+    let repo = TempRepo::new("plusplus");
+    repo.write("calc.py", "def calc(n):\n    return n\n");
+    repo.write(
+        "calc_test.py",
+        "from calc import calc\n\n\ndef test_calc():\n    assert calc(3) == 3\n",
+    );
+    repo.commit("base");
+    let base = repo.head();
+    repo.write(
+        "calc.py",
+        "def calc(n):\n    return n\n\n\n++ 1\n\n\ndef never_run():\n    return 999\n",
+    );
+    repo.commit("append a ++ line and an untested helper");
+
+    let (code, stderr) = coverage_base(&repo, &base, None);
+    assert_eq!(
+        code, 1,
+        "the uncovered line after the ++ line must stay in scope and fail; stderr: {stderr}"
+    );
+}

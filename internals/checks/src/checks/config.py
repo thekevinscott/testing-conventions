@@ -14,3 +14,9 @@ TS_FIXTURE_CONFIG = ".github/selftest/monorepo/packages/ts/testing-conventions.t
 PY_FIXTURE_PACKAGE_ROOT = ".github/selftest/monorepo/packages/py"
 PY_FIXTURE_PYTHON_ENV = "uv"
 PY_FIXTURE_CONFIG = ".github/selftest/monorepo/packages/py/testing-conventions.toml"
+
+# The repo-only caller workflows that build the hermetic-cli artifact (#356): every `uses:` call
+# of the reusable workflow in these files must `needs: [build-cli]` so the artifact exists before
+# the called workflow's rule jobs download it.
+SELFTEST_WORKFLOW = ".github/workflows/testing-conventions-selftest.yml"
+DOGFOOD_WORKFLOW = ".github/workflows/dogfood.yml"

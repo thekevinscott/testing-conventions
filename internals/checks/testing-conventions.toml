@@ -15,3 +15,20 @@ path = "checks/config.py"
 rules = ["mutation"]
 lines = ["4-5"]
 reason = "path-string constants; a mutated literal is observable only through a real file read, which lives in the out-of-scope e2e suite (CliRunner over the real workflow), so no in-scope unit test can kill it"
+
+# hermetic_wired/cli.py:93 compares two regex-match counts (`uses != needs`, #356). The `Gt`
+# mutant (`uses > needs`) is a real gap, killed by a uses<needs test. The `IsNot` mutant
+# (`uses is not needs`) is a genuine CPython equivalent mutant, not an untested gap: both are
+# `len(...)` results, and CPython interns every int in -5..256 as a singleton, so for the tiny
+# match counts a real workflow file can ever produce, `a != b` and `a is not b` return
+# identical results for every reachable input — no assertion, mock, or injection distinguishes
+# them (tried: driving the function directly with both under/over/equal-count fixtures, per
+# AGENTS.md's technique catalog; none differ, because the underlying values never differ). The
+# only way to force different int objects of equal value would be feeding 257+ fabricated
+# `uses:`/`needs:` lines purely to escape the interning range — testing CPython's cache
+# implementation, not this code's logic.
+[[python.exempt]]
+path = "checks/hermetic_wired/cli.py"
+rules = ["mutation"]
+lines = ["93"]
+reason = "uses != needs on two len(...) int counts: the IsNot mutant (uses is not needs) is behaviorally identical to != for every count a real workflow file can produce, since CPython interns all ints in -5..256 as singletons — equal small ints are always the same object. Killable only by fabricating 257+ uses:/needs: lines to escape interning, which would test CPython's cache, not this comparison; the Gt mutant (uses > needs) is a real gap and is killed by test_raises_when_a_caller_has_more_needs_edges_than_uses_calls."

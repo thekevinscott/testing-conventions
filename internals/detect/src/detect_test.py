@@ -53,3 +53,19 @@ def test_build_command_language_empty_when_no_manifest_and_none_present():
 
 def test_build_command_language_empty_when_no_manifest_and_ambiguous():
     assert detect.build_command_language("", ["python", "typescript"]) == ""
+
+
+def test_hermetic_for_this_repos_own_caller_with_no_version():
+    assert detect.hermetic("thekevinscott/testing-conventions", "") is True
+
+
+def test_not_hermetic_for_any_other_caller():
+    assert detect.hermetic("someone/else", "") is False
+
+
+def test_an_explicit_version_wins_over_hermetic():
+    assert detect.hermetic("thekevinscott/testing-conventions", "0.3.0") is False
+
+
+def test_not_hermetic_when_the_caller_is_unknown():
+    assert detect.hermetic("", "") is False

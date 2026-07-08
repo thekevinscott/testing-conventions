@@ -238,3 +238,31 @@ def test_attestation_is_looked_up_at_the_package_root_not_the_repo_root(fs):
     out = detect.compute_outputs("", scan_root="/repo/packages/x/src", repo_root="/repo")
     assert fs["attestation_roots_seen"] == [Path("/repo/packages/x")]
     assert out["e2e_attestation"] == "true"
+
+
+def test_cli_command_is_the_hermetic_artifact_for_this_repos_caller(fs):
+    outputs = detect.compute_outputs(
+        "", "scan", caller_repository="thekevinscott/testing-conventions", version=""
+    )
+    assert outputs["cli_command"] == "./hermetic-cli/testing-conventions"
+    assert (
+        outputs["ts_mutation_adapter_args"]
+        == "--ts-mutation-adapter ./hermetic-cli/dist/mutation/main.js"
+    )
+
+
+def test_cli_command_is_empty_for_any_other_caller(fs):
+    outputs = detect.compute_outputs("", "scan", caller_repository="someone/else", version="")
+    assert outputs["cli_command"] == ""
+    assert outputs["ts_mutation_adapter_args"] == ""
+
+
+def test_cli_command_is_empty_when_a_version_is_pinned(fs):
+    outputs = detect.compute_outputs(
+        "", "scan", caller_repository="thekevinscott/testing-conventions", version="0.3.0"
+    )
+    assert outputs["cli_command"] == ""
+
+
+def test_cli_command_defaults_empty_when_the_caller_is_not_passed(fs):
+    assert detect.compute_outputs("", "scan")["cli_command"] == ""

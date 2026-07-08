@@ -99,13 +99,19 @@ name: Testing Conventions (self-test)
 #                         Expected to fail pre-release, same `@v0`/binary lag as build-command-clean.
 #
 # hermetic mode (#356, epic #353) — building detect + the CLI from HEAD instead of `@v0`/npx:
-#   hermetic-wired  asserts the reusable workflow *derives* the hermetic path — the exact
-#                   caller-guard literal, a `build-cli` job, a local (non-`@v0`) detect step,
-#                   and a `cli_command` output, with no `inputs.hermetic` flag — the red→green
-#                   signal for the wiring itself. There is no separate acceptance job: hermetic
-#                   mode has no input, so every `uses:` call in this file (and dogfood.yml) IS
-#                   the acceptance test — each one builds and runs this commit's own detect +
-#                   CLI, making a change to either visible in its own PR's CI.
+#   build-cli       builds and stages the hermetic-cli artifact once per run (the colocated-
+#                   tested `tc-checks build-hermetic-cli`); every `uses:` call below needs it,
+#                   so the reusable workflow's hermetic steps download this commit's own
+#                   binary + detect. The job lives HERE — a repo-only caller — because a
+#                   guarded job in the reusable workflow would render a skipped row in every
+#                   consumer's checks UI.
+#   hermetic-wired  asserts the whole contract statically: the derivation guard literal, the
+#                   local detect step, the cli_command output, the ${CLI_COMMAND:- fallback,
+#                   and the hermetic-cli download in the reusable workflow (and that it has
+#                   no `inputs.hermetic` and no `build-cli:` job); a build-cli job here and
+#                   in dogfood.yml; and a needs: [build-cli] edge on every `uses:` call.
+#                   There is no separate acceptance job: every `uses:` call IS the acceptance
+#                   test — each one builds and runs this commit's own detect + CLI.
 #
 # rust colocated-test (#274) — the presence arm fans over rust:
 #   colocated-rust-wired  asserts the whole-tree colocated-test job fans out over the
@@ -338,13 +344,12 @@ jobs:
 
   hermetic-wired:
     name: The reusable workflow derives a hermetic (build-from-HEAD) mode
-    # Red→green wiring signal for #356 (epic #353, Layer 1): asserts the derivation guard
-    # (`github.repository == '…' && inputs.version == ''`), a `build-cli` job, a local
-    # (`./.github/actions/detect`) detect step, and a `cli_command` detect output all exist —
-    # and that no `inputs.hermetic` flag does. `github.repository` belongs to the *calling*
-    # run of a reusable workflow, so the guard activates for this repo's own callers and can
-    # never match for a consumer — hermetic mode is derived, not declared, leaving no
-    # consumer-facing input to misuse.
+    # Red→green wiring signal for #356 (epic #353, Layer 1): the derivation is decided in
+    # tested Python (internals/detect's `hermetic()`, from caller_repository + version — the
+    # `github` context of a reusable workflow belongs to the *calling* run, so a consumer can
+    # never match), the build lives in the repo-only caller workflows, and the reusable
+    # workflow carries hermetic *steps* only — no input to misuse, no job row for a consumer
+    # to see.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

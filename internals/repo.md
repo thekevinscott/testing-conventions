@@ -86,72 +86,83 @@ Each self-test job's assertion — run a published `npx testing-conventions` com
 
 ## Hermetic mode: building detect + the CLI from HEAD (#356)
 
-Every job above resolves two mutable external references at run time: the `detect` step pins
-`…/actions/detect@v0` (a floating tag), and every rule job runs
+Every job in the reusable workflow resolves two mutable external references at run time: the
+`detect` step pins `…/actions/detect@v0` (a floating tag), and every rule job runs
 `npx -y "testing-conventions${VERSION:+@$VERSION}"` (no version → latest on npm). For a
 *consumer*, that's the whole point — they want the released, supported surface. But when
 `testing-conventions.yml` gates its **own** merges (self-test, dogfood), it means a PR's own CI
 validates `(this commit's workflow) × (whatever @v0/npm currently are)`, not the commit under
 test — the exact skew #353 exists to close (worked examples: #206, #351, #355).
 
-Hermetic mode is **derived, never declared**. The workflow takes the hermetic path iff
+Hermetic mode is **derived, never declared — and the derivation lives in tested code, not YAML**.
+The reusable workflow passes detect two facts it alone knows: `caller_repository`
+(`${{ github.repository }}`, which for a reusable workflow always belongs to the **calling** run)
+and `version` (`${{ inputs.version }}`). detect.py's `hermetic()` decides:
 
-    github.repository == 'thekevinscott/testing-conventions' && inputs.version == ''
+    caller_repository == 'thekevinscott/testing-conventions' and version == ''
 
-For a reusable workflow, the `github` context always belongs to the **calling** run, so the left
-conjunct holds exactly when this repo's own workflows are the caller — an external consumer's call
-carries their own `github.repository` and can never match. The right conjunct keeps an explicit
-`version` authoritative even in-repo: naming a version means "run that published artifact" (which
-is what #357's post-publish verification does), and it always wins. Read together: when this repo
-gates its own commit and no published version is named, the only binary that can truthfully gate
-the commit is the one built from it; for every other caller, the published artifact is the only
-truthful one. The caller states nothing — the same derivation bar the tool holds its consumers to.
+An external consumer's call carries their own repository and can never match; an explicit
+`version` always names the published artifact (which is what #357's post-publish verification
+does) and wins even in-repo. When the derivation holds, detect emits `cli_command`
+(`./hermetic-cli/testing-conventions`) and `ts_mutation_adapter_args` (the `--ts-mutation-adapter`
+argument the npm launcher normally appends, pre-rendered like `e2e_extra_scope`, #333); for every
+other caller both are empty. (Rejected alternatives, in order: a `hermetic` boolean input —
+`workflow_call` inputs have no visibility modifier, so a testing-only flag is public surface any
+consumer can flip; and a guarded `build-cli` job inside the reusable workflow — a job with a
+false `if:` still renders a skipped row in every consumer's checks UI. The `hermetic-wired` check
+fails on either reappearing.)
 
-(Rejected alternative: a `hermetic` boolean `workflow_call` input. Inputs have no visibility
-modifier, so a testing-only flag is public surface any consumer can set — building *this repo's*
-source instead of the artifact they pinned, at multi-minute cost, with possible drift from the
-release pipeline's build. The `hermetic-wired` check fails on any `inputs.hermetic` reference.)
+**The build lives in the callers.** `testing-conventions-selftest.yml` and `dogfood.yml` — repo-
+only files no consumer references — each carry a `build-cli` job whose single `run:` line invokes
+the colocated-tested `tc-checks build-hermetic-cli` (internals/checks): build the release binary
+from HEAD (the same binary `packages/node/scripts/build.ts` stages for the npm packages), build
+`packages/node`'s `dist/` (the TS mutation adapter), and stage both as the `hermetic-cli`
+artifact — binary at the artifact root, `dist/` beside it, exec bit restored on download (artifact
+transfer drops it). Every `uses:` call in those files declares `needs: [build-cli]`: a called
+reusable workflow runs inside the caller's run, so its jobs start only after the caller's `needs`
+are met and share the run-scoped artifact store. One build per run, shared by every call.
 
-When the derivation holds:
+**The reusable workflow carries only the consumption side, all step-level** (steps render no
+checks rows, so a consumer's checks UI is unchanged):
 
-- A `build-cli` job (gated on the guard, so it never runs for a consumer) checks out HEAD, runs
-  `cargo build --release --manifest-path packages/rust/Cargo.toml --bin testing-conventions` —
-  the same binary `packages/node`'s per-platform npm packages stage (`packages/node/scripts/build.ts`)
-  — builds `packages/node`'s `dist/` (the TS mutation adapter, `dist/mutation/main.js`), and
-  uploads both as the `hermetic-cli` artifact: the binary at the artifact root, `dist/` beside it.
-- The `detect` job runs `./.github/actions/detect` (HEAD's composite action — the caller's checkout
-  *is* this repo whenever the guard holds, so the local path resolves to the commit under test)
-  instead of `…/detect@v0`. `uses:` can't be a runtime expression, so both steps are declared
-  behind `if:`/negated-`if:`, and every job output coalesces whichever ran
+- The `detect` job declares a step pair — `scan_hermetic` (`uses: ./.github/actions/detect`,
+  HEAD's action: the caller's checkout IS this repo whenever the guard holds) and
+  `scan_published` (`…/detect@v0`) — selected by the guard literal as step `if:`s. This is the
+  one place the guard stays in YAML: which action ref runs is a scheduling decision only an
+  expression can make (`uses:` cannot be dynamic). Every job output coalesces whichever ran
   (`steps.scan_hermetic.outputs.x || steps.scan_published.outputs.x`).
-- `detect` exposes `cli_command`: `./hermetic-cli/testing-conventions` under the guard, empty
-  otherwise. Each rule job downloads the `hermetic-cli` artifact (and restores the exec bit —
-  artifact download drops it) when `cli_command` is non-empty, and runs
-  `${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} <subcommand> …` — the
-  invocation's shape is unchanged; only which binary answers it differs. The mutation job
-  additionally appends `--ts-mutation-adapter ./hermetic-cli/dist/mutation/main.js` hermetically,
-  because that argument is normally appended by the npm launcher (`packages/node/src/bin/index.ts`),
-  which the hermetic path bypasses.
-- Rule jobs declare `needs: [detect, build-cli]` with `if: ${{ !failure() && !cancelled() && … }}`,
-  so the published path runs with `build-cli` skipped, and a hermetic build failure fails the run
-  closed rather than silently falling back to npm.
+- Each rule job downloads the `hermetic-cli` artifact (and re-chmods the binary) when
+  `cli_command` is non-empty, and runs
+  `${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} <subcommand> …`. The
+  fallback token is deliberate and load-bearing: the workflow and action `@v0` refs are resolved
+  at different moments, so a consumer can transiently pair a new workflow with an old detect that
+  emits no `cli_command` — the default-expansion keeps that combination running today's exact
+  npx line, and it keeps the consumer execution path byte-for-byte unrouted through any new
+  logic. The mutation job appends detect's pre-rendered `$TS_MUTATION_ADAPTER_ARGS` (unquoted,
+  the `$EXTRA_SCOPE` pattern) because the hermetic path bypasses the npm launcher that normally
+  supplies it.
 
-`cli_command` flows through `needs.detect.outputs`, threaded explicitly exactly like
-`build_command` / `package_root` — never through an invented environment variable (AGENTS.md,
-"Never pass data through the environment").
+Data flows through detect action outputs / `needs.detect.outputs` / step-local `env:` — never an
+invented environment side-channel (AGENTS.md, "Never pass data through the environment"). The
+derivation comes from `caller_repository`, never from artifact presence, so a caller that
+activates hermetic mode without staging the artifact fails red at the download step — there is no
+silent npx fallback in-repo. The `hermetic-wired` check pins the whole contract statically: the
+guard literal, the local detect step, the `cli_command` output, the `${CLI_COMMAND:-` fallback,
+and the `hermetic-cli` download in the reusable workflow; no `inputs.hermetic` and no `build-cli:`
+job there; and, in each caller file, a `build-cli` job plus a `needs: [build-cli]` edge on every
+`uses:` call (without the edge the build races the download and fails flaky).
 
 The acceptance bar (#356): a PR that changes `detect`'s behavior, or a rule's, goes **red in its
 own CI** before merge when that change breaks something. There is no dedicated acceptance job —
-hermetic mode has no input, so every `uses:` call in `testing-conventions-selftest.yml` and
-`dogfood.yml` is the acceptance test, exercising this branch's own `detect` and compiled CLI.
-Consumer-facing documentation never mentions hermetic mode: there is nothing to document — no
-input exists.
+hermetic mode has no input, so every `uses:` call in the two caller workflows is the acceptance
+test, exercising this branch's own `detect` and compiled CLI. Consumer-facing documentation never
+mentions hermetic mode: there is nothing to document — no input exists and no job appears.
 
 Edges: a fork PR *into* this repo runs in base-repo context, so it is gated hermetically (the
-point of the gate). A fork *of* this repo running the self-test carries the fork's
-`github.repository`, so it exercises the published path. The red-path self-test jobs that drive
-`npx testing-conventions` directly in their own `run:` steps (isolation-red, below-floor, …) still
-resolve npm-latest — a known residual gap tracked in the follow-up issue filed from #356.
+point of the gate). A fork *of* this repo carries the fork's `github.repository`, so it exercises
+the published path. The red-path self-test jobs that drive `npx testing-conventions` directly in
+their own `run:` steps (isolation-red, below-floor, …) still resolve npm-latest — a known
+residual gap tracked in the follow-up issue filed from #356.
 
 ## Rolling release: how `@v0` advances
 

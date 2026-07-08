@@ -89,11 +89,11 @@ name: Testing Conventions
 # and build at the *derived package root* (#277/#278) — the nearest directory at-or-above
 # `path`, down to the checkout root, holding a `package.json` / `pyproject.toml` / `Cargo.toml`
 # (`.` for a single-package repo, so an existing single-package call is unaffected). The
-# TypeScript package manager, the Python environment model (plain `pip`, or `uv sync` for a
+# TypeScript package manager, the Python environment model (a bare `uv venv`, or `uv sync` for a
 # `pyproject.toml` with a `[project]` table — which also builds a maturin package's native
-# module), and whether a Rust toolchain is auto-provisioned are all read from that root's own
-# manifest, so a per-package-lockfile monorepo package (dirsql PR #410) installs and builds
-# correctly with no configuration.
+# module; Python is provisioned by uv either way, #399), and whether a Rust toolchain is
+# auto-provisioned are all read from that root's own manifest, so a per-package-lockfile monorepo
+# package (dirsql PR #410) installs and builds correctly with no configuration.
 #
 # `build_command` (#243/#289) and `rust_toolchain` (#263) are the remaining *escape hatches*, for a
 # build the package manifest cannot express, run/provisioned at that same derived package root.
@@ -431,29 +431,28 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
-        name: Install coverage toolchain (coverage.py + pytest)
-        run: python -m pip install --quiet coverage pytest
-      # A package root whose pyproject.toml carries a [project] table (python_env ==
-      # 'uv', #277) is an installable project with its own dependencies: `uv sync`
-      # installs them AND builds/installs the project itself, so a maturin package's
-      # native module compiles right here (cargo already provisioned above) — zero
-      # config, no build_command / rust_toolchain needed.
-      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
+      # Provision Python with uv (#399), identically across the three suite-executing jobs so the
+      # block can't drift. An installable project (a pyproject.toml with a [project] table —
+      # python_env == 'uv', #277) is synced: `uv sync` installs its own dependencies AND
+      # builds/installs the project itself, so a maturin package's native module compiles right
+      # here (cargo already provisioned above). A plain package has no project to sync, so a bare
+      # `uv venv` stands in. The union suite toolchain installs into that same venv, which goes on
+      # PATH: coverage.py + pytest for the coverage gate, the testing-conventions adapter wheel for
+      # mutation (named last, so the #92 subcommand-drift guard reads it as an install argument,
+      # not an invocation).
+      - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.12'
-      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
-        name: Provision the project environment (uv)
+      - if: matrix.language == 'python'
+        name: Provision the Python suite environment (uv)
         working-directory: ${{ needs.detect.outputs.package_root }}
+        env:
+          PYTHON_ENV: ${{ needs.detect.outputs.python_env || 'pip' }}
         run: |
           set -euo pipefail
-          uv sync
-          uv pip install coverage pytest
+          if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
+          uv pip install coverage pytest testing-conventions
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       # TypeScript shells out to vitest, so install the project's own deps — the
       # manager (pnpm or npm, #277) and the install location (the package root, #278)
@@ -550,27 +549,28 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
-        name: Install coverage toolchain (coverage.py + pytest)
-        run: python -m pip install --quiet coverage pytest
-      # A package root with a [project] table (python_env == 'uv', #277): `uv sync`
-      # installs the project's own dependencies and builds/installs the project
-      # itself, as in the whole-tree coverage job.
-      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
+      # Provision Python with uv (#399), identically across the three suite-executing jobs so the
+      # block can't drift. An installable project (a pyproject.toml with a [project] table —
+      # python_env == 'uv', #277) is synced: `uv sync` installs its own dependencies AND
+      # builds/installs the project itself, so a maturin package's native module compiles right
+      # here (cargo already provisioned above). A plain package has no project to sync, so a bare
+      # `uv venv` stands in. The union suite toolchain installs into that same venv, which goes on
+      # PATH: coverage.py + pytest for the coverage gate, the testing-conventions adapter wheel for
+      # mutation (named last, so the #92 subcommand-drift guard reads it as an install argument,
+      # not an invocation).
+      - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.12'
-      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
-        name: Provision the project environment (uv)
+      - if: matrix.language == 'python'
+        name: Provision the Python suite environment (uv)
         working-directory: ${{ needs.detect.outputs.package_root }}
+        env:
+          PYTHON_ENV: ${{ needs.detect.outputs.python_env || 'pip' }}
         run: |
           set -euo pipefail
-          uv sync
-          uv pip install coverage pytest
+          if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
+          uv pip install coverage pytest testing-conventions
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
@@ -663,36 +663,31 @@ jobs:
       # language, installed from the derived package root (#279) so a monorepo's
       # per-package lockfile/manifest is the one that's read. #56 (config-driven `check`)
       # will eventually drive this from config.
-      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'pip'
-        name: Install the Python mutation toolchain (wheel + pytest)
-        # `unit mutation --language python` spawns the adapter shipped in the wheel
-        # (`python3 -m testing_conventions.mutation.main`, #248); installing the wheel puts
-        # that module on the path and brings cosmic-ray as a dependency. pytest runs the
-        # project's suite. (#258 — cosmic-ray alone left the adapter module unresolvable.)
-        # The wheel is named last so the subcommand-drift guard (#92) doesn't read the
-        # package that follows the binary name as a `testing-conventions` invocation.
-        run: python -m pip install --quiet pytest testing-conventions
-      # A `uv`-managed package (detect's python_env, #277) gets its own dependencies too:
-      # `uv sync` installs (and, for a maturin project, builds) the project itself — the
-      # cargo toolchain above is already on PATH for that build — then the adapter wheel
-      # and pytest go INTO that same venv (not global pip) so cosmic-ray's spawned pytest
-      # can import both the project's own dependencies and the adapter (#279). Wheel named
-      # last, same #92 drift-guard reason as the pip install above.
-      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
+      # Provision Python with uv (#399), identically across the three suite-executing jobs so the
+      # block can't drift. An installable project (a pyproject.toml with a [project] table —
+      # python_env == 'uv', #277) is synced: `uv sync` installs its own dependencies AND
+      # builds/installs the project itself, so a maturin package's native module compiles right
+      # here (cargo already provisioned above). A plain package has no project to sync, so a bare
+      # `uv venv` stands in. The union suite toolchain installs into that same venv, which goes on
+      # PATH: coverage.py + pytest for the coverage gate, the testing-conventions adapter wheel for
+      # mutation — `unit mutation --language python` spawns `python3 -m
+      # testing_conventions.mutation.main` (#248), which the wheel puts on the path alongside its
+      # cosmic-ray dependency (#258), and cosmic-ray's spawned pytest imports the project's own
+      # dependencies from this same venv (#279). The wheel is named last, so the #92
+      # subcommand-drift guard reads it as an install argument, not an invocation.
+      - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.12'
-      - if: matrix.language == 'python' && (needs.detect.outputs.python_env || 'pip') == 'uv'
-        name: Provision the project environment (uv)
+      - if: matrix.language == 'python'
+        name: Provision the Python suite environment (uv)
         working-directory: ${{ needs.detect.outputs.package_root }}
+        env:
+          PYTHON_ENV: ${{ needs.detect.outputs.python_env || 'pip' }}
         run: |
           set -euo pipefail
-          uv sync
-          uv pip install pytest testing-conventions
+          if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
+          uv pip install coverage pytest testing-conventions
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       # TypeScript drives Stryker, which runs the project's test runner — install the
       # project's deps (which must include @stryker-mutator/core and a runner plugin) with

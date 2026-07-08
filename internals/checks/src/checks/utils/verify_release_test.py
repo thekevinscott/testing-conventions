@@ -90,6 +90,20 @@ def test_select_dispatched_run_excludes_a_lexically_smaller_non_matching_sha():
     assert select_dispatched_run(runs, "mmm", since="2026-07-08T09:00:00Z")["databaseId"] == 2
 
 
+def test_select_dispatched_run_excludes_a_lexically_greater_non_matching_sha():
+    # sha "mmm"; a run at "zzz" (lexically > sha) must be excluded by `==` — a `>=` mutant would
+    # wrongly include it. The wrong run is newer, so a `>=` mutant would select it over the match.
+    runs = [_run_row(sha="zzz", created="2026-07-08T13:00:00Z", db=1), _run_row(sha="mmm", db=2)]
+    assert select_dispatched_run(runs, "mmm", since="2026-07-08T09:00:00Z")["databaseId"] == 2
+
+
+def test_select_dispatched_run_excludes_a_lexically_greater_non_dispatch_event():
+    # event "zzz" sorts after "workflow_dispatch", so a `==`->`>=` mutant would wrongly include it;
+    # newer, so the mutant would select it over the real dispatch.
+    runs = [_run_row(event="zzz", created="2026-07-08T13:00:00Z", db=1), _run_row(event="workflow_dispatch", db=2)]
+    assert select_dispatched_run(runs, "abc", since="2026-07-08T09:00:00Z")["databaseId"] == 2
+
+
 def test_select_dispatched_run_matches_a_non_interned_equal_sha():
     # `==`, not `is`: the caller's sha and the run's headSha are distinct string objects. An `is`
     # mutant would fail to match equal-but-not-identical strings and find nothing.
@@ -327,9 +341,42 @@ def test_await_run_times_out_when_the_deadline_is_reached():
         raise AssertionError("reaching the deadline must time out, not poll on")
 
 
+def test_await_run_times_out_when_the_clock_passes_the_deadline():
+    # clock=[0, 200]: the deadline is 120, and 200 is strictly *past* it, so `>=` times out — an
+    # `>=`->`==` mutant would see 200 != 120, keep polling, and find the run instead of timing out.
+    listings = iter([json.dumps([]), json.dumps([
+        {"databaseId": 9, "headSha": "sha", "event": "workflow_dispatch", "createdAt": "2026-07-08T10:00:01Z"}])])
+    clock = iter([0.0, float(RUN_APPEAR_TIMEOUT_S) + 80.0])
+
+    def run(argv, **kwargs):
+        return _Result(stdout=next(listings))
+
+    try:
+        _await_run("a.yml", "sha", "2026-07-08T10:00:00Z", run, sleep=lambda _s: None, clock=lambda: next(clock))
+    except TimeoutError as error:
+        assert "never registered" in str(error)
+    else:
+        raise AssertionError("passing the deadline must time out, not poll on")
+
+
 def test_watch_conclusion_returns_once_the_run_completes():
     def run(argv, **kwargs):
         return _Result(stdout=json.dumps({"status": "completed", "conclusion": "success"}))
+
+    assert _watch_conclusion(3, run, sleep=lambda _s: None) == "success"
+
+
+def test_watch_conclusion_keeps_polling_on_a_status_that_sorts_below_completed():
+    # `== "completed"`, not `<= "completed"`: a status that sorts lexically *below* "completed"
+    # (here a fabricated "aborted") is not terminal — a `<=` mutant would stop early and return its
+    # conclusion instead of polling on to the real completed state.
+    states = iter([
+        json.dumps({"status": "aborted", "conclusion": "wrong"}),
+        json.dumps({"status": "completed", "conclusion": "success"}),
+    ])
+
+    def run(argv, **kwargs):
+        return _Result(stdout=next(states))
 
     assert _watch_conclusion(3, run, sleep=lambda _s: None) == "success"
 

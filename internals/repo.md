@@ -70,6 +70,16 @@ real per-package-lockfile monorepo) exercises the derivation end to end via the 
 `testing-conventions-selftest.yml` already uses, so it isn't blocked by the `@v0` lag described
 below.
 
+**Writing the outputs to `GITHUB_OUTPUT` (#396).** `main` renders the outputs through
+`render_github_output` before appending them to the `GITHUB_OUTPUT` file. A single-line value is a
+plain `name=value` line; a value that carries a newline — a `build_command` declared as a TOML
+`"""…"""` multi-line string — is written in the runner's heredoc form (`name<<DELIM`, the value,
+then `DELIM` on its own line), with a content-derived delimiter that can't collide with any line of
+the value. A raw `name=value` line for a multi-line value would corrupt the file: the embedded
+newline ends the file-command line early, and the value's remaining lines are parsed as further
+(bogus) outputs. `render_github_output` is a pure function with its own colocated test, so the
+rendering is exercised in isolation, not only through a full action run.
+
 ## Self-test and the `@v0` path
 
 The reusable workflow (`.github/workflows/testing-conventions.yml`) drives the **published** tool — its `detect` step pins `…/actions/detect@v0`, and each rule job runs `npx testing-conventions` (no version → latest on npm). The self-test (`testing-conventions-selftest.yml`) calls that reusable workflow. So a change to *detection* (which rules fan out) or *rule behavior* does **not** take effect in the self-test — or for any consumer — until a release **moves `@v0`** to the new commit and publishes the package.

@@ -27,6 +27,19 @@ fn clean_workflow_has_no_violations() {
 }
 
 #[test]
+fn a_package_install_line_is_not_flagged_as_an_invocation() {
+    // `pip install testing-conventions pytest` names the tool as a dependency, not a
+    // subcommand invocation; only the real `check` call is validated. Under the
+    // old command-position-blind extraction the install line's trailing `pytest` read
+    // as a subcommand and tripped `no-unknown-subcommand`.
+    let violations = workflow::check(fixture("install_line"), &command()).unwrap();
+    assert!(
+        violations.is_empty(),
+        "an install line was wrongly flagged: {violations:?}"
+    );
+}
+
+#[test]
 fn red_flags_the_renamed_subcommand() {
     let violations = workflow::check(fixture("red"), &command()).unwrap();
     // `unit location` (renamed to `unit colocated-test`) is on line 9.

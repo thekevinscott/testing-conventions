@@ -20,10 +20,13 @@
 //! it tokenizes each non-comment line, finds the `testing-conventions` binary token
 //! (the bare command word, optionally version-pinned `…@x` /
 //! `…${VERSION:+@$VERSION}` — the `npx` / on-`PATH` form the reusable workflow and
-//! the docs use), and reads the tokens after it as the invocation. That is the
-//! deterministic bright-line; a path-qualified invocation (`./bin/testing-conventions`),
-//! a subcommand split across a `\`-continuation, or one named in non-`run:` prose is
-//! a documented limit.
+//! the docs use) in *command position*, and reads the tokens after it as the
+//! invocation. Command position is the bright-line that separates a real call from
+//! the tool named as an argument to another command — `pip install
+//! testing-conventions pytest` installs it as a dependency, and is not an
+//! invocation. A path-qualified invocation (`./bin/testing-conventions`), a
+//! subcommand split across a `\`-continuation, or one named in non-`run:` prose is a
+//! documented limit.
 
 use std::path::{Path, PathBuf};
 
@@ -102,10 +105,49 @@ fn is_workflow_file(path: &Path) -> bool {
 
 /// The args of a `testing-conventions` invocation on `line`, or `None` if the
 /// line has no such call. Comments are ignored and surrounding quotes stripped.
+///
+/// The binary token counts only when it is in *command position* — the command
+/// being run, not an argument to another command — so a package-install line
+/// (`pip install testing-conventions pytest`) is not read as an invocation whose
+/// trailing token would be validated as a subcommand.
 fn line_invocation(line: &str) -> Option<Vec<String>> {
     let tokens = tokenize(line);
     let pos = tokens.iter().position(|t| is_binary_token(t))?;
+    if !is_command_position(&tokens, pos) {
+        return None;
+    }
     Some(tokens[pos + 1..].to_vec())
+}
+
+/// `true` when the binary token at `pos` is in *command position*: the command
+/// being run, not an argument to another command. After stepping back over an
+/// `npx` launcher and its option flags, the preceding token must mark a command
+/// boundary — nothing (start of the shell), the YAML `run:` scalar lead-in, or a
+/// shell command separator. A token governed by any other command word
+/// (`pip install …`, `cp … testing-conventions`) is an argument, not an invocation.
+fn is_command_position(tokens: &[String], pos: usize) -> bool {
+    let mut i = pos;
+    // Step back over an `npx` launcher — its option flags, then `npx` itself — so
+    // the documented `npx -y testing-conventions …` form reads as command position.
+    if i > 0 {
+        let mut j = i;
+        while j > 0 && tokens[j - 1].starts_with('-') {
+            j -= 1;
+        }
+        if j > 0 && tokens[j - 1] == "npx" {
+            i = j - 1;
+        }
+    }
+    match i.checked_sub(1) {
+        None => true,
+        Some(prev) => is_command_boundary(&tokens[prev]),
+    }
+}
+
+/// `true` when `token` ends a command so the next token starts a new one: the YAML
+/// `run:` scalar lead-in, or a shell command separator.
+fn is_command_boundary(token: &str) -> bool {
+    matches!(token, "run:" | "&&" | "||" | "|" | ";" | "&" | "(" | "{")
 }
 
 /// `true` when `token` is the `testing-conventions` binary as a command word: bare,
@@ -174,22 +216,34 @@ fn tokenize(line: &str) -> Vec<String> {
 ///
 /// Each invocation's leading tokens are walked against the tree: a token in a
 /// subcommand position (the current command takes subcommands) must name one of
-/// them, else it is flagged. The walk stops at the first flag (`-…`) — subcommands
-/// precede options in clap — and at the first command that takes positionals rather
-/// than subcommands, so a path argument is never mistaken for a subcommand.
+/// them, else it is flagged. A global flag (`-…`) before the subcommand is skipped
+/// — together with its value when the command declares the option as value-taking —
+/// so a subcommand after a leading flag is still validated. The walk stops at the
+/// first command that takes positionals rather than subcommands, so a path argument
+/// is never mistaken for a subcommand.
 pub fn unknown_subcommands(invocations: &[Invocation], root: &clap::Command) -> Vec<Violation> {
     let mut out = Vec::new();
     for inv in invocations {
         let mut node = root;
-        for tok in &inv.args {
-            // Flags begin the options/positionals section: the subcommand chain is
-            // complete. A command that takes positionals (not subcommands) means
-            // this token is an argument, not a subcommand to validate.
-            if tok.starts_with('-') || !node.has_subcommands() {
+        let mut i = 0;
+        while i < inv.args.len() {
+            // A command that takes positionals (not subcommands) means the
+            // remaining tokens are arguments, not a subcommand chain to validate.
+            if !node.has_subcommands() {
                 break;
             }
+            let tok = &inv.args[i];
+            if tok.starts_with('-') {
+                // A global flag before the subcommand: skip it (and its value, when
+                // the command declares it value-taking) rather than ending the walk.
+                i += if flag_takes_value(node, tok) { 2 } else { 1 };
+                continue;
+            }
             match node.find_subcommand(tok.as_str()) {
-                Some(sub) => node = sub,
+                Some(sub) => {
+                    node = sub;
+                    i += 1;
+                }
                 None => {
                     out.push(Violation {
                         file: inv.file.clone(),
@@ -207,6 +261,25 @@ pub fn unknown_subcommands(invocations: &[Invocation], root: &clap::Command) -> 
         }
     }
     out
+}
+
+/// `true` when `token` (a `-…` / `--…` flag) is an option of `node` that consumes a
+/// following value, so the subcommand walk must skip that value too. An inline
+/// `--flag=value` carries its own value and consumes no following token.
+fn flag_takes_value(node: &clap::Command, token: &str) -> bool {
+    if token.contains('=') {
+        return false;
+    }
+    let name = token.trim_start_matches('-');
+    node.get_arguments().any(|arg| {
+        let matches_long = arg.get_long() == Some(name);
+        let matches_short = name.len() == 1 && arg.get_short().is_some_and(|c| name.starts_with(c));
+        (matches_long || matches_short)
+            && matches!(
+                arg.get_action(),
+                clap::ArgAction::Set | clap::ArgAction::Append
+            )
+    })
 }
 
 /// Check `path` (a workflow file or directory): every `testing-conventions`
@@ -314,6 +387,64 @@ mod tests {
             ])
         );
         assert_eq!(line_invocation("- uses: actions/checkout@v6"), None);
+    }
+
+    #[test]
+    fn line_invocation_ignores_a_package_install_line() {
+        // `testing-conventions` as an *argument* to a package manager — the tool
+        // being installed as a dependency, not run — is not an invocation. A
+        // `pip install testing-conventions pytest` line would otherwise read
+        // `pytest` as a subcommand and spuriously flag it.
+        assert_eq!(
+            line_invocation("- run: pip install testing-conventions pytest"),
+            None
+        );
+        assert_eq!(
+            line_invocation("- run: npm install -D testing-conventions"),
+            None
+        );
+        assert_eq!(
+            line_invocation("- run: cargo install testing-conventions"),
+            None
+        );
+        // The real command-position forms still read as invocations.
+        assert_eq!(
+            line_invocation("- run: testing-conventions check"),
+            Some(vec!["check".to_string()])
+        );
+        assert_eq!(
+            line_invocation("- run: npx -y testing-conventions check"),
+            Some(vec!["check".to_string()])
+        );
+    }
+
+    #[test]
+    fn unknown_subcommands_validates_across_leading_global_flags() {
+        // A global flag (and its value) before the subcommand must not stop the
+        // walk: the subcommand after it is still validated. Modeled with a
+        // small command tree carrying a value-taking `--config` global.
+        let root = clap::Command::new("tc")
+            .arg(
+                clap::Arg::new("config")
+                    .long("config")
+                    .action(clap::ArgAction::Set),
+            )
+            .subcommand(clap::Command::new("unit").subcommand(clap::Command::new("coverage")));
+        // `location` is not a `unit` subcommand — flagged despite the leading
+        // `--config x`.
+        let flagged = unknown_subcommands(&[inv(1, &["--config", "x", "unit", "location"])], &root);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert!(
+            flagged[0].message.contains("location"),
+            "{}",
+            flagged[0].message
+        );
+        // A live subcommand after the same flag stays clean — the flag's value `x`
+        // is not mistaken for a subcommand.
+        assert!(
+            unknown_subcommands(&[inv(2, &["--config", "x", "unit", "coverage"])], &root)
+                .is_empty()
+        );
     }
 
     #[test]

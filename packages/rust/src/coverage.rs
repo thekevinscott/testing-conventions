@@ -925,7 +925,7 @@ fn run_cargo_llvm_cov(
         // instruments only on a nightly toolchain — the error below names that.
         command.arg("--branch");
     }
-    if let Some(regex) = ignore_filename_regex(ignore) {
+    if let Some(regex) = ignore_filename_regex(root, ignore) {
         command.arg("--ignore-filename-regex").arg(regex);
     }
     // Nested-run hygiene: when this check itself runs under `cargo llvm-cov` (the
@@ -1133,14 +1133,28 @@ fn llvm_cov_patch_detail(json: &str) -> Result<BTreeMap<String, RustPatchCoverag
 /// each regex-escaped (matched literally, not as a pattern) and joined with `|`. An
 /// exempt file leaves the denominator with its reason recorded in config — an
 /// auditable omission, not a silent ignore-glob.
-fn ignore_filename_regex(ignore: &[String]) -> Option<String> {
+///
+/// llvm-cov reports absolute filenames and `--ignore-filename-regex` is a substring
+/// search, so each `root`-relative exempt path is anchored to its full path under
+/// `root` and terminated with `$`. Substring-matching an unanchored `src/a.rs` would
+/// over-match a workspace member's `member/src/a.rs` (and a nested `src/xsrc/a.rs`);
+/// the full-path anchor drops only the exempted file.
+fn ignore_filename_regex(root: &Path, ignore: &[String]) -> Option<String> {
     if ignore.is_empty() {
         return None;
     }
     Some(
         ignore
             .iter()
-            .map(|path| regex_escape(path))
+            .map(|rel| {
+                // Anchor to the file's absolute path: the exempt entry is validated
+                // to exist under `root`, so `canonicalize` resolves it to the same
+                // absolute form llvm-cov reports; the fallback keeps the anchor
+                // deterministic when the path can't be resolved (e.g. in tests).
+                let full = root.join(rel);
+                let full = full.canonicalize().unwrap_or(full);
+                format!("{}$", regex_escape(&full.to_string_lossy()))
+            })
             .collect::<Vec<_>>()
             .join("|"),
     )
@@ -1807,17 +1821,59 @@ mod tests {
 
     #[test]
     fn rust_ignore_regex_is_none_when_nothing_is_exempt() {
-        assert_eq!(ignore_filename_regex(&[]), None);
+        assert_eq!(ignore_filename_regex(Path::new("/repo"), &[]), None);
     }
 
     #[test]
-    fn rust_ignore_regex_escapes_and_joins_exempt_paths() {
-        // The caller passes already-resolved, `root`-relative paths; each is
-        // regex-escaped (the `.` becomes `\.`) and joined into one alternation.
+    fn rust_ignore_regex_anchors_each_exempt_path_to_its_full_path() {
+        // The caller passes already-resolved, `root`-relative paths; each is joined
+        // under `root`, regex-escaped (the `.` becomes `\.`), and `$`-anchored, then
+        // joined into one alternation. (`/repo` doesn't exist, so `canonicalize`
+        // falls back to the plain join — deterministic for the assertion.)
         let exempt = vec!["src/shim.rs".to_string(), "src/gen.rs".to_string()];
         assert_eq!(
-            ignore_filename_regex(&exempt).as_deref(),
-            Some(r"src/shim\.rs|src/gen\.rs")
+            ignore_filename_regex(Path::new("/repo"), &exempt).as_deref(),
+            Some(r"/repo/src/shim\.rs$|/repo/src/gen\.rs$")
+        );
+    }
+
+    /// Model llvm-cov's substring `--ignore-filename-regex` for the fully-escaped,
+    /// optionally end-anchored literals this tool emits: unescape the literal, honor a
+    /// trailing `$` end-anchor, else substring-match. One matching alternative ignores
+    /// the file.
+    fn llvm_would_ignore(regex: &str, filename: &str) -> bool {
+        regex.split('|').any(|alt| {
+            let (lit, anchored) = match alt.strip_suffix('$') {
+                Some(head) => (head, true),
+                None => (alt, false),
+            };
+            let lit = lit.replace('\\', "");
+            if anchored {
+                filename.ends_with(&lit)
+            } else {
+                filename.contains(&lit)
+            }
+        })
+    }
+
+    #[test]
+    fn rust_ignore_regex_does_not_over_match_a_member_with_the_same_suffix() {
+        // llvm-cov's `--ignore-filename-regex` is a substring search, so an entry for a
+        // top-level `src/a.rs` must not also drop a workspace member's `member/src/a.rs`
+        // — nor a nested `src/xsrc/a.rs` that merely shares the suffix.
+        let regex = ignore_filename_regex(Path::new("/repo"), &["src/a.rs".to_string()]).unwrap();
+        // The exempted file itself is still dropped.
+        assert!(
+            llvm_would_ignore(&regex, "/repo/src/a.rs"),
+            "the exempted file must still be ignored: {regex}"
+        );
+        assert!(
+            !llvm_would_ignore(&regex, "/repo/member/src/a.rs"),
+            "`src/a.rs` over-matched `member/src/a.rs`: {regex}"
+        );
+        assert!(
+            !llvm_would_ignore(&regex, "/repo/src/xsrc/a.rs"),
+            "`src/a.rs` over-matched `src/xsrc/a.rs`: {regex}"
         );
     }
 }

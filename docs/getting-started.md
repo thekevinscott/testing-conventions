@@ -88,7 +88,9 @@ you fix the code, or record a reasoned exemption in
 Run `npx testing-conventions install` to write the contract into your repo's `AGENTS.md`, so a
 coding agent knows the rules before it writes code. The managed block carries the contract's
 non-negotiables and points at this site and its machine-readable digest (`llms.txt`). Re-running
-refreshes the block; everything outside its markers stays yours.
+refreshes the block; everything outside its markers stays yours. `install` reads the block by its
+`begin`/`end` marker pair — if the `end` marker is missing (a hand edit deleted or fenced it),
+`install` stops and names it so you can restore the marker, keeping your surrounding prose intact.
 
 ## Next
 

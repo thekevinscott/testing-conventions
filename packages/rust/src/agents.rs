@@ -7,7 +7,7 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
-use anyhow::{bail, Context};
+use anyhow::{anyhow, bail, Context};
 use sha2::{Digest, Sha256};
 
 const SCHEMA_VERSION: u32 = 1;
@@ -42,8 +42,10 @@ fn begin_marker() -> String {
 }
 
 /// Upsert the managed block into the file at `path`: create the file when
-/// absent, append when the markers are missing, otherwise replace only the
-/// region between the markers. A current block is a byte-identical no-op.
+/// absent, append when no marker is present, otherwise replace only the region
+/// between the markers. A current block is a byte-identical no-op. A begin marker
+/// with no matching end marker is a damaged block — `install` refuses it rather
+/// than appending and orphaning the marker.
 pub fn install(path: &Path) -> anyhow::Result<()> {
     if path
         .symlink_metadata()
@@ -65,25 +67,36 @@ pub fn install(path: &Path) -> anyhow::Result<()> {
     let region = format!("{}\n{TEMPLATE}{END_MARKER}", begin_marker());
     let new = match &existing {
         None => format!("{region}\n"),
-        Some(text) => {
-            let bounds = text.find(BEGIN_OPEN).and_then(|start| {
-                let end = text[start..].find(END_MARKER)?;
-                Some((start, start + end + END_MARKER.len()))
-            });
-            match bounds {
-                Some((start, end)) => format!("{}{region}{}", &text[..start], &text[end..]),
-                None => {
-                    let mut out = text.clone();
-                    if !out.is_empty() && !out.ends_with('\n') {
-                        out.push('\n');
-                    }
-                    if !out.is_empty() {
-                        out.push('\n');
-                    }
-                    format!("{out}{region}\n")
-                }
+        Some(text) => match text.find(BEGIN_OPEN) {
+            Some(start) => {
+                // A begin marker with no matching end marker is a damaged block —
+                // hand-edited or partly deleted. Appending a fresh block would orphan
+                // this begin marker, so the *next* run would span from it to the new
+                // end marker and delete everything between, eating user prose. Refuse
+                // and leave the file untouched instead.
+                let rel_end = text[start..].find(END_MARKER).ok_or_else(|| {
+                    anyhow!(
+                        "{}: a `testing-conventions` begin marker has no matching end marker \
+                         — refusing to write, as replacing a partial block would delete \
+                         surrounding content. Restore the `{END_MARKER}` marker (or remove the \
+                         stray begin marker) and re-run.",
+                        path.display()
+                    )
+                })?;
+                let end = start + rel_end + END_MARKER.len();
+                format!("{}{region}{}", &text[..start], &text[end..])
             }
-        }
+            None => {
+                let mut out = text.clone();
+                if !out.is_empty() && !out.ends_with('\n') {
+                    out.push('\n');
+                }
+                if !out.is_empty() {
+                    out.push('\n');
+                }
+                format!("{out}{region}\n")
+            }
+        },
     };
 
     if existing.as_deref() == Some(new.as_str()) {

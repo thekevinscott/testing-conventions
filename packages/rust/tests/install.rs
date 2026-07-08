@@ -91,3 +91,31 @@ fn reinstall_replaces_a_stale_block_carrying_the_removed_link() {
         "a refresh drops the removed CLI guide link (#353)"
     );
 }
+
+#[test]
+fn install_refuses_a_begin_marker_with_no_end_marker() {
+    // A block whose end marker was deleted (or fenced in a quote) leaves an orphaned
+    // begin marker. Appending a fresh block would then bracket the orphaned begin and
+    // the new end, so the *next* run replaces everything between them — silently
+    // deleting all user prose in that span. install refuses instead, leaving the file
+    // byte-for-byte intact so the consumer can restore the marker.
+    let dir = TempDir::new();
+    let damaged = "# My project\n\n\
+         <!-- testing-conventions:begin v1 hash=000000000000 -->\n\
+         ## Testing conventions\n\n\
+         Important user prose that must survive.\n"
+        .to_string();
+    fs::write(dir.agents_md(), &damaged).unwrap();
+
+    let result = install(&dir.agents_md());
+    assert!(
+        result.is_err(),
+        "install must refuse a begin marker with no matching end marker"
+    );
+
+    let text = fs::read_to_string(dir.agents_md()).unwrap();
+    assert_eq!(
+        text, damaged,
+        "the damaged file must be left untouched, not appended to"
+    );
+}

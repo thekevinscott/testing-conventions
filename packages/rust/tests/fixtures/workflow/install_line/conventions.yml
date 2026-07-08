@@ -1,0 +1,12 @@
+name: Conventions
+on: [pull_request]
+
+jobs:
+  conventions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # Installing the tool as a dependency is not an invocation to validate (#396):
+      # `testing-conventions` here is an argument to `pip install`, not a command.
+      - run: pip install testing-conventions pytest
+      - run: npx -y testing-conventions check

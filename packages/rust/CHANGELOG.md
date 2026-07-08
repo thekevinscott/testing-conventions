@@ -30,6 +30,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `not(...)` groups, so `#[cfg(not(test))]` is production code, `#[cfg(not(not(test)))]` is a test
   module, and `#[cfg(test)]` / `#[cfg(all(test, …))]` are unchanged.
 
+- **`install`: a damaged managed block no longer risks eating surrounding prose** (#396). When an
+  `AGENTS.md` held a `testing-conventions:begin` marker whose matching `:end` marker had been
+  deleted (or fenced inside a quote), `install` treated the block as absent and appended a fresh
+  one — orphaning the begin marker so the *next* run bracketed the orphan and the new end marker
+  and replaced everything between them, silently deleting the user's own text in that span.
+  `install` now refuses a begin marker with no matching end marker, leaving the file byte-for-byte
+  intact and naming the problem so the marker can be restored.
+
+- **Workflow guard: package-install lines and pre-subcommand global flags are handled correctly**
+  (#396). The guard that keeps the reusable workflow's `testing-conventions` invocations in step
+  with the CLI (private `workflow` command) mis-read two shapes: a line like
+  `pip install testing-conventions pytest` — where the tool is a *dependency argument*, not the
+  command — was read as an invocation whose `pytest` token tripped a spurious
+  `no-unknown-subcommand`; and a global flag before the subcommand
+  (`testing-conventions --config x unit …`) stopped the subcommand walk at the first `-`, so a
+  stranded subcommand after it went unchecked. The guard now treats a line as an invocation only
+  when the tool is in command position (bare, or launched by `npx`) and validates the subcommand
+  across leading global flags and their values.
+
+- **Rust coverage (library API): a whole-file exemption no longer over-matches same-named files**
+  (#396). `--ignore-filename-regex` is a substring search, so an unanchored exempt entry for
+  `src/a.rs` also dropped a workspace member's `member/src/a.rs` (and a nested `src/xsrc/a.rs`)
+  from the denominator. Each exempt entry is now anchored to the file's full path, so it matches
+  only the exempted file. Latent through the CLI today (validation always runs with nothing
+  exempt); reachable through the library API.
+
 - **`unit mutation --language rust`: concurrent invocations no longer each duplicate the
   cargo-mutants install** (#385, found investigating #370/epic #366). Provisioning the pinned
   `cargo-mutants` binary was a bare "does it exist; if not, `cargo install`" check with no

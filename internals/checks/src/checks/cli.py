@@ -11,6 +11,8 @@ from checks.build_command_wired.cli import cli as build_command_wired
 from checks.colocated_rust_wired.cli import cli as colocated_rust_wired
 from checks.coverage_package_root_wired.cli import cli as coverage_package_root_wired
 from checks.coverage_rust_wired.cli import cli as coverage_rust_wired
+from checks.detect_package_root_py.cli import cli as detect_package_root_py
+from checks.detect_package_root_ts.cli import cli as detect_package_root_ts
 from checks.detect_routes_python.cli import cli as detect_routes_python
 from checks.diff_scoped_wired.cli import cli as diff_scoped_wired
 from checks.e2e_verify_checks_out_pr_head.cli import cli as e2e_verify_checks_out_pr_head
@@ -39,6 +41,8 @@ main.add_command(build_command_wired, name="build-command-wired")
 main.add_command(colocated_rust_wired, name="colocated-rust-wired")
 main.add_command(coverage_package_root_wired, name="coverage-package-root-wired")
 main.add_command(coverage_rust_wired, name="coverage-rust-wired")
+main.add_command(detect_package_root_py, name="detect-package-root-py")
+main.add_command(detect_package_root_ts, name="detect-package-root-ts")
 main.add_command(detect_routes_python, name="detect-routes-python")
 main.add_command(diff_scoped_wired, name="diff-scoped-wired")
 main.add_command(e2e_verify_checks_out_pr_head, name="e2e-verify-checks-out-pr-head")

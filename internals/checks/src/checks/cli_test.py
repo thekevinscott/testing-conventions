@@ -22,6 +22,14 @@ def test_coverage_rust_wired_is_registered():
     assert "coverage-rust-wired" in main.commands
 
 
+def test_detect_package_root_py_is_registered():
+    assert "detect-package-root-py" in main.commands
+
+
+def test_detect_package_root_ts_is_registered():
+    assert "detect-package-root-ts" in main.commands
+
+
 def test_detect_routes_python_is_registered():
     assert "detect-routes-python" in main.commands
 

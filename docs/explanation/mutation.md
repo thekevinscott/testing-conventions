@@ -92,10 +92,29 @@ runner that runs your own suite:
 | Language | Engine | You provide |
 | --- | --- | --- |
 | TypeScript | [Stryker](https://stryker-mutator.io/), driven via its Node API by an adapter bundled in the npm package | `vitest` |
-| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray), driven via its library API by an adapter bundled in the wheel, with a baseline check guarding against a broken suite reporting a false pass; each mutant's run ends at its first failing test | `pytest` |
+| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray), driven via its library API by an adapter bundled in the wheel, with a baseline check that requires the clean suite to pass; each mutant's run ends at its first failing test | `pytest` |
 | Rust | [cargo-mutants](https://github.com/sourcefrog/cargo-mutants), provisioned on first use (a pinned `cargo install` into the tool's own cache) and run from there; concurrent invocations share one provisioning install rather than each racing to install their own | the cargo toolchain that builds and tests your crate |
 
 A run lists each survivor with its file, line, and mutation, and fails on any un-exempted one.
+
+## Timeouts: a mutant timeout is inconclusive, a baseline timeout is fatal
+
+A mutant whose run outlasts its budget **times out**. A timeout is *inconclusive* — the tool
+counts it as neither a caught mutant nor a survivor, so a diff-scoped run where every mutant on
+the touched lines times out passes with zero findings. This holds across engines: cargo-mutants
+signals it with its own timeout exit status, and cosmic-ray reports the mutant with no usable
+outcome; both drop out of the survivor set.
+
+A **baseline** timeout is the opposite — a loud error. The baseline is the clean, unmutated suite;
+a suite that can't finish in its budget is untrustworthy as a judge of any mutant, exactly as a
+baseline that *fails* is. So an unmutated suite that times out or ends abnormally stops the run
+with an error. A silently timed-out baseline would instead let every mutant time out and drop,
+and slip an empty survivor set through as a false pass.
+
+Each engine scopes the per-mutant timeout to the clean suite's own measured runtime: a slow suite
+earns a proportionally larger budget, and only a mutant that runs *far* longer than the clean
+suite is judged hung — so a legitimately slow suite keeps its budget instead of hitting a fixed
+ceiling.
 
 ## Why it matters for agents
 

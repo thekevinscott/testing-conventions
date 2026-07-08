@@ -12,12 +12,17 @@ def _result(outcome, output=""):
 
 def test_returns_the_observed_runtime_when_the_suite_passes(cosmic_ray):
     # A passing baseline reports ``survived``; the check returns the clean run's wall-clock
-    # seconds (later ➜ earlier tick), which scopes every mutant's timeout. An injected clock
-    # pins the elapsed exactly (10.0 ➜ 15.0 = 5.0s), so the subtraction can't be flipped.
-    cosmic_ray.db.results = iter([("baseline", _result("survived"))])
-    ticks = iter([10.0, 15.0])
+    # seconds (later tick minus earlier tick), which scopes every mutant's timeout. The injected
+    # clock pins the elapsed to a span where subtraction and modulo diverge (25.0 - 10.0 = 15.0,
+    # not 25.0 % 10.0 = 5.0), so the ``-`` cannot be flipped to ``%``. ``survived`` is built at
+    # runtime so it is a distinct object from the interned literal the check compares against: the
+    # comparison is equality (``!=``), not identity (``is not``), and this passing outcome returns
+    # rather than raising.
+    survived = "".join(list("survived"))
+    cosmic_ray.db.results = iter([("baseline", _result(survived))])
+    ticks = iter([10.0, 25.0])
     observed = check_baseline({"module-path": ["."]}, clock=lambda: next(ticks))
-    assert observed == 5.0
+    assert observed == 15.0
 
 
 def test_reads_an_enum_like_outcomes_value(cosmic_ray):

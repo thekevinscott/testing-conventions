@@ -49,6 +49,13 @@ fn imports_clean_exits_zero() {
     assert_eq!(iso_exit("imports/clean"), 0);
 }
 
+// #393: a locally-built crate (with target/ and a broken tests/fixtures/ file) neither
+// aborts the rule nor false-flags — the walk skips tests/ and target/.
+#[test]
+fn local_build_exits_zero() {
+    assert_eq!(iso_exit("unit/local_build"), 0);
+}
+
 // waivers
 #[test]
 fn waived_exits_zero() {

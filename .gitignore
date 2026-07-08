@@ -46,3 +46,9 @@ packages/rust/tests/fixtures/unit_mutation/typescript/*/.stryker-tmp/
 # the derived package_root — the blanket `dist/` rule above would otherwise hide them from git.
 !.github/selftest/packaging-package-root/**/dist/
 !.github/selftest/packaging-package-root/**/dist/**
+
+# #393: a committed `target/` of built artifacts under one isolation fixture crate, proving
+# the unit-isolation source walk skips `target/` — the blanket `target/` rule above would
+# otherwise hide the built-artifact file from git.
+!packages/rust/tests/fixtures/isolation/unit/local_build/target/
+!packages/rust/tests/fixtures/isolation/unit/local_build/target/**

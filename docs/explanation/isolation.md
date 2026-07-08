@@ -38,27 +38,35 @@ The unit suite's side: every collaborator is mocked.
 
 - **TypeScript** — `unmocked-collaborator`: any runtime import a unit test doesn't `vi.mock()`.
   Three imports are never collaborators: the unit under test (`widget.test.ts` → `./widget`),
-  type-only imports, and the test runner (`vitest`). Plus `untyped-mock`: a mock factory with no
-  `vi.importActual<typeof import(...)>()` type anchor, so the double can't drift from the real
-  module.
+  type-only imports, and the test runner (`vitest`). A mock matches its import by resolved module,
+  so the extension may differ between the two — Vitest resolves `./formatter` and `./formatter.js`
+  to the same module, so a `.js` import mocked bare (or the inverse) counts as mocked. Plus
+  `untyped-mock`: a mock factory with no `vi.importActual<typeof import(...)>()` type anchor, so the
+  double can't drift from the real module.
 - **Python** — `unmocked-collaborator`: an imported collaborator the colocated `*_test.py` doesn't
   mock, both first-party and external (a third-party package, or effectful stdlib such as
   `socket`, `subprocess`, `random`). Never collaborators: the unit under test, the test framework,
   pure stdlib, and type-only imports. The canonical unit test imports only the unit under test and
-  patches collaborators by string in a fixture — so it has no collaborator imports at all. A
-  re-export barrel is the unit under test too: in `__init___test.py`, a bare `from . import …`
-  names the package's own `__init__.py` surface — `Thing`, `__all__`, `__version__` — so those
-  names are what the test verifies, never collaborators. (Reaching around the barrel into a sibling
-  module — `from .core import Thing` in `__init___test.py` — imports a real collaborator and is
-  flagged.) This matches TypeScript, where `index.test.ts` importing `./index.js` is the unit under
-  test.
+  patches collaborators by string in a fixture — so it has no collaborator imports at all. When a
+  collaborator *is* imported, a `patch(...)` mocks it only when its target names that import's own
+  module: `from pkg.ledger import record` is mocked by `patch("pkg.ledger.record")`, and each
+  imported symbol must be patched — a `from pkg.ledger import record, erase` that patches only
+  `record` leaves `erase` a real collaborator. A patch that merely shares a last segment with a
+  different module (`patch("other.record")`, `patch("json.dumps")`) does not mock it. A re-export
+  barrel is the unit under test too: in `__init___test.py`, a bare `from . import …` names the
+  package's own `__init__.py` surface — `Thing`, `__all__`, `__version__` — so those names are what
+  the test verifies, never collaborators. (Reaching around the barrel into a sibling module —
+  `from .core import Thing` in `__init___test.py` — imports a real collaborator and is flagged.)
+  This matches TypeScript, where `index.test.ts` importing `./index.js` is the unit under test.
 - **Rust** — the same intent, structurally: `no-out-of-module-call` and `no-out-of-module-import`
   flag a unit test (an inline `#[cfg(test)]` module) that reaches out of its own module —
   `crate::…`, an external crate, or effectful `std` (`fs`, `net`, `process`, `env`, `thread`, the
   clock). A single `super::` (the unit under test), `self`, and pure `std` stay in-module. Inject
   a trait double for a collaborator instead. A unit test is a module gated by a positively-required
   `test` (`#[cfg(test)]`, `#[cfg(all(test, …))]`); a `#[cfg(not(test))]` module compiles in
-  *non-test* builds, so it is production code and its out-of-module calls are left alone.
+  *non-test* builds, so it is production code and its out-of-module calls are left alone. The scan
+  reads the crate's own unit source, skipping `tests/` integration crates and the `target/` build
+  directory, so a locally-built crate is scanned the same as a fresh checkout.
 
 ## What `integration lint` flags
 

@@ -226,3 +226,24 @@ fn stale_exempt_entry_errors() {
         "a stale exempt entry must error, not silently pass"
     );
 }
+
+// ---- #393: the source walk skips tests/ and target/ ----------------------
+
+#[test]
+fn local_build_crate_neither_aborts_nor_false_flags() {
+    // A locally-built crate carries `target/` (built artifacts) and `tests/fixtures/`
+    // (an intentionally-broken `.rs` plus a `#[cfg(test)]` module that reaches out of
+    // module). The unit-isolation walk scans only the crate's own unit source, so it
+    // neither aborts on the unparsable fixture nor false-flags the non-unit trees.
+    let violations = find_violations(fixture("unit/local_build"))
+        .expect("a locally-built crate must not abort the rule on a tests/ or target/ file");
+    assert!(
+        violations.is_empty(),
+        "target/ and tests/ must be skipped, so nothing is flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn local_build_crate_exits_zero() {
+    assert_eq!(iso_exit("unit/local_build"), 0);
+}

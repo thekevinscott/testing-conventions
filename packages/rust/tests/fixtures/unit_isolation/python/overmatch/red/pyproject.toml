@@ -1,0 +1,5 @@
+# First-party package `myproject`. The unit test below imports a two-symbol
+# collaborator but mocks only one of the symbols — the other stays a real collaborator.
+[project]
+name = "myproject"
+version = "0.0.0"

@@ -136,3 +136,23 @@ fn spy_option_mock_reports_no_violations() {
 fn spy_option_clean_exits_zero() {
     assert_eq!(isolation_exit("untyped_mock/spy_clean"), 0);
 }
+
+// ---- #393: mock specifier extension normalization ------------------------
+
+#[test]
+fn ext_normalize_clean_reports_no_violations() {
+    // Vitest resolves `./formatter` and `./formatter.js` to the same module, so a `.js`
+    // import mocked bare — and the inverse spelling — count as mocked. Neither
+    // collaborator is flagged.
+    let violations = find_unit_violations(fixture("ext_normalize/clean"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "an extension-mismatched import/mock pair must still match; got {violations:?}"
+    );
+}
+
+#[test]
+fn ext_normalize_clean_exits_zero() {
+    assert_eq!(isolation_exit("ext_normalize/clean"), 0);
+}

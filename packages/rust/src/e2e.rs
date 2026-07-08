@@ -204,6 +204,7 @@ fn latest_code_commit(
     extra_scopes: &[PathBuf],
     excludes: &[PathBuf],
 ) -> Result<Option<String>> {
+    validate_scopes(repo, scope, extra_scopes)?;
     let pathspec = relative_pathspec(repo, scope);
     let mut args: Vec<String> = vec!["log".into(), "-1".into(), "--format=%H".into()];
     // `<base>..HEAD` — commits reachable from HEAD but not `base`, i.e. the ones
@@ -243,6 +244,53 @@ fn relative_pathspec(repo: &Path, scope: &Path) -> String {
         Ok(rel) if !rel.as_os_str().is_empty() => rel.to_string_lossy().into_owned(),
         _ => scope.to_string_lossy().into_owned(),
     }
+}
+
+/// Confirm `scope` and every `extra_scope` name at least one path git tracks under
+/// `repo`, erroring loudly on one that matches nothing (#391).
+///
+/// The documented "`scope` must be `repo` or a descendant of it" constraint was
+/// never enforced: a typo'd or outside `scope` falls through [`relative_pathspec`]
+/// as a pathspec matching nothing, and with `--base` that empty walk reports
+/// [`Verification::Fresh`] — a stale attestation that passes forever. Each
+/// `extra_scope` has the same failure mode: a misspelled shared-tree root silently
+/// drops out of the walk. Confirming the pathspec matches a tracked path before the
+/// walk turns both into an honest error naming the bad scope.
+fn validate_scopes(repo: &Path, scope: &Path, extra_scopes: &[PathBuf]) -> Result<()> {
+    let scope_spec = relative_pathspec(repo, scope);
+    if !pathspec_matches_tracked(repo, &scope_spec)? {
+        bail!(
+            "e2e verify: --scope `{}` matches no tracked path under `{}` — \
+             --scope must name `{}` or a directory beneath it that git tracks",
+            scope.display(),
+            repo.display(),
+            repo.display(),
+        );
+    }
+    for extra in extra_scopes {
+        let extra_spec = format!(":(top){}", extra.display());
+        if !pathspec_matches_tracked(repo, &extra_spec)? {
+            bail!(
+                "e2e verify: --extra-scope `{}` matches no tracked path — \
+                 --extra-scope must name a repo-root-relative directory that git tracks",
+                extra.display(),
+            );
+        }
+    }
+    Ok(())
+}
+
+/// `true` when git tracks at least one path matching `pathspec` (run with cwd
+/// `repo`). A pathspec git rejects as outside the repository exits non-zero; that
+/// is treated identically to "matches nothing" — either way the scope names no
+/// tracked path.
+fn pathspec_matches_tracked(repo: &Path, pathspec: &str) -> Result<bool> {
+    let out = Command::new("git")
+        .args(["ls-files", "--", pathspec])
+        .current_dir(repo)
+        .output()
+        .with_context(|| format!("running `git ls-files -- {pathspec}`"))?;
+    Ok(out.status.success() && !out.stdout.is_empty())
 }
 
 /// Run `git` with `args` in `repo`, returning trimmed stdout; errors if git fails.

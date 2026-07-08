@@ -421,15 +421,46 @@ pub(crate) fn has_cfg_test(attrs: &[syn::Attribute]) -> bool {
     })
 }
 
-/// `true` when a `cfg(...)` token stream contains a bare `test` ident (recursing
-/// into `all(...)` / `any(...)` groups). A `feature = "test"` string literal does
-/// not count.
+/// `true` when a `cfg(...)` token stream *positively requires* the `test` ident —
+/// a bare `test` reached under an **even** number of `not(...)` negations (recursing
+/// into `all(...)` / `any(...)` groups). `#[cfg(not(test))]` gates production code
+/// for non-test builds, so it does not count; a `feature = "test"` string
+/// literal never counts.
 fn cfg_mentions_test(tokens: proc_macro2::TokenStream) -> bool {
-    tokens.into_iter().any(|tt| match tt {
-        proc_macro2::TokenTree::Ident(id) => id == "test",
-        proc_macro2::TokenTree::Group(group) => cfg_mentions_test(group.stream()),
-        _ => false,
-    })
+    cfg_requires_test(tokens, false)
+}
+
+/// Walk a `cfg(...)` predicate's tokens, returning `true` when a bare `test` ident
+/// is reached with `negated == false` — i.e. under an even number of enclosing
+/// `not(...)` groups. `negated` flips for the contents of each `not(...)`, so
+/// `not(test)` (and any oddly-negated `test`) is not a positively-required test cfg.
+fn cfg_requires_test(tokens: proc_macro2::TokenStream, negated: bool) -> bool {
+    let mut iter = tokens.into_iter().peekable();
+    while let Some(tt) = iter.next() {
+        match tt {
+            proc_macro2::TokenTree::Ident(id) if id == "not" => {
+                // `not` applies to the immediately following group; recurse into it
+                // with the negation parity flipped.
+                if let Some(proc_macro2::TokenTree::Group(group)) = iter.peek() {
+                    let stream = group.stream();
+                    iter.next();
+                    if cfg_requires_test(stream, !negated) {
+                        return true;
+                    }
+                }
+            }
+            proc_macro2::TokenTree::Ident(id) => {
+                if !negated && id == "test" {
+                    return true;
+                }
+            }
+            proc_macro2::TokenTree::Group(group) if cfg_requires_test(group.stream(), negated) => {
+                return true;
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 /// The crate's normal `[dependencies]` names (hyphens normalized to underscores,
@@ -607,6 +638,18 @@ mod tests {
             &module("#[cfg(feature = \"test\")] mod t {}").attrs
         ));
         assert!(!has_cfg_test(&module("mod t {}").attrs));
+        // `not(test)` gates production code, not a test module.
+        assert!(!has_cfg_test(&module("#[cfg(not(test))] mod t {}").attrs));
+        assert!(!has_cfg_test(
+            &module("#[cfg(all(not(test), unix))] mod t {}").attrs
+        ));
+        assert!(!has_cfg_test(
+            &module("#[cfg(not(all(test, unix)))] mod t {}").attrs
+        ));
+        // Even negation parity restores a positively-required `test`.
+        assert!(has_cfg_test(
+            &module("#[cfg(not(not(test)))] mod t {}").attrs
+        ));
     }
 
     #[test]

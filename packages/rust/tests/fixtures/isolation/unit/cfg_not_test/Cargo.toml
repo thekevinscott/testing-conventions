@@ -1,0 +1,10 @@
+# Fixture crate for the Rust unit-isolation rule — a `#[cfg(not(test))]` module is
+# production code, not a unit test, so its cross-module calls must not be flagged
+# (#390). Parsed by `syn`, never compiled — `[workspace]` keeps cargo from
+# absorbing it into the tool's build.
+[package]
+name = "iso_unit_cfg_not_test"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

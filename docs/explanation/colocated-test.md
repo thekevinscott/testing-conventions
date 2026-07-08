@@ -31,8 +31,11 @@ matching-named unit test.
   extension. Declaration files (`*.d.ts`) carry no runtime code and are ignored.
 - **Rust** — units are inline `#[cfg(test)]` modules, not sibling files, so the check is presence
   of the inline module: a `src` file that defines a function with a body but has no `#[cfg(test)]`
-  module is an orphan. Module-declaration files (only `mod` / `use`) and type-only files (no `fn`)
-  aren't subjects; `tests/`, `benches/`, `examples/`, and `build.rs` are skipped.
+  module is an orphan. A test module is one gated by a positively-required `test` — `#[cfg(test)]`
+  or `#[cfg(all(test, …))]`; a `#[cfg(not(test))]` module compiles in *non-test* builds, so it is
+  production code and counts as behavior to test, never as the inline test. Module-declaration
+  files (only `mod` / `use`) and type-only files (no `fn`) aren't subjects; `tests/`, `benches/`,
+  `examples/`, and `build.rs` are skipped.
 
 Empty or comment-only files are never subjects, and a file with a `colocated-test`
 [exemption](../guide/configure#exempt-a-file) is deliberately omitted, with a reason.

@@ -85,3 +85,18 @@ fn rust_red_tree_flags_the_untested_module() {
         "stderr should name the orphan module; got: {stderr}"
     );
 }
+
+#[test]
+fn rust_cfg_not_test_module_is_flagged() {
+    // #390: `#[cfg(not(test))]` is production code, not a test module. `src/gated.rs`
+    // has behavior and only a `not(test)` module, so the binary flags it as an orphan.
+    let (code, stderr) = unit_colocated_test_output("rust/cfg_not_test", "rust");
+    assert_eq!(
+        code, 1,
+        "a `not(test)` module is not a test module; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("gated.rs"),
+        "stderr should name the orphan module; got: {stderr}"
+    );
+}

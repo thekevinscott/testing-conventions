@@ -19,6 +19,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   workflow or call passing a `--scope`/`--extra-scope` that matched nothing used to pass (falsely);
   it now fails until the scope is corrected. See `MIGRATIONS.md`.
 
+- **`#[cfg(not(test))]` no longer counts as an inline test module (Rust)** (#390). The cfg scan
+  matched any bare `test` ident in a `cfg(...)` and never handled `not(...)`, so a
+  `#[cfg(not(test))]` module — production code compiled for non-test builds — was mistaken for a
+  test module. This produced two wrong verdicts: a **false green** in the `unit colocated-test`
+  presence gate (a file with behavior and only a `#[cfg(not(test))]` module satisfied the gate with
+  zero inline tests) and a **false red** in `unit lint` (production calls inside a
+  `#[cfg(not(test))]` module were flagged as out-of-module unit-test calls). The predicate is now
+  parsed with negation parity: a `test` ident counts only when reached under an even number of
+  `not(...)` groups, so `#[cfg(not(test))]` is production code, `#[cfg(not(not(test)))]` is a test
+  module, and `#[cfg(test)]` / `#[cfg(all(test, …))]` are unchanged.
+
 - **`unit mutation --language rust`: concurrent invocations no longer each duplicate the
   cargo-mutants install** (#385, found investigating #370/epic #366). Provisioning the pinned
   `cargo-mutants` binary was a bare "does it exist; if not, `cargo install`" check with no

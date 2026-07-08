@@ -15,6 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Fixes the Rust cfg scan so `#[cfg(not(test))]` is no longer mistaken for an inline test module
+(#390). The scan matched any bare `test` ident and never handled `not(...)`, so a
+`#[cfg(not(test))]` module — production code compiled for non-test builds — set the test-module
+signal, producing a false green in the `unit colocated-test` presence gate and a false red in
+`unit lint`. The predicate is now parsed with negation parity: a `test` ident counts only under an
+even number of `not(...)` groups. No public API change; consumers whose Rust crates carry
+`#[cfg(not(test))]` modules are now scored correctly (see **Behavior changes without code
+changes**).
+
 Moves the suite-executing jobs' (`unit-coverage`, `coverage-changed`, `mutation`) install/build
 location to the derived package root (#278, #279, epic #276, building on #277's `package_root` /
 `ts_package_manager` / `python_env` / `provision_rust` primitive). All three jobs now install
@@ -895,6 +904,14 @@ repo-root-relative directory (for `--extra-scope`). A valid descendant scope wit
 attestation still reports `Stale`; a scope with tracked files but no in-range commits still passes
 on an empty `<base>..HEAD` diff. No public API signature change — the library entry points
 (`verify`, `verify_scoped`, `verify_since`, `verify_extra_scoped`) are unchanged in shape.
+
+A Rust crate with a `#[cfg(not(test))]` module is now scored correctly by `unit colocated-test`
+and `unit lint` (#390). `#[cfg(not(test))]` compiles in non-test builds — production code, not a
+test module — so a source file whose only cfg-gated module is `not(test)` now needs a real
+`#[cfg(test)]` module to clear the presence gate (it previously passed with zero inline tests),
+and production calls inside a `#[cfg(not(test))]` module are no longer flagged as out-of-module
+unit-test calls (they previously exited 1). `#[cfg(test)]` and `#[cfg(all(test, …))]` modules are
+scored exactly as before. No public API change. Required changes: None.
 
 `unit mutation --language rust` no longer duplicates the `cargo-mutants` provisioning install
 under concurrent invocations (#385). A cold provisioning cache previously cost one from-source

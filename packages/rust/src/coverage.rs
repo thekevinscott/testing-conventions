@@ -1,4 +1,4 @@
-//! Coverage rule (Python — issue #26; TypeScript — issue #31; Rust — issue #37; exemptions — issue #32).
+//! Coverage rule.
 //!
 //! Enforces the README's Coverage rule: a library's unit suite must meet the
 //! configured floor, with test files excluded from the denominator. This module
@@ -7,19 +7,19 @@
 //! (shelling out to the language's coverage tool) is a thin layer on top, kept
 //! separate so the guarantee is testable without that toolchain installed.
 //!
-//! Python (#26) uses coverage.py: a single total, branch coverage on. Given a
+//! Python uses coverage.py: a single total, branch coverage on. Given a
 //! [`CoverageReport`] and [`Thresholds`], [`evaluate`] decides pass/fail, and
-//! [`measure`] shells out to `coverage`. TypeScript (#31) is the twin: vitest
+//! [`measure`] shells out to `coverage`. TypeScript is the twin: vitest
 //! reports four independent metrics (lines / branches / functions / statements),
 //! so it carries its own [`TypeScriptThresholds`], [`VitestReport`], and
 //! [`evaluate_typescript`] / [`measure_typescript`] pair — sharing only the
-//! [`Outcome`] type. Its subprocess layer shells out to `vitest`. Rust (#37) is
+//! [`Outcome`] type. Its subprocess layer shells out to `vitest`. Rust is
 //! the third twin: `cargo llvm-cov` reports regions/lines (branch coverage is
 //! experimental), so it carries [`RustThresholds`], [`LlvmCovReport`], and
 //! [`evaluate_rust`] / [`measure_rust`]; its subprocess layer shells out to
 //! `cargo llvm-cov`.
 //!
-//! Files exempted from coverage in config (issue #32) are omitted from the
+//! Files exempted from coverage in config are omitted from the
 //! denominator alongside the test files; the caller resolves them
 //! ([`crate::config::resolve_exempt`]) and passes their paths to [`measure`] /
 //! [`measure_typescript`] / [`measure_rust`].
@@ -38,7 +38,7 @@ const TEST_OMIT: &str = "*_test.py";
 
 /// Also always omitted: `conftest.py` holds pytest fixtures (test support), never
 /// a coverage subject. `*conftest.py` matches it at any depth, mirroring the
-/// `*_test.py` glob. (#112)
+/// `*_test.py` glob.
 const SUPPORT_OMIT: &str = "*conftest.py";
 
 /// The coverage floor to enforce, from a `[<language>].coverage` table.
@@ -52,7 +52,7 @@ pub struct Thresholds {
 
 /// A coverage.py JSON report (`coverage json`), pared to what the checks need:
 /// the `totals` (the floor) and the per-file `files` block (patch
-/// coverage, #132). Unmodeled fields (metadata, per-function/class data) are
+/// coverage). Unmodeled fields (metadata, per-function/class data) are
 /// ignored.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CoverageReport {
@@ -65,7 +65,7 @@ pub struct CoverageReport {
 }
 
 /// Per-file coverage detail from a coverage.py report (one `files` entry) — what
-/// patch coverage (#132) reads to decide whether a changed line is covered.
+/// patch coverage reads to decide whether a changed line is covered.
 /// Unmodeled fields (the summary, per-function/class data) are ignored.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct FileCoverage {
@@ -86,7 +86,7 @@ pub struct FileCoverage {
     pub missing_branches: Vec<Vec<i64>>,
     /// `[source_line, dest_line]` pairs for branches the suite DID take (coverage.py
     /// emits these alongside `missing_branches` under `--branch`). The diff-scoped
-    /// floor (#162) counts an arc toward changed-line branch coverage when its source
+    /// floor counts an arc toward changed-line branch coverage when its source
     /// line is in the diff; with `missing_branches` it gives branch coverage over the
     /// changed lines. Empty when branch coverage was off.
     #[serde(default)]
@@ -157,7 +157,7 @@ pub fn measure(root: &Path, thresholds: Thresholds, omit: &[String]) -> Result<O
 /// Run the Python unit suite under coverage.py in `root` with **every** source
 /// under `root` measured (`coverage run --source=.`) and return the parsed report
 /// — so an untested source shows in the `files` block as wholly uncovered rather
-/// than vanishing. The per-file detail is what patch coverage (#132) reads; `omit`
+/// than vanishing. The per-file detail is what patch coverage reads; `omit`
 /// is as in [`measure`] (an exempt file stays out of the run, so its changed
 /// lines are lifted).
 pub fn measure_patch_report(root: &Path, omit: &[String]) -> Result<CoverageReport> {
@@ -167,7 +167,7 @@ pub fn measure_patch_report(root: &Path, omit: &[String]) -> Result<CoverageRepo
 /// Run the Python unit suite under coverage.py in `root` and return the parsed report
 /// with its per-file `files` detail — measuring only the files the suite imports (no
 /// `--source=.`), exactly as the whole-tree floor [`measure`] does. The line-scoped
-/// exemption path (#226) reads this: it recomputes the floor over the measured lines
+/// exemption path reads this: it recomputes the floor over the measured lines
 /// minus the exempt ones, so it must see the same file set [`measure`] does (an
 /// untested-but-unimported file is out of scope for both), not the wider `--source=.`
 /// set [`measure_patch_report`] uses for the diff. `omit` is as in [`measure`].
@@ -234,7 +234,6 @@ fn run_coverage(root: &Path, omit: &[String], include_all_sources: bool) -> Resu
         );
     }
 
-    // Emit the report to stdout and parse it.
     let json = Command::new("coverage")
         .current_dir(root)
         .args(["json", "-o", "-"])
@@ -265,8 +264,7 @@ fn build_omit(omit: &[String]) -> String {
         .join(",")
 }
 
-// ---------------------------------------------------------------------------
-// TypeScript (vitest) — issue #31.
+// TypeScript (vitest).
 //
 // The TypeScript twin of the Python rule above. vitest reports four independent
 // metrics rather than Python's single total-plus-branch, so it carries its own
@@ -274,7 +272,6 @@ fn build_omit(omit: &[String]) -> String {
 // The split is the same: a pure `evaluate_typescript` over a parsed json-summary
 // report, and a thin `measure_typescript` that shells out to vitest to produce
 // one — so the enforcement core is testable without a Node toolchain.
-// ---------------------------------------------------------------------------
 
 /// What vitest measures: every TypeScript source under the scanned root. The
 /// braces are a vitest (picomatch) glob, expanded by vitest, not the shell.
@@ -495,8 +492,8 @@ fn run_vitest(root: &Path, exclude: &[String]) -> Result<VitestReport> {
 }
 
 /// Run vitest coverage over the unit suite in `root` and return the raw contents
-/// of the `report_file` the `reporter` wrote. Shared by the floor (#31, the
-/// `json-summary` → `coverage-summary.json` pair) and patch coverage (#135, the
+/// of the `report_file` the `reporter` wrote. Shared by the floor (the
+/// `json-summary` → `coverage-summary.json` pair) and patch coverage (the
 /// detailed `json` → `coverage-final.json` Istanbul pair) — the two differ only in
 /// the reporter and how they parse it.
 ///
@@ -563,15 +560,13 @@ fn run_vitest_coverage(
     })
 }
 
-// ---------------------------------------------------------------------------
-// TypeScript diff-scoped coverage detail — issues #135, #162.
+// TypeScript diff-scoped coverage detail.
 //
 // What the diff-scoped floor (`crate::patch_coverage::measure_typescript`) reads:
 // per-file coverage detail for the four vitest metrics. vitest's `json-summary`
 // gives only per-file totals, so this measures with the detailed `json` (Istanbul
 // `coverage-final.json`) reporter and reduces each file to the per-statement /
 // per-branch-arm / per-function `(line, covered)` counts the floor's ratio needs.
-// ---------------------------------------------------------------------------
 
 /// One file's entry in a vitest v8 `coverage-final.json` (Istanbul) report, pared
 /// to what patch coverage reads: the statement / branch / function maps and their
@@ -593,7 +588,7 @@ struct IstanbulFile {
     #[serde(default)]
     b: BTreeMap<String, Vec<u64>>,
     /// Function id → declaration location. A function whose hit count in `f` is `0`
-    /// was never called. The diff-scoped floor (#162) reads this via
+    /// was never called. The diff-scoped floor reads this via
     /// [`istanbul_patch_detail`].
     #[serde(rename = "fnMap", default)]
     fn_map: BTreeMap<String, IstanbulFn>,
@@ -631,7 +626,7 @@ struct IstanbulFn {
 }
 
 /// Per-file coverage detail from a vitest v8 `coverage-final.json` (Istanbul)
-/// report — the counts the diff-scoped floor (#162) needs. Each entry carries the
+/// report — the counts the diff-scoped floor needs. Each entry carries the
 /// Istanbul maps reduced to `(line, …, covered)` tuples, so the pure
 /// [`crate::patch_coverage::evaluate_patch_typescript`] can restrict each of the
 /// four metrics to the changed lines.
@@ -654,7 +649,7 @@ pub struct TsPatchCoverage {
 /// Run the TypeScript unit suite under vitest in `root` and return the per-file
 /// coverage detail for the four metrics — keyed by the absolute path vitest
 /// reports, the caller re-keying to `root`-relative to match the diff. Reads the
-/// Istanbul report for the diff-scoped floor (#162): the per-statement /
+/// Istanbul report for the diff-scoped floor: the per-statement /
 /// per-branch-arm / per-function `(line, covered)` detail the floor's ratio needs.
 /// `exclude` is the `coverage`-rule exemptions,
 /// dropped from the run so an exempt file's changed lines are lifted. `npx`
@@ -707,22 +702,20 @@ fn istanbul_patch_detail(json: &str) -> Result<BTreeMap<String, TsPatchCoverage>
     Ok(out)
 }
 
-// ---------------------------------------------------------------------------
-// Rust (cargo llvm-cov) — issue #37.
+// Rust (cargo llvm-cov).
 //
 // The Rust twin of the rules above. `cargo llvm-cov` reports LLVM source-based
 // coverage as regions + lines (branch coverage is still experimental), so the
 // Rust rule carries its own thresholds and `measure_rust` entry point; only the
 // `Outcome` type is shared. Mirroring the Python/TypeScript split, a pure
 // `evaluate_rust` over a parsed llvm-cov export and the thin subprocess layer
-// that produces one land with the implementation (#37).
-// ---------------------------------------------------------------------------
+// that produces one land with the implementation.
 
 /// The `cargo llvm-cov` coverage floors, from a `[rust].coverage` table (or the
 /// zero-config default). `lines` is always enforced; the rest are opt-in — `None`
-/// skips the check (the zero-config default floors lines only, #206). A `branch`
+/// skips the check (the zero-config default floors lines only). A `branch`
 /// floor adds `--branch` to the run, which instruments only on a nightly
-/// toolchain (#267).
+/// toolchain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RustThresholds {
     pub regions: Option<u8>,
@@ -748,7 +741,7 @@ pub struct LlvmCovData {
 
 /// The `totals` block of an llvm-cov export — the metrics this rule can enforce:
 /// regions and lines always, `functions` and (under `--branch`) `branches` when
-/// their opt-in floors are set (#267). llvm-cov also reports `instantiations` and
+/// their opt-in floors are set. llvm-cov also reports `instantiations` and
 /// `mcdc`, which the check ignores. `branches` is optional-with-default so an
 /// export from a run without branch instrumentation still parses (it then reads
 /// `count = 0`).
@@ -795,7 +788,7 @@ pub fn evaluate_rust(report: &LlvmCovReport, thresholds: RustThresholds) -> Outc
             "the unit suite measured no code — check the path and that the suite runs".to_string(),
         );
     }
-    // `regions`, `functions`, and `branch` are opt-in (#206, #267): the zero-config
+    // `regions`, `functions`, and `branch` are opt-in: the zero-config
     // default floors lines only, so each check is skipped unless a config set its
     // floor.
     let mut checks: Vec<(&str, f64, u8)> = Vec::new();
@@ -840,7 +833,7 @@ pub fn evaluate_rust(report: &LlvmCovReport, thresholds: RustThresholds) -> Outc
 /// `ignore` from the denominator (a single `--ignore-filename-regex`), then
 /// evaluates the export. `ignore` holds the `coverage`-rule exemptions resolved
 /// from config, as `root`-relative paths; `features` the `[rust] features` list to
-/// enable on the run (#266). `cargo-llvm-cov` must be installed.
+/// enable on the run. `cargo-llvm-cov` must be installed.
 pub fn measure_rust(
     root: &Path,
     thresholds: RustThresholds,
@@ -876,7 +869,7 @@ impl Drop for TargetDir {
 
 /// Run cargo llvm-cov over the unit suite in `root` and return the parsed
 /// `--summary-only` export — the totals the floor checks. `branch` adds
-/// `--branch` for a configured branch floor (#267).
+/// `--branch` for a configured branch floor.
 fn run_llvm_cov(
     root: &Path,
     ignore: &[String],
@@ -895,13 +888,13 @@ fn run_llvm_cov(
 /// Run `cargo llvm-cov --lib` over the unit suite in `root` with the given coverage
 /// `format` args (`["--json", "--summary-only"]` for the whole-tree floor's totals,
 /// `["--json"]` for the diff-scoped floor's per-region detail) and return its
-/// stdout. Shared by the whole-tree floor (#37) and the diff-scoped floor (#162),
-/// so both measure the same unit-only slice (#265).
+/// stdout. Shared by the whole-tree floor and the diff-scoped floor,
+/// so both measure the same unit-only slice.
 ///
 /// The build goes to an out-of-tree target dir (via `CARGO_TARGET_DIR`) so the
 /// scanned crate stays pristine; the `coverage`-rule exemptions become one
 /// `--ignore-filename-regex`; the `[rust] features` list is enabled on the run so
-/// `#[cfg(feature = ...)]` code is compiled and measured (#266); and the outer
+/// `#[cfg(feature = ...)]` code is compiled and measured; and the outer
 /// run's instrumentation env is stripped for nested-run hygiene (the loop below
 /// explains why).
 fn run_cargo_llvm_cov(
@@ -920,7 +913,7 @@ fn run_cargo_llvm_cov(
         // `--lib` scopes the run to the unit suite — the library target with its
         // inline `#[cfg(test)]` modules, the tool's definition of a Rust unit.
         // cargo-llvm-cov's default runs every test target, which lets the
-        // integration tier under `tests/` pad the number (#265).
+        // integration tier under `tests/` pad the number.
         .arg("--lib")
         .args(format)
         .env("CARGO_TARGET_DIR", &target.0);
@@ -928,7 +921,7 @@ fn run_cargo_llvm_cov(
         command.arg("--features").arg(features.join(","));
     }
     if branch {
-        // A configured branch floor measures branch outcomes (#267); the flag
+        // A configured branch floor measures branch outcomes; the flag
         // instruments only on a nightly toolchain — the error below names that.
         command.arg("--branch");
     }
@@ -958,7 +951,7 @@ fn run_cargo_llvm_cov(
         "__CARGO_LLVM_COV_RUSTC_WRAPPER",
         "__CARGO_LLVM_COV_RUSTC_WRAPPER_RUSTFLAGS",
         "__CARGO_LLVM_COV_RUSTC_WRAPPER_CRATE_NAMES",
-        // Toolchain hygiene (#267): when this tool is itself spawned by a cargo
+        // Toolchain hygiene: when this tool is itself spawned by a cargo
         // process (a test harness, an xtask), cargo/rustup export the *spawning*
         // toolchain into the environment, and rustup gives those variables
         // precedence over the scanned crate's own `rust-toolchain.toml`. The
@@ -996,7 +989,7 @@ fn run_cargo_llvm_cov(
 }
 
 /// Per-file region detail from a `cargo llvm-cov --json` export — the per-region
-/// counts the diff-scoped floor (#162) needs. Each entry carries one
+/// counts the diff-scoped floor needs. Each entry carries one
 /// `(start_line, end_line, covered)` tuple per code region, so the pure
 /// [`crate::patch_coverage::evaluate_patch_rust`] can restrict both the regions and
 /// lines metrics to the changed lines.
@@ -1051,7 +1044,7 @@ struct LlvmCovFunction {
 /// Run the Rust unit suite under `cargo llvm-cov` in `root` and return the per-file
 /// region detail — keyed by the absolute path llvm-cov reports, the caller re-keying
 /// to `root`-relative to match the diff. Reads the full `--json` export for the
-/// diff-scoped floor (#162): the per-region `(line, covered)` detail the floor's
+/// diff-scoped floor: the per-region `(line, covered)` detail the floor's
 /// regions metric needs. `ignore` is the `coverage`-rule exemptions, dropped
 /// from the run so an exempt file's changed lines are lifted. `cargo-llvm-cov` must
 /// be installed.
@@ -1061,7 +1054,7 @@ pub fn measure_patch_rust_detail(
     features: &[String],
 ) -> Result<BTreeMap<String, RustPatchCoverage>> {
     // The diff-scoped floor judges regions + lines, so its run never adds
-    // `--branch` (#267).
+    // `--branch`.
     llvm_cov_patch_detail(&run_cargo_llvm_cov(
         root,
         ignore,
@@ -1235,7 +1228,7 @@ mod tests {
     #[test]
     fn parses_the_per_file_block_for_patch_coverage() {
         // A realistic `coverage json` shape: a `files` map carrying the per-file
-        // missing lines and `[src, dst]` branch pairs patch coverage (#132) reads.
+        // missing lines and `[src, dst]` branch pairs patch coverage reads.
         let json = r#"{
             "files": {
                 "widget.py": {
@@ -1278,8 +1271,6 @@ mod tests {
             "*_test.py,*conftest.py,pkg/gen.py,shim.py"
         );
     }
-
-    // --- TypeScript (vitest) — issue #31 ---
 
     fn metric(pct: f64) -> VitestMetric {
         VitestMetric {
@@ -1444,8 +1435,6 @@ mod tests {
         assert!(parse_vitest_report(json).is_err());
     }
 
-    // --- Rust (cargo llvm-cov) — issue #37 ---
-
     fn rust_metric(percent: f64) -> LlvmCovMetric {
         LlvmCovMetric {
             count: 10,
@@ -1468,7 +1457,7 @@ mod tests {
     }
 
     /// Like [`rust_report`] with explicit functions/branches metrics — the opt-in
-    /// floors' tests (#267). `branches: (count, percent)` so the vacuous
+    /// floors' tests. `branches: (count, percent)` so the vacuous
     /// zero-denominator case is constructible.
     fn rust_report_full(
         regions: f64,
@@ -1508,7 +1497,7 @@ mod tests {
 
     #[test]
     fn rust_functions_floor_fails_below_and_passes_at_its_bar() {
-        // The opt-in functions floor (#267) is judged on the export's functions
+        // The opt-in functions floor is judged on the export's functions
         // total: 66.67% fails a 100 floor naming the metric, and clears 60.
         let report = rust_report_full(100.0, 100.0, 66.67, (0, 0.0));
         let floor = |functions| RustThresholds {
@@ -1526,7 +1515,7 @@ mod tests {
 
     #[test]
     fn rust_branch_floor_fails_below_and_passes_at_its_bar() {
-        // The opt-in branch floor (#267) is judged on the branches total of a
+        // The opt-in branch floor is judged on the branches total of a
         // `--branch` run: 50% fails a 100 floor naming the metric, and clears 50.
         let report = rust_report_full(100.0, 100.0, 100.0, (2, 50.0));
         let floor = |branch| RustThresholds {
@@ -1590,7 +1579,7 @@ mod tests {
 
     #[test]
     fn rust_skips_the_region_check_when_regions_is_opt_out() {
-        // The zero-config default (#206) sets `regions: None`, so only lines are
+        // The zero-config default sets `regions: None`, so only lines are
         // enforced: a crate at 100% lines clears the floor even with low regions.
         let thresholds = RustThresholds {
             regions: None,
@@ -1681,8 +1670,6 @@ mod tests {
         assert_eq!(report.data[0].totals.regions.percent, 75.0);
         assert_eq!(report.data[0].totals.lines.count, 20);
     }
-
-    // --- Rust diff-scoped region detail (`cargo llvm-cov --json`) — issue #162 ---
 
     #[test]
     fn llvm_cov_patch_detail_reads_code_regions_per_file() {

@@ -1,5 +1,5 @@
 //! Integration tests for the `functions` and `branch` floors on the Rust
-//! coverage config (#267): both keys are part of the `[rust].coverage` schema,
+//! coverage config: both keys are part of the `[rust].coverage` schema,
 //! accepted by the loader's self-guard alongside `regions` and `lines`.
 //!
 //! Red until the floors land: today the config self-guard

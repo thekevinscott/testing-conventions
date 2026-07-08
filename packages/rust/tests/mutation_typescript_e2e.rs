@@ -1,7 +1,7 @@
-//! E2E tests for the TypeScript mutation rule (#202): drive the built CLI binary
+//! E2E tests for the TypeScript mutation rule: drive the built CLI binary
 //! end-to-end (no mocks) against the fixture projects and assert the exit code.
 //!
-//! The binary spawns the bundled Node mutation adapter (#246); in production the npm
+//! The binary spawns the bundled Node mutation adapter; in production the npm
 //! launcher appends its path as `--ts-mutation-adapter`, so these tests pass the freshly-built
 //! adapter ([`common::ts_adapter`]) the same way on each invocation. The fixtures are
 //! **runner-only** (vitest): the tool bundles and drives Stryker; the project provides only its

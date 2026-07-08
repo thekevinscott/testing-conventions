@@ -191,6 +191,16 @@ Internal modules in this repo are **not** underscore-prefixed — an empty `__in
 "nothing public here." This is our convention for *this* library's source; it is not a rule we
 impose on consumers, who name their modules however they like.
 
+A comment earns its place by saying something the code cannot. Public API doc comments (`///`,
+`//!`, TSDoc, docstrings) document the interface; a comment on non-obvious code records a constraint
+or invariant the reader needs — a platform quirk, an ordering requirement, a subprocess contract, a
+spec the ecosystem left unnamed. Everything else is noise, and three kinds recur in LLM-drafted
+code: **issue/PR archaeology** (citing `(#74)` or `issue #26` to mark when a change landed — that
+history lives in git blame, not the source), **code restatement** (paraphrasing the line it sits
+on), and **reviewer-directed justification** (arguing a choice is correct to an imagined reviewer).
+Drop all three; a retained comment states a positive fact in the **Affirmative voice**. Banner
+dividers and decorative separators (`// -----`) are noise too.
+
 ## Docs-only changes
 
 A PR that touches **only** documentation — the `docs/` site and Markdown files like `README.md` / `AGENTS.md`, with nothing under `packages/` — changes no tested behavior, so the red/green workflow above is skipped: no red integration/e2e tests, and nothing needs to go red on CI first. The rest of the bar holds — every existing test stays green and the docs site still builds — so go straight to the change.

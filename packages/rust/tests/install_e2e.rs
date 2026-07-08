@@ -1,4 +1,4 @@
-//! E2E tests for `install` (#353 follow-up): drive the built CLI binary with
+//! E2E tests for `install`: drive the built CLI binary with
 //! no mocks and assert the block it writes points only at pages that exist —
 //! the docs site root and the machine-readable contract (`llms.txt`), with the
 //! removed CLI guide page unlinked.

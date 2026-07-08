@@ -1,13 +1,12 @@
-//! Diff-scoped coverage floor (Python — #132; TypeScript — #135; Rust — #136;
-//! folded into `unit coverage --base` — #162; parent #46).
+//! Diff-scoped coverage floor.
 //!
 //! Enforces the README Coverage rule over the lines a diff touches: where
-//! [`crate::coverage`] measures the *whole* suite against the configured floor
-//! (#26), the `measure*` functions here measure that same floor over only the
+//! [`crate::coverage`] measures the *whole* suite against the configured floor,
+//! the `measure*` functions here measure that same floor over only the
 //! lines `<base>...HEAD` added or modified — `covered ÷ total-changed-executable`,
 //! against the thresholds `unit coverage` enforces whole-tree. `unit coverage
 //! --base` routes here, so a diff that clears the configured floor passes even with
-//! an uncovered changed line, and one below it fails no matter how small (#162).
+//! an uncovered changed line, and one below it fails no matter how small.
 //!
 //! Two inputs are combined:
 //!   - the **diff** — [`changed_lines`] runs `git diff --unified=0 <base>...HEAD`
@@ -26,7 +25,7 @@
 //!     blanks) and `coverage`-exempt files have nothing to cover and drop out of the
 //!     ratio.
 //!
-//! Relationship to the commit-scoped co-change rule ([`crate::co_change`], #33):
+//! Relationship to the commit-scoped co-change rule ([`crate::co_change`]):
 //! co-change enforces that a changed source and its colocated *test* move
 //! together; the diff-scoped floor enforces that the changed *lines* are actually
 //! exercised. They are complementary, not overlapping — co-change can pass (the
@@ -49,7 +48,7 @@ use crate::coverage::{
 /// lines find nothing to cover and are skipped without a special case here.
 const TS_EXTENSIONS: [&str; 4] = [".ts", ".tsx", ".mts", ".cts"];
 
-/// Diff-scoped Python coverage floor (#162): measure `thresholds` over the
+/// Diff-scoped Python coverage floor: measure `thresholds` over the
 /// `<base>...HEAD` changed `.py` lines instead of the whole tree. `omit` is the
 /// `coverage`-rule exemptions, as in [`crate::coverage::measure`] — an exempt file
 /// is omitted from the run, so its changed lines drop out of the ratio.
@@ -76,7 +75,7 @@ pub fn measure(
     Ok(evaluate_patch(&changed, &files, thresholds))
 }
 
-/// Drop the line-scoped `coverage` exemptions (#226) from a `--base` diff's changed-line
+/// Drop the line-scoped `coverage` exemptions from a `--base` diff's changed-line
 /// set, so a changed line that is line-exempt is lifted from the diff floor — the
 /// counterpart to a whole-file exemption dropping the file. The over-exemption guard is
 /// the whole-tree floor's job ([`measure_line_exempt`], the `unit coverage` job the
@@ -104,7 +103,7 @@ fn lift_exempt_lines(
 /// `branch`, a branch arc counts toward the ratio when its source line is in the diff
 /// — taken arcs as covered, untaken as missed — exactly as the whole-tree total folds
 /// branches in. No small-diff carve-out: a tiny diff below the floor fails like any
-/// other (#162).
+/// other.
 fn evaluate_patch(
     changed: &BTreeMap<String, BTreeSet<u64>>,
     files: &BTreeMap<String, FileCoverage>,
@@ -180,7 +179,7 @@ fn arc_source_in(arc: &[i64], lines: &BTreeSet<u64>) -> bool {
         .is_some_and(|src| lines.contains(&src))
 }
 
-/// Diff-scoped TypeScript coverage floor (#162): the four vitest metrics measured
+/// Diff-scoped TypeScript coverage floor: the four vitest metrics measured
 /// over the `<base>...HEAD` changed `.ts`/`.tsx`/`.mts`/`.cts` lines instead of the
 /// whole tree. `exclude` is the `coverage`-rule exemptions, as in
 /// [`crate::coverage::measure_typescript`] — an excluded file is left out of the
@@ -230,7 +229,7 @@ pub fn measure_typescript(
 /// returns (a diff may legitimately touch no branches or functions). The fail
 /// message lists every metric below its floor, matching
 /// [`coverage::evaluate_typescript`]'s. No small-diff carve-out: a tiny diff below
-/// the floor fails like any other (#162).
+/// the floor fails like any other.
 fn evaluate_patch_typescript(
     changed: &BTreeMap<String, BTreeSet<u64>>,
     detail: &BTreeMap<String, coverage::TsPatchCoverage>,
@@ -329,7 +328,7 @@ fn evaluate_patch_typescript(
     }
 }
 
-/// Diff-scoped Rust coverage floor (#162): the `cargo llvm-cov` regions/lines
+/// Diff-scoped Rust coverage floor: the `cargo llvm-cov` regions/lines
 /// metrics measured over the `<base>...HEAD` changed `.rs` lines instead of the
 /// whole tree. `ignore` is the `coverage`-rule exemptions, as in
 /// [`crate::coverage::measure_rust`] — an exempt file is dropped from the run, so
@@ -375,7 +374,7 @@ pub fn measure_rust(
 /// code" failure the whole-tree [`coverage::evaluate_rust`] returns (a diff may
 /// legitimately touch no measured region). The fail message lists every metric below
 /// its floor, matching [`coverage::evaluate_rust`]'s. No small-diff carve-out: a tiny
-/// diff below the floor fails like any other (#162).
+/// diff below the floor fails like any other.
 fn evaluate_patch_rust(
     changed: &BTreeMap<String, BTreeSet<u64>>,
     detail: &BTreeMap<String, coverage::RustPatchCoverage>,
@@ -428,7 +427,7 @@ fn evaluate_patch_rust(
             100.0 * covered as f64 / total as f64
         }
     };
-    // `regions` is opt-in (#206): skip the region check unless a config set a floor,
+    // `regions` is opt-in: skip the region check unless a config set a floor,
     // matching the whole-tree `coverage::evaluate_rust`.
     let mut checks: Vec<(&str, f64, u8)> = Vec::new();
     if let Some(regions) = thresholds.regions {
@@ -556,8 +555,7 @@ fn relative_keys<V>(files: BTreeMap<String, V>, root: &Path) -> BTreeMap<String,
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// Line-scoped coverage exemptions — issue #226.
+// Line-scoped coverage exemptions.
 //
 // A `coverage` exemption with a `lines` list excuses only those lines from the floor,
 // not the whole file. No coverage tool excludes individual line *numbers* from the
@@ -566,9 +564,8 @@ fn relative_keys<V>(files: BTreeMap<String, V>, root: &Path) -> BTreeMap<String,
 // diff-scoped floor reads — the measured lines minus the exempt ones. A determinism
 // guard (the counterpart to the stale-path rule) keeps the list honest: every listed
 // line must be genuinely uncovered, and an unlisted uncovered line still fails.
-// ---------------------------------------------------------------------------
 
-/// Diff-free Python coverage floor with line-scoped exemptions (#226): measure
+/// Diff-free Python coverage floor with line-scoped exemptions: measure
 /// `thresholds` over every measured line *except* the `exempt_lines`. `omit` is the
 /// whole-file `coverage` exemptions, as in [`crate::coverage::measure`]. Requires
 /// coverage.py + pytest. The line-exempt path runs only when `exempt_lines` is
@@ -590,7 +587,7 @@ pub fn measure_line_exempt(
     Ok(floor_outcome(covered, total, thresholds.fail_under))
 }
 
-/// TypeScript twin of [`measure_line_exempt`] (#226): the four vitest metrics measured
+/// TypeScript twin of [`measure_line_exempt`]: the four vitest metrics measured
 /// over every measured line except the `exempt_lines`. `exclude` is the whole-file
 /// `coverage` exemptions, as in [`crate::coverage::measure_typescript`]. Requires
 /// vitest + `@vitest/coverage-v8`.
@@ -612,7 +609,7 @@ pub fn measure_line_exempt_typescript(
     Ok(evaluate_patch_typescript(&line_set, &detail, thresholds))
 }
 
-/// Rust twin of [`measure_line_exempt`] (#226): the `cargo llvm-cov` regions/lines
+/// Rust twin of [`measure_line_exempt`]: the `cargo llvm-cov` regions/lines
 /// metrics measured over every measured line except the `exempt_lines`. `ignore` is the
 /// whole-file `coverage` exemptions, as in [`crate::coverage::measure_rust`]. Requires
 /// `cargo-llvm-cov`.
@@ -738,7 +735,7 @@ fn rust_measured_missed(
 }
 
 /// The per-file line set the floor is measured over — every measured line minus the
-/// exempt ones — after the #226 determinism guard. Each exempt line must be in its
+/// exempt ones — after the determinism guard. Each exempt line must be in its
 /// file's `missed` set (genuinely failing); a listed line that is covered, or carries
 /// no measured code, is a hard error so the exemption can't excuse working code.
 fn apply_line_exemptions(
@@ -789,8 +786,6 @@ mod tests {
             .map(|(path, lines)| (path.to_string(), lines.iter().copied().collect()))
             .collect()
     }
-
-    // ---- parse_unified_diff --------------------------------------------------
 
     #[test]
     fn parses_added_lines_from_a_hunk() {
@@ -864,8 +859,6 @@ mod tests {
         );
     }
 
-    // ---- evaluate_patch (diff-scoped floor, #162) ---------------------------
-
     fn cov(
         executed: &[u64],
         missing: &[u64],
@@ -908,7 +901,7 @@ mod tests {
 
     #[test]
     fn patch_the_same_diff_clears_a_lower_floor() {
-        // The #162 behavior: 75% passes a 70 floor despite the uncovered line.
+        // 75% passes a 70 floor despite the uncovered line.
         let files = BTreeMap::from([("w.py".to_string(), cov(&[1, 2, 3], &[4], &[], &[]))]);
         let floor_70 = Thresholds {
             fail_under: 70,
@@ -966,8 +959,6 @@ mod tests {
             Outcome::Pass
         );
     }
-
-    // ---- evaluate_patch_typescript (diff-scoped TS floor, #162) -------------
 
     use coverage::TsPatchCoverage;
 
@@ -1030,7 +1021,7 @@ mod tests {
 
     #[test]
     fn ts_patch_the_same_diff_clears_a_lower_floor() {
-        // The #162 behavior: the 75% diff passes a 70 floor despite the uncovered line.
+        // The 75% diff passes a 70 floor despite the uncovered line.
         let detail = ts_detail(&[(
             "w.ts",
             TsPatchCoverage {
@@ -1157,8 +1148,6 @@ mod tests {
         );
     }
 
-    // ---- evaluate_patch_rust (diff-scoped Rust floor, #162) -----------------
-
     use coverage::RustPatchCoverage;
 
     fn rust_detail(entries: &[(&str, RustPatchCoverage)]) -> BTreeMap<String, RustPatchCoverage> {
@@ -1212,7 +1201,7 @@ mod tests {
 
     #[test]
     fn rust_patch_the_same_diff_clears_a_lower_floor() {
-        // The #162 behavior: the 75% diff passes a 70 floor despite the uncovered region.
+        // The 75% diff passes a 70 floor despite the uncovered region.
         let detail = rust_detail(&[(
             "w.rs",
             RustPatchCoverage {
@@ -1233,7 +1222,7 @@ mod tests {
 
     #[test]
     fn rust_patch_skips_the_region_check_when_regions_is_opt_out() {
-        // The zero-config default (#206) sets `regions: None`, so the diff-scoped floor
+        // The zero-config default sets `regions: None`, so the diff-scoped floor
         // enforces lines only: a diff whose changed lines are all covered passes even
         // though one of its regions is uncovered (lines 1-4 are each covered by ≥1
         // region, but region 4 is not).
@@ -1352,8 +1341,6 @@ mod tests {
             "got: {out:?}"
         );
     }
-
-    // ---- line-scoped exemptions (#226) --------------------------------------
 
     fn exempt(entries: &[(&str, &[u32])]) -> BTreeMap<String, BTreeSet<u32>> {
         entries

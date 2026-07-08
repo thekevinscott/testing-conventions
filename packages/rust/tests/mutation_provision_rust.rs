@@ -1,4 +1,4 @@
-//! E2E test for the Rust mutation arm's engine provisioning (#242).
+//! E2E test for the Rust mutation arm's engine provisioning.
 //!
 //! The consumer installs nothing and never names cargo-mutants: the tool provisions the
 //! engine itself on first use — a pinned `cargo install` into its own cache directory —

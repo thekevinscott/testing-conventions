@@ -1,5 +1,4 @@
-//! Integration tests for the unit `colocated-test` check (Python — issue #15;
-//! TypeScript — issue #18; exemptions — issue #32; renamed from `location` in #55).
+//! Integration tests for the unit `colocated-test` check.
 //!
 //! A source file must have a *colocated* test named after it: `foo.py` →
 //! `foo_test.py`, `foo-bar.ts` → `foo-bar.test.ts`. `missing_unit_tests`
@@ -73,8 +72,6 @@ fn unit_colocated_test_exit(fixture_name: &str, language: &str) -> i32 {
     unit_colocated_test_run(fixture_name, language).expect("a readable tree should not error")
 }
 
-// ---- Python (#15) --------------------------------------------------------
-
 #[test]
 fn python_clean_tree_reports_no_orphans() {
     assert!(
@@ -114,8 +111,6 @@ fn python_subcommand_exits_nonzero_on_a_red_tree() {
     assert_eq!(unit_colocated_test_exit("red", "python"), 1);
 }
 
-// ---- conftest.py is pytest support, never a subject (#112) ---------------
-
 #[test]
 fn python_conftest_is_a_non_subject() {
     // conftest.py holds pytest fixtures — test support, not a unit under test
@@ -131,8 +126,6 @@ fn python_conftest_is_a_non_subject() {
 fn python_conftest_subcommand_exits_zero() {
     assert_eq!(unit_colocated_test_exit("python_conftest", "python"), 0);
 }
-
-// ---- TypeScript (#18) ----------------------------------------------------
 
 #[test]
 fn typescript_clean_tree_reports_no_orphans() {
@@ -165,8 +158,6 @@ fn typescript_subcommand_exits_nonzero_on_a_red_tree() {
     assert_eq!(unit_colocated_test_exit("typescript/red", "typescript"), 1);
 }
 
-// ---- Rust (#40 — inline `#[cfg(test)]` presence) -------------------------
-
 #[test]
 fn rust_clean_tree_exits_zero() {
     // Every source module with testable behavior carries an inline `#[cfg(test)]`
@@ -180,8 +171,6 @@ fn rust_red_tree_exits_nonzero() {
     // presence check must flag it; the correctly-tested `widget.rs` must not be.
     assert_eq!(unit_colocated_test_exit("rust/red", "rust"), 1);
 }
-
-// ---- Exemptions (#32) ----------------------------------------------------
 
 #[test]
 fn empty_init_is_a_non_subject_but_content_and_shims_are_orphans() {
@@ -234,8 +223,6 @@ fn a_stale_exempt_entry_is_an_error() {
     );
 }
 
-// ---- CLI surface (#22) ---------------------------------------------------
-
 /// Raw result of invoking the CLI with `args` after the program name, so a
 /// usage error (clap) can be asserted rather than unwrapped away.
 fn run_cli(args: &[&str]) -> anyhow::Result<i32> {
@@ -260,7 +247,7 @@ fn unit_colocated_test_requires_language() {
 
 #[test]
 fn the_flat_unit_location_subcommand_is_gone() {
-    // The pre-#22 flat form (`unit-location …`) no longer parses; the rule now
+    // The flat form (`unit-location …`) no longer parses; the rule now
     // lives at `unit colocated-test`.
     let err = run_cli(&["unit-location", "src"]).expect_err("the flat subcommand was removed");
     let clap_err = err
@@ -271,7 +258,7 @@ fn the_flat_unit_location_subcommand_is_gone() {
 
 #[test]
 fn the_old_unit_location_subcommand_is_renamed() {
-    // #55: the rule was renamed `location` → `colocated-test`, so the former
+    // The rule was renamed `location` → `colocated-test`, so the former
     // `unit location` no longer parses; only `unit colocated-test` does.
     let err = run_cli(&["unit", "location", "src"])
         .expect_err("`unit location` was renamed to `unit colocated-test`");
@@ -283,7 +270,7 @@ fn the_old_unit_location_subcommand_is_renamed() {
 
 #[test]
 fn the_unit_co_change_subcommand_is_folded_into_base() {
-    // #161: `unit co-change` was folded into `unit colocated-test --base`, so the
+    // `unit co-change` was folded into `unit colocated-test --base`, so the
     // standalone subcommand no longer parses.
     let err = run_cli(&[
         "unit",

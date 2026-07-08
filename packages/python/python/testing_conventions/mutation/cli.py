@@ -1,4 +1,4 @@
-"""The mutation adapter's orchestrator (#248), the Python counterpart of the TypeScript
+"""The mutation adapter's orchestrator, the Python counterpart of the TypeScript
 ``mutationCLI``: parse args, drive cosmic-ray in-process, and emit the normalized-results
 JSON the rust core gates on. A pure, importable function; ``main.py`` is the executable that
 runs it.

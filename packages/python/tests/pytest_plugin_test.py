@@ -1,4 +1,4 @@
-"""Integration tests for the ``testing_conventions`` pytest plugin (#218).
+"""Integration tests for the ``testing_conventions`` pytest plugin.
 
 Each test drives a real sub-pytest (``runpytest_subprocess``) over a tiny
 project, so the installed ``pytest11`` entry point auto-loads the plugin exactly

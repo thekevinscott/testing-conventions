@@ -1,5 +1,5 @@
 //! E2E tests for diff-scoped TypeScript coverage — `unit coverage --language
-//! typescript --base` (#162): drive the built CLI binary as a real subprocess
+//! typescript --base`: drive the built CLI binary as a real subprocess
 //! against throwaway git repos and assert the exit code (and, for a red case, the
 //! failure on stderr). Complements the in-process integration tests in
 //! `coverage_base_ts.rs`. Requires `git` + a Node toolchain with vitest installed;
@@ -225,7 +225,7 @@ fn ts_a_lower_configured_floor_lets_the_same_diff_pass() {
 
 #[test]
 fn ts_a_tiny_below_floor_diff_still_exits_nonzero() {
-    // No small-diff carve-out (#162): a single untested helper (a brand-new file the
+    // No small-diff carve-out: a single untested helper (a brand-new file the
     // suite never imports → 0% on its lines) fails the default floor.
     let repo = TempRepo::new("tiny");
     let base = baseline(&repo);

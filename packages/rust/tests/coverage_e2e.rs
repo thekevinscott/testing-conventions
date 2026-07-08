@@ -1,4 +1,4 @@
-//! E2E tests for the Python coverage rule (#26): drive the built CLI binary
+//! E2E tests for the Python coverage rule: drive the built CLI binary
 //! end-to-end (no mocks) against the fixture codebases and assert the exit code.
 //! Requires `coverage` + `pytest` on PATH.
 
@@ -39,23 +39,23 @@ fn full_exits_zero_against_a_100_floor() {
 #[test]
 fn conftest_omitted_exits_zero_against_a_100_floor() {
     // conftest_omit's conftest.py has an uncovered fixture body; the binary clears
-    // the 100 floor only by omitting conftest.py from the denominator (#112).
+    // the 100 floor only by omitting conftest.py from the denominator.
     assert_eq!(unit_coverage_exit("conftest_omit", "floor100.toml"), 0);
 }
 
 #[test]
 fn exempt_cov_exits_zero_against_a_100_floor() {
     // The config exempts shim.py from coverage, so the built binary omits it
-    // from the denominator and clears the 100 floor end-to-end (#32).
+    // from the denominator and clears the 100 floor end-to-end.
     assert_eq!(
         unit_coverage_exit("exempt_cov", "floor100_exempt_shim.toml"),
         0
     );
 }
 
-// Zero-config (#80): a `--config` pointing at a file that doesn't exist falls
+// Zero-config: a `--config` pointing at a file that doesn't exist falls
 // back to the default Python floor — the same way a brand-new library with no
-// `testing-conventions.toml` runs. That default is now 100 (#194), so only a
+// `testing-conventions.toml` runs. That default is now 100, so only a
 // fully-covered suite clears it: `full` (100%) passes, while `above_85` (~86%,
 // which cleared the old 85 default) and `below_85` (~71%) both fail.
 
@@ -66,7 +66,7 @@ fn full_exits_zero_with_no_config_via_the_default_floor() {
 
 #[test]
 fn above_85_exits_nonzero_with_no_config_via_the_default_floor() {
-    // ~86% cleared the old 85 default; the strict 100 default (#194) fails it.
+    // ~86% cleared the old 85 default; the strict 100 default fails it.
     assert_eq!(unit_coverage_exit("above_85", "no-such-config.toml"), 1);
 }
 

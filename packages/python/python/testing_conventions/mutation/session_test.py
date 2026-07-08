@@ -1,4 +1,4 @@
-"""Unit tests for the mutation adapter's cosmic-ray session (#248)."""
+"""Unit tests for the mutation adapter's cosmic-ray session."""
 from pathlib import Path
 from types import SimpleNamespace
 

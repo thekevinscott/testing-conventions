@@ -1,14 +1,14 @@
-//! Integration tests for diff-scoped coverage — `unit coverage --base` (#162).
+//! Integration tests for diff-scoped coverage — `unit coverage --base`.
 //!
 //! Folds the old `unit patch-coverage` into the coverage floor: with `--base`, the
 //! SAME configured floor is measured over the `<base>...HEAD` diff (the changed
 //! lines) instead of the whole tree. Unlike the implicit-100% patch-coverage it
 //! replaces, a changed line is judged against the configured floor — a diff that
 //! clears it passes even with an uncovered line, and one below it fails however
-//! small the diff (no small-diff carve-out, per the #162 decision).
+//! small the diff (no small-diff carve-out).
 //!
-//! Each test builds a throwaway git repo (the codebases are the fixtures, per the
-//! #3 guardrail) and runs REAL coverage.py over it via the SDK
+//! Each test builds a throwaway git repo (the codebases are the fixtures) and
+//! runs REAL coverage.py over it via the SDK
 //! (`patch_coverage::measure`) and the CLI (`run`). Requires `coverage` + `pytest`
 //! + `git` on PATH.
 //!
@@ -177,8 +177,6 @@ fn baseline(repo: &TempRepo) -> String {
     repo.head()
 }
 
-// ---- The floor is measured over the diff (SDK `measure`) ------------------
-
 #[test]
 fn a_diff_below_the_floor_fails() {
     // The core red case: the 75%-covered diff is below the 85 floor under test,
@@ -244,7 +242,7 @@ def test_widget():
 
 #[test]
 fn a_tiny_below_floor_diff_is_not_exempted() {
-    // The #162 decision: there is no small-diff carve-out. A two-line diff (a
+    // There is no small-diff carve-out. A two-line diff (a
     // single untested helper: the `def` runs at import, its `return` never does →
     // 50%) fails the 85 floor just like a large one would.
     let repo = TempRepo::new("tiny");
@@ -298,12 +296,10 @@ fn an_unknown_base_ref_is_an_error() {
     );
 }
 
-// ---- Exit codes via the CLI (`run`) --------------------------------------
-
 #[test]
 fn cli_exits_nonzero_on_a_below_floor_diff() {
-    // No config, so the diff is judged against the default Python floor (now 100,
-    // #194); the 75% diff is below it → exit 1.
+    // No config, so the diff is judged against the default Python floor (now 100);
+    // the 75% diff is below it → exit 1.
     let repo = TempRepo::new("cli-red");
     let base = baseline(&repo);
     repo.write("widget.py", WIDGET_PY_75);
@@ -361,11 +357,9 @@ fn cli_a_lower_configured_floor_lets_the_same_diff_pass() {
     );
 }
 
-// ---- Exemptions (#32 machinery, rule `coverage`) -------------------------
-
 #[test]
 fn a_coverage_exemption_lifts_a_below_floor_change() {
-    // A line-scoped `coverage` exemption (#226) lifts the shim's changed lines from the
+    // A line-scoped `coverage` exemption lifts the shim's changed lines from the
     // diff ratio — the same waiver the whole-tree floor honors, now line-scoped.
     let repo = TempRepo::new("exempt");
     repo.write(

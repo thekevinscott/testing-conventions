@@ -1,4 +1,4 @@
-//! E2E tests for the Rust `unit lint` rule (#44): drive the built CLI binary
+//! E2E tests for the Rust `unit lint` rule: drive the built CLI binary
 //! against the fixture crates and assert the exit code.
 
 use std::path::PathBuf;
@@ -32,7 +32,7 @@ fn clean_exits_zero() {
     assert_eq!(iso_exit("unit/clean"), 0);
 }
 
-// D2: foreign imports (#44)
+// D2: foreign imports
 #[test]
 fn imports_red_exits_nonzero() {
     assert_eq!(iso_exit("imports/red"), 1);
@@ -43,7 +43,7 @@ fn imports_clean_exits_zero() {
     assert_eq!(iso_exit("imports/clean"), 0);
 }
 
-// waivers (#102)
+// waivers
 #[test]
 fn waived_exits_zero() {
     let code = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))

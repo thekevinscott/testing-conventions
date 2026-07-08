@@ -1,4 +1,4 @@
-//! E2E tests for line-scoped mutation exemptions (#226): drive the built CLI binary
+//! E2E tests for line-scoped mutation exemptions: drive the built CLI binary
 //! end-to-end (no mocks) against the `survivors` / `killed` fixtures and assert the
 //! exit code and message.
 //!
@@ -50,8 +50,6 @@ fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
-// ---- Rust -----------------------------------------------------------------
-
 #[test]
 fn rust_exempting_the_survivor_line_passes() {
     // Line 7 (`n > 0`) is where every mutant survives; lifting just that line clears
@@ -79,8 +77,6 @@ fn rust_over_exempting_a_caught_line_is_a_hard_error() {
         stderr(&out)
     );
 }
-
-// ---- TypeScript -----------------------------------------------------------
 
 #[test]
 fn typescript_exempting_both_survivor_lines_passes() {
@@ -115,8 +111,6 @@ fn typescript_over_exempting_a_caught_line_is_a_hard_error() {
         stderr(&out)
     );
 }
-
-// ---- Python ---------------------------------------------------------------
 
 #[test]
 fn python_exempting_both_survivor_lines_passes() {

@@ -1,4 +1,4 @@
-//! E2E tests for diff-scoped coverage — `unit coverage --base` (#162): drive the
+//! E2E tests for diff-scoped coverage — `unit coverage --base`: drive the
 //! built CLI binary as a real subprocess against throwaway git repos and assert
 //! the exit code (and, for a red case, the failure on stderr). Complements the
 //! in-process integration tests in `coverage_base.rs`. Requires `coverage` +
@@ -210,7 +210,7 @@ fn a_lower_configured_floor_lets_the_same_diff_pass() {
 
 #[test]
 fn a_tiny_below_floor_diff_still_exits_nonzero() {
-    // No small-diff carve-out (#162): a single untested helper (50% on a two-line
+    // No small-diff carve-out: a single untested helper (50% on a two-line
     // diff) fails the default floor.
     let repo = TempRepo::new("tiny");
     let base = baseline(&repo);

@@ -1,4 +1,4 @@
-"""Unit tests for the cosmic-ray → normalized-schema mapping (#248)."""
+"""Unit tests for the cosmic-ray → normalized-schema mapping."""
 from types import SimpleNamespace
 
 from testing_conventions.mutation.normalize import normalize

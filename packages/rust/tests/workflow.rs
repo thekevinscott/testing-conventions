@@ -1,7 +1,7 @@
-//! Integration tests for the workflow guard (#92): exercise the library API over
+//! Integration tests for the workflow guard: exercise the library API over
 //! fixture workflow files. The guard: the reusable workflow's `testing-conventions`
 //! invocations must name subcommands the binary still exposes, so a rename like
-//! `unit location` → `unit colocated-test` (#55) can't strand the `@v0` path.
+//! `unit location` → `unit colocated-test` can't strand the `@v0` path.
 //!
 //! The e2e suite (`workflow_e2e.rs`) drives the same fixtures through the built
 //! binary; this checks the library contract directly, against the binary's own
@@ -29,7 +29,7 @@ fn clean_workflow_has_no_violations() {
 #[test]
 fn red_flags_the_renamed_subcommand() {
     let violations = workflow::check(fixture("red"), &command()).unwrap();
-    // `unit location` (renamed to `unit colocated-test`, #55) is on line 9.
+    // `unit location` (renamed to `unit colocated-test`) is on line 9.
     assert!(
         violations
             .iter()
@@ -41,7 +41,7 @@ fn red_flags_the_renamed_subcommand() {
 #[test]
 fn red_flags_the_old_flat_form() {
     let violations = workflow::check(fixture("red"), &command()).unwrap();
-    // The pre-#22 flat `unit-location` is gone entirely; it sits on line 11.
+    // The old flat `unit-location` is gone entirely; it sits on line 11.
     assert!(
         violations
             .iter()
@@ -71,7 +71,7 @@ fn invocations_are_extracted_from_the_shell() {
 
 #[test]
 fn workflow_command_is_hidden_from_help() {
-    // The `workflow` guard is private (#191): it stays in the binary (the drift guard needs
+    // The `workflow` guard is private: it stays in the binary (the drift guard needs
     // the in-process command tree) but must not appear in `--help`. Hidden, not removed.
     let cli = command();
     let workflow_cmd = cli

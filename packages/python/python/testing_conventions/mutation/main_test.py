@@ -1,4 +1,4 @@
-"""Unit test for the mutation adapter's executable entry (#248).
+"""Unit test for the mutation adapter's executable entry.
 
 Importing ``main`` runs ``mutation_cli(sys.argv[1:])`` at module top (the same top-level run
 ``python -m testing_conventions.mutation.main`` performs), so the test sets ``sys.argv`` and a

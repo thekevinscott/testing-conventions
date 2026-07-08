@@ -1,10 +1,9 @@
-//! Integration tests for the Python mutation rule (#203).
+//! Integration tests for the Python mutation rule.
 //!
 //! These run REAL cosmic-ray over the fixture projects via the SDK
 //! ([`mutation::measure_python`]), which spawns the bundled Python adapter (`python3 -m
-//! testing_conventions.mutation.main`, #248) to drive cosmic-ray in-process, and assert the
-//! surviving-mutant set — the Python parallel of the Rust (#201) and TypeScript (#202) arms.
-//! Per the #3 guardrail the
+//! testing_conventions.mutation.main`) to drive cosmic-ray in-process, and assert the
+//! surviving-mutant set — the Python parallel of the Rust and TypeScript arms. The
 //! *projects themselves* are the fixtures: `killed` (every mutant caught by an asserting
 //! test) reports no survivors, and `survivors` (an assertion-light test that runs the
 //! code but pins nothing) reports several — the gap mutation testing exposes that

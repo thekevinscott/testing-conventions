@@ -1,4 +1,4 @@
-//! E2E tests for the packaging rule's foundation (#70): drive the built CLI
+//! E2E tests for the packaging rule's foundation: drive the built CLI
 //! binary against fixture "artifact" trees and assert the exit code. The rule
 //! (README "Packaging"): test files must never ship in a built artifact. Each
 //! fixture stands in for an unpacked built artifact (a wheel, a `dist/`).

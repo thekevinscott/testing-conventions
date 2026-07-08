@@ -1,4 +1,4 @@
-//! Mutation testing for Rust (`unit mutation --language rust`, #201) — the rung
+//! Mutation testing for Rust (`unit mutation --language rust`) — the rung
 //! above coverage. A test that *runs* a line still passes if you delete its
 //! assertions; a surviving mutant proves it. This module wraps
 //! [cargo-mutants](https://github.com/sourcefrog/cargo-mutants): it runs the engine,
@@ -36,7 +36,7 @@ pub struct Survivor {
 }
 
 /// The `(file, line)` locations an engine produced a viable mutant for — the input the
-/// #226 line-scoped guard reads to tell an over-exemption (a listed line whose mutants
+/// line-scoped guard reads to tell an over-exemption (a listed line whose mutants
 /// were all caught) from an out-of-scope line (no mutant there).
 pub type MutatedLines = BTreeSet<(String, u32)>;
 
@@ -128,7 +128,7 @@ fn cargo_mutants_survivors(report: &MutantsReport) -> Vec<Survivor> {
 
 /// The `(file, line)` locations cargo-mutants produced a **viable, conclusive** mutant
 /// for — caught or missed (`CaughtMutant` / `MissedMutant`), not the inconclusive
-/// `Timeout` / `Unviable`. The #226 line-scoped guard reads this to tell an
+/// `Timeout` / `Unviable`. The line-scoped guard reads this to tell an
 /// over-exemption (a listed line whose mutants were all *caught*, no survivor) from an
 /// out-of-scope line (no mutant there at all — e.g. outside a `--base` diff).
 pub fn mutated_lines(report: &MutantsReport) -> MutatedLines {
@@ -159,7 +159,7 @@ pub fn evaluate(survivors: Vec<Survivor>, exempt: &[String]) -> Vec<Survivor> {
 }
 
 /// Apply file- and line-scoped `mutation` exemptions to the raw `survivors`, with the
-/// #226 determinism guard. `mutated` is the set of `(file, line)` that produced a
+/// determinism guard. `mutated` is the set of `(file, line)` that produced a
 /// viable mutant (caught or survived); `whole_file` is the file-level exemptions and
 /// `line_scoped` the per-line ones.
 ///
@@ -209,7 +209,7 @@ pub fn evaluate_scoped(
 }
 
 /// A mutant's outcome, normalized across the engines (Stryker / cosmic-ray / cargo-mutants)
-/// — the union of their result vocabularies reduced to what the gate needs (#239). Each
+/// — the union of their result vocabularies reduced to what the gate needs. Each
 /// language adapter maps its native outcomes onto this so the Rust core gates on one
 /// representation instead of three per-engine report formats. The serialized form is
 /// `snake_case` (`no_coverage`, `compile_error`, …) — the wire contract adapters emit.
@@ -239,7 +239,7 @@ impl MutantStatus {
 
     /// Whether this came from a **viable, conclusive** mutant — one that actually ran
     /// (`Survived` / `Killed` / `NoCoverage` / `Timeout`), not one that never compiled or
-    /// errored out. The #226 determinism guard reads this to tell an over-exemption (a
+    /// errored out. The determinism guard reads this to tell an over-exemption (a
     /// listed line whose mutants were all caught) from an out-of-scope line (no mutant there).
     fn is_viable(self) -> bool {
         matches!(
@@ -252,7 +252,7 @@ impl MutantStatus {
     }
 }
 
-/// One mutant in the normalized result set (#239): the engine-agnostic shape every language
+/// One mutant in the normalized result set: the engine-agnostic shape every language
 /// adapter emits. Extra fields an adapter includes are ignored.
 #[derive(Debug, Clone, Deserialize)]
 pub struct NormalizedMutant {
@@ -270,16 +270,16 @@ pub struct NormalizedMutant {
 }
 
 /// Parse the normalized results an engine adapter emits — a flat JSON array of
-/// [`NormalizedMutant`] (#239).
+/// [`NormalizedMutant`].
 pub fn parse_normalized_results(json: &str) -> Result<Vec<NormalizedMutant>> {
     serde_json::from_str(json).context("parsing normalized mutation results")
 }
 
 /// Gate a normalized result set: drop the survivors lifted by a file- or line-scoped
-/// `mutation` exemption (with the #226 determinism guard), leaving the rule's findings.
+/// `mutation` exemption (with the determinism guard), leaving the rule's findings.
 ///
 /// This is the engine-agnostic core each language arm feeds once its adapter has produced
-/// [`NormalizedMutant`]s (#239) — the replacement for the per-engine `*_survivors` /
+/// [`NormalizedMutant`]s — the replacement for the per-engine `*_survivors` /
 /// `*_mutated_lines` + [`evaluate_scoped`] wiring. Survivors are `Survived` / `NoCoverage`
 /// mutants; the guard reads every *viable* mutant's `(file, line)`.
 pub fn evaluate_normalized(
@@ -309,7 +309,7 @@ fn normalized_survivors(mutants: &[NormalizedMutant]) -> Vec<Survivor> {
 }
 
 /// The `(file, line)` of every viable, conclusive mutant in a normalized result set — the
-/// input the #226 line-scoped guard in [`evaluate_scoped`] reads.
+/// input the line-scoped guard in [`evaluate_scoped`] reads.
 fn normalized_mutated_lines(mutants: &[NormalizedMutant]) -> MutatedLines {
     mutants
         .iter()
@@ -331,7 +331,7 @@ fn describe_normalized(mutant: &NormalizedMutant) -> String {
 ///
 /// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested (via
 /// cargo-mutants' `--in-diff`); without it, the whole crate. `exempt` is the file-level
-/// `mutation` exempt paths and `exempt_lines` the line-scoped ones (#226), applied with
+/// `mutation` exempt paths and `exempt_lines` the line-scoped ones, applied with
 /// the determinism guard in [`evaluate_scoped`]. The tool provisions cargo-mutants itself
 /// on first use ([`ensure_cargo_mutants`]) — only a cargo toolchain need be present.
 pub fn measure_rust(
@@ -383,12 +383,12 @@ fn one_line(replacement: &str) -> String {
 }
 
 /// Run the bundled TypeScript mutation adapter over the project at `root` and return its
-/// un-exempted survivors — the TS arm of the mutation rule (#202), parity with
+/// un-exempted survivors — the TS arm of the mutation rule, parity with
 /// [`measure_rust`].
 ///
 /// The consumer installs **nothing** Stryker-related: the npm package ships a Node
 /// adapter that drives Stryker through its own Node API and emits the engine-agnostic
-/// [`NormalizedMutant`] schema (#239), which this gates over via [`evaluate_normalized`]
+/// [`NormalizedMutant`] schema, which this gates over via [`evaluate_normalized`]
 /// — the same core the Rust and Python arms feed. Only the project's own test runner
 /// (vitest) needs to be present, exactly as cargo-mutants needs a buildable crate and
 /// cosmic-ray needs pytest.
@@ -397,7 +397,7 @@ fn one_line(replacement: &str) -> String {
 /// Stryker has no native git-diff mode, so the changed lines become `--mutate
 /// <file>:<line>-<line>` ranges (line granularity, matching cargo-mutants' `--in-diff`).
 /// Without it, the project's configured `mutate` set runs. `exempt` is the file-level
-/// exempt paths and `exempt_lines` the line-scoped ones (#226). `adapter` is the path to
+/// exempt paths and `exempt_lines` the line-scoped ones. `adapter` is the path to
 /// the bundled Node adapter (`dist/mutation/main.js`) — the CLI receives it from the npm
 /// launcher's `--ts-mutation-adapter` argument and hands it down explicitly.
 pub fn measure_typescript(
@@ -425,7 +425,7 @@ pub fn measure_typescript(
 
 /// Run the bundled TS mutation `adapter` over `root` and return the normalized-results JSON
 /// it writes. The adapter (a Node entry shipped with the npm package) drives Stryker via
-/// its Node API and emits a [`NormalizedMutant`] array (#239) — so the consumer drives the
+/// its Node API and emits a [`NormalizedMutant`] array — so the consumer drives the
 /// engine through this CLI alone; the npm package resolves `@stryker-mutator/*` from the
 /// tool's own tree.
 ///
@@ -532,11 +532,11 @@ fn contiguous_runs(lines: &BTreeSet<u64>) -> Vec<(u64, u64)> {
 }
 
 /// Run the bundled Python mutation adapter over the project at `root` and return its
-/// un-exempted survivors — the Python arm of the mutation rule (#203 / #248), parity with
+/// un-exempted survivors — the Python arm of the mutation rule, parity with
 /// [`measure_rust`] and [`measure_typescript`].
 ///
 /// The tool drives the engine: the wheel ships a Python adapter that runs cosmic-ray through
-/// its own library API (`WorkDB`) and emits the normalized [`NormalizedMutant`] schema (#239)
+/// its own library API (`WorkDB`) and emits the normalized [`NormalizedMutant`] schema
 /// the gate consumes. maturin (`bindings = "bin"`) ships the rust binary directly as the wheel's
 /// script — with no Python launcher to inject a path, unlike the TS arm — so the binary invokes
 /// the adapter as an installed module (`python3 -m testing_conventions.mutation.main`), resolved
@@ -547,8 +547,7 @@ fn contiguous_runs(lines: &BTreeSet<u64>) -> Vec<(u64, u64)> {
 /// has no native git-diff mode, so the run is scoped to the changed `.py` files (passed as
 /// `--module`) and the survivors are filtered to the changed lines in the core — line
 /// granularity, matching the other arms. Without it, the whole project's sources run (tests
-/// excluded). `exempt` is the file-level exempt paths and `exempt_lines` the line-scoped ones
-/// (#226).
+/// excluded). `exempt` is the file-level exempt paths and `exempt_lines` the line-scoped ones.
 pub fn measure_python(
     root: &Path,
     exempt: &[String],
@@ -577,7 +576,7 @@ pub fn measure_python(
     let json = run_py_adapter(root, &modules)?;
     let mut mutants = parse_normalized_results(&json)?;
     if let Some(changed) = &changed {
-        // Diff-scoping v1 (#248): keep only mutants on the changed lines.
+        // Diff-scoping v1: keep only mutants on the changed lines.
         mutants.retain(|mutant| {
             changed
                 .get(&mutant.file)
@@ -589,8 +588,8 @@ pub fn measure_python(
 
 /// Run the bundled Python mutation adapter over `root` and return the normalized-results JSON
 /// it writes. The rust binary spawns `python3 -m testing_conventions.mutation.main --out <tmp>
-/// [--module <path> ...]`; the adapter drives cosmic-ray in-process (#248) and emits a
-/// [`NormalizedMutant`] array (#239). `modules`, when non-empty, scopes the run to those source
+/// [--module <path> ...]`; the adapter drives cosmic-ray in-process and emits a
+/// [`NormalizedMutant`] array. `modules`, when non-empty, scopes the run to those source
 /// files (the `<base>...HEAD` changed ones); empty runs the whole project. Results are written
 /// to a temp file the adapter names via `--out`, then read back. `PYTHONDONTWRITEBYTECODE` keeps
 /// `__pycache__` out of the scanned tree; a non-zero adapter exit surfaces its captured output.
@@ -696,7 +695,7 @@ const CARGO_MUTANTS_VERSION: &str = "27.1.0";
 /// Ensure the pinned cargo-mutants is available and return the absolute path to its binary,
 /// provisioning it on first use.
 ///
-/// The consumer installs nothing and never names the engine (the #242 / #239 contract):
+/// The consumer installs nothing and never names the engine:
 /// cargo ships no library form of cargo-mutants, so — unlike the in-process TS/Python
 /// adapters — the tool runs a pinned `cargo install cargo-mutants` into its own cache
 /// directory and drives the installed binary from there. A cached binary is reused; only a
@@ -752,12 +751,12 @@ fn resolve_cache_base(xdg: Option<OsString>, home: Option<OsString>) -> PathBuf 
 /// `lock_path`, re-check (another caller may have installed while this one waited for the
 /// lock), and run `install` if still absent.
 ///
-/// The lock closes a race #370 exposed: a bare check-then-install with no locking let N
+/// The lock closes a race: a bare check-then-install with no locking let N
 /// concurrent callers that all observed an absent binary each launch a full `cargo install`
 /// — correct (no corrupted output) but ruinously slow, since a from-source cargo-mutants
 /// compile is duplicated N times instead of once. Concurrent callers now wait ~one install and
 /// find the binary, instead of each running their own; a cold cache costs one serial install
-/// regardless of how many callers race for it (#385).
+/// regardless of how many callers race for it.
 ///
 /// Pure over the filesystem plus the injected installer, so a test drives every branch with
 /// a temp path and a fake installer (no from-source compile). An installer that reports
@@ -862,7 +861,7 @@ fn strip_llvm_cov_env(command: &mut Command) {
 /// where `engine` is the provisioned cargo-mutants binary ([`ensure_cargo_mutants`]) invoked
 /// by absolute path. The `[rust] features` list rides after cargo-mutants' `--` separator,
 /// which forwards it to the cargo build/test runs — so `#[cfg(feature = ...)]` code is
-/// compiled and its mutants exercised (#266).
+/// compiled and its mutants exercised.
 ///
 /// cargo-mutants exits `0` when every mutant is caught and `2` when some survive (or
 /// time out / are unviable) — both are normal here, since survivors are the rule's
@@ -905,8 +904,6 @@ fn run_cargo_mutants(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // --- normalized results (#239): the engine-agnostic schema + core gate ---
 
     // A normalized result set covering every status: two survivors (Survived + NoCoverage),
     // a caught Killed, an inconclusive-but-viable Timeout, and two unviable mutants
@@ -990,7 +987,7 @@ mod tests {
     #[test]
     fn evaluate_normalized_rejects_exempting_a_caught_line() {
         // Line 9 had only a Killed mutant (viable, no survivor) — over-exemption is an error,
-        // via the shared #226 determinism guard.
+        // via the shared determinism guard.
         let mutants = parse_normalized_results(NORMALIZED).unwrap();
         let line_scoped = BTreeMap::from([("src/a.ts".to_string(), BTreeSet::from([9u32]))]);
         let err = evaluate_normalized(&mutants, &[], &line_scoped).unwrap_err();
@@ -1097,8 +1094,6 @@ mod tests {
         assert!(!is_mutatable_py("README.md"));
     }
 
-    // --- line-scoped exemptions (#226) ---
-
     #[test]
     fn mutated_lines_collects_caught_and_missed() {
         // The MissedMutant (src/lib.rs:7) and the CaughtMutant (src/other.rs:3) are both
@@ -1180,8 +1175,6 @@ mod tests {
         assert!(kept.is_empty());
     }
 
-    // --- engine provisioning (#242) ---
-
     fn unique_tmp() -> PathBuf {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let dir = std::env::temp_dir().join(format!(
@@ -1254,9 +1247,9 @@ mod tests {
 
     #[test]
     fn provision_does_not_duplicate_the_install_under_concurrent_callers() {
-        // #385: on a cold cache, N concurrent callers must share one install, not each run
+        // On a cold cache, N concurrent callers must share one install, not each run
         // their own — cargo-mutants' from-source compile duplicated N times (instead of once)
-        // is what turned a ~1-minute cold-cache cost into ~7 minutes under nextest (#370). A
+        // is what turned a ~1-minute cold-cache cost into ~7 minutes under nextest. A
         // barrier forces both threads to observe the absent binary together, and the install
         // closure sleeps briefly to widen the race window so this reproduces deterministically
         // rather than flakily.

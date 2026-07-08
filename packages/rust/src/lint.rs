@@ -1,4 +1,4 @@
-//! Integration-test lints (issue #19; rules #48–#52) — the `integration lint`
+//! Integration-test lints — the `integration lint`
 //! command.
 //!
 //! A *lint* here is a deterministic style/mechanism check on test code, as
@@ -10,18 +10,18 @@
 //! `rustpython_parser` and the tree is walked with a [`Visitor`].
 //!
 //! Implemented lints:
-//! - **`no-monkeypatch`** (#49): a test/fixture function that declares the
+//! - **`no-monkeypatch`**: a test/fixture function that declares the
 //!   `monkeypatch` parameter (pytest's fixture). Patch with `unittest.mock`
 //!   wrapped in a `pytest.fixture` instead.
-//! - **`no-inline-patch`** (#50): a `patch(...)` / `patch.object(...)` /
+//! - **`no-inline-patch`**: a `patch(...)` / `patch.object(...)` /
 //!   `patch.dict(...)` call inside a test body — the `with patch(...)` form or a
 //!   bare call. Patches belong in a `pytest.fixture`; a patch *inside* a fixture
 //!   is allowed.
-//! - **`no-environ-mutation`** (#51): direct mutation of `os.environ` —
+//! - **`no-environ-mutation`**: direct mutation of `os.environ` —
 //!   `os.environ[...] = …`, `del os.environ[...]`, or a mutating method
 //!   (`update` / `pop` / `setdefault` / `clear` / `popitem`). Set env via
 //!   `patch.dict(os.environ, {...})` instead.
-//! - **`no-constant-patch`** (#52): patching a module-global UPPER_CASE constant,
+//! - **`no-constant-patch`**: patching a module-global UPPER_CASE constant,
 //!   e.g. `patch("pkg.config.CACHE_DIR", …)`. Inject config explicitly. Waivable
 //!   per file via the config `exempt` list.
 
@@ -44,11 +44,11 @@ pub use crate::violation::Violation;
 /// sorted by `(file, line)` for deterministic output.
 ///
 /// A *Python test file* is `*_test.py` or `conftest.py` (where fixtures live); a
-/// legacy `test_*.py` is ordinary source (#145). Each is parsed and walked. A file
+/// legacy `test_*.py` is ordinary source. Each is parsed and walked. A file
 /// that cannot be read or parsed is an error.
 pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     let root = root.as_ref();
-    // The dist's own top-level package, for `no-first-party-patch` (#42). Resolved
+    // The dist's own top-level package, for `no-first-party-patch`. Resolved
     // once for the whole tree; `None` (no declared package) means that rule flags
     // nothing.
     let first_party = first_party_package(root);
@@ -80,12 +80,12 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
 }
 
 /// Scan the colocated Python unit tests under `root` and return every
-/// `unmocked-collaborator` violation (#42 slice 2): a first-party collaborator a
+/// `unmocked-collaborator` violation: a first-party collaborator a
 /// unit test imports without mocking it. The Python arm of `unit lint`
 /// ([`crate::isolation::Language::Python`]).
 ///
 /// A *unit test* here is `*_test.py` (not `conftest.py`); a legacy `test_*.py` is
-/// ordinary source (#145). First-party is the dist's own package
+/// ordinary source. First-party is the dist's own package
 /// ([`first_party_package`]); a tree with no declared package has no first-party
 /// collaborators and so reports nothing.
 pub fn find_unit_isolation_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
@@ -239,8 +239,8 @@ impl Visitor for UnitIsolationVisitor<'_> {
                         // (`level == 1`) names the package's own `__init__.py` — the unit
                         // under test — so every bound name is the SUT, never a collaborator
                         // (`__all__` / `__version__` included, since they live in the SUT).
-                        // Parity with TS's `index.test.ts` / `import … from './index.js'`
-                        // (#382). Scoped exactly: a `from .. import …` (`level == 2`) reaches
+                        // Parity with TS's `index.test.ts` / `import … from './index.js'`.
+                        // Scoped exactly: a `from .. import …` (`level == 2`) reaches
                         // the *parent* package, and a `from .core import …` takes the `Some`
                         // branch above — both stay collaborators.
                         let barrel_sut = self.base == "__init__" && level == 1;
@@ -296,7 +296,7 @@ fn import_head(module: &str) -> &str {
 /// `true` when an import head names a collaborator the unit-isolation rule checks:
 /// **first-party** (the dist package) or **external** — a third-party package, or an
 /// effectful-stdlib module. The test framework and **pure** stdlib are not
-/// collaborators (#121).
+/// collaborators.
 fn is_checked_import(head: &str, first_party: &str) -> bool {
     if head == first_party {
         return true; // first-party
@@ -609,7 +609,7 @@ fn is_type_checking(test: &Expr) -> bool {
 
 /// The unit-under-test base name for a test file: `widget_test.py` → `widget`.
 /// Only `*_test.py` reaches here (the unit-isolation scan no longer recognizes a
-/// legacy `test_*.py` — #145), so stripping the `_test` suffix is all it takes.
+/// legacy `test_*.py`), so stripping the `_test` suffix is all it takes.
 fn unit_under_test_base(file: &Path) -> String {
     let name = file
         .file_name()
@@ -626,7 +626,7 @@ struct LintVisitor<'a> {
     file: &'a Path,
     source: &'a str,
     fixture_depth: usize,
-    /// The dist's own top-level package (#42), or `None` when undiscoverable.
+    /// The dist's own top-level package, or `None` when undiscoverable.
     first_party: Option<&'a str>,
     violations: Vec<Violation>,
 }
@@ -644,7 +644,7 @@ impl LintVisitor<'_> {
     /// Shared entry for both function kinds: run the parameter lint, then return
     /// whether this function is a fixture (so the caller bumps `fixture_depth`).
     fn enter_function(&mut self, args: &Arguments, decorators: &[Expr], range: TextRange) -> bool {
-        // `no-monkeypatch` (#49): the `monkeypatch` parameter is the signal.
+        // `no-monkeypatch`: the `monkeypatch` parameter is the signal.
         let takes_monkeypatch = args
             .posonlyargs
             .iter()
@@ -690,7 +690,7 @@ impl Visitor for LintVisitor<'_> {
 
     fn visit_expr_call(&mut self, node: ExprCall) {
         let is_patch = is_patch_call(&node);
-        // `no-inline-patch` (#50): a patch(...) call outside any fixture is a
+        // `no-inline-patch`: a patch(...) call outside any fixture is a
         // patch in a test body. Inside a fixture it is the right place.
         if is_patch && self.fixture_depth == 0 {
             self.report(
@@ -699,12 +699,12 @@ impl Visitor for LintVisitor<'_> {
                 "patch is called inline in a test body; move it into a `pytest.fixture`",
             );
         }
-        // `no-constant-patch` (#52): patching a module-global UPPER_CASE constant.
+        // `no-constant-patch`: patching a module-global UPPER_CASE constant.
         // Fires regardless of fixture — config constants are usually patched in one.
         if is_patch && patches_constant(&node) {
             self.report(node.range, "no-constant-patch", CONSTANT_PATCH_MSG);
         }
-        // `no-first-party-patch` (#42): in an integration test, patching a
+        // `no-first-party-patch`: in an integration test, patching a
         // first-party target — `patch("ourpkg.mod.fn")` — is forbidden; an
         // integration test runs first-party code for real. Fires regardless of
         // fixture (the patch belongs in one); only when the dist's own package is
@@ -717,7 +717,7 @@ impl Visitor for LintVisitor<'_> {
                 }
             }
         }
-        // `no-environ-mutation` (#51): `os.environ.update(...)` and friends.
+        // `no-environ-mutation`: `os.environ.update(...)` and friends.
         if is_environ_mutation_call(&node) {
             self.report(node.range, "no-environ-mutation", ENVIRON_MUTATION_MSG);
         }
@@ -733,7 +733,7 @@ impl Visitor for LintVisitor<'_> {
         }
     }
 
-    // `no-environ-mutation` (#51): `os.environ[...] = …`, augmented assignment,
+    // `no-environ-mutation`: `os.environ[...] = …`, augmented assignment,
     // and `del os.environ[...]`.
     fn visit_stmt_assign(&mut self, node: StmtAssign) {
         if node.targets.iter().any(is_os_environ_subscript) {
@@ -803,7 +803,7 @@ fn attr_base_is_patch(expr: &Expr) -> bool {
 /// Message for the `no-constant-patch` lint.
 const CONSTANT_PATCH_MSG: &str = "patches a module-global config constant; inject config explicitly (a consumer that did `from pkg import CONSTANT` snapshots the value at import time and ignores the patch)";
 
-/// Message for the `no-first-party-patch` lint (#42).
+/// Message for the `no-first-party-patch` lint.
 const FIRST_PARTY_PATCH_MSG: &str = "patches a first-party target; an integration test must run first-party code for real — only third-party packages and effectful stdlib may be patched";
 
 /// The string-literal first argument of a `patch(...)` call — the dotted target
@@ -827,7 +827,7 @@ fn patches_constant(call: &ExprCall) -> bool {
 }
 
 /// `true` when a patch `target`'s head dotted segment names the first-party
-/// package `pkg`, e.g. `target = "ourpkg.mod.fn"`, `pkg = "ourpkg"` (#42).
+/// package `pkg`, e.g. `target = "ourpkg.mod.fn"`, `pkg = "ourpkg"`.
 fn patches_first_party(target: &str, pkg: &str) -> bool {
     target
         .split('.')
@@ -894,7 +894,7 @@ fn line_of(source: &str, offset: TextSize) -> usize {
 }
 
 /// The dist's own top-level import package — the first-party root for
-/// `no-first-party-patch` (#42).
+/// `no-first-party-patch`.
 ///
 /// Walk up from `root` to the nearest `pyproject.toml`, read its `[project].name`,
 /// and [normalize](normalize_dist_name) it to an import name. Returns `None` when
@@ -953,7 +953,7 @@ fn collect_python_files(
 }
 
 /// `true` for a file the integration lints scan: `*_test.py` or `conftest.py`
-/// (where fixtures live). A legacy `test_*.py` is ordinary source (#112, #145), so
+/// (where fixtures live). A legacy `test_*.py` is ordinary source, so
 /// it is not scanned.
 fn is_python_test_file(path: &Path) -> bool {
     let name = path
@@ -964,7 +964,7 @@ fn is_python_test_file(path: &Path) -> bool {
 }
 
 /// `true` for a colocated *unit* test the isolation rule scans: `*_test.py`. A
-/// legacy `test_*.py` is ordinary source (#112, #145), and `conftest.py` holds
+/// legacy `test_*.py` is ordinary source, and `conftest.py` holds
 /// fixtures (not a unit) — neither is scanned.
 fn is_python_unit_test_file(path: &Path) -> bool {
     let name = path
@@ -1117,7 +1117,7 @@ mod tests {
             unit_under_test_base(Path::new("pkg/widget_test.py")),
             "widget"
         );
-        // Only `*_test.py` reaches here (#145), so a legacy `test_*.py` keeps its
+        // Only `*_test.py` reaches here, so a legacy `test_*.py` keeps its
         // `test_` prefix, and a name without the `_test` suffix is its own stem.
         assert_eq!(
             unit_under_test_base(Path::new("test_widget.py")),
@@ -1130,7 +1130,7 @@ mod tests {
     fn recognizes_python_unit_test_files() {
         assert!(is_python_unit_test_file(Path::new("widget_test.py")));
         assert!(is_python_unit_test_file(Path::new("pkg/widget_test.py")));
-        // A legacy `test_*.py` is ordinary source, not a unit test (#145).
+        // A legacy `test_*.py` is ordinary source, not a unit test.
         assert!(!is_python_unit_test_file(Path::new("test_widget.py")));
         // conftest holds fixtures, not a unit — excluded from unit lint.
         assert!(!is_python_unit_test_file(Path::new("conftest.py")));
@@ -1222,7 +1222,7 @@ mod tests {
 
     #[test]
     fn visitor_treats_barrel_reexport_import_as_the_unit_under_test() {
-        // #382: in `__init___test.py` (base `__init__`), a bare `from . import …`
+        // In `__init___test.py` (base `__init__`), a bare `from . import …`
         // imports the package's own re-export surface — the SUT — so no name is a
         // collaborator, `__all__` / `__version__` included (they live in the SUT).
         assert!(unmocked(
@@ -1344,7 +1344,7 @@ mod tests {
         assert!(is_python_test_file(Path::new("widget_test.py")));
         assert!(is_python_test_file(Path::new("pkg/widget_test.py")));
         assert!(is_python_test_file(Path::new("conftest.py")));
-        // A legacy `test_*.py` is ordinary source, not a test file (#145).
+        // A legacy `test_*.py` is ordinary source, not a test file.
         assert!(!is_python_test_file(Path::new("test_widget.py")));
     }
 

@@ -1,11 +1,9 @@
-//! `e2e attest` / `e2e verify` (#17) — the e2e attestation nudge.
+//! `e2e attest` / `e2e verify` — the e2e attestation nudge.
 //!
 //! `attest` runs the e2e suite locally and records that it ran against the
-//! current commit; `verify` (a later slice, #68) confirms in CI that the latest
+//! current commit; `verify` confirms in CI that the latest
 //! code commit is attested. The point is to *nudge* agents to run e2e locally —
 //! CI never runs e2e, it only checks the committed attestation.
-//!
-//! This module implements both `attest` (#67) and `verify` (#68).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -20,7 +18,7 @@ pub const ATTESTATION_PATH: &str = "e2e-attestation.json";
 /// A record of one local e2e run — written to disk and committed by [`attest`].
 ///
 /// `commit` is the SHA of the code commit the run was made against (HEAD at
-/// attest time); [`verify`](crate::e2e) (#68) checks it against the latest code
+/// attest time); [`verify`](crate::e2e) checks it against the latest code
 /// commit. The rest is information for humans — nothing is gated on it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attestation {
@@ -76,7 +74,7 @@ pub fn attest(repo: &Path, command: &str) -> Result<Attestation> {
     let message = format!("e2e attestation for {short}");
     // A plain commit that inherits the repo's signing policy: a repo requiring
     // verified signatures gets a signed (mergeable) attestation, instead of the
-    // unsigned commit a forced `commit.gpgsign=false` would leave behind (#128).
+    // unsigned commit a forced `commit.gpgsign=false` would leave behind.
     git_run(repo, &["commit", "-q", "-m", message.as_str()])?;
 
     Ok(attestation)
@@ -100,18 +98,18 @@ pub enum Verification {
     },
 }
 
-/// Verify that the committed attestation names the latest code commit (#68) — the
+/// Verify that the committed attestation names the latest code commit — the
 /// CI side of the nudge. Reads only the committed attestation: never runs e2e,
 /// never inspects the recorded exit code or output.
 ///
 /// Equivalent to [`verify_scoped`] with `scope` set to `repo` — the freshness
-/// walk covers everything under `repo`, same as before #294.
+/// walk covers everything under `repo`.
 pub fn verify(repo: &Path) -> Result<Verification> {
     verify_scoped(repo, repo)
 }
 
 /// Verify the committed attestation at `repo`, scoping the "latest code commit"
-/// walk to `scope` instead of all of `repo` (#294).
+/// walk to `scope` instead of all of `repo`.
 ///
 /// `repo` and `scope` serve different roles: `repo` is where
 /// `e2e-attestation.json` lives (the package root — a manifest's own natural
@@ -121,19 +119,19 @@ pub fn verify(repo: &Path) -> Result<Verification> {
 /// attestable source). `scope` must be `repo` or a descendant of it.
 ///
 /// Equivalent to [`verify_since`] with `base` set to `None` — the walk covers
-/// all reachable history, same as before #319.
+/// all reachable history.
 pub fn verify_scoped(repo: &Path, scope: &Path) -> Result<Verification> {
     verify_since(repo, scope, None)
 }
 
 /// Equivalent to [`verify_extra_scoped`] with no extra roots and no excludes —
-/// the freshness walk covers only `scope`, same as before #333.
+/// the freshness walk covers only `scope`.
 pub fn verify_since(repo: &Path, scope: &Path, base: Option<&str>) -> Result<Verification> {
     verify_extra_scoped(repo, scope, base, &[], &[])
 }
 
 /// Verify the committed attestation at `repo`, joining **extra freshness roots**
-/// outside `scope` into the "latest code commit" walk (#333).
+/// outside `scope` into the "latest code commit" walk.
 ///
 /// `extra_scopes` are **repo-root-relative** directories — a shared source tree
 /// that is a sibling of the package (a native core bound into several language
@@ -193,7 +191,7 @@ pub fn verify_extra_scoped(
 /// pathspec so the attestation's own commit never counts as code. `extra_scopes`
 /// and `excludes` are repo-root-relative (`:(top)` pathspec magic), so they match
 /// from the top of the tree regardless of `repo` being a subdirectory cwd — that
-/// is how a sibling tree outside `scope` joins the walk (#333). When `base` is
+/// is how a sibling tree outside `scope` joins the walk. When `base` is
 /// `Some`, the walk is restricted to the commits this branch introduced
 /// (`<base>..HEAD`); `None` when that range holds no such commit. Without `base`
 /// the walk covers all reachable history.
@@ -234,7 +232,7 @@ fn latest_code_commit(
 
 /// `scope` as a pathspec relative to `repo` (git resolves pathspecs relative to
 /// the invocation's cwd, which is always `repo` here). `.` when `scope` is
-/// `repo` itself — byte-identical to the pre-#294 pathspec.
+/// `repo` itself.
 fn relative_pathspec(repo: &Path, scope: &Path) -> String {
     if scope == repo {
         return ".".to_string();

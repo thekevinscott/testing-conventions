@@ -1,4 +1,4 @@
-//! E2E tests for the Rust `integration lint` rule (#44): drive the built CLI
+//! E2E tests for the Rust `integration lint` rule: drive the built CLI
 //! binary against the fixture crates and assert the exit code.
 
 use std::path::PathBuf;
@@ -32,7 +32,7 @@ fn clean_exits_zero() {
     assert_eq!(lint_exit("clean"), 0);
 }
 
-// waivers (#102)
+// waivers
 #[test]
 fn waived_exits_zero() {
     let code = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))

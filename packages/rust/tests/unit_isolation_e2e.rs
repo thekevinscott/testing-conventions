@@ -1,4 +1,4 @@
-//! E2E tests for the TypeScript unit-isolation check (#43 / #76): drive the
+//! E2E tests for the TypeScript unit-isolation check: drive the
 //! built CLI binary end-to-end (no mocks) against the fixtures and assert the
 //! exit code.
 
@@ -33,7 +33,7 @@ fn clean_exits_zero() {
     assert_eq!(isolation_exit("clean"), 0);
 }
 
-// typed `vi.mock` (#77)
+// typed `vi.mock`
 #[test]
 fn untyped_red_exits_nonzero() {
     assert_eq!(isolation_exit("untyped_mock/red"), 1);
@@ -44,7 +44,7 @@ fn untyped_clean_exits_zero() {
     assert_eq!(isolation_exit("untyped_mock/clean"), 0);
 }
 
-// Vitest options-object mock (`{ spy: true }`, #111) — not a factory, must pass.
+// Vitest options-object mock (`{ spy: true }`) — not a factory, must pass.
 #[test]
 fn spy_option_clean_exits_zero() {
     assert_eq!(isolation_exit("untyped_mock/spy_clean"), 0);

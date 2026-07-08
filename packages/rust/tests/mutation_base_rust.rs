@@ -1,13 +1,13 @@
 //! Integration test for diff-scoped Rust mutation — `unit mutation --language rust
-//! --base` (#201).
+//! --base`.
 //!
 //! With `--base`, only mutants on the `<base>...HEAD` changed lines are tested, via
 //! cargo-mutants' own `--in-diff`. Builds a throwaway cargo crate in a git repo (the
-//! codebase is the fixture, per the #3 guardrail): a fully-tested baseline, then a
+//! codebase is the fixture): a fully-tested baseline, then a
 //! commit that adds an assertion-light function. The diff scopes the run to the added
 //! function, whose mutants all survive — while the unchanged, well-tested code isn't
 //! mutated at all. Requires `git` + a cargo toolchain — the tool provisions cargo-mutants
-//! itself (#242); the run builds the crate from scratch, so it's slow.
+//! itself; the run builds the crate from scratch, so it's slow.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

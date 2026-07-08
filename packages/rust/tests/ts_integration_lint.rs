@@ -1,7 +1,7 @@
 //! Integration tests for the TypeScript integration-isolation lint
-//! (#43 / #75: `no-first-party-mock`). Per the #3 guardrail, the rule ships a
-//! red fixture (a first-party `vi.mock` — must be flagged) and a clean fixture
-//! (only third-party / built-in mocks — must pass).
+//! (`no-first-party-mock`). The rule ships a red fixture (a first-party `vi.mock`
+//! — must be flagged) and a clean fixture (only third-party / built-in mocks —
+//! must pass).
 
 use std::ffi::OsString;
 use std::path::PathBuf;

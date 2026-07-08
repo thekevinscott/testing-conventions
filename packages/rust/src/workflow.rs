@@ -1,9 +1,9 @@
-//! Workflow guard — keep the reusable workflow in step with the CLI (issue #92).
+//! Workflow guard — keep the reusable workflow in step with the CLI.
 //!
 //! The reusable workflow (`.github/workflows/testing-conventions.yml`) is the
 //! documented `@v0` consumption path: a consumer pins `@v0`, and the workflow runs
 //! the *published* `testing-conventions` binary via `npx`. When a CLI subcommand is
-//! renamed or removed — e.g. `unit location` → `unit colocated-test` (#55) — but a
+//! renamed or removed — e.g. `unit location` → `unit colocated-test` — but a
 //! workflow still invokes the old name, every `@v0` consumer breaks with
 //! `unrecognized subcommand`, silently: the workflow file is frozen at the tag
 //! while `npx` keeps pulling the latest binary.
@@ -291,7 +291,7 @@ mod tests {
         assert!(!is_binary_token("actions/checkout@v6"));
         assert!(!is_binary_token("npx"));
         // Path-qualified tokens — e.g. a `cp` / `install` argument — are not
-        // invocations, even when they end in the binary name (#92, node.yml).
+        // invocations, even when they end in the binary name.
         assert!(!is_binary_token(
             "packages/rust/target/release/testing-conventions"
         ));

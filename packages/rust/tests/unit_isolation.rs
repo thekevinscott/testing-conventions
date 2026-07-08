@@ -1,7 +1,7 @@
 //! Integration tests for the TypeScript unit-isolation check
-//! (#43 / #76: `unmocked-collaborator`). Per the #3 guardrail, the rule ships a
-//! red fixture (an un-mocked collaborator — must be flagged) and a clean fixture
-//! (every collaborator mocked — must pass).
+//! (`unmocked-collaborator`). The rule ships a red fixture (an un-mocked
+//! collaborator — must be flagged) and a clean fixture (every collaborator
+//! mocked — must pass).
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -80,8 +80,6 @@ fn clean_exits_zero() {
     assert_eq!(isolation_exit("clean"), 0);
 }
 
-// ---- typed `vi.mock` (#77): a mock factory must anchor to the real module ----
-
 #[test]
 fn red_flags_untyped_mock() {
     let violations = find_unit_violations(fixture("untyped_mock/red"))
@@ -119,8 +117,6 @@ fn untyped_red_exits_nonzero() {
 fn untyped_clean_exits_zero() {
     assert_eq!(isolation_exit("untyped_mock/clean"), 0);
 }
-
-// ---- Vitest options-object mock (`{ spy: true }`, #111) — not a factory ----
 
 #[test]
 fn spy_option_mock_reports_no_violations() {

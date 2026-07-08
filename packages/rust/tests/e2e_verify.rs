@@ -1,9 +1,9 @@
-//! Integration tests for `e2e verify` (#17, slice #68).
+//! Integration tests for `e2e verify`.
 //!
 //! `verify` reads the committed attestation and confirms it names the *latest
 //! code commit* — the newest commit touching any path other than the attestation
 //! file. Each test builds a throwaway git repo, optionally attests, and asserts
-//! the [`Verification`] outcome. Per the #3 guardrail: the clean case (a fresh
+//! the [`Verification`] outcome: the clean case (a fresh
 //! attestation passes) and the red cases (no attestation; code changed since).
 //!
 //! These start red against the stub in `src/e2e.rs` and go green once `verify`
@@ -121,7 +121,7 @@ fn verify_fails_when_code_changed_since_the_attestation() {
     );
 }
 
-// --- #281: `e2e verify` accepts a directory argument, scoping attestation
+// `e2e verify` accepts a directory argument, scoping attestation
 // discovery to it instead of always reading the checkout root. `e2e::verify`
 // already takes a `&Path` (this whole file exercises it that way); these cases
 // pin the *library* behavior a subdirectory argument depends on: attesting and
@@ -181,7 +181,7 @@ fn verify_scopes_missing_to_a_package_subdirectory() {
     );
 }
 
-// --- #281: the `testing-conventions e2e verify <path>` CLI surface. `run()`
+// the `testing-conventions e2e verify <path>` CLI surface. `run()`
 // dispatches in-process, so these never touch the test binary's own working
 // directory — the path argument alone must drive discovery. Before `lib.rs`
 // grows the `Verify { path }` field these fail to parse at all (clap rejects
@@ -242,7 +242,7 @@ fn cli_verify_with_path_argument_fails_when_stale() {
     );
 }
 
-// --- #294: `verify_scoped` narrows the freshness walk to `scope`, distinct
+// `verify_scoped` narrows the freshness walk to `scope`, distinct
 // from `repo` (where the attestation file lives). `scope` must be `repo` or a
 // descendant of it — the shape a `path`-scoped workflow call always produces
 // (the derived package root is always at-or-above `path`).
@@ -298,7 +298,7 @@ fn verify_scoped_with_scope_equal_to_repo_matches_verify() {
     );
 }
 
-// --- #294: the `e2e verify <path> --scope <dir>` CLI surface.
+// the `e2e verify <path> --scope <dir>` CLI surface.
 
 /// `testing-conventions e2e verify <path> [--scope <dir>]` exit code, dispatched
 /// in-process.
@@ -336,8 +336,8 @@ fn cli_verify_with_scope_ignores_a_commit_outside_it() {
 
 #[test]
 fn cli_verify_with_no_scope_defaults_to_path_unchanged() {
-    // Regression guard: omitting --scope must stay byte-identical to #281's
-    // behavior — freshness scoped to the whole `path` argument.
+    // Regression guard: omitting --scope must stay byte-identical —
+    // freshness scoped to the whole `path` argument.
     let repo = TempRepo::new();
     let package = repo.0.join("packages/widget");
     std::fs::create_dir_all(package.join("src")).unwrap();
@@ -354,9 +354,9 @@ fn cli_verify_with_no_scope_defaults_to_path_unchanged() {
 
 #[test]
 fn cli_verify_with_no_argument_defaults_to_the_current_directory() {
-    // Regression guard (#281): `e2e verify` with *no* argument must stay
+    // Regression guard: `e2e verify` with *no* argument must stay
     // byte-identical to today — the default `.` resolves against whatever the
-    // process's current directory is, exactly like the pre-#281 `current_dir()`
+    // process's current directory is, exactly like the earlier `current_dir()`
     // call did. `run()` dispatches in-process, so cwd here really is the test
     // binary's own working directory (the crate root) — asserting only that the
     // no-arg form still parses and dispatches (rather than erroring as an
@@ -370,7 +370,7 @@ fn cli_verify_with_no_argument_defaults_to_the_current_directory() {
     assert_eq!(code, 1);
 }
 
-// --- #319: `verify_since` restricts the freshness walk to `<base>..HEAD` (the
+// `verify_since` restricts the freshness walk to `<base>..HEAD` (the
 // commits this branch introduced) instead of all reachable history. This makes
 // the gate diff-relative — the way the changed-line coverage/mutation gates are
 // — so a squash-merging repo can adopt it: a stale-on-base attestation (a squash
@@ -500,7 +500,7 @@ fn cli_verify_with_base_passes_on_an_unrelated_branch() {
     );
 }
 
-// --- #333: `verify_extra_scoped` joins **extra freshness roots** — directories
+// `verify_extra_scoped` joins **extra freshness roots** — directories
 // outside the package's own `scope` (a shared source tree that is a sibling of
 // every package, e.g. a native core bound into language bindings) — into the
 // `<base>..HEAD` freshness walk, with an optional exclude for feature-gated
@@ -531,7 +531,7 @@ fn verify_extra_scoped_flags_a_commit_under_an_extra_root() {
     let latest = rev_parse(&repo.0, "HEAD");
 
     // Sanity: without the extra root, `--base` scoped to the binding sees an empty
-    // diff and passes — exactly the gap #333 describes.
+    // diff and passes — exactly the gap described above.
     assert_eq!(
         verify_since(&package, &package, Some(&base)).unwrap(),
         Verification::Fresh,
@@ -616,7 +616,7 @@ fn verify_extra_scoped_with_no_extra_roots_matches_verify_since() {
     );
 }
 
-// --- #333: the `e2e verify <path> [--extra-scope <dir>]... [--exclude <dir>]...`
+// the `e2e verify <path> [--extra-scope <dir>]... [--exclude <dir>]...`
 // CLI surface. Repeatable flags flow the declared roots through to the freshness
 // walk. Before `lib.rs` grows these fields, clap rejects the unknown flags and
 // `run` errors — so these start red.

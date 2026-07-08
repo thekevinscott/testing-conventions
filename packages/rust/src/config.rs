@@ -1,9 +1,9 @@
 //! The testing-conventions config schema and loader.
 //!
 //! One config file is read into the in-memory [`Config`] below. The loader
-//! parses *and* validates the config itself (the "self-guard" from issue #12):
+//! parses *and* validates the config itself (the "self-guard"):
 //! a malformed or unknown-key config is an error, never a silently-accepted
-//! default. Validation also covers the per-file [`Exemption`] list (issue #32):
+//! default. Validation also covers the per-file [`Exemption`] list:
 //! every exemption must name at least one rule and carry a non-empty reason.
 
 use std::collections::BTreeSet;
@@ -31,14 +31,14 @@ pub struct Config {
 /// The `[python]` table. Both keys are optional, so a repo can configure just
 /// coverage, just exemptions, or both. `Default` (no coverage table, no
 /// exemptions) backs the zero-config path: an absent `[python]` table means the
-/// rule runs against the default floor with nothing exempt (#80).
+/// rule runs against the default floor with nothing exempt.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PythonConfig {
     pub coverage: Option<PythonCoverage>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
-    /// The build declaration (#289, generalized to every language table in #335): a shell
+    /// The build declaration: a shell
     /// command a build-dependent job runs after toolchain + dependency setup and before it
     /// builds or imports the package, for a build the manifest **structurally can't express**.
     /// It is not an escape hatch — it *supplies* a necessary fact (how to build), it doesn't
@@ -48,14 +48,14 @@ pub struct PythonConfig {
     /// Absent (`None`) means no build step. For Python it's the common case — a PEP 517 backend
     /// exposes only sandboxed `build_wheel`/`build_sdist` hooks with no pre-build shell step.
     pub build_command: Option<String>,
-    /// Optional note on the build (#335): free-form documentation, never validated — a necessary
+    /// Optional note on the build: free-form documentation, never validated — a necessary
     /// build fact needs no justification. Retained as a key so a config that carried one still
     /// loads under `deny_unknown_fields`.
     #[serde(default)]
     pub reason: String,
 }
 
-/// The `[e2e]` table (#333). `extra_scope` names a shared source tree beside the
+/// The `[e2e]` table. `extra_scope` names a shared source tree beside the
 /// package — a native core bound into several language bindings — whose commits
 /// join the `e2e verify` freshness walk, and `exclude` carves feature-gated
 /// subtrees of it back out. Both are optional lists of repo-relative directory
@@ -83,12 +83,12 @@ pub struct TypeScriptConfig {
     pub coverage: Option<TypeScriptCoverage>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
-    /// The build declaration (#335); see [`PythonConfig::build_command`]. For TypeScript it's
+    /// The build declaration; see [`PythonConfig::build_command`]. For TypeScript it's
     /// *necessary*, not exceptional: a published TS library ships compiled JS, and `npm pack`
     /// runs `prepare` / `prepack` but not a bare `build` script — whose name npm never
     /// standardized — so a compiling package that doesn't wire `prepare` names its build here.
     pub build_command: Option<String>,
-    /// Optional note on the build (#335); free-form, never validated. See
+    /// Optional note on the build; free-form, never validated. See
     /// [`PythonConfig::reason`].
     #[serde(default)]
     pub reason: String,
@@ -99,7 +99,7 @@ pub struct TypeScriptConfig {
 #[serde(deny_unknown_fields)]
 pub struct RustConfig {
     pub coverage: Option<RustCoverage>,
-    /// Cargo features the suite-running Rust rules enable (#266): `unit coverage`
+    /// Cargo features the suite-running Rust rules enable: `unit coverage`
     /// passes them to `cargo llvm-cov` (`--features`) and `unit mutation` forwards
     /// them to cargo-mutants' build/test runs, so `#[cfg(feature = ...)]` code is
     /// compiled, measured, and mutated. Cargo features are Rust's build-system
@@ -109,11 +109,11 @@ pub struct RustConfig {
     pub features: Vec<String>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
-    /// The build declaration (#335); see [`PythonConfig::build_command`]. Rarely needed for Rust
+    /// The build declaration; see [`PythonConfig::build_command`]. Rarely needed for Rust
     /// — `cargo` compiles via `build.rs` and packages via `cargo package` from the manifest — so
     /// this is only for a pre-build step neither expresses.
     pub build_command: Option<String>,
-    /// Optional note on the build (#335); free-form, never validated. See
+    /// Optional note on the build; free-form, never validated. See
     /// [`PythonConfig::reason`].
     #[serde(default)]
     pub reason: String,
@@ -121,7 +121,7 @@ pub struct RustConfig {
 
 /// `[python].coverage`. A **partial override** — `#[serde(default)]` fills any missing
 /// field from [`PythonCoverage::default`], so a table that sets only one threshold keeps
-/// our defaults for the rest (#216); `deny_unknown_fields` still rejects a typo'd key.
+/// our defaults for the rest; `deny_unknown_fields` still rejects a typo'd key.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PythonCoverage {
@@ -129,8 +129,8 @@ pub struct PythonCoverage {
     pub fail_under: u8,
 }
 
-/// The default Python floor used when coverage isn't configured (#80): branch
-/// coverage on, `fail_under = 100` (#194). Strict by default — "100% of what you
+/// The default Python floor used when coverage isn't configured: branch
+/// coverage on, `fail_under = 100`. Strict by default — "100% of what you
 /// didn't explicitly exempt" — because the rule already honors `# pragma: no cover`,
 /// reason-required `[[python.exempt]]` entries, and the empty/comment-only
 /// auto-exemption, so trivia is excluded deliberately rather than by a slack floor.
@@ -146,7 +146,7 @@ impl Default for PythonCoverage {
 
 /// `[typescript].coverage`. A **partial override** — `#[serde(default)]` fills any
 /// missing field from [`TypeScriptCoverage::default`], so a table that sets only one of
-/// the four metrics keeps our defaults for the rest (#216); `deny_unknown_fields` still
+/// the four metrics keeps our defaults for the rest; `deny_unknown_fields` still
 /// rejects a typo'd key.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -157,8 +157,8 @@ pub struct TypeScriptCoverage {
     pub statements: u8,
 }
 
-/// The default TypeScript floors used when coverage isn't configured (#80): all
-/// four metrics at 100 (#194), matching the strict-by-default Python floor. As with
+/// The default TypeScript floors used when coverage isn't configured: all
+/// four metrics at 100, matching the strict-by-default Python floor. As with
 /// Python, "100" means "100% of what you didn't explicitly exempt" — the rule honors
 /// reason-required `[[typescript.exempt]]` entries and skips declaration files
 /// (`*.d.ts`). A config `[typescript].coverage` table lowers any of the four.
@@ -175,8 +175,8 @@ impl Default for TypeScriptCoverage {
 
 /// `[rust].coverage`. A **partial override** — `#[serde(default)]` fills any missing
 /// field from [`RustCoverage::default`] (`lines = 100`, everything else `None`), so a
-/// table that sets only `regions` keeps `lines = 100` (#216); `deny_unknown_fields`
-/// still rejects a typo'd key. Three opt-in floors sit alongside `lines` (#267):
+/// table that sets only `regions` keeps `lines = 100`; `deny_unknown_fields`
+/// still rejects a typo'd key. Three opt-in floors sit alongside `lines`:
 /// `regions` (a Rust-only sub-line metric), `functions` (the export's functions
 /// total, stable toolchain), and `branch` (adds `--branch` to the run, which
 /// instruments only on a nightly toolchain).
@@ -189,11 +189,11 @@ pub struct RustCoverage {
     pub branch: Option<u8>,
 }
 
-/// The default Rust floor used when coverage isn't configured (#206): `lines = 100`,
+/// The default Rust floor used when coverage isn't configured: `lines = 100`,
 /// matching Python/TypeScript's line-level 100. The other metrics are opt-in (`None`
 /// unless a config sets them): `regions` is a Rust-only sub-line metric harsher than
 /// lines, `functions` keeps the default line-shaped like Python's, and `branch`
-/// requires a nightly toolchain (#267) — so the zero-config floor is lines only. As
+/// requires a nightly toolchain — so the zero-config floor is lines only. As
 /// with Python/TypeScript, "100" means "100% of what you didn't explicitly exempt" —
 /// the rule honors reason-required `[[rust.exempt]]` entries. A config
 /// `[rust].coverage` table lowers the line floor or adds the opt-in floors.
@@ -208,7 +208,7 @@ impl Default for RustCoverage {
     }
 }
 
-/// A rule a file can be exempted from (issue #32).
+/// A rule a file can be exempted from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Rule {
@@ -216,37 +216,37 @@ pub enum Rule {
     ColocatedTest,
     /// The unit-test coverage floor ([`crate::coverage`]).
     Coverage,
-    /// The commit-scoped `co-change` check ([`crate::co_change`], #33) — a
+    /// The commit-scoped `co-change` check ([`crate::co_change`]) — a
     /// changed source whose colocated test needn't co-change.
     CoChange,
-    /// `integration lint` — a test/fixture takes pytest's `monkeypatch` fixture ([`crate::lint`], #49).
+    /// `integration lint` — a test/fixture takes pytest's `monkeypatch` fixture ([`crate::lint`]).
     NoMonkeypatch,
-    /// `integration lint` — a `patch(...)` called inline in a Python test body ([`crate::lint`], #50).
+    /// `integration lint` — a `patch(...)` called inline in a Python test body ([`crate::lint`]).
     NoInlinePatch,
-    /// `integration lint` — direct mutation of `os.environ` in a Python test ([`crate::lint`], #51).
+    /// `integration lint` — direct mutation of `os.environ` in a Python test ([`crate::lint`]).
     NoEnvironMutation,
-    /// The `no-constant-patch` lint ([`crate::lint`], issue #52).
+    /// The `no-constant-patch` lint ([`crate::lint`]).
     NoConstantPatch,
-    /// `integration lint` — patching a first-party target in a Python integration test ([`crate::lint`], #42).
+    /// `integration lint` — patching a first-party target in a Python integration test ([`crate::lint`]).
     NoFirstPartyPatch,
-    /// `unit lint` — a call out of a Rust unit's own module ([`crate::isolation`], #44).
+    /// `unit lint` — a call out of a Rust unit's own module ([`crate::isolation`]).
     NoOutOfModuleCall,
-    /// `unit lint` — a foreign `use` in a Rust unit test ([`crate::isolation`], #44).
+    /// `unit lint` — a foreign `use` in a Rust unit test ([`crate::isolation`]).
     NoOutOfModuleImport,
-    /// `integration lint` — doubling a first-party item in a Rust integration test (#44).
+    /// `integration lint` — doubling a first-party item in a Rust integration test.
     NoFirstPartyDouble,
-    /// `unit lint` — an un-mocked first-party/external import in a TS unit test ([`crate::ts`], #76).
+    /// `unit lint` — an un-mocked first-party/external import in a TS unit test ([`crate::ts`]).
     UnmockedCollaborator,
-    /// `unit lint` — a `vi.mock` without a typed anchor in a TS unit test (#77).
+    /// `unit lint` — a `vi.mock` without a typed anchor in a TS unit test.
     UntypedMock,
-    /// `integration lint` — a `vi.mock` of a first-party module in a TS integration test (#75).
+    /// `integration lint` — a `vi.mock` of a first-party module in a TS integration test.
     NoFirstPartyMock,
-    /// `unit mutation` — a surviving mutant the unit suite didn't catch ([`crate::mutation`], #201).
+    /// `unit mutation` — a surviving mutant the unit suite didn't catch ([`crate::mutation`]).
     Mutation,
 }
 
 impl Rule {
-    /// Whether a `lines` list may scope this rule (#226). The measured-line rules —
+    /// Whether a `lines` list may scope this rule. The measured-line rules —
     /// `coverage` and `mutation` — judge individual lines, so an exemption can name
     /// the exact lines it lifts. Every other rule is whole-file (presence, a lint, a
     /// folder convention), so a `lines` key alongside it is a config error.
@@ -300,7 +300,7 @@ impl Rule {
     }
 }
 
-/// One element of an exemption's `lines` list (#226): a single 1-based line, or an
+/// One element of an exemption's `lines` list: a single 1-based line, or an
 /// inclusive `"start-end"` range.
 ///
 /// Parses from a TOML integer (`9`) or a string range (`"12-13"`). Semantic checks
@@ -394,7 +394,7 @@ pub struct Exemption {
     pub path: String,
     /// Which rules the exemption lifts (`colocated-test`, `coverage`).
     pub rules: Vec<Rule>,
-    /// Lines this exemption is scoped to (#226). Empty (the default, the `lines` key
+    /// Lines this exemption is scoped to. Empty (the default, the `lines` key
     /// omitted) is a **whole-file** exemption — today's behavior. A non-empty list
     /// narrows a `coverage` / `mutation` exemption to exactly those lines, guarded so
     /// every listed line must actually be failing.
@@ -416,7 +416,7 @@ impl Exemption {
     }
 }
 
-/// What an exemption lifts for one file (#226): the whole file, or only specific lines.
+/// What an exemption lifts for one file: the whole file, or only specific lines.
 ///
 /// The resolved counterpart of [`Exemption::lines`] — [`resolve_exempt_scoped`] turns
 /// each entry into one of these, so the `coverage` / `mutation` rules can apply a
@@ -478,7 +478,7 @@ impl Config {
     }
 
     /// The `[[rust.exempt]]` list (empty when the table is absent). The named
-    /// accessor the Rust isolation rules (#44) waive through; equivalent to
+    /// accessor the Rust isolation rules waive through; equivalent to
     /// [`Self::exemptions`]`(Language::Rust)`.
     pub fn rust_exemptions(&self) -> &[Exemption] {
         self.rust.as_ref().map_or(&[], |c| &c.exempt)
@@ -487,7 +487,7 @@ impl Config {
     /// Reject any `exempt` entry that names no rule or carries an empty reason —
     /// a reasonless or scopeless exemption can never be a silent pass.
     fn validate(&self) -> Result<()> {
-        // `build_command` carries no reason requirement (#335): it *supplies* a necessary fact —
+        // `build_command` carries no reason requirement: it *supplies* a necessary fact —
         // how to build a package the ecosystem doesn't build for you — rather than *waiving* a
         // check the way an exemption does, so there is nothing to justify. (An `exempt` entry
         // still requires a reason below; that one really does waive a gate.)
@@ -512,7 +512,7 @@ impl Config {
                         entry.path
                     );
                 }
-                // Line-scoping and whole-file exemptions don't mix (#226). The
+                // Line-scoping and whole-file exemptions don't mix. The
                 // measured-line rules (`coverage` / `mutation`) **require** `lines` —
                 // an exemption may not lift a whole file from coverage or mutation, only
                 // the exact lines it can prove are failing. The whole-file rules
@@ -580,7 +580,7 @@ pub fn resolve_exempt(
         .collect())
 }
 
-/// Resolve the per-file exempt **scope** for `rule` (#226) — whole-file or line-scoped.
+/// Resolve the per-file exempt **scope** for `rule` — whole-file or line-scoped.
 ///
 /// Like [`resolve_exempt`], a stale path is a hard error so the list can't rot. An
 /// entry with no `lines` resolves to [`LineScope::WholeFile`] (today's behavior); one
@@ -664,7 +664,7 @@ mod tests {
 
     #[test]
     fn default_python_coverage_is_the_strict_floor() {
-        // The zero-config floor (#80, #194) is strict by default: branch on, 100.
+        // The zero-config floor is strict by default: branch on, 100.
         // Locked here so it can't silently drift from the Defaults reference.
         assert_eq!(
             PythonCoverage::default(),
@@ -677,7 +677,7 @@ mod tests {
 
     #[test]
     fn default_typescript_coverage_is_the_strict_floor() {
-        // The zero-config floor (#80, #194) is strict by default: all four metrics
+        // The zero-config floor is strict by default: all four metrics
         // at 100. Locked here so it can't silently drift from the Defaults reference.
         assert_eq!(
             TypeScriptCoverage::default(),
@@ -692,9 +692,9 @@ mod tests {
 
     #[test]
     fn default_rust_coverage_is_the_strict_line_floor() {
-        // The zero-config Rust floor (#206) is `lines = 100` — matching Python/TS — with
+        // The zero-config Rust floor is `lines = 100` — matching Python/TS — with
         // every other metric opt-in (None): `regions` (a Rust-only sub-line metric),
-        // `functions`, and `branch` (nightly-only instrumentation, #267). Locked here
+        // `functions`, and `branch` (nightly-only instrumentation). Locked here
         // so it can't silently drift from the Defaults reference.
         assert_eq!(
             RustCoverage::default(),
@@ -709,7 +709,7 @@ mod tests {
 
     #[test]
     fn rust_coverage_table_parses_with_regions_omitted() {
-        // `regions` is opt-in (#206): a `[rust].coverage` table may set `lines` alone,
+        // `regions` is opt-in: a `[rust].coverage` table may set `lines` alone,
         // leaving the region check off.
         let config = parse("[rust]\ncoverage = { lines = 90 }\n").unwrap();
         let coverage = config.rust.unwrap().coverage.unwrap();
@@ -719,7 +719,7 @@ mod tests {
 
     #[test]
     fn a_python_build_command_with_an_optional_reason_parses() {
-        // #289/#335: the build_command survives, and an optional `reason` note is retained.
+        // The build_command survives, and an optional `reason` note is retained.
         let config = parse(
             "[python]\nbuild_command = \"uv run maturin develop\"\n\
              reason = \"maturin's PEP 517 backend has no pre-build shell hook\"\n",
@@ -738,8 +738,8 @@ mod tests {
 
     #[test]
     fn a_python_build_command_with_no_reason_loads() {
-        // #335: `build_command` needs no reason — it supplies a necessary fact, it doesn't waive
-        // a check. A bare command (reason serde-defaulted to empty) loads, where #289 rejected it.
+        // `build_command` needs no reason — it supplies a necessary fact, it doesn't waive
+        // a check. A bare command (reason serde-defaulted to empty) loads.
         let config = parse("[python]\nbuild_command = \"uv run maturin develop\"\n").unwrap();
         let python = config.python.unwrap();
         assert_eq!(
@@ -849,8 +849,6 @@ mod tests {
         assert!(err.to_string().contains("matches no file"), "got: {err}");
     }
 
-    // --- line-scoped exemptions (#226) ---
-
     #[test]
     fn line_specs_parse_from_ints_and_range_strings() {
         // `lines = [9, 10, "12-13"]` — a TOML integer is a single line, a "start-end"
@@ -878,7 +876,7 @@ mod tests {
 
     #[test]
     fn a_coverage_exemption_without_lines_is_rejected() {
-        // `lines` is required for the measured-line rules (#226): an exemption can't
+        // `lines` is required for the measured-line rules: an exemption can't
         // lift a whole file from coverage, only the lines it can prove are uncovered.
         let err = parse(
             "[[python.exempt]]\npath = \"cli.py\"\nrules = [\"coverage\"]\nreason = \"gen\"\n",

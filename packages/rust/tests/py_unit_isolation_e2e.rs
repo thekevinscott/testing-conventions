@@ -1,4 +1,4 @@
-//! E2E tests for the Python unit-isolation check (#42 slice 2): drive the built
+//! E2E tests for the Python unit-isolation check: drive the built
 //! CLI binary end-to-end (no mocks) against the fixtures and assert the exit code.
 
 use std::path::PathBuf;
@@ -52,13 +52,13 @@ fn waived_exits_zero() {
     );
 }
 
-// #145: a legacy `test_*.py` is source (not scanned), so the tree is clean
+// A legacy `test_*.py` is source (not scanned), so the tree is clean
 #[test]
 fn legacy_test_prefix_exits_zero() {
     assert_eq!(isolation_exit("legacy_prefix"), 0);
 }
 
-// external & effectful-stdlib deps (#121, slice 3)
+// external & effectful-stdlib deps
 #[test]
 fn external_red_exits_nonzero() {
     assert_eq!(isolation_exit("external/red"), 1);
@@ -80,7 +80,7 @@ fn external_waived_exits_zero() {
     );
 }
 
-// #382: a barrel test's `from . import …` names the SUT's own surface, not a
+// A barrel test's `from . import …` names the SUT's own surface, not a
 // collaborator; a sibling-direct import (`from .core import …`) is still flagged
 #[test]
 fn barrel_clean_exits_zero() {

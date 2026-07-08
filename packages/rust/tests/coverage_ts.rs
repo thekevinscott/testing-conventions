@@ -1,7 +1,7 @@
-//! Integration tests for the TypeScript coverage rule (#31).
+//! Integration tests for the TypeScript coverage rule.
 //!
 //! These run REAL vitest over the fixture codebases via the SDK
-//! (`coverage::measure_typescript`) and assert pass/fail. Per the #3 guardrail
+//! (`coverage::measure_typescript`) and assert pass/fail. Per the guardrail
 //! the *codebases themselves* are the fixtures: `full` (100% on all four metrics)
 //! clears a 100 floor, `above` (~83% lines / 87% branches) fails 100 but clears a
 //! mid floor, `below` (100% lines but only ~66% branches) fails the mid floor on
@@ -71,7 +71,7 @@ fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
     // `exempt_cov` sits below 100 only because of shim.ts (its `launch` is never
     // exercised); omitting it — the `coverage`-rule exemption the CLI resolves
     // from config — leaves core.ts, fully covered, to clear 100. Without the
-    // exemption this codebase fails the floor (#32).
+    // exemption this codebase fails the floor.
     assert_eq!(
         measure_typescript(&codebase("exempt_cov"), FULL, &["shim.ts".to_string()]).unwrap(),
         Outcome::Pass
@@ -108,7 +108,7 @@ fn a_suite_that_cannot_run_is_an_error_not_a_silent_pass() {
 
 #[test]
 fn a_package_root_config_file_is_not_counted_as_uncovered_source() {
-    // #290: `full_with_config/` is fully tested (identical to `full/`) but also
+    // `full_with_config/` is fully tested (identical to `full/`) but also
     // carries its own `vitest.config.ts` — the shape a per-package monorepo
     // `uses:` call produces (`path` names the whole package root, not just
     // `src/`). vitest's own default excludes already keep config files out of

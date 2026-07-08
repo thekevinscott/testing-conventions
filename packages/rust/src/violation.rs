@@ -2,7 +2,7 @@
 //!
 //! Both the Python `lint` module and the Rust `isolation` module report findings
 //! as a [`Violation`], so the CLI prints every rule the same way
-//! (`path:line: rule — message`). Hoisted here (#44) so neither lint module owns
+//! (`path:line: rule — message`). Hoisted here so neither lint module owns
 //! the other's type.
 
 use std::path::PathBuf;

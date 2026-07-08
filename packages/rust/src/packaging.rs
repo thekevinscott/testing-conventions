@@ -1,4 +1,4 @@
-//! Packaging rule — foundation (issue #70).
+//! Packaging rule — foundation.
 //!
 //! README "Packaging": test files never ship in the built artifact. Colocated
 //! unit tests live next to the source, so packaging has to strip them — and this
@@ -11,8 +11,8 @@
 //! wheel/sdist, `npm pack`, `cargo package`, then unpacking it) is a per-language
 //! layer on top — kept separate, and out of this foundation slice, so the core
 //! guarantee is testable without any language toolchain. The per-language slices
-//! supply the build step and the glob set: Python `*_test.py` (#72), TypeScript
-//! `*.test.*` (#73), Rust `tests/` (#74).
+//! supply the build step and the glob set: Python `*_test.py`, TypeScript
+//! `*.test.*`, Rust `tests/`.
 
 use std::path::{Path, PathBuf};
 
@@ -95,7 +95,7 @@ fn unzip_to_temp(archive: &Path) -> Result<TempDir> {
 
 /// `true` for an artifact this rule unpacks as a gzipped tar: an `npm pack`
 /// tarball (`.tgz`), a `.tar.gz` (a Python sdist), or a Cargo `.crate` from
-/// `cargo package` (#74) — all gzipped tarballs.
+/// `cargo package` — all gzipped tarballs.
 fn is_tar_gz_artifact(path: &Path) -> bool {
     let name = path
         .file_name()
@@ -172,8 +172,8 @@ fn collect_offenders(
 ///
 /// A pattern ending in `/` is a **directory** pattern: it matches when `path`
 /// (relative to the artifact `root`) lives under a directory of that name — e.g.
-/// `tests/` flags `…/tests/integration.rs` (Rust's crate-root integration tests,
-/// #74). Every other pattern is a file-name glob (`*` wildcards) matched against
+/// `tests/` flags `…/tests/integration.rs` (Rust's crate-root integration
+/// tests). Every other pattern is a file-name glob (`*` wildcards) matched against
 /// the entry's name (`*_test.py`, `*.test.*`).
 fn matches_any(path: &Path, root: &Path, patterns: &[String]) -> bool {
     let name = path

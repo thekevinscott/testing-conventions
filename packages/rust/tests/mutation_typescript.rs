@@ -1,15 +1,15 @@
-//! Integration tests for the TypeScript mutation rule (#202).
+//! Integration tests for the TypeScript mutation rule.
 //!
 //! These run REAL Stryker over the fixture projects via the SDK
-//! ([`mutation::measure_typescript`]) — which spawns the bundled Node adapter (#246) — and
-//! assert the surviving-mutant set, the TS parallel of the Rust vertical (#201). Per the #3
-//! guardrail the *projects themselves* are the fixtures: `killed` (every mutant caught by an
+//! ([`mutation::measure_typescript`]) — which spawns the bundled Node adapter — and
+//! assert the surviving-mutant set, the TS parallel of the Rust vertical. The
+//! *projects themselves* are the fixtures: `killed` (every mutant caught by an
 //! asserting test) reports no survivors, and `survivors` (an assertion-light test that runs
 //! the code but pins nothing) reports several — the gap mutation testing exposes that
 //! coverage can't.
 //!
 //! The fixtures are **runner-only**: they install just vitest. That the gate still runs
-//! Stryker over them is the proof of #246 — the tool bundles and drives the engine; the
+//! Stryker over them proves the tool bundles and drives the engine; the
 //! project provides only its own test runner. Each test runs against its own staged copy
 //! (vitest `node_modules` symlinked) so the parallel Stryker sandboxes never collide, and
 //! passes the freshly-built adapter path ([`common::ts_adapter`]) straight to the rule.
@@ -41,7 +41,7 @@ fn killed_reports_no_survivors() {
 #[test]
 fn survivors_are_reported() {
     // The fixture installs only vitest, yet the gate runs Stryker over it via the bundled
-    // adapter and finds the assertion-light suite's survivors. That's #246: the tool drives
+    // adapter and finds the assertion-light suite's survivors. The tool drives
     // the engine; the project supplies only its test runner.
     let project = Staged::new("survivors");
     let survivors = measure_typescript(

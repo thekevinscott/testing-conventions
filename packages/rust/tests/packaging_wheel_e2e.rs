@@ -1,10 +1,10 @@
-//! E2E tests for the Python packaging slice (#72): drive the built CLI binary
+//! E2E tests for the Python packaging slice: drive the built CLI binary
 //! against pre-built **wheel** fixtures and assert the exit code. The rule
 //! (README "Packaging"): test files must never ship in the built artifact —
 //! here a Python wheel. `red.whl` ships a colocated `widget/core_test.py` that
 //! should have been stripped; `clean.whl` does not.
 //!
-//! These start red — the foundation (#70) scans an unpacked directory, not a
+//! These start red — the foundation scans an unpacked directory, not a
 //! `.whl` archive — and go green once `packaging` unpacks the wheel before
 //! scanning it.
 

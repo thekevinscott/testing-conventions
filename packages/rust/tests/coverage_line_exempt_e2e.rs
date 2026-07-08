@@ -1,4 +1,4 @@
-//! E2E tests for line-scoped coverage exemptions (#226): drive the built CLI binary
+//! E2E tests for line-scoped coverage exemptions: drive the built CLI binary
 //! end-to-end (no mocks) against the `exempt_cov` fixtures and assert the exit code
 //! and message.
 //!
@@ -43,8 +43,6 @@ fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
-// ---- Python ---------------------------------------------------------------
-
 #[test]
 fn python_minimal_line_exemption_clears_the_floor() {
     // Only shim.py's uncovered body (lines 2-4) is exempt; core.py is fully covered, so
@@ -78,8 +76,6 @@ fn python_under_listing_still_fails_the_floor() {
     );
 }
 
-// ---- Rust -----------------------------------------------------------------
-
 #[test]
 fn rust_minimal_line_exemption_clears_the_floor() {
     // Only src/shim.rs's uncovered `launch` region (lines 6-8) is exempt; core.rs is
@@ -99,8 +95,6 @@ fn rust_over_exemption_is_a_hard_error() {
         stderr(&out)
     );
 }
-
-// ---- TypeScript -----------------------------------------------------------
 
 #[test]
 fn typescript_minimal_line_exemption_clears_the_floor() {

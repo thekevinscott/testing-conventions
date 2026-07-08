@@ -1,7 +1,7 @@
-//! Integration tests for the Python coverage rule (#26; exemptions #32).
+//! Integration tests for the Python coverage rule.
 //!
 //! These run REAL coverage.py over the fixture codebases via the SDK
-//! (`coverage::measure`) and assert pass/fail. Per the #3 guardrail the
+//! (`coverage::measure`) and assert pass/fail. Per the guardrail the
 //! *codebases themselves* are the fixtures: `full` (100% branch) clears a 100
 //! floor, `above_85` (~86%) fails 100, `below_85` (~71%) fails 85. Requires
 //! `coverage` + `pytest` on PATH.
@@ -54,7 +54,7 @@ fn conftest_is_omitted_from_the_denominator() {
     // conftest.py is pytest support, never a coverage subject. `conftest_omit`'s
     // widget.py is fully covered, but its conftest.py has an unused fixture body
     // (uncovered) — so the 100 floor passes only because conftest.py is omitted
-    // from the denominator alongside the test files. (#112)
+    // from the denominator alongside the test files.
     assert_eq!(
         measure(&codebase("conftest_omit"), FLOOR_100, &[]).unwrap(),
         Outcome::Pass
@@ -66,7 +66,7 @@ fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
     // `exempt_cov` sits at ~58% only because of shim.py; omitting it (the
     // `coverage`-rule exemption the CLI resolves from config) leaves core.py,
     // fully covered, to clear 100. The exemption is doing real work — without it
-    // this codebase fails the floor (#32).
+    // this codebase fails the floor.
     assert_eq!(
         measure(&codebase("exempt_cov"), FLOOR_100, &["shim.py".to_string()]).unwrap(),
         Outcome::Pass

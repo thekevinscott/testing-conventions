@@ -1,16 +1,15 @@
 //! Integration tests for diff-scoped Rust coverage — `unit coverage --language
-//! rust --base` (#162).
+//! rust --base`.
 //!
 //! The Rust twin of `coverage_base.rs` / `coverage_base_ts.rs`: with `--base`, the
 //! SAME configured `cargo llvm-cov` floors (regions / lines) are measured over the
 //! `<base>...HEAD` diff (the changed lines) instead of the whole tree. Unlike the
 //! implicit-100% `unit patch-coverage` it replaces, a changed line is judged against
 //! the configured floor — a diff that clears it passes even with an uncovered line,
-//! and one below it fails however small the diff (no small-diff carve-out, per the
-//! #162 decision).
+//! and one below it fails however small the diff (no small-diff carve-out).
 //!
 //! Each test builds a throwaway cargo crate in a git repo (the codebases are the
-//! fixtures, per the #3 guardrail) and runs REAL `cargo llvm-cov` over it via the SDK
+//! fixtures) and runs REAL `cargo llvm-cov` over it via the SDK
 //! (`patch_coverage::measure_rust`) and the CLI (`run`). The crate carries its own
 //! `[workspace]` so `cargo llvm-cov` measures it in isolation. Rust has no
 //! zero-config default floor, so every CLI case commits a `testing-conventions.toml`
@@ -230,8 +229,6 @@ fn baseline(repo: &TempRepo) -> String {
     repo.head()
 }
 
-// ---- The floor is measured over the diff (SDK `measure_rust`) -------------
-
 #[test]
 fn rust_a_diff_below_the_floor_fails() {
     // The core red case: the known-ratio diff (regions/lines 50%) is below an 80
@@ -278,7 +275,7 @@ fn rust_a_fully_covered_change_passes() {
 
 #[test]
 fn rust_a_tiny_below_floor_diff_is_not_exempted() {
-    // The #162 decision: there is no small-diff carve-out. A single untested helper
+    // There is no small-diff carve-out. A single untested helper
     // (a brand-new module the suite never exercises → 0% on its few lines) fails the
     // 80 floor just like a large diff would.
     let repo = TempRepo::new("tiny");
@@ -326,8 +323,6 @@ fn rust_an_unknown_base_ref_is_an_error() {
         "an unresolvable base ref must error"
     );
 }
-
-// ---- Exit codes via the CLI (`run`) --------------------------------------
 
 #[test]
 fn rust_cli_exits_nonzero_on_a_below_floor_diff() {
@@ -396,12 +391,10 @@ fn rust_cli_a_docs_only_diff_passes() {
     );
 }
 
-// ---- Exemptions (#32 machinery, rule `coverage`) -------------------------
-
 #[test]
 fn rust_a_coverage_exemption_lifts_a_below_floor_change() {
     // A `coverage` exemption drops a file from the run, so its changed lines drop out
-    // of the diff ratios — the same waiver the whole-tree floor (#37) honors. The
+    // of the diff ratios — the same waiver the whole-tree floor honors. The
     // config carries both the 80 floor and the exemption.
     let repo = TempRepo::new("exempt");
     repo.write(

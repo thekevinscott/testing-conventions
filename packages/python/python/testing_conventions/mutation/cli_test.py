@@ -1,4 +1,4 @@
-"""Unit tests for the mutation adapter's orchestrator (#248).
+"""Unit tests for the mutation adapter's orchestrator.
 
 These drive the real ``mutation_cli`` over the fake ``cosmic_ray`` engine — parse args, build
 config, baseline, session, normalize, write — so the whole flow is exercised end-to-end

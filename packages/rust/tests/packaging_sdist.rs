@@ -1,7 +1,7 @@
-//! Integration tests for the Python sdist coverage slice (#106): exercise
+//! Integration tests for the Python sdist coverage slice: exercise
 //! `packaging::inspect` over pre-built Python **sdist** fixtures (`.tar.gz`).
 //! See `packaging_sdist_e2e.rs` for the binary-level checks and the note on why
-//! this slice has no red phase (the behavior already shipped with #73).
+//! this slice has no red phase (the behavior already shipped).
 
 use std::path::PathBuf;
 

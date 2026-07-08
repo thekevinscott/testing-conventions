@@ -875,6 +875,13 @@ jobs:
       - name: Check out the repository to build and inspect its distribution
         if: inputs.packaging_artifact == ''
         uses: actions/checkout@v6
+      # A local `uses: ./...` action reference resolves from the job's own checkout — every
+      # other rule job always checks out first, but this one skips it on the
+      # packaging_artifact path above, so on the hermetic path that path needs its own
+      # (otherwise-redundant) checkout for ./.github/actions/download-hermetic-cli to resolve.
+      - name: Check out the repository to resolve the hermetic-cli download action
+        if: inputs.packaging_artifact != '' && needs.detect.outputs.cli_command != ''
+        uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli

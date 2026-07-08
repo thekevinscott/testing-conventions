@@ -1251,7 +1251,9 @@ mod tests {
             .collect();
 
         for h in handles {
-            h.join().expect("provisioning thread must not panic").unwrap();
+            h.join()
+                .expect("provisioning thread must not panic")
+                .unwrap();
         }
 
         assert_eq!(

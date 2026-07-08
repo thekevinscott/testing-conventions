@@ -37,6 +37,7 @@ from checks.packaging_red.cli import cli as packaging_red
 from checks.python_mutation_clean.cli import cli as python_mutation_clean
 from checks.rolling_release_wired.cli import cli as rolling_release_wired
 from checks.rust_toolchain_wired.cli import cli as rust_toolchain_wired
+from checks.uv_provisioning_wired.cli import cli as uv_provisioning_wired
 from checks.wiring_detect_action.cli import cli as wiring_detect_action
 from checks.wiring_e2e_default_on.cli import cli as wiring_e2e_default_on
 from checks.wiring_packaging_default_on.cli import cli as wiring_packaging_default_on
@@ -77,6 +78,7 @@ main.add_command(packaging_red, name="packaging-red")
 main.add_command(python_mutation_clean, name="python-mutation-clean")
 main.add_command(rolling_release_wired, name="rolling-release-wired")
 main.add_command(rust_toolchain_wired, name="rust-toolchain-wired")
+main.add_command(uv_provisioning_wired, name="uv-provisioning-wired")
 main.add_command(wiring_detect_action, name="wiring-detect-action")
 main.add_command(wiring_e2e_default_on, name="wiring-e2e-default-on")
 main.add_command(wiring_packaging_default_on, name="wiring-packaging-default-on")

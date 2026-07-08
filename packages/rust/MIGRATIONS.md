@@ -15,6 +15,18 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Consolidates the reusable workflow's Python provisioning to uv (#399). The suite-executing jobs
+(`unit-coverage`, `coverage-changed`, `mutation`) provisioned Python two ways, selected by
+detect's `python_env`: `actions/setup-python` + `python -m pip install` for a plain package, or
+`setup-uv` + `uv sync` for a `[project]`-table package — the same provisioning written twice per
+job, three jobs over, free to drift between arms. All three jobs now provision with uv alone,
+with identical steps: `uv sync` for an installable project (installing its dependencies and
+building/installing the project itself), `uv venv` for a plain package, then `coverage` +
+`pytest` + the `testing-conventions` adapter wheel into that same venv, which goes on the suite's
+`PATH`. detect's `python_env` distinction survives where it matters — `uv sync` only applies to
+an installable project — and only the tool duplication goes. Workflow-only: no CLI, API, or
+config change (see **Behavior changes without code changes**).
+
 Fixes the Rust cfg scan so `#[cfg(not(test))]` is no longer mistaken for an inline test module
 (#390). The scan matched any bare `test` ident and never handled `not(...)`, so a
 `#[cfg(not(test))]` module — production code compiled for non-test builds — set the test-module
@@ -917,6 +929,17 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+The reusable workflow provisions Python with uv in every suite-executing job (#399); the
+`actions/setup-python` + `python -m pip install` arm is gone. A plain (`python_env == 'pip'`)
+package's suite now runs from a `uv venv` at the derived package root instead of the runner's
+global interpreter, and the suite toolchain is identical in all three jobs — `coverage`, `pytest`,
+and the `testing-conventions` adapter wheel (previously the coverage jobs installed `coverage` +
+`pytest` and the mutation job `pytest` + the wheel). A consumer whose provisioning depends on
+pip-specific configuration (a `PIP_INDEX_URL` env var or `pip.conf` naming a private index)
+declares the uv equivalent instead — `UV_INDEX_URL`, or `[[index]]` in `uv.toml` — since uv reads
+its own configuration. The `uses:` call is unchanged, and `python_env` still decides `uv sync`
+(installable project) vs a bare `uv venv` (plain package).
+
 Changed-line coverage, TypeScript / Python mutation, and the co-change check now keep two classes
 of changed file in scope that they previously dropped as a false green (#392). A changed source
 line whose content begins `++ ` (rendered `+++ …` in the unified diff) is read as hunk body, so the
@@ -1136,6 +1159,17 @@ Exemptions (#32) change runtime behavior:
   failure (exit `4`) or usage error is still fatal. No API or config change.
 
 ### Verification
+
+```
+uv run --project internals/checks tc-checks uv-provisioning-wired
+grep -c 'python -m pip install' .github/workflows/testing-conventions.yml || true
+```
+
+Expected: the check passes ("the suite-executing jobs provision Python with uv alone,
+identically") and the grep counts zero occurrences — the workflow carries one Python provisioning
+path (#399), identical across `unit-coverage`, `coverage-changed`, and `mutation`. The runtime
+halves are the `clean` (plain package) and `monorepo-coverage-py` / `mutation-monorepo-py`
+(uv-managed package) self-test jobs, all green.
 
 ```
 python3 -c "import yaml; yaml.safe_load(open('.github/workflows/testing-conventions.yml'))"

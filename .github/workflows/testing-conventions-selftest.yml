@@ -128,6 +128,15 @@ name: Testing Conventions (self-test)
 #                         The clean runtime path rides the existing `["rust"]` fixtures
 #                         (integration-lint-rust, isolation-clean, coverage-rust-clean),
 #                         whose sources all carry inline tests.
+#
+# uv-only Python provisioning (#399) — one provisioning tool in the suite-executing jobs:
+#   uv-provisioning-wired  asserts the reusable workflow provisions Python with uv alone —
+#                          no actions/setup-python + `python -m pip install` second arm —
+#                          and that the python-arm steps are identical across unit-coverage /
+#                          coverage-changed / mutation, so a provisioning change can't drift
+#                          between jobs. The runtime paths ride the existing fixtures: `clean`
+#                          covers the plain (`python_env == 'pip'`) package end to end, and
+#                          monorepo-coverage-py / mutation-monorepo-py the uv-managed one.
 
 on:
   pull_request:
@@ -1083,3 +1092,22 @@ jobs:
       config: .github/selftest/monorepo/packages/py/testing-conventions.toml
       gates: '["mutation"]'
       base: origin/main
+
+  # ---- #399: the suite-executing jobs provision Python with uv alone ----
+
+  uv-provisioning-wired:
+    name: The suite-executing jobs provision Python with uv alone
+    # Red→green wiring signal for #399: the reusable workflow must provision Python one way —
+    # uv — with identical python-arm steps across unit-coverage / coverage-changed / mutation,
+    # or every provisioning change is written twice per job (a pip arm beside the uv arm) and
+    # the arms drift. A static check, so it tracks the workflow file itself; the runtime halves
+    # ride the existing fixtures (`clean` for the plain package, monorepo-coverage-py /
+    # mutation-monorepo-py for the uv-managed one).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
+      - name: testing-conventions.yml must provision Python with uv alone
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks uv-provisioning-wired

@@ -184,6 +184,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **BREAKING: the reusable workflow provisions Python with uv alone** (#399). The suite-executing
+  jobs (`unit-coverage`, `coverage-changed`, `mutation`) each carried two Python provisioning
+  arms, selected by detect's `python_env` — `actions/setup-python` + `python -m pip install` for a
+  plain package, `setup-uv` + `uv sync` for a `[project]`-table one — so every provisioning change
+  was written twice per job and could drift between arms. All three jobs now provision with uv
+  alone, with identical steps: `uv sync` for an installable project, `uv venv` for a plain
+  package, then `coverage` + `pytest` + the `testing-conventions` adapter wheel into that same
+  venv, which goes on the suite's `PATH`. `python_env` still decides `uv sync` vs a bare venv;
+  only the tool duplication goes. Breaking for a consumer whose provisioning relied on
+  pip-specific configuration (`PIP_INDEX_URL` / `pip.conf`): uv reads its own configuration —
+  declare `UV_INDEX_URL` (or `[[index]]` in `uv.toml`) instead. See `MIGRATIONS.md`.
+
 - **BREAKING: the suite-executing jobs (`unit coverage`, changed-line coverage, `mutation`)
   install, provision, and build at the derived package root, not the checkout root** (#278, #279,
   epic #276, building on #277's `package_root`/`ts_package_manager`/`python_env`/`provision_rust`

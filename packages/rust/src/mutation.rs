@@ -863,11 +863,9 @@ fn strip_llvm_cov_env(command: &mut Command) {
 /// which forwards it to the cargo build/test runs — so `#[cfg(feature = ...)]` code is
 /// compiled and its mutants exercised.
 ///
-/// cargo-mutants exits `0` when every mutant is caught and `2` when some survive (or
-/// time out / are unviable) — both are normal here, since survivors are the rule's
-/// *output*, not an error. Any other code (usage error, or a baseline that didn't
-/// build/pass) is fatal. The outer instrumentation env is stripped so a nested run (this
-/// rule's own tests under `cargo llvm-cov`) doesn't re-enter the rustc wrapper and hang.
+/// The exit code is classified by [`classify_mutants_exit`] (`0`/`2`/`3` normal, else fatal).
+/// The outer instrumentation env is stripped so a nested run (this rule's own tests under
+/// `cargo llvm-cov`) doesn't re-enter the rustc wrapper and hang.
 fn run_cargo_mutants(
     engine: &Path,
     root: &Path,
@@ -896,13 +894,16 @@ fn run_cargo_mutants(
 /// Split from [`run_cargo_mutants`] so the exit-code handling is unit-tested with an injected
 /// [`Output`] rather than a real (and, for a timeout, a genuinely slow) engine run.
 ///
-/// cargo-mutants exits `0` when every mutant is caught and `2` when some survive — both
-/// normal, since survivors are the rule's *output*. Any other code (a usage error, or a
-/// baseline that didn't build/pass) is fatal.
+/// cargo-mutants exits `0` when every mutant is caught, `2` when some are missed (survivors),
+/// and `3` when some mutants **timed out** and none were missed — all three write an
+/// `outcomes.json` the gate reads, and a timeout is inconclusive (this module's own `Timeout`
+/// semantics), not a survivor. Any other code — a usage error, or a baseline that didn't
+/// build/pass (exit 4) — is fatal.
 fn classify_mutants_exit(root: &Path, output: &Output) -> Result<()> {
     match output.status.code() {
-        // 0 = all caught, 2 = some survived/were missed: both produce a report to read.
-        Some(0) | Some(2) => Ok(()),
+        // 0 = all caught, 2 = some missed (survivors), 3 = some timed out with none missed:
+        // all three produce an outcomes.json to read, and a timeout is inconclusive.
+        Some(0) | Some(2) | Some(3) => Ok(()),
         _ => bail!(
             "cargo-mutants did not run cleanly in `{}` (baseline build/test failure?):\n{}{}",
             root.display(),

@@ -15,13 +15,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build wheel + smoke
+  build-wheel:
+    name: Build wheel (once)
+    # The package is maturin `bindings = "bin"` (packages/python/pyproject.toml): the wheel
+    # ships the Rust binary with no per-Python-version native extension, so it builds to an
+    # interpreter-agnostic `py3-none-*` tag (verified: `maturin build` produces
+    # `testing_conventions-*-py3-none-manylinux_*.whl`, installs and runs identically under
+    # 3.9-3.13). One Rust compile here, consumed by both `build` and `plugin` below, instead
+    # of a redundant compile per matrix leg (#371, epic #366).
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -30,19 +32,41 @@ jobs:
           workspaces: packages/rust
       - uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.13'
       - run: pip install maturin
       - name: Build wheel
         run: maturin build --release -o dist
         working-directory: packages/python
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-wheel
+          path: packages/python/dist/*.whl
+
+  build:
+    name: Install + smoke (py${{ matrix.python-version }})
+    needs: build-wheel
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: python-wheel
+          path: dist
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
       - name: Install wheel + smoke (--version)
         run: |
           python -m venv .venv
-          .venv/bin/pip install packages/python/dist/*.whl
+          .venv/bin/pip install dist/*.whl
           .venv/bin/testing-conventions --version
 
   plugin:
     name: Pytest plugin (py${{ matrix.python-version }})
+    needs: build-wheel
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -54,20 +78,17 @@ jobs:
         working-directory: packages/python
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v8
         with:
-          workspaces: packages/rust
+          name: python-wheel
+          path: packages/python/dist
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install maturin
       # Install the built wheel (registers the pytest11 entry point) alongside the
       # test toolchain, so the integration tests load the plugin exactly as a
       # consumer's `pip install`ed run would.
-      - name: Build + install the wheel with the test toolchain
-        run: |
-          maturin build --release -o dist
-          pip install dist/*.whl pytest pytest-cov coverage
+      - name: Install the wheel with the test toolchain
+        run: pip install dist/*.whl pytest pytest-cov coverage
       - name: Run the plugin integration tests
         run: pytest tests/ -q

@@ -153,3 +153,28 @@ The two pre-existing first-party helpers were resolved per the #321 open questio
 One correctness question was worth answering empirically before landing this, not assuming: `mutation.rs`'s `ensure_cargo_mutants()` provisions a shared, version-scoped binary cache (`~/.cache/testing-conventions/cargo-mutants-<version>`) with no file locking — a bare "does the binary exist, if not run `cargo install`" check. nextest runs each test *binary* in its own OS process, in parallel, which could mean several processes racing to provision that shared cache simultaneously on a cold cache. Verified locally: cleared the cache, ran the mutation-Rust tests concurrently — every run landed on an intact, correctly-sized binary, no corruption. **That verification checked the race's safety but not its cost, and cost was the actual gap**: PR #383's own first CI run hit an evicted provisioning cache and took 6m59s instead of the expected ~2m — not nextest overhead, but four concurrent full from-source `cargo install cargo-mutants` compiles racing on a 4-vCPU runner (the old harness's one-binary-at-a-time model meant a cold cache only ever paid one serial install; nextest's cross-binary parallelism was the first thing to run several cargo-mutants-driving tests concurrently for real). Fixed in #385 with an advisory file lock around the install, re-checking for the binary after acquiring it — concurrent callers now wait for one install instead of each duplicating it, restoring the old cold-cache cost profile regardless of test-runner concurrency.
 
 With that fixed, the real warm-cache comparison holds up: a subsequent PR's run (provisioning cache hit) measured the `cargo llvm-cov nextest` step at **2m08s**, against the pre-nextest baseline's 2m23s–2m54s — a modest, real win, not the dramatic cut the epic's original profiling hoped for (that number was dominated by `dogfood-github-helpers.yml`'s Python mutation step, addressed separately, and by the since-resolved #364 packaging-fixture bug).
+
+## Python CI: build the wheel once (#371)
+
+`python.yml`'s `build` job used to run `maturin build --release` across the full `3.9`–`3.13`
+matrix, and `plugin` built it again for its own `3.9`/`3.13` matrix — seven Rust compiles of the
+same crate per PR run. The package is maturin `bindings = "bin"`
+(`packages/python/pyproject.toml`): the wheel ships the Rust binary with no per-Python-version
+native extension, so every matrix leg was compiling and wrapping the identical artifact.
+
+Verified before implementing, per the issue's own caveat that this could collapse to a no-op if
+the wheel tag turned out to be version-specific: `maturin build --release` produces
+`testing_conventions-<version>-py3-none-manylinux_*.whl` — the `py3-none-` tag is Python's
+own marker for "any CPython 3.x on this platform," confirmed by installing and running the same
+`.whl` under real 3.10–3.13 venvs locally (3.9 wasn't available to test directly, but the tag
+guarantees it). One wheel is correct for the whole matrix.
+
+`build-wheel` now builds it once and uploads it as an artifact (`actions/upload-artifact@v7`,
+matching the naming/versioning this repo already uses for the reusable workflow's own
+`packaging_artifact` wiring); `build` and `plugin` both `needs: build-wheel` and
+`actions/download-artifact@v8` the same wheel instead of rebuilding, matrixing only the cheap
+consumer-facing check each was actually testing — `pip install` + `--version` for `build`,
+`pip install` + the plugin's pytest suite for `plugin`. Neither downstream job needs the Rust
+toolchain, `rust-cache`, or `maturin` installed anymore; they only need Python and the
+already-built wheel. `plugin` still checks out the repo (unlike `build`) because it runs
+`pytest tests/` against the checked-out integration-test files, which aren't part of the wheel.

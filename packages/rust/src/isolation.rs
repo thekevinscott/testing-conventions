@@ -424,7 +424,7 @@ pub(crate) fn has_cfg_test(attrs: &[syn::Attribute]) -> bool {
 /// `true` when a `cfg(...)` token stream *positively requires* the `test` ident —
 /// a bare `test` reached under an **even** number of `not(...)` negations (recursing
 /// into `all(...)` / `any(...)` groups). `#[cfg(not(test))]` gates production code
-/// for non-test builds, so it does not count (#390); a `feature = "test"` string
+/// for non-test builds, so it does not count; a `feature = "test"` string
 /// literal never counts.
 fn cfg_mentions_test(tokens: proc_macro2::TokenStream) -> bool {
     cfg_requires_test(tokens, false)
@@ -454,10 +454,8 @@ fn cfg_requires_test(tokens: proc_macro2::TokenStream, negated: bool) -> bool {
                     return true;
                 }
             }
-            proc_macro2::TokenTree::Group(group) => {
-                if cfg_requires_test(group.stream(), negated) {
-                    return true;
-                }
+            proc_macro2::TokenTree::Group(group) if cfg_requires_test(group.stream(), negated) => {
+                return true;
             }
             _ => {}
         }
@@ -640,7 +638,7 @@ mod tests {
             &module("#[cfg(feature = \"test\")] mod t {}").attrs
         ));
         assert!(!has_cfg_test(&module("mod t {}").attrs));
-        // #390: `not(test)` gates production code, not a test module.
+        // `not(test)` gates production code, not a test module.
         assert!(!has_cfg_test(&module("#[cfg(not(test))] mod t {}").attrs));
         assert!(!has_cfg_test(
             &module("#[cfg(all(not(test), unix))] mod t {}").attrs

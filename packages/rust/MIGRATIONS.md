@@ -882,6 +882,13 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`unit mutation --language rust` no longer duplicates the `cargo-mutants` provisioning install
+under concurrent invocations (#385). A cold provisioning cache previously cost one from-source
+`cargo install` per concurrent caller that observed the binary absent (a monorepo's per-package
+matrix, a test runner that parallelizes across binaries); it now costs one install regardless of
+how many callers race for it, with the rest waiting on a file lock and reusing the result. No API
+or config change; the reported survivor set is unaffected.
+
 `unit lint --language python` no longer reports a re-export barrel's own test (`__init___test.py`)
 as importing unmocked collaborators when it imports the barrel's public surface (#382). A bare,
 level-1 `from . import Thing, __all__, __version__` in `__init___test.py` is now the unit under

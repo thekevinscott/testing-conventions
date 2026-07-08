@@ -705,7 +705,10 @@ const CARGO_MUTANTS_VERSION: &str = "27.1.0";
 fn ensure_cargo_mutants() -> Result<PathBuf> {
     let root = cargo_mutants_cache_root();
     let bin = root.join("bin").join(cargo_mutants_bin_name());
-    provision(&bin, || run_install(&root, |command| command.output()))
+    let lock_path = root.join(".install.lock");
+    provision(&bin, &lock_path, || {
+        run_install(&root, |command| command.output())
+    })
 }
 
 /// The cargo-mutants binary's file name (`.exe` on Windows), as `cargo install --root`
@@ -745,11 +748,41 @@ fn resolve_cache_base(xdg: Option<OsString>, home: Option<OsString>) -> PathBuf 
     std::env::temp_dir()
 }
 
-/// Return `bin` if it already exists, otherwise run `install` and return `bin` once it does.
+/// Return `bin` if it already exists, otherwise take an exclusive advisory lock at
+/// `lock_path`, re-check (another caller may have installed while this one waited for the
+/// lock), and run `install` if still absent.
+///
+/// The lock closes a race #370 exposed: a bare check-then-install with no locking let N
+/// concurrent callers that all observed an absent binary each launch a full `cargo install`
+/// — correct (no corrupted output) but ruinously slow, since a from-source cargo-mutants
+/// compile is duplicated N times instead of once. Concurrent callers now wait ~one install and
+/// find the binary, instead of each running their own; a cold cache costs one serial install
+/// regardless of how many callers race for it (#385).
+///
 /// Pure over the filesystem plus the injected installer, so a test drives every branch with
 /// a temp path and a fake installer (no from-source compile). An installer that reports
 /// success but produces no binary is an error.
-fn provision(bin: &Path, install: impl FnOnce() -> Result<()>) -> Result<PathBuf> {
+fn provision(
+    bin: &Path,
+    lock_path: &Path,
+    install: impl FnOnce() -> Result<()>,
+) -> Result<PathBuf> {
+    if bin.exists() {
+        return Ok(bin.to_path_buf());
+    }
+    if let Some(parent) = lock_path.parent() {
+        std::fs::create_dir_all(parent).context("creating the provisioning lock's parent dir")?;
+    }
+    let lock_file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(lock_path)
+        .context("opening the provisioning lock file")?;
+    lock_file
+        .lock()
+        .context("acquiring the provisioning lock")?;
+    // Re-check: another caller may have installed while this one waited for the lock.
     if bin.exists() {
         return Ok(bin.to_path_buf());
     }
@@ -1164,10 +1197,11 @@ mod tests {
     fn provision_returns_an_existing_binary_without_installing() {
         let tmp = unique_tmp();
         let bin = tmp.join("bin").join("cargo-mutants");
+        let lock = tmp.join(".install.lock");
         std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
         std::fs::write(&bin, b"binary").unwrap();
         let mut installed = false;
-        let got = provision(&bin, || {
+        let got = provision(&bin, &lock, || {
             installed = true;
             Ok(())
         })
@@ -1181,8 +1215,9 @@ mod tests {
     fn provision_installs_when_the_binary_is_absent() {
         let tmp = unique_tmp();
         let bin = tmp.join("bin").join("cargo-mutants");
+        let lock = tmp.join(".install.lock");
         let mut installed = false;
-        let got = provision(&bin, || {
+        let got = provision(&bin, &lock, || {
             installed = true;
             std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
             std::fs::write(&bin, b"binary").unwrap();
@@ -1198,7 +1233,8 @@ mod tests {
     fn provision_errors_when_install_produces_no_binary() {
         let tmp = unique_tmp();
         let bin = tmp.join("bin").join("cargo-mutants");
-        let err = provision(&bin, || Ok(())).unwrap_err();
+        let lock = tmp.join(".install.lock");
+        let err = provision(&bin, &lock, || Ok(())).unwrap_err();
         assert!(
             err.to_string().contains("cargo-mutants is not at"),
             "got: {err}"
@@ -1210,8 +1246,60 @@ mod tests {
     fn provision_propagates_an_install_failure() {
         let tmp = unique_tmp();
         let bin = tmp.join("bin").join("cargo-mutants");
-        let err = provision(&bin, || bail!("install blew up")).unwrap_err();
+        let lock = tmp.join(".install.lock");
+        let err = provision(&bin, &lock, || bail!("install blew up")).unwrap_err();
         assert!(err.to_string().contains("install blew up"), "got: {err}");
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn provision_does_not_duplicate_the_install_under_concurrent_callers() {
+        // #385: on a cold cache, N concurrent callers must share one install, not each run
+        // their own — cargo-mutants' from-source compile duplicated N times (instead of once)
+        // is what turned a ~1-minute cold-cache cost into ~7 minutes under nextest (#370). A
+        // barrier forces both threads to observe the absent binary together, and the install
+        // closure sleeps briefly to widen the race window so this reproduces deterministically
+        // rather than flakily.
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+        use std::time::Duration;
+
+        let tmp = unique_tmp();
+        let bin = tmp.join("bin").join("cargo-mutants");
+        let lock = tmp.join(".install.lock");
+        let install_count = Arc::new(AtomicU64::new(0));
+        let barrier = Arc::new(Barrier::new(2));
+
+        let handles: Vec<_> = (0..2)
+            .map(|_| {
+                let bin = bin.clone();
+                let lock = lock.clone();
+                let install_count = Arc::clone(&install_count);
+                let barrier = Arc::clone(&barrier);
+                thread::spawn(move || {
+                    barrier.wait();
+                    provision(&bin, &lock, || {
+                        install_count.fetch_add(1, Ordering::SeqCst);
+                        thread::sleep(Duration::from_millis(50));
+                        std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
+                        std::fs::write(&bin, b"binary").unwrap();
+                        Ok(())
+                    })
+                })
+            })
+            .collect();
+
+        for h in handles {
+            h.join()
+                .expect("provisioning thread must not panic")
+                .unwrap();
+        }
+
+        assert_eq!(
+            install_count.load(Ordering::SeqCst),
+            1,
+            "two concurrent callers on a cold cache must share one install, not each run their own"
+        );
         std::fs::remove_dir_all(&tmp).unwrap();
     }
 

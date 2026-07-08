@@ -47,6 +47,12 @@ on:
       - '.github/workflows/testing-conventions.yml'
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'testing-conventions version to verify against, e.g. 0.0.67. Empty (the default, on pull_request / push) runs the #356 hermetic build-from-HEAD path unchanged; the verify-and-promote workflow (#357) dispatches this at the release SHA with the just-published version pinned, forcing the published consumer path.'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -87,6 +93,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       path: packages/python/python
 
   colocated-test:
@@ -94,6 +101,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       path: packages/node/src
       gates: '["colocated-test"]'
 
@@ -106,6 +114,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       path: packages/node
       gates: '["e2e-verify"]'
 
@@ -127,6 +136,7 @@ jobs:
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
+      version: ${{ inputs.version }}
       path: internals/checks/src
 
   # internals/detect (#363) is NOT dogfooded here, unlike internals/checks above. Its

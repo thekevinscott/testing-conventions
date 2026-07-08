@@ -40,6 +40,8 @@ from checks.red_path_hermetic_wired.cli import cli as red_path_hermetic_wired
 from checks.rolling_release_wired.cli import cli as rolling_release_wired
 from checks.rust_toolchain_wired.cli import cli as rust_toolchain_wired
 from checks.uv_provisioning_wired.cli import cli as uv_provisioning_wired
+from checks.verify_release.cli import cli as verify_release
+from checks.verify_release_wired.cli import cli as verify_release_wired
 from checks.wiring_detect_action.cli import cli as wiring_detect_action
 from checks.wiring_e2e_default_on.cli import cli as wiring_e2e_default_on
 from checks.wiring_packaging_default_on.cli import cli as wiring_packaging_default_on
@@ -83,6 +85,8 @@ main.add_command(red_path_hermetic_wired, name="red-path-hermetic-wired")
 main.add_command(rolling_release_wired, name="rolling-release-wired")
 main.add_command(rust_toolchain_wired, name="rust-toolchain-wired")
 main.add_command(uv_provisioning_wired, name="uv-provisioning-wired")
+main.add_command(verify_release, name="verify-release")
+main.add_command(verify_release_wired, name="verify-release-wired")
 main.add_command(wiring_detect_action, name="wiring-detect-action")
 main.add_command(wiring_e2e_default_on, name="wiring-e2e-default-on")
 main.add_command(wiring_packaging_default_on, name="wiring-packaging-default-on")

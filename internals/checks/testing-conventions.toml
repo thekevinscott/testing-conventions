@@ -65,3 +65,33 @@ path = "checks/utils/job_block.py"
 rules = ["mutation"]
 lines = ["50"]
 reason = "i + 1 < len(headers) on job_block.py:50: i is bound only by enumerate(headers), so i + 1 can never exceed len(headers) on any reachable execution, making the NotEq mutant (i + 1 != len(headers)) behaviorally identical to < for every input — and the IsNot mutant additionally equivalent via CPython's small-int interning (job counts are always far below 256). Neither is killable without fabricating an unreachable i, which would test a contract this function doesn't have. The sibling Add_LShift mutant on the same line is a real gap, killed by asserting on the first job's own block boundary."
+
+# verify_release.py:150, :156 (#357) are the two subprocess boundary calls — the `_run_text` /
+# `_run_bytes` helpers every git/gh operation routes through. The `capture_output=True` / `text=True`
+# flags are the mutation-survivors: their effect is entirely inside `subprocess.run` (stdout captured
+# and decoded), so an *injected* `run` fake — the only way to test this repo-only helper, since its
+# `gh` boundary can't be run for real in CI — cannot observe them being flipped; the fake returns its
+# canned stdout regardless. Killing them would mean building a fake that re-implements subprocess.run's
+# capture/text contract, i.e. testing the standard library, not this code. Everything else in the
+# helpers is killed for real: the nonzero-exit raise (`if result.returncode:`, via signal/exit tests),
+# and every parse and decision downstream. This is the `build_hermetic_cli` case — a boundary CI can't
+# exercise — which is why the helper lives here (exemptions available) rather than `.github/scripts`.
+[[python.exempt]]
+path = "checks/utils/verify_release.py"
+rules = ["mutation"]
+lines = ["150", "156"]
+reason = "capture_output=True / text=True on the two subprocess boundary calls (_run_text/_run_bytes): their effect lives inside subprocess.run, unobservable through the injected `run` fake this repo-only helper is tested with (its gh boundary can't run for real in CI), so flipping them changes nothing a fake can see — killing them would test subprocess.run's own capture/text contract, not this code. The returncode raise and all parsing/decisions are killed for real; this is the build_hermetic_cli boundary-exemption case."
+
+# verify_release/cli.py:29, :35-42, :50-57 (#357) are the three thin subcommand callbacks — each
+# threads its argument into the exhaustively-tested checks.utils.verify_release (resolve_version /
+# check_layout+missing_paths / verify_suites+failed_suites) and echoes or raises. Driving a callback
+# for real means real git/gh (resolve tags, archive a commit, dispatch+poll workflow runs); the
+# decisions they wrap (which paths are missing, which suites failed) are unit-tested in
+# checks/utils/verify_release_test.py against an injected boundary. This is exactly the
+# build_hermetic_cli.cli split: the utils module carries the logic and the coverage, the click glue is
+# exempted.
+[[python.exempt]]
+path = "checks/verify_release/cli.py"
+rules = ["coverage", "mutation"]
+lines = ["29", "35-38", "46-50"]
+reason = "thin subcommand glue threading each argument into the exhaustively-tested checks.utils.verify_release and echoing/raising; driving a callback for real means real git/gh (resolve tags, archive a commit, dispatch+poll runs), and the decisions they wrap are unit-tested against an injected boundary — the build_hermetic_cli.cli split, logic+coverage in utils, click glue exempted."

@@ -13,7 +13,7 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use testing_conventions::colocated_test::{missing_unit_tests, Language};
+use testing_conventions::colocated_test::{missing_inline_tests, missing_unit_tests, Language};
 use testing_conventions::run;
 
 /// Absolute path to a fixture tree under `tests/fixtures/colocated_test/`.
@@ -170,6 +170,32 @@ fn rust_red_tree_exits_nonzero() {
     // `src/untested.rs` has a function but no inline `#[cfg(test)]` module, so the
     // presence check must flag it; the correctly-tested `widget.rs` must not be.
     assert_eq!(unit_colocated_test_exit("rust/red", "rust"), 1);
+}
+
+#[test]
+fn rust_cfg_not_test_module_is_not_a_test_module() {
+    // `#[cfg(not(test))]` compiles in non-test builds — it is production code,
+    // never a test module. A file with behavior whose only cfg-gated module is
+    // `not(test)` has no inline test, so it is an orphan the presence gate must
+    // flag — not a false green.
+    let root = fixture("rust/cfg_not_test");
+    let orphans: Vec<String> = missing_inline_tests(&root, &BTreeSet::new())
+        .expect("walking a readable tree should succeed")
+        .iter()
+        .map(|path| {
+            path.strip_prefix(&root)
+                .expect("an orphan must live under the scanned root")
+                .to_string_lossy()
+                .replace('\\', "/")
+        })
+        .collect();
+    assert_eq!(orphans, vec!["src/gated.rs"]);
+}
+
+#[test]
+fn rust_cfg_not_test_tree_exits_nonzero() {
+    // The subcommand must surface the orphan as a non-zero exit.
+    assert_eq!(unit_colocated_test_exit("rust/cfg_not_test", "rust"), 1);
 }
 
 #[test]

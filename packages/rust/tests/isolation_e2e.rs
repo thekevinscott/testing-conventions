@@ -32,6 +32,12 @@ fn clean_exits_zero() {
     assert_eq!(iso_exit("unit/clean"), 0);
 }
 
+// `#[cfg(not(test))]` is production code, not a unit test.
+#[test]
+fn cfg_not_test_exits_zero() {
+    assert_eq!(iso_exit("unit/cfg_not_test"), 0);
+}
+
 // D2: foreign imports
 #[test]
 fn imports_red_exits_nonzero() {

@@ -91,6 +91,24 @@ fn clean_exits_zero() {
     assert_eq!(iso_exit("unit/clean"), 0);
 }
 
+#[test]
+fn cfg_not_test_module_is_not_linted_as_test_code() {
+    // A `#[cfg(not(test))]` module compiles in non-test builds — it is production
+    // code, not a unit test — so its first-party cross-module call must not be
+    // flagged. Treating `not(test)` as a test module is a false red.
+    let violations = find_violations(fixture("unit/cfg_not_test"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "production code under `#[cfg(not(test))]` must not be linted as a unit test; got {violations:?}"
+    );
+}
+
+#[test]
+fn cfg_not_test_exits_zero() {
+    assert_eq!(iso_exit("unit/cfg_not_test"), 0);
+}
+
 /// `true` when scanning `fixture_name` yields a `no-out-of-module-import`
 /// violation in the file ending `file_suffix`.
 fn import_flagged(fixture_name: &str, file_suffix: &str) -> bool {

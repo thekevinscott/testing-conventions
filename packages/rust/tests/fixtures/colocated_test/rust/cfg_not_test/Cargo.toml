@@ -1,0 +1,11 @@
+# Fixture for the Rust colocated-test rule — a `#[cfg(not(test))]` module must not
+# count as an inline test module (#390). `src/gated.rs` has behavior and only a
+# `#[cfg(not(test))]` module (production code), so it is the orphan the presence
+# check must flag. Parsed by `syn`, never compiled — `[workspace]` isolates the
+# fixture from the parent cargo workspace.
+[package]
+name = "colo_rust_cfg_not_test"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

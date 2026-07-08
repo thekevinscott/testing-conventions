@@ -56,7 +56,9 @@ The unit suite's side: every collaborator is mocked.
   flag a unit test (an inline `#[cfg(test)]` module) that reaches out of its own module —
   `crate::…`, an external crate, or effectful `std` (`fs`, `net`, `process`, `env`, `thread`, the
   clock). A single `super::` (the unit under test), `self`, and pure `std` stay in-module. Inject
-  a trait double for a collaborator instead.
+  a trait double for a collaborator instead. A unit test is a module gated by a positively-required
+  `test` (`#[cfg(test)]`, `#[cfg(all(test, …))]`); a `#[cfg(not(test))]` module compiles in
+  *non-test* builds, so it is production code and its out-of-module calls are left alone.
 
 ## What `integration lint` flags
 

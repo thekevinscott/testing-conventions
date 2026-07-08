@@ -43,24 +43,27 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Install the Python toolchain (coverage, pytest, and the mutation adapter)
-        # The mutation arm spawns the adapter shipped in the testing-conventions wheel
-        # (`python3 -m testing_conventions.mutation.main`, #248) — installing the wheel
-        # provides it and brings cosmic-ray.
-        run: python -m pip install --quiet coverage pytest testing-conventions
+      - uses: astral-sh/setup-uv@v6
       - name: Enforce the conventions on the helper scripts
         # The Python arms that apply to loose first-party scripts: a colocated unit test per
         # source, unit-suite isolation, the coverage floor, the integration mocking lint, and
         # mutation on the changed lines — diff-scoped (`--base`) exactly like the packages'
         # gate, since whole-tree mutation is too slow to gate. (Packaging / e2e-attestation
         # don't apply here.) Collect every failure, then fail.
+        #
+        # `npx testing-conventions` is the deliberate consumer path this job dogfoods. The
+        # mutation arm spawns `python3 -m testing_conventions.mutation.main` (#248), though, and
+        # PYTHONPATH resolves that adapter from source — the PR's code, not the released wheel —
+        # while uv layers the engines (coverage, pytest, cosmic-ray) onto the `python3` npx spawns.
+        env:
+          PYTHONPATH: ${{ github.workspace }}/packages/python/python
         run: |
           set -uo pipefail
           fail=0
           for dir in .github/scripts; do
             for rule in "unit colocated-test" "unit lint" "unit coverage" "integration lint" "unit mutation --base origin/main"; do
               echo "::group::testing-conventions $rule --language python $dir"
-              if ! npx -y testing-conventions $rule --language python "$dir"; then
+              if ! uv run --with coverage --with pytest --with cosmic-ray --no-project npx -y testing-conventions $rule --language python "$dir"; then
                 echo "::error::\`$rule\` failed for $dir"
                 fail=1
               fi

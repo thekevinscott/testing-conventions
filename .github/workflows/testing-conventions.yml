@@ -863,30 +863,26 @@ jobs:
     if: ${{ (inputs.gates == '' || contains(inputs.gates, '"packaging"')) && (inputs.packaging_artifact != '' || needs.detect.outputs.packaging_build != '' || needs.detect.outputs.packaging_dist == 'true') }}
     runs-on: ubuntu-latest
     steps:
+      # A local `uses: ./...` action reference (the hermetic-cli download below) resolves from
+      # the job's own checkout — every other rule job always checks out first, so it just works
+      # there; this job normally skips checkout on the packaging_artifact path (nothing to
+      # build), so it needs its own checkout whenever the hermetic path also needs one. This
+      # must run BEFORE the artifact download below: actions/checkout always deletes the
+      # workspace's existing contents before initializing its own checkout (regardless of the
+      # `clean` input, which only controls git-clean *after* a checkout is already in place) —
+      # checking out after the download would wipe the artifact it just fetched.
+      - name: Check out the repository to build/inspect its distribution, or just to resolve the hermetic-cli download action
+        if: inputs.packaging_artifact == '' || needs.detect.outputs.cli_command != ''
+        uses: actions/checkout@v6
       # Acquire the distributions one of two ways: a named upload artifact (scanned as-is),
-      # or the consumer checkout — where the build steps below produce the distribution, or a
-      # committed dist/ already sits (#186).
+      # or the consumer checkout above — where the build steps below produce the distribution,
+      # or a committed dist/ already sits (#186).
       - name: Download the uploaded distributions
         if: inputs.packaging_artifact != ''
         uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.packaging_artifact }}
           path: _packaging_artifact
-      - name: Check out the repository to build and inspect its distribution
-        if: inputs.packaging_artifact == ''
-        uses: actions/checkout@v6
-      # A local `uses: ./...` action reference resolves from the job's own checkout — every
-      # other rule job always checks out first, but this one skips it on the
-      # packaging_artifact path above, so on the hermetic path that path needs its own
-      # (otherwise-redundant) checkout for ./.github/actions/download-hermetic-cli to resolve.
-      # `clean: false`: actions/checkout defaults to `git clean -ffdx` before fetching, which
-      # would delete the untracked _packaging_artifact/ the step above just downloaded — this
-      # checkout only needs the repo's own files on disk, not a pristine workspace.
-      - name: Check out the repository to resolve the hermetic-cli download action
-        if: inputs.packaging_artifact != '' && needs.detect.outputs.cli_command != ''
-        uses: actions/checkout@v6
-        with:
-          clean: false
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli

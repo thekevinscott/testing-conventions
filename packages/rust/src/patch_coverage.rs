@@ -859,6 +859,39 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_plus_plus_body_line_is_not_a_file_header() {
+        // An added source line whose content begins `++ ` renders as `+++ …` in the
+        // unified diff (the `+` add-marker plus the `++ `). It is hunk *body*, not a
+        // `+++` file header — so it must stay attributed to `w.py` and must not divert
+        // the file's later added lines to a bogus key (which drops them from scoping —
+        // a false green). Header detection only fires before the first `@@`.
+        let diff = "diff --git a/w.py b/w.py\n\
+                    index abc..def 100644\n\
+                    --- a/w.py\n\
+                    +++ b/w.py\n\
+                    @@ -1,0 +1,3 @@\n\
+                    +++ 1\n\
+                    +y = 1\n\
+                    +z = 2\n";
+        assert_eq!(parse_unified_diff(diff), changed(&[("w.py", &[1, 2, 3])]));
+    }
+
+    #[test]
+    fn new_side_path_decodes_a_c_quoted_non_ascii_path() {
+        // With `core.quotepath` on (git's default), a non-ASCII header path is
+        // C-quoted — wrapped in double quotes with octal `\NNN` byte escapes — e.g.
+        // `src/föö.py` → `"b/src/f\303\266\303\266.py"`. `new_side_path` must decode it
+        // to the real UTF-8 path so it matches the coverage report's key; left quoted,
+        // the changed lines are silently skipped (a vacuous pass).
+        assert_eq!(
+            new_side_path("\"b/src/f\\303\\266\\303\\266.py\"").as_deref(),
+            Some("src/föö.py")
+        );
+        // An unquoted path (quotepath off) keeps working, bar the `b/` strip.
+        assert_eq!(new_side_path("b/src/föö.py").as_deref(), Some("src/föö.py"));
+    }
+
     fn cov(
         executed: &[u64],
         missing: &[u64],

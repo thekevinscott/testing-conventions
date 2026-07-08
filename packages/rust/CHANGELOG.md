@@ -55,6 +55,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   from the denominator. Each exempt entry is now anchored to the file's full path, so it matches
   only the exempted file. Latent through the CLI today (validation always runs with nothing
   exempt); reachable through the library API.
+- **Diff scoping now keeps `++ `-prefixed lines and non-ASCII paths in scope** (#392). The shared
+  `<base>...HEAD` diff parser that backs changed-line coverage and TypeScript / Python mutation
+  (`patch_coverage::changed_lines`), plus the co-change name-status walk
+  (`co_change::stale_sources`), dropped changed files from scoping in two ways — each a false
+  green. First, an added source line whose content begins `++ ` renders as `+++ …` in the unified
+  diff and was consumed by the `+++ ` file-header branch, diverting that file's later changed lines
+  to a phantom key so they left the coverage/mutation ratio; the parser now tracks hunk state, so
+  `+++ ` / `--- ` are read as headers only before the first `@@`, and a `++ ` body line stays
+  attributed to its file. Second, git output inherited the caller's config: under the default
+  `core.quotepath=on`, a changed `src/föö.py` was emitted C-quoted (`"src/f\303\266\303\266.py"`)
+  and never matched a report key (coverage/mutation silently skipped it) or read back as a file
+  (co-change hard-errored). The diff and name-status runs now pass `-c core.quotepath=off
+  --no-ext-diff` and force `--src-prefix=a/ --dst-prefix=b/` (so a custom `diff.mnemonicPrefix` /
+  `diff.noprefix` can't break the `b/` strip), and any residual C-quoted path is decoded to its
+  real UTF-8 form. No CLI or config change.
 
 - **`unit mutation --language rust`: concurrent invocations no longer each duplicate the
   cargo-mutants install** (#385, found investigating #370/epic #366). Provisioning the pinned

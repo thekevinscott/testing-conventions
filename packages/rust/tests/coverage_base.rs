@@ -297,6 +297,33 @@ fn an_unknown_base_ref_is_an_error() {
 }
 
 #[test]
+fn a_plus_plus_line_keeps_the_uncovered_change_in_scope() {
+    // #392: a `++ 1` line renders as `+++ 1` in the diff and was consumed by the
+    // `+++` file-header branch, diverting the file's later added lines (an untested
+    // `never_run`) to a bogus key — dropping them from the ratio, so a below-floor
+    // change passed vacuously. The uncovered `return 999` must stay in scope, failing
+    // the 100 floor.
+    let repo = TempRepo::new("plusplus");
+    repo.write("calc.py", "def calc(n):\n    return n\n");
+    repo.write(
+        "calc_test.py",
+        "from calc import calc\n\n\ndef test_calc():\n    assert calc(3) == 3\n",
+    );
+    repo.commit("base");
+    let base = repo.head();
+    repo.write(
+        "calc.py",
+        "def calc(n):\n    return n\n\n\n++ 1\n\n\ndef never_run():\n    return 999\n",
+    );
+    repo.commit("append a ++ line and an untested helper");
+
+    assert!(
+        matches!(measure_base(&repo, &base, 100), Outcome::Fail(_)),
+        "the uncovered line after the ++ line must stay in scope and fail the floor"
+    );
+}
+
+#[test]
 fn cli_exits_nonzero_on_a_below_floor_diff() {
     // No config, so the diff is judged against the default Python floor (now 100);
     // the 75% diff is below it → exit 1.

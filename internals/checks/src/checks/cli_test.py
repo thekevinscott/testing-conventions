@@ -138,6 +138,10 @@ def test_uv_provisioning_wired_is_registered():
     assert "uv-provisioning-wired" in main.commands
 
 
+def test_verify_release_is_registered():
+    assert "verify-release" in main.commands
+
+
 def test_verify_release_wired_is_registered():
     assert "verify-release-wired" in main.commands
 

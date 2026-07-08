@@ -6,9 +6,9 @@ tag move is about to bless — the *new* workflow file, the *published* binary, 
 detect — is green over the consumer surface. #357 gates the promotion on a verification run before
 the tag moves, and this asserts that gate stays wired:
 
-  * the layout check (`verify_release.py check-layout`) runs — the remote-action-fetch provenance
+  * the layout check (`tc-checks verify-release check-layout`) runs — the remote-action-fetch provenance
     the version-pinned suite can't cover;
-  * the version-pinned suite is dispatched (`verify_release.py dispatch-and-wait`) over *both* the
+  * the version-pinned suite is dispatched (`tc-checks verify-release dispatch-and-wait`) over *both* the
     self-test and dogfood workflows; and
   * the job that advances `@v0` (`move_major_tag.py`) `needs:` the verification jobs, so a red
     layout check or a red suite leaves `@v0` where it is (fail closed) rather than promoting anyway.
@@ -22,8 +22,8 @@ from typing import Optional
 
 from checks.utils.job_block import iter_job_blocks
 
-LAYOUT_STEP = "verify_release.py check-layout"
-SUITE_STEP = "verify_release.py dispatch-and-wait"
+LAYOUT_STEP = "tc-checks verify-release check-layout"
+SUITE_STEP = "tc-checks verify-release dispatch-and-wait"
 MOVE_STEP = "move_major_tag.py"
 DISPATCHED_WORKFLOWS = ("testing-conventions-selftest.yml", "dogfood.yml")
 VERIFY_JOBS = ("verify-layout", "verify-suite")
@@ -43,9 +43,9 @@ def check_move_gated_on_verification(text: Optional[str]) -> Optional[str]:
         )
     missing = []
     if LAYOUT_STEP not in text:
-        missing.append("the layout check (`verify_release.py check-layout`)")
+        missing.append("the layout check (`tc-checks verify-release check-layout`)")
     if SUITE_STEP not in text:
-        missing.append("the version-pinned suite dispatch (`verify_release.py dispatch-and-wait`)")
+        missing.append("the version-pinned suite dispatch (`tc-checks verify-release dispatch-and-wait`)")
     for workflow in DISPATCHED_WORKFLOWS:
         if workflow not in text:
             missing.append(f"a verification dispatch of {workflow}")

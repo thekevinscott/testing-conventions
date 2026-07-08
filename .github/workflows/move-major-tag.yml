@@ -18,8 +18,9 @@ name: Move major tag
 # structurally forced — the new-workflow × detect-at-the-new-tag combination is unconstructable
 # until the tag moves (`uses:` refs can't be dynamic) — and the coverage it would give is already
 # proven pre-merge by Layer 1's hermetic gate (#356). See internals/repo.md, "Validated
-# promotion". All logic is in the colocated-tested `.github/scripts/verify-release` and
-# `.github/scripts/move-major-tag` helpers; this workflow wires triggers, checkouts, and env.
+# promotion". All logic is in the colocated-tested `tc-checks verify-release` command
+# (internals/checks) and the `.github/scripts/move-major-tag` helper; this workflow wires
+# triggers, checkouts, and env.
 
 on:
   workflow_run:
@@ -55,9 +56,10 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
           fetch-tags: true
+      - uses: astral-sh/setup-uv@v6
       - name: Resolve the just-published version to pin the verification to
         id: version
-        run: echo "version=$(python3 .github/scripts/verify-release/verify_release.py resolve-version "${{ github.event.workflow_run.head_sha }}")" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(uv run --project internals/checks tc-checks verify-release resolve-version "${{ github.event.workflow_run.head_sha }}")" >> "$GITHUB_OUTPUT"
 
   verify-layout:
     # The remote-action-fetch provenance the version-pinned suite can't cover (it runs
@@ -73,8 +75,9 @@ jobs:
         with:
           ref: ${{ needs.context.outputs.sha }}
           fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
       - name: The release archive carries the detect action's fetch targets
-        run: python3 .github/scripts/verify-release/verify_release.py check-layout "${{ needs.context.outputs.sha }}"
+        run: uv run --project internals/checks tc-checks verify-release check-layout "${{ needs.context.outputs.sha }}"
 
   verify-suite:
     # The full self-test + dogfood surface, pinned to the just-published version (the published
@@ -92,11 +95,12 @@ jobs:
           ref: ${{ needs.context.outputs.sha }}
           fetch-depth: 0
           fetch-tags: true
+      - uses: astral-sh/setup-uv@v6
       - name: Verify the version-pinned self-test + dogfood suites at the release commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          python3 .github/scripts/verify-release/verify_release.py dispatch-and-wait
+          uv run --project internals/checks tc-checks verify-release dispatch-and-wait
           "${{ needs.context.outputs.sha }}" "${{ needs.context.outputs.version }}"
           testing-conventions-selftest.yml dogfood.yml
 

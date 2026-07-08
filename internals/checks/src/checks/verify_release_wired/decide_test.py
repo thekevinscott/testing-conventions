@@ -12,16 +12,13 @@ WIRED = """\
 jobs:
   context:
     steps:
-      - run: python3 .github/scripts/verify-release/verify_release.py resolve-version "$SHA"
+      - run: uv run --project internals/checks tc-checks verify-release resolve-version "$SHA"
   verify-layout:
     steps:
-      - run: python3 .github/scripts/verify-release/verify_release.py check-layout "$SHA"
+      - run: uv run --project internals/checks tc-checks verify-release check-layout "$SHA"
   verify-suite:
-    strategy:
-      matrix:
-        workflow: [testing-conventions-selftest.yml, dogfood.yml]
     steps:
-      - run: python3 .github/scripts/verify-release/verify_release.py dispatch-and-wait "$WF" "$SHA" "$V"
+      - run: uv run --project internals/checks tc-checks verify-release dispatch-and-wait "$SHA" "$V" testing-conventions-selftest.yml dogfood.yml
   move-v0:
     needs: [context, verify-layout, verify-suite]
     steps:
@@ -34,12 +31,12 @@ def test_error_when_the_file_is_absent():
 
 
 def test_error_when_the_layout_check_is_missing():
-    text = WIRED.replace('verify_release.py check-layout "$SHA"', "echo skip")
+    text = WIRED.replace('tc-checks verify-release check-layout "$SHA"', "echo skip")
     assert "layout check" in check_move_gated_on_verification(text)
 
 
 def test_error_when_the_suite_dispatch_is_missing():
-    text = WIRED.replace('verify_release.py dispatch-and-wait "$WF" "$SHA" "$V"', "echo skip")
+    text = WIRED.replace("tc-checks verify-release dispatch-and-wait", "echo skip")
     assert "suite dispatch" in check_move_gated_on_verification(text)
 
 

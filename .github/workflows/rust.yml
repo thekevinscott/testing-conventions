@@ -87,6 +87,7 @@ jobs:
         working-directory: packages/rust/tests/fixtures/unit_coverage/typescript
         run: npm ci
       - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@nextest
       # The Rust mutation rule (#242) provisions cargo-mutants itself — a pinned `cargo
       # install` into the tool's cache on first use — so the integration/e2e tests need no
       # ambient engine. Cache that directory across runs to skip the from-source compile.
@@ -112,13 +113,20 @@ jobs:
       - name: Install the TypeScript mutation fixtures' toolchain
         working-directory: packages/rust/tests/fixtures/unit_mutation/typescript
         run: npm ci
-      # `cargo llvm-cov` runs the integration + e2e suites under `tests/` (and the
+      # `cargo llvm-cov nextest` runs the integration + e2e suites under `tests/` (and the
       # library tests) under instrumentation, enforcing the 95% line floor over the
-      # whole suite — unit tests alone don't exercise the CLI dispatch in lib.rs.
-      # PYTHONPATH points the Python mutation adapter (`python3 -m
-      # testing_conventions.mutation.main`, spawned over staged temp fixtures) at the source
-      # package; a consumer resolves it from the installed wheel's site-packages instead.
-      - run: cargo llvm-cov --ignore-filename-regex 'main\.rs' --fail-under-lines 95
+      # whole suite — unit tests alone don't exercise the CLI dispatch in lib.rs. nextest
+      # runs each of the 65 integration-test binaries in its own process in parallel
+      # (#370, epic #366), instead of the default harness's one-binary-at-a-time run —
+      # several binaries cost multiple seconds to tens of seconds (real subprocess
+      # shellouts to pytest/vitest/cargo-mutants), which dominated this job's wall clock
+      # far more than compile time did. `--fail-under-lines`/`--ignore-filename-regex` are
+      # cargo-llvm-cov's own report-gating flags and apply identically regardless of which
+      # test runner subcommand executes the tests. PYTHONPATH points the Python mutation
+      # adapter (`python3 -m testing_conventions.mutation.main`, spawned over staged temp
+      # fixtures) at the source package; a consumer resolves it from the installed wheel's
+      # site-packages instead.
+      - run: cargo llvm-cov nextest --ignore-filename-regex 'main\.rs' --fail-under-lines 95
         env:
           PYTHONPATH: ${{ github.workspace }}/packages/python/python
 

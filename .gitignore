@@ -46,3 +46,6 @@ packages/rust/tests/fixtures/unit_mutation/typescript/*/.stryker-tmp/
 # the derived package_root — the blanket `dist/` rule above would otherwise hide them from git.
 !.github/selftest/packaging-package-root/**/dist/
 !.github/selftest/packaging-package-root/**/dist/**
+
+# Claude Code local worktrees and session scratch (never tracked)
+.claude/

@@ -460,16 +460,28 @@ fn evaluate_patch_rust(
 /// real addition; `--no-renames` keeps a rename a delete + an add (the added side
 /// is held to coverage); `--relative` reports paths relative to `repo`. Returns an
 /// error if `git diff` fails (e.g. `base` names no resolvable ref).
+///
+/// The invocation is pinned against the caller's git config (#392):
+/// `-c core.quotepath=off` emits non-ASCII bytes raw instead of octal-escaping them,
+/// `--no-ext-diff` blocks a configured external differ, and forcing
+/// `--src-prefix=a/ --dst-prefix=b/` keeps the `b/` strip in [`new_side_path`] working
+/// under a custom `diff.mnemonicPrefix` / `diff.noprefix`. Any residual C-quoted path
+/// (a name with a `"`, a backslash, or a control byte) is decoded in [`new_side_path`].
 pub fn changed_lines(repo: &Path, base: &str) -> Result<BTreeMap<String, BTreeSet<u64>>> {
     let range = format!("{base}...HEAD");
     let output = Command::new("git")
         .current_dir(repo)
         .args([
+            "-c",
+            "core.quotepath=off",
             "diff",
             "--no-color",
+            "--no-ext-diff",
             "--no-renames",
             "--unified=0",
             "--relative",
+            "--src-prefix=a/",
+            "--dst-prefix=b/",
             &range,
         ])
         .output()
@@ -489,43 +501,111 @@ pub fn changed_lines(repo: &Path, base: &str) -> Result<BTreeMap<String, BTreeSe
 /// counter from each `@@ … +c,d @@` hunk header, then records every following `+`
 /// line (a deletion `-` consumes no new-side number). A deleted file
 /// (`+++ /dev/null`) yields no entry.
+///
+/// Hunk state guards the header detection (#392): a `+++ ` / `--- ` line is a file
+/// header only *before* the first `@@` of a file's block; once inside a hunk, a `+`
+/// line — even one that renders as `+++ …` because its added content began `++ ` —
+/// is body, recorded against the current file. Each `diff --git ` line opens a new
+/// block and resets the state, so the next `+++ ` header is read as one again.
 fn parse_unified_diff(diff: &str) -> BTreeMap<String, BTreeSet<u64>> {
     let mut changed: BTreeMap<String, BTreeSet<u64>> = BTreeMap::new();
     let mut current: Option<String> = None;
     let mut next_line: u64 = 0;
+    let mut in_hunk = false;
     for line in diff.lines() {
-        if let Some(header) = line.strip_prefix("+++ ") {
-            current = new_side_path(header);
+        if line.starts_with("diff --git ") {
+            // A new file's header block begins — leave hunk state so the `+++`
+            // header that follows is read as a header, not as added body.
+            in_hunk = false;
+            current = None;
         } else if line.starts_with("@@") {
+            in_hunk = true;
             if let Some(start) = hunk_new_start(line) {
                 next_line = start;
             }
+        } else if !in_hunk {
+            // Before the first `@@`: the only header we read is `+++`. `--- `, `index`,
+            // and mode lines carry no new-side path and are ignored.
+            if let Some(header) = line.strip_prefix("+++ ") {
+                current = new_side_path(header);
+            }
         } else if line.starts_with('+') {
-            // An added new-side line — the `+++` header is handled above, so this
-            // is diff body. Record it against the current file and advance.
+            // Inside a hunk: an added new-side body line — recorded against the
+            // current file and the counter advanced (a `+++ …` body line included).
             if let Some(file) = &current {
                 changed.entry(file.clone()).or_default().insert(next_line);
             }
             next_line += 1;
         }
-        // `-` (deleted) and metadata lines consume no new-side line and are skipped.
+        // `-` (deleted), context, and metadata lines consume no new-side line.
     }
     changed
 }
 
 /// The `repo`-relative new-side path from a `+++` diff header, or `None` for a
-/// deletion (`+++ /dev/null`). Strips git's `b/` prefix and a trailing tab.
+/// deletion (`+++ /dev/null`). Decodes a C-quoted path (#392) before stripping git's
+/// forced `b/` prefix and a trailing tab.
 fn new_side_path(header: &str) -> Option<String> {
-    let path = header
+    let raw = header
         .split('\t')
         .next()
         .unwrap_or(header)
         .trim_end_matches('\r');
-    if path == "/dev/null" {
+    if raw == "/dev/null" {
         return None;
     }
-    let path = path.strip_prefix("b/").unwrap_or(path);
+    // Git quotes the whole thing including the prefix (`"b/föö.py"`), so decode first.
+    let unquoted = unquote_c_path(raw);
+    let path = unquoted.strip_prefix("b/").unwrap_or(&unquoted);
     Some(path.replace('\\', "/"))
+}
+
+/// Decode a git C-quoted path to its real bytes (#392). Git wraps a path containing a
+/// `"`, a backslash, or a control byte — and, with `core.quotepath` on, a high-bit
+/// byte — in double quotes and C-escapes it (`\a \b \t \n \v \f \r \" \\`, and octal
+/// `\NNN` for any other byte). An unquoted path (no surrounding quotes) is returned
+/// unchanged, so this is a no-op on the common `core.quotepath=off` output.
+pub(crate) fn unquote_c_path(path: &str) -> String {
+    let bytes = path.as_bytes();
+    if bytes.len() < 2 || bytes[0] != b'"' || bytes[bytes.len() - 1] != b'"' {
+        return path.to_string();
+    }
+    let inner = &bytes[1..bytes.len() - 1];
+    let mut out: Vec<u8> = Vec::with_capacity(inner.len());
+    let mut i = 0;
+    while i < inner.len() {
+        if inner[i] != b'\\' || i + 1 >= inner.len() {
+            out.push(inner[i]);
+            i += 1;
+            continue;
+        }
+        let next = inner[i + 1];
+        if (b'0'..=b'7').contains(&next) {
+            // An octal escape: up to three octal digits.
+            let mut value: u32 = 0;
+            let mut k = i + 1;
+            while k < inner.len() && k < i + 4 && (b'0'..=b'7').contains(&inner[k]) {
+                value = value * 8 + u32::from(inner[k] - b'0');
+                k += 1;
+            }
+            out.push(value as u8);
+            i = k;
+        } else {
+            let decoded = match next {
+                b'a' => 0x07,
+                b'b' => 0x08,
+                b't' => b'\t',
+                b'n' => b'\n',
+                b'v' => 0x0b,
+                b'f' => 0x0c,
+                b'r' => b'\r',
+                other => other, // `\"`, `\\`, and any other escaped byte are literal.
+            };
+            out.push(decoded);
+            i += 2;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// The new-side start line from a hunk header `@@ -a,b +c,d @@ …` — the `c`. With
@@ -890,6 +970,34 @@ mod tests {
         );
         // An unquoted path (quotepath off) keeps working, bar the `b/` strip.
         assert_eq!(new_side_path("b/src/föö.py").as_deref(), Some("src/föö.py"));
+    }
+
+    #[test]
+    fn unquote_c_path_decodes_octal_and_named_escapes() {
+        // Octal byte escapes reassemble UTF-8 (ö = C3 B6).
+        assert_eq!(
+            unquote_c_path("\"src/f\\303\\266\\303\\266.py\""),
+            "src/föö.py"
+        );
+        // The named escapes and the literal `\"` / `\\` each decode to their byte.
+        assert_eq!(unquote_c_path("\"a\\tb\\\"c\\\\d\""), "a\tb\"c\\d");
+        assert_eq!(
+            unquote_c_path("\"\\a\\b\\n\\v\\f\\r\""),
+            "\u{7}\u{8}\n\u{b}\u{c}\r"
+        );
+        // A short octal run stops at three digits: `\1015` → byte 0o101 ('A') then '5'.
+        assert_eq!(unquote_c_path("\"\\1015\""), "A5");
+    }
+
+    #[test]
+    fn unquote_c_path_leaves_an_unquoted_path_unchanged() {
+        // The common `core.quotepath=off` case: no surrounding quotes → returned as-is.
+        assert_eq!(unquote_c_path("src/föö.py"), "src/föö.py");
+        // A lone `"` (not a wrapping pair) and the empty string are left alone.
+        assert_eq!(unquote_c_path("\""), "\"");
+        assert_eq!(unquote_c_path(""), "");
+        // A trailing lone backslash inside the quotes is emitted literally.
+        assert_eq!(unquote_c_path("\"a\\\""), "a\\");
     }
 
     fn cov(

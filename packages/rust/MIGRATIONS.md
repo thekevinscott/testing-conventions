@@ -901,6 +901,17 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+Changed-line coverage, TypeScript / Python mutation, and the co-change check now keep two classes
+of changed file in scope that they previously dropped as a false green (#392). A changed source
+line whose content begins `++ ` (rendered `+++ …` in the unified diff) is read as hunk body, so the
+file's later changed lines stay in scope; and a git-quoted / non-ASCII path (default
+`core.quotepath=on`) is decoded to its real UTF-8 form, so it matches the coverage report key and
+reads back as a real file. **Runtime behavior at the same API:** a pull request that touches such a
+file may now fail `unit coverage --base` / `unit mutation --base` (or flag a stale co-change) where
+it previously passed vacuously — the gate now measures a change it used to skip. No public API
+signature change (`patch_coverage::changed_lines`, `co_change::stale_sources` are unchanged in
+shape).
+
 `e2e verify` now rejects a `--scope` (or `--extra-scope`) that resolves to no tracked path, where
 before it silently reported `Fresh` (#391). The documented "`--scope` must be `path` or a descendant
 of it" constraint was never enforced, so a typo'd or outside scope resolved to a git pathspec

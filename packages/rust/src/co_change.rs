@@ -146,11 +146,19 @@ fn test_exists_in_base(repo: &Path, base: &str, rel: &str) -> Result<bool> {
 /// `--relative` scopes the diff to `repo` and reports paths relative to it.
 fn changed_entries(repo: &Path, base: &str) -> Result<Vec<(Status, String)>> {
     let range = format!("{base}...HEAD");
+    // `-c core.quotepath=off --no-ext-diff` pins the walk against the caller's git
+    // config (#392): a non-ASCII path is emitted raw rather than octal-escaped, so a
+    // `Modified` `src/föö.py` keys correctly (and reads back as a real file) instead of
+    // hard-erroring; a configured external differ is blocked. `--name-status` carries no
+    // `a/`/`b/` prefix, so no prefix pinning is needed here.
     let output = Command::new("git")
         .current_dir(repo)
         .args([
+            "-c",
+            "core.quotepath=off",
             "diff",
             "--name-status",
+            "--no-ext-diff",
             "--no-renames",
             "--relative",
             &range,
@@ -169,7 +177,11 @@ fn changed_entries(repo: &Path, base: &str) -> Result<Vec<(Status, String)>> {
     for line in stdout.lines() {
         // `<status>\t<path>` — the status is a single letter with `--no-renames`.
         if let Some((status, path)) = line.split_once('\t') {
-            let path = path.trim_end_matches('\r').replace('\\', "/");
+            // Decode a residual C-quoted path (a name with a `"` / backslash / control
+            // byte still comes quoted even with `core.quotepath=off`) before normalizing
+            // separators (#392).
+            let path = crate::patch_coverage::unquote_c_path(path.trim_end_matches('\r'));
+            let path = path.replace('\\', "/");
             entries.push((Status::from_code(status), path));
         }
     }

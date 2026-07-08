@@ -15,8 +15,9 @@ EXCLUDES = ["*_test.py", "test_*.py", "conftest.py"]
 
 def render_config(modules):
     """Render the ``cosmic-ray`` TOML for a run over ``modules`` (a list of source-file
-    paths; empty ⇒ the whole project, ``"."``). ``pytest`` runs the suite; the ``local``
-    distributor runs each mutant in this adapter's own process tree."""
+    paths; empty ⇒ the whole project, ``"."``). ``pytest`` runs the suite, ending a killed
+    mutant's run at its first failing test (``-x``; exit status — hence classification — is
+    unchanged); the ``local`` distributor runs each mutant in this adapter's own process tree."""
     paths = modules or ["."]
     module_path = ", ".join(f'"{p}"' for p in paths)
     excludes = ", ".join(f'"{glob}"' for glob in EXCLUDES)
@@ -25,7 +26,7 @@ def render_config(modules):
         f"module-path = [{module_path}]\n"
         "timeout = 30.0\n"
         f"excluded-modules = [{excludes}]\n"
-        'test-command = "python3 -m pytest -q -p no:cacheprovider"\n'
+        'test-command = "python3 -m pytest -x -q -p no:cacheprovider"\n'
         "\n"
         "[cosmic-ray.distributor]\n"
         'name = "local"\n'

@@ -31,6 +31,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **The per-mutant pytest run stops at the first failure** (`-x`) (#380, epic #366). A killed
+  mutant's suite run ends at the test that kills it; a surviving mutant's all-green run is
+  unchanged, and cosmic-ray classifies outcomes by exit status, so the survivor set is identical —
+  only faster. The baseline check runs the same command; a passing baseline never triggers `-x`.
+
 ### Deprecated
 
 ### Removed

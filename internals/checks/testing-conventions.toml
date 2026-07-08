@@ -15,3 +15,30 @@ path = "checks/config.py"
 rules = ["mutation"]
 lines = ["4-5"]
 reason = "path-string constants; a mutated literal is observable only through a real file read, which lives in the out-of-scope e2e suite (CliRunner over the real workflow), so no in-scope unit test can kill it"
+
+# build_hermetic_cli/cli.py:40-41 (#356) is the thin callback that threads this check's own
+# hardcoded production constants (COMMANDS: real `cargo build --release` / `pnpm install` /
+# `pnpm run build` invocations; BINARY/NODE_DIST: real repo-relative paths) into
+# checks.utils.build_hermetic_cli.stage_hermetic_cli. stage_hermetic_cli's own orchestration
+# (the run=/root= injection seams, every branch: build failure, signal death, missing/existing
+# stage dirs, dist merge) is exhaustively covered in isolation by
+# checks/utils/build_hermetic_cli_test.py — see run_checks / isolation_red.cli for the identical
+# split. These two lines specifically cannot be driven the same way isolation_red.cli's one line
+# is (a real `true`/`false` swapped in via a genuine trailing CLI argument, #328): COMMANDS has no
+# such override — it's three distinct real commands with different cwds, not a single command a
+# CLI-level substitution could stand in for — so driving `cli.callback()` for real here means
+# spawning an actual multi-minute cargo+pnpm build against this repo's real source, out of scope
+# for a colocated unit test (and exactly the operation the tested stage_hermetic_cli already
+# exercises against fakes). Re-adding root=/run= parameters to `cli` itself to make this
+# injectable was tried and rejected on review (#377): that reintroduces a bespoke testing seam on
+# the public click signature, the exact smell the utils-module split was meant to remove.
+# Injection was tried and correctly rejected; mocking stage_hermetic_cli (or COMMANDS) would only
+# assert this file calls a mock, not that it wires the real constants correctly. The real
+# composition is exercised on every CI run by the `build-cli` job (tc-checks build-hermetic-cli,
+# .github/actions/build-hermetic-cli/action.yml) — a stronger real-world exercise than a mocked
+# CliRunner e2e test.
+[[python.exempt]]
+path = "checks/build_hermetic_cli/cli.py"
+rules = ["coverage", "mutation"]
+lines = ["40-41"]
+reason = "thin callback threading this check's own hardcoded production constants (real cargo/pnpm commands, real repo-relative paths) into the exhaustively-tested stage_hermetic_cli; driving it for real here means spawning an actual multi-minute build, out of scope for a colocated unit test, and no CLI-level override exists the way isolation_red.cli's trailing command argument substitutes a cheap true/false for run_checks' CHECKS — COMMANDS is three distinct real commands with different cwds, not a single command a substitution could stand in for. Re-adding root=/run= injection to cli() itself was tried and rejected on review as a bespoke seam on the public click signature; the real composition is exercised for real on every CI run by the build-cli job."

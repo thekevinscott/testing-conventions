@@ -671,6 +671,12 @@ both sides, so a `.js` import mocked bare (and the inverse) resolves to the same
 Rust's scan reuses the colocated-test source walk, skipping `tests/`/`benches/`/`examples/`/`target/`
 and `build.rs`, so a locally-built crate is scanned the same as a fresh checkout. No public API
 change; the lint's *verdicts* change (see **Behavior changes without code changes**).
+`unit mutation --language rust` no longer errors when mutants time out (#395). cargo-mutants exits
+`3` when some mutants time out and none were missed — an inconclusive-not-fatal outcome the tool's
+own model already treats as a non-survivor — but the gate previously accepted only exit `0`/`2` and
+bailed exit `3` as a "baseline build/test failure". A diff-scoped run where every mutant on the
+touched lines times out under a slow suite now passes with zero survivors instead of a false error.
+A genuine baseline failure (exit `4`, or a usage error) stays fatal. No config or API change.
 
 ### Required changes
 
@@ -1124,6 +1130,10 @@ Exemptions (#32) change runtime behavior:
   - **Rust** — `unit lint --language rust` on a locally-built crate no longer aborts on an unparsable
     `.rs` under `tests/` nor false-flags `#[cfg(test)]` modules under `tests/`/`target/`; only the
     crate's own unit source is scanned.
+- `unit mutation --language rust` treats a cargo-mutants timeout run (exit `3`: mutants timed out,
+  none missed) as a pass, not a fatal error (#395). Timeouts are inconclusive — neither caught nor
+  survivors — so the run reports zero survivors and the gate stays green; only a real baseline
+  failure (exit `4`) or usage error is still fatal. No API or config change.
 
 ### Verification
 

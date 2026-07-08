@@ -42,3 +42,26 @@ path = "checks/build_hermetic_cli/cli.py"
 rules = ["coverage", "mutation"]
 lines = ["40-41"]
 reason = "thin callback threading this check's own hardcoded production constants (real cargo/pnpm commands, real repo-relative paths) into the exhaustively-tested stage_hermetic_cli; driving it for real here means spawning an actual multi-minute build, out of scope for a colocated unit test, and no CLI-level override exists the way isolation_red.cli's trailing command argument substitutes a cheap true/false for run_checks' CHECKS — COMMANDS is three distinct real commands with different cwds, not a single command a substitution could stand in for. Re-adding root=/run= injection to cli() itself was tried and rejected on review as a bespoke seam on the public click signature; the real composition is exercised for real on every CI run by the build-cli job."
+
+# job_block.py:50 (#356) computes each job's end boundary as
+# `headers[i + 1].start() if i + 1 < len(headers) else len(text)`, with `i` bound only by
+# `enumerate(headers)` — never a function parameter or otherwise externally reachable. So
+# `i + 1` can never exceed `len(headers)` on any execution: `i` ranges 0..len(headers)-1, making
+# `i + 1` range 1..len(headers) exactly. Under that invariant, `i + 1 < len(headers)` and
+# `i + 1 != len(headers)` (the NotEq mutant) evaluate identically for every reachable `i` — the
+# only value that could separate them, `i + 1 > len(headers)`, is unreachable by construction, not
+# merely untested. The IsNot mutant is additionally a CPython small-int-interning equivalent (as
+# in hermetic_wired/cli.py's prior exemption, now removed with the code it protected): job counts
+# in any real or test workflow file are far below 256, so `!=` and `is not` already return
+# identical results for every reachable pair before the loop-invariant argument even applies.
+# Tried: constructing a headers list where i+1 exceeds len(headers) — impossible without hand-
+# building a fake `_JOB_HEADER.finditer` result bypassing `enumerate` entirely, which would test
+# a contract this function doesn't have, not this comparison. The sibling Add_LShift mutant
+# (`i + 1` -> `i << 1`) on the same line is a real gap and is killed by
+# test_iter_job_blocks_yields_every_job_bounded_to_its_own_region's assertions on the *first*
+# job's own block.
+[[python.exempt]]
+path = "checks/utils/job_block.py"
+rules = ["mutation"]
+lines = ["50"]
+reason = "i + 1 < len(headers) on job_block.py:50: i is bound only by enumerate(headers), so i + 1 can never exceed len(headers) on any reachable execution, making the NotEq mutant (i + 1 != len(headers)) behaviorally identical to < for every input — and the IsNot mutant additionally equivalent via CPython's small-int interning (job counts are always far below 256). Neither is killable without fabricating an unreachable i, which would test a contract this function doesn't have. The sibling Add_LShift mutant on the same line is a real gap, killed by asserting on the first job's own block boundary."

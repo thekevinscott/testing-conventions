@@ -54,6 +54,12 @@ def test_is_empty_when_the_start_header_is_absent():
 def test_iter_job_blocks_yields_every_job_bounded_to_its_own_region():
     blocks = dict(iter_job_blocks(TEXT))
     assert list(blocks) == ["build", "target", "next"]
+    # The *first* job's own block, not just later ones: a wrong index arithmetic (e.g. reading
+    # the current header's own start instead of the next one's) would make this block empty
+    # rather than merely shifted, since `build` is index 0.
+    assert "build:" in blocks["build"]
+    assert "before-marker" in blocks["build"]
+    assert "inside-marker" not in blocks["build"]
     assert "inside-marker" in blocks["target"]
     assert "before-marker" not in blocks["target"]
     assert "after-marker" not in blocks["target"]

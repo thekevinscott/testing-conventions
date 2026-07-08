@@ -158,6 +158,25 @@ Follow the `move-major-tag` (`move_major_tag.py` + colocated unit test + `tests/
 a CLI argument (`… check.py "${{ steps.detect.outputs.package_root }}"`), never an env
 side-channel — see **Never pass data through the environment**.
 
+## PR workflow concurrency
+
+Every `pull_request`-triggered workflow in this repo (not a release, not a `workflow_run`
+follow-up) declares, after `permissions:` and before `jobs:`:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+```
+
+so a rapid sequence of pushes to the same PR branch cancels the superseded run instead of
+burning runner-minutes to completion. A workflow that also triggers on `push: [main]` (e.g.
+`dogfood.yml`) guards the flag instead: `cancel-in-progress: ${{ github.event_name ==
+'pull_request' }}`, so a `main` run is never cancelled out from under itself. This is CI
+hygiene on internal tooling, not shipped product behavior, so it does not earn a `tc-checks`
+wiring gate (see **Logic lives in scripts, not workflow YAML** for what does) — just copy the
+block into any new `pull_request` workflow.
+
 ## Affirmative voice
 
 Write docs and user-facing text by stating what the tool **does** and what the user **provides** —

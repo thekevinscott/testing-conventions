@@ -51,6 +51,12 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Also runs on `push: [main]` (the dogfood-over-main run); scope cancellation to PR pushes so
+  # a main run is never cancelled out from under itself.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   conventions:
     name: Shipped reusable workflow over the Python plugin source

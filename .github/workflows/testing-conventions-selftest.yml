@@ -98,6 +98,15 @@ name: Testing Conventions (self-test)
 #                         ahead of the build (ubuntu-24.04 runners carry no preinstalled Rust).
 #                         Expected to fail pre-release, same `@v0`/binary lag as build-command-clean.
 #
+# hermetic mode (#356, epic #353) — building detect + the CLI from HEAD instead of `@v0`/npx:
+#   hermetic-wired  asserts the reusable workflow *derives* the hermetic path — the exact
+#                   caller-guard literal, a `build-cli` job, a local (non-`@v0`) detect step,
+#                   and a `cli_command` output, with no `inputs.hermetic` flag — the red→green
+#                   signal for the wiring itself. There is no separate acceptance job: hermetic
+#                   mode has no input, so every `uses:` call in this file (and dogfood.yml) IS
+#                   the acceptance test — each one builds and runs this commit's own detect +
+#                   CLI, making a change to either visible in its own PR's CI.
+#
 # rust colocated-test (#274) — the presence arm fans over rust:
 #   colocated-rust-wired  asserts the whole-tree colocated-test job fans out over the
 #                         rust-inclusive `colocated_test_languages` matrix — the red→green
@@ -326,6 +335,22 @@ jobs:
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks github-helpers-wired
+
+  hermetic-wired:
+    name: The reusable workflow derives a hermetic (build-from-HEAD) mode
+    # Red→green wiring signal for #356 (epic #353, Layer 1): asserts the derivation guard
+    # (`github.repository == '…' && inputs.version == ''`), a `build-cli` job, a local
+    # (`./.github/actions/detect`) detect step, and a `cli_command` detect output all exist —
+    # and that no `inputs.hermetic` flag does. `github.repository` belongs to the *calling*
+    # run of a reusable workflow, so the guard activates for this repo's own callers and can
+    # never match for a consumer — hermetic mode is derived, not declared, leaving no
+    # consumer-facing input to misuse.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
+      - name: testing-conventions.yml must offer a hermetic build-from-HEAD mode
+        run: uv run --project internals/checks tc-checks hermetic-wired
 
   detect-routes-python:
     name: the detect action routes Python into the unit-lint matrix

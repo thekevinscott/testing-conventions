@@ -83,6 +83,76 @@ A second #206 follow-up: zero-config Rust coverage also routed `packages/python`
 A third worked example, and a caution against over-attributing reds to `@v0` lag (#355): after the #351 `@v0` flip, `build-command-clean` and `rust-toolchain-clean` (the `[python].build_command` runtime fixtures, #243/#263/#289) still failed — `ModuleNotFoundError: No module named 'generated'`, the build step silently skipped. The workflow's own comments blamed the usual `@v0`/published-binary lag, but `@v0` was already current (it points at the same commit as `main`). The real cause: #335 generalized `build_command`'s config lookup to key off `primary_language(package_root)`, which returns `''` without a manifest (`pyproject.toml`/`package.json`/`Cargo.toml`) — but both fixtures are deliberately manifest-less (a bare pip Python package, #289's original case), so the lookup silently dropped the build step regardless of `@v0`. Fixed in `detect.compute_outputs`: `build_command`'s language falls back to the single present language when no manifest names a primary one (still empty, never guessed, when more than one language is present with no manifest to disambiguate). The lesson: a self-test red after a `@v0` flip is only actually *just* `@v0` lag if the *local* source (this PR's own `detect.py`, not the tag) also passes — check that first, per **Layer 1** in #353, rather than assuming the documented lag and waiting for the next release. Fixing the source doesn't make `build-command-clean` / `rust-toolchain-clean` green in *this* PR's own CI, though: `detect` here is still `actions/detect@v0`, so the fix only reaches this job once a release moves the tag — the ordinary pre-release lag, now with a real bug it had been masking underneath it.
 
 Each self-test job's assertion — run a published `npx testing-conventions` command over a fixture, then pass/fail on its exit code — lives as a standalone, colocated-tested check (epic #302). The failure-path jobs (#309) — `isolation-red`, `below-floor`, `mutation-gate`, `python-mutation-clean`, `packaging-red`, `coverage-rust-red`, `integration-lint-new-arms-trip`, `packaging-package-root-red` — have moved into the `internals/checks` package as `tc-checks <name>` subcommands (#328): each holds its hardcoded invocations in a `CHECKS` list and hands them to the shared `run_checks` orchestrator (`checks/utils/`), which runs each invocation — or a single trailing command, the benign `true`/`false` e2e seam — and decides pass/fail through the pure `failure_reason`; colocated `cli_test.py`, `run_checks_test.py`, and `failure_reason_test.py` cover the logic while a sibling e2e suite drives the real subprocess boundary through `CliRunner`. The workflow step runs `uv run --project internals/checks tc-checks <name>`; the tested Python holds the invocation and the exit-code logic, so it earns the same dogfood gate as the rest of the checks package and stays clear of the `${{ }}` templating trap an inline `run:` body carries.
+
+## Hermetic mode: building detect + the CLI from HEAD (#356)
+
+Every job above resolves two mutable external references at run time: the `detect` step pins
+`…/actions/detect@v0` (a floating tag), and every rule job runs
+`npx -y "testing-conventions${VERSION:+@$VERSION}"` (no version → latest on npm). For a
+*consumer*, that's the whole point — they want the released, supported surface. But when
+`testing-conventions.yml` gates its **own** merges (self-test, dogfood), it means a PR's own CI
+validates `(this commit's workflow) × (whatever @v0/npm currently are)`, not the commit under
+test — the exact skew #353 exists to close (worked examples: #206, #351, #355).
+
+Hermetic mode is **derived, never declared**. The workflow takes the hermetic path iff
+
+    github.repository == 'thekevinscott/testing-conventions' && inputs.version == ''
+
+For a reusable workflow, the `github` context always belongs to the **calling** run, so the left
+conjunct holds exactly when this repo's own workflows are the caller — an external consumer's call
+carries their own `github.repository` and can never match. The right conjunct keeps an explicit
+`version` authoritative even in-repo: naming a version means "run that published artifact" (which
+is what #357's post-publish verification does), and it always wins. Read together: when this repo
+gates its own commit and no published version is named, the only binary that can truthfully gate
+the commit is the one built from it; for every other caller, the published artifact is the only
+truthful one. The caller states nothing — the same derivation bar the tool holds its consumers to.
+
+(Rejected alternative: a `hermetic` boolean `workflow_call` input. Inputs have no visibility
+modifier, so a testing-only flag is public surface any consumer can set — building *this repo's*
+source instead of the artifact they pinned, at multi-minute cost, with possible drift from the
+release pipeline's build. The `hermetic-wired` check fails on any `inputs.hermetic` reference.)
+
+When the derivation holds:
+
+- A `build-cli` job (gated on the guard, so it never runs for a consumer) checks out HEAD, runs
+  `cargo build --release --manifest-path packages/rust/Cargo.toml --bin testing-conventions` —
+  the same binary `packages/node`'s per-platform npm packages stage (`packages/node/scripts/build.ts`)
+  — builds `packages/node`'s `dist/` (the TS mutation adapter, `dist/mutation/main.js`), and
+  uploads both as the `hermetic-cli` artifact: the binary at the artifact root, `dist/` beside it.
+- The `detect` job runs `./.github/actions/detect` (HEAD's composite action — the caller's checkout
+  *is* this repo whenever the guard holds, so the local path resolves to the commit under test)
+  instead of `…/detect@v0`. `uses:` can't be a runtime expression, so both steps are declared
+  behind `if:`/negated-`if:`, and every job output coalesces whichever ran
+  (`steps.scan_hermetic.outputs.x || steps.scan_published.outputs.x`).
+- `detect` exposes `cli_command`: `./hermetic-cli/testing-conventions` under the guard, empty
+  otherwise. Each rule job downloads the `hermetic-cli` artifact (and restores the exec bit —
+  artifact download drops it) when `cli_command` is non-empty, and runs
+  `${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} <subcommand> …` — the
+  invocation's shape is unchanged; only which binary answers it differs. The mutation job
+  additionally appends `--ts-mutation-adapter ./hermetic-cli/dist/mutation/main.js` hermetically,
+  because that argument is normally appended by the npm launcher (`packages/node/src/bin/index.ts`),
+  which the hermetic path bypasses.
+- Rule jobs declare `needs: [detect, build-cli]` with `if: ${{ !failure() && !cancelled() && … }}`,
+  so the published path runs with `build-cli` skipped, and a hermetic build failure fails the run
+  closed rather than silently falling back to npm.
+
+`cli_command` flows through `needs.detect.outputs`, threaded explicitly exactly like
+`build_command` / `package_root` — never through an invented environment variable (AGENTS.md,
+"Never pass data through the environment").
+
+The acceptance bar (#356): a PR that changes `detect`'s behavior, or a rule's, goes **red in its
+own CI** before merge when that change breaks something. There is no dedicated acceptance job —
+hermetic mode has no input, so every `uses:` call in `testing-conventions-selftest.yml` and
+`dogfood.yml` is the acceptance test, exercising this branch's own `detect` and compiled CLI.
+Consumer-facing documentation never mentions hermetic mode: there is nothing to document — no
+input exists.
+
+Edges: a fork PR *into* this repo runs in base-repo context, so it is gated hermetically (the
+point of the gate). A fork *of* this repo running the self-test carries the fork's
+`github.repository`, so it exercises the published path. The red-path self-test jobs that drive
+`npx testing-conventions` directly in their own `run:` steps (isolation-red, below-floor, …) still
+resolve npm-latest — a known residual gap tracked in the follow-up issue filed from #356.
+
 ## Rolling release: how `@v0` advances
 
 `@v0` is a **moving major tag**: consumers pin `…/testing-conventions.yml@v0` and `…/actions/detect@v0`, and the tag is force-moved forward on each release so every consumer tracks `main`. We own all consumers and fix forward — this is rolling release, the opposite of a semver pin.

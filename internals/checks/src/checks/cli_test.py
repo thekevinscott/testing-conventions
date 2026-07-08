@@ -66,6 +66,10 @@ def test_github_helpers_wired_is_registered():
     assert "github-helpers-wired" in main.commands
 
 
+def test_hermetic_wired_is_registered():
+    assert "hermetic-wired" in main.commands
+
+
 def test_integration_lint_new_arms_trip_is_registered():
     assert "integration-lint-new-arms-trip" in main.commands
 

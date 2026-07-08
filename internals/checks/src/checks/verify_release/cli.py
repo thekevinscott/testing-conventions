@@ -34,12 +34,8 @@ def resolve_version(sha: str) -> None:
 def check_layout(sha: str) -> None:
     absent = vr.check_layout(sha)
     if absent:
-        raise CheckFailed(
-            f"the release archive of {sha} is missing " + ", ".join(absent)
-            + " — a consumer's remote `detect` action fetch would resolve a broken action the "
-            "moment @v0 moves; refusing to promote (#357)"
-        )
-    click.echo(f"detect action layout present in the archive of {sha}")
+        raise CheckFailed(vr.layout_error(sha, absent))
+    click.echo(vr.layout_ok(sha))
 
 
 @cli.command("dispatch-and-wait")
@@ -50,8 +46,5 @@ def dispatch_and_wait(sha: str, version: str, workflows: tuple[str, ...]) -> Non
     conclusions = vr.verify_suites(sha, version, list(workflows))
     failed = vr.failed_suites(conclusions)
     if failed:
-        raise CheckFailed(
-            "the version-pinned verification failed for " + ", ".join(failed)
-            + f" at {sha}; refusing to promote (#357)"
-        )
-    click.echo(f"the version-pinned verification passed for {', '.join(conclusions)} at {sha}")
+        raise CheckFailed(vr.verification_error(sha, failed))
+    click.echo(vr.verification_ok(sha, conclusions))

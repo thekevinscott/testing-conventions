@@ -93,5 +93,5 @@ reason = "capture_output=True / text=True on the two subprocess boundary calls (
 [[python.exempt]]
 path = "checks/verify_release/cli.py"
 rules = ["coverage", "mutation"]
-lines = ["29", "35-42", "50-57"]
+lines = ["29", "35-38", "46-50"]
 reason = "thin subcommand glue threading each argument into the exhaustively-tested checks.utils.verify_release and echoing/raising; driving a callback for real means real git/gh (resolve tags, archive a commit, dispatch+poll runs), and the decisions they wrap are unit-tested against an injected boundary — the build_hermetic_cli.cli split, logic+coverage in utils, click glue exempted."

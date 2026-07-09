@@ -896,6 +896,51 @@ def test_is_workspace_member_never_searches_outside_repo_root(tmp_path_factory):
     assert detect.is_workspace_member(package_root, repo_root) is False
 
 
+# --- #410: cargo_target_dir — the workspace-aware Rust build cache location ---
+
+
+def test_e2e_cargo_target_dir_unredirected_for_a_standalone_crate_with_no_workspace(run_detect):
+    # A crate with no ancestor [workspace] table caches at its own package root, unchanged.
+    out = run_detect(
+        sources={"Cargo.toml": '[package]\nname = "x"\n', "src/lib.rs": "pub fn f() {}\n"},
+    )
+    assert out["cargo_target_dir"] == "scan/target"
+
+
+def test_e2e_cargo_target_dir_workspace_member_redirects_to_the_workspace_root(run_detect):
+    # #410: cargo resolves `target/` at the *workspace* root regardless of the invoking cwd, so a
+    # workspace member's cache must key on the workspace root's target/, not its own — the exact
+    # miss that made dirsql's suite jobs archive (and restore) an empty directory every run.
+    out = run_detect(
+        scan_path="packages/rust/src",
+        root_files={
+            "Cargo.toml": '[workspace]\nmembers = ["packages/rust"]\n',
+            "packages/rust/Cargo.toml": '[package]\nname = "x"\n',
+            "packages/rust/src/lib.rs": "pub fn f() {}\n",
+        },
+    )
+    assert out["cargo_target_dir"] == "./target"
+
+
+def test_e2e_cargo_target_dir_unredirected_for_a_crate_that_is_itself_the_workspace_root(run_detect):
+    # A workspace-root package (its own Cargo.toml carries both [package] and [workspace]) is not
+    # a *member* of an ancestor workspace — its own target dir is already correct.
+    out = run_detect(
+        sources={
+            "Cargo.toml": '[package]\nname = "x"\n\n[workspace]\nmembers = ["."]\n',
+            "src/lib.rs": "pub fn f() {}\n",
+        },
+    )
+    assert out["cargo_target_dir"] == "scan/target"
+
+
+def test_e2e_cargo_target_dir_defaults_to_the_repo_root_target_with_no_rust(run_detect):
+    # No manifest anywhere: package_root falls back to the repo root, and cargo_target_dir is
+    # emitted unconditionally — the cache steps' own `if` guards decide whether it matters.
+    out = run_detect()
+    assert out["cargo_target_dir"] == "./target"
+
+
 def test_e2e_packaging_build_prefers_the_wheel_for_a_pyo3_binding(run_detect):
     # A binding carries two manifests; the published artifact is the wheel, not the core crate.
     out = run_detect(

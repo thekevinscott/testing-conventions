@@ -66,6 +66,9 @@ outputs:
   provision_rust:
     description: 'true when the package_root manifest declares a Rust-compiling build (a Cargo.toml, a maturin build-backend, or a napi config) — lets the suite jobs provision cargo with no `rust_toolchain` input.'
     value: ${{ steps.scan.outputs.provision_rust }}
+  cargo_target_dir:
+    description: 'The workspace-aware Rust build cache location (#410): the workspace root''s target/ for a workspace-member crate (cargo resolves the target dir there regardless of the invoking cwd), else the package root''s own target/.'
+    value: ${{ steps.scan.outputs.cargo_target_dir }}
   config:
     description: 'The config file to pass to `--config` (#277): the `config` input verbatim unless it is the default, in which case a package-root testing-conventions.toml wins if present.'
     value: ${{ steps.scan.outputs.config }}

@@ -31,8 +31,8 @@ The standard recognizes three kinds of test, by how much of the system they exer
 - **Integration** — treats the system as a black box. First-party code runs *for real*; only the
   outside world is mocked (databases, the network, the clock, the filesystem, LLMs).
 - **E2E** — like integration, but with no mocks at all. Slow, flaky, and costly, so CI never runs
-  them; an agent runs them on demand to confirm real third-party contracts still hold, and
-  [attests](./e2e) that it did.
+  them; an agent runs them ad hoc, on its own judgment, to confirm real third-party contracts
+  still hold, and [attests](./e2e) the decision it made.
 
 The unit/integration split is **structural**, not a tag or marker: unit tests are
 [colocated](./colocated-test) with their source, integration tests live in their own folder, and
@@ -66,7 +66,7 @@ Every check is a CI job that fails the build on a violation, with the offending 
 - [Isolation](./isolation) — unit tests mock every collaborator; integration tests run first-party
   code for real.
 - [Packaging](./packaging) — test files never ship in the built artifact.
-- [E2E attestation](./e2e) — the e2e suite ran against the current code, without CI ever running it.
+- [E2E attestation](./e2e) — every branch that changes the code records one visible e2e decision, without CI ever running the suite.
 - [Scoping and exemptions](./scoping) — how the scan is scoped and how a deliberate omission is
   recorded.
 

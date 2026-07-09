@@ -70,3 +70,19 @@ fn red_exits_nonzero() {
 fn clean_exits_zero() {
     assert_eq!(lint_exit("no_first_party_mock/clean"), 0);
 }
+
+// The suite tiers derive from the package root — the nearest `package.json` at
+// or above the scanned `path` — so a call whose `path` is the package's source
+// directory still lints the sibling `tests/integration/` and `tests/e2e/` suites.
+
+#[test]
+fn tier_layout_integration_suite_is_linted_from_a_src_scan() {
+    assert_eq!(lint_exit("tier_layout/red/src"), 1);
+}
+
+#[test]
+fn tier_layout_test_outside_a_standard_tier_is_flagged() {
+    // `tests/loose.test.ts` sits under the package's `tests/` but in neither
+    // `tests/integration/` nor `tests/e2e/` — the `unknown-tier` violation.
+    assert_eq!(lint_exit("tier_layout/unknown_tier/src"), 1);
+}

@@ -156,3 +156,11 @@ fn ext_normalize_clean_reports_no_violations() {
 fn ext_normalize_clean_exits_zero() {
     assert_eq!(isolation_exit("ext_normalize/clean"), 0);
 }
+
+#[test]
+fn tier_layout_suites_are_not_unit_subjects() {
+    // `tests/integration/flow.test.ts` deliberately runs first-party code for
+    // real. `<package root>/tests/` belongs to the suite tiers, so the
+    // unit-suite isolation rule reports nothing there.
+    assert_eq!(isolation_exit("tier_layout"), 0);
+}

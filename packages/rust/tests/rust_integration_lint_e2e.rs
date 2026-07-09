@@ -45,3 +45,10 @@ fn waived_exits_zero() {
         .expect("the process should exit with a code");
     assert_eq!(code, 0);
 }
+
+#[test]
+fn tier_layout_tests_crate_is_linted_from_a_src_scan() {
+    // The integration suite derives from the crate root, so the binary scanning
+    // `src/` still lints the crate's `tests/` directory.
+    assert_eq!(lint_exit("derived/src"), 1);
+}

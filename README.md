@@ -112,11 +112,13 @@ coverage is measured on.
 - **TypeScript:** `tests/integration/`, files end in `.test.ts`.
 - **Rust:** `tests/` at the crate root. Each file compiles as its own crate, so the location is the signal.
 
-**Checked:** the boundary is enforced behaviorally, not by a folder gate.
-`unit lint` requires unit tests to mock every collaborator, `integration lint`
-requires integration tests to run first-party code for real, and `unit coverage`
-measures only the colocated unit suite. The `tests/integration/` folder is a
-convention, not a separately checked rule.
+**Checked:** both behaviorally and structurally. `unit lint` requires unit tests
+to mock every collaborator, `integration lint` requires integration tests to run
+first-party code for real, and `unit coverage` measures only the colocated unit
+suite. The location is derived and enforced: `integration lint` takes its
+subjects from `<package root>/tests/integration/` and `<package root>/tests/e2e/`
+(Rust: the crate root's `tests/`), and a test file under `tests/` outside a
+standard tier is flagged (`unknown-tier`).
 
 #### External Dependencies
 

@@ -329,3 +329,29 @@ fn integration_lint_requires_language() {
         clap::error::ErrorKind::MissingRequiredArgument
     );
 }
+
+// The suite tiers derive from the package root — the nearest `pyproject.toml` at
+// or above the scanned `path` — so a call whose `path` is the package's source
+// directory still lints the sibling `tests/integration/` and `tests/e2e/` suites.
+
+#[test]
+fn tier_layout_integration_suite_is_linted_from_a_src_scan() {
+    assert_eq!(lint_exit("tier_layout/red_integration/src"), 1);
+}
+
+#[test]
+fn tier_layout_e2e_suite_is_linted_from_a_src_scan() {
+    assert_eq!(lint_exit("tier_layout/red_e2e/src"), 1);
+}
+
+#[test]
+fn tier_layout_test_outside_a_standard_tier_is_flagged() {
+    // `tests/loose_test.py` sits under the package's `tests/` but in neither
+    // `tests/integration/` nor `tests/e2e/` — the `unknown-tier` violation.
+    assert_eq!(lint_exit("tier_layout/unknown_tier/src"), 1);
+}
+
+#[test]
+fn tier_layout_clean_suites_exit_zero() {
+    assert_eq!(lint_exit("tier_layout/clean/src"), 0);
+}

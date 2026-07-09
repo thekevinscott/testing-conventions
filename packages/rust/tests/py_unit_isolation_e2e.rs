@@ -108,3 +108,10 @@ fn overmatch_clean_exits_zero() {
 fn wrong_module_red_exits_nonzero() {
     assert_eq!(isolation_exit("wrong_module/red"), 1);
 }
+
+#[test]
+fn tier_layout_suites_are_not_unit_subjects() {
+    // `<package root>/tests/` belongs to the suite tiers; the unit-suite
+    // isolation rule reports nothing there.
+    assert_eq!(isolation_exit("tier_layout"), 0);
+}

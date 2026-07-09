@@ -15,6 +15,16 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Retires the exact-match e2e freshness contract in favor of one branch-keyed decision per branch
+(shipped through this package's bundled CLI; full notes in `packages/rust/MIGRATIONS.md`).
+`e2e attest '<cmd>'` writes `e2e-attestations/<branch-slug>.json` and prunes receipts other
+branches left behind; `e2e verify --base <ref>` passes a branch whose diff leaves the scoped
+source untouched or carries a receipt, comparing no commit SHAs. A branch open across the upgrade
+that changed scoped source runs `e2e attest '<cmd>'` once; the retired `e2e-attestation.json` is
+collected by that same attest. `attest` must run on a checked-out branch. The new
+`e2e slug [branch]` subcommand prints the standardized receipt slug, so scripts can locate a
+branch's receipt at `e2e-attestations/$(npx testing-conventions e2e slug).json`.
+
 Adds the TypeScript mutation engine adapter (#246, part of #239), organized by folder:
 `src/mutation/mutation-cli.ts` exposes `mutationCLI` over one-function-per-file helpers alongside it,
 and `src/mutation/main.ts` is the executable. It runs Stryker via its Node API and normalizes

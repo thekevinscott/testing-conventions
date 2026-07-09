@@ -102,8 +102,15 @@ fn attest_writes_the_branch_receipt_and_exits_zero() {
         .expect("the receipts directory should exist")
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
-    assert_eq!(receipts.len(), 1, "one receipt for the branch: {receipts:?}");
-    assert_eq!(receipts[0], "feature-one.json", "branch-keyed: {receipts:?}");
+    assert_eq!(
+        receipts.len(),
+        1,
+        "one receipt for the branch: {receipts:?}"
+    );
+    assert_eq!(
+        receipts[0], "feature-one.json",
+        "branch-keyed: {receipts:?}"
+    );
 }
 
 #[test]

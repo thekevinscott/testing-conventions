@@ -191,7 +191,10 @@ fn attest_overwrites_its_own_receipt_in_place() {
         &std::fs::read_to_string(repo.0.join(RECEIPTS_DIR).join(&second[0])).unwrap(),
     )
     .unwrap();
-    assert_eq!(receipt["exit_code"], 3, "the receipt records the latest run");
+    assert_eq!(
+        receipt["exit_code"], 3,
+        "the receipt records the latest run"
+    );
 }
 
 #[test]
@@ -203,7 +206,11 @@ fn attest_prunes_receipts_other_branches_left_behind() {
     attest(&repo.0, "true").expect("attest should succeed");
 
     let names = repo.receipt_names();
-    assert_eq!(names.len(), 1, "stale sibling receipts are pruned: {names:?}");
+    assert_eq!(
+        names.len(),
+        1,
+        "stale sibling receipts are pruned: {names:?}"
+    );
     assert_eq!(names[0], "feature-two.json");
 }
 
@@ -226,7 +233,11 @@ fn verify_base_passes_when_the_branch_leaves_scoped_source_untouched() {
     repo.commit_file("README.md", "docs only\n", "docs");
     let scope = repo.0.join("src");
     let result = verify_since(&repo.0, &scope, Some("base")).expect("verify should run");
-    assert_eq!(result, Verification::Fresh, "no scoped change owes no decision");
+    assert_eq!(
+        result,
+        Verification::Fresh,
+        "no scoped change owes no decision"
+    );
 }
 
 #[test]
@@ -248,7 +259,11 @@ fn verify_base_passes_on_a_receipt_added_by_the_branch() {
     repo.commit_file("src/lib.rs", "pub fn changed() {}\n", "code");
     repo.commit_receipt("feature-code-abcd012345");
     let result = verify_since(&repo.0, &repo.0, Some("base")).expect("verify should run");
-    assert_eq!(result, Verification::Fresh, "the branch's receipt answers the nudge");
+    assert_eq!(
+        result,
+        Verification::Fresh,
+        "the branch's receipt answers the nudge"
+    );
 }
 
 #[test]
@@ -305,7 +320,14 @@ fn verify_base_does_not_count_a_receipt_deletion() {
     git(&repo.0, &["branch", "-f", "base"]);
     repo.branch("feature/code");
     repo.commit_file("src/lib.rs", "pub fn changed() {}\n", "code");
-    git(&repo.0, &["rm", "-q", &format!("{RECEIPTS_DIR}/merged-branch-abcd012345.json")]);
+    git(
+        &repo.0,
+        &[
+            "rm",
+            "-q",
+            &format!("{RECEIPTS_DIR}/merged-branch-abcd012345.json"),
+        ],
+    );
     git(&repo.0, &["commit", "-q", "-m", "prune"]);
     let result = verify_since(&repo.0, &repo.0, Some("base")).expect("verify should run");
     assert!(
@@ -349,9 +371,16 @@ fn verify_base_ignores_the_legacy_single_file_attestation() {
     git(&deleter.0, &["branch", "-f", "base"]);
     deleter.branch("chore/drop-legacy");
     git(&deleter.0, &["rm", "-q", "e2e-attestation.json"]);
-    git(&deleter.0, &["commit", "-q", "-m", "drop legacy attestation"]);
+    git(
+        &deleter.0,
+        &["commit", "-q", "-m", "drop legacy attestation"],
+    );
     let result = verify_since(&deleter.0, &deleter.0, Some("base")).expect("verify should run");
-    assert_eq!(result, Verification::Fresh, "deleting the legacy file owes nothing");
+    assert_eq!(
+        result,
+        Verification::Fresh,
+        "deleting the legacy file owes nothing"
+    );
 }
 
 #[test]
@@ -361,10 +390,18 @@ fn verify_base_extra_scope_change_owes_a_decision_answered_by_a_receipt() {
     let repo = TempRepo::new();
     repo.commit_file("core/src/lib.rs", "pub fn core() {}\n", "core seed");
     std::fs::create_dir_all(repo.0.join("packages/binding")).unwrap();
-    repo.commit_file("packages/binding/manifest.toml", "name = \"binding\"\n", "binding seed");
+    repo.commit_file(
+        "packages/binding/manifest.toml",
+        "name = \"binding\"\n",
+        "binding seed",
+    );
     git(&repo.0, &["branch", "-f", "base"]);
     repo.branch("feature/core");
-    repo.commit_file("core/src/lib.rs", "pub fn core_changed() {}\n", "core change");
+    repo.commit_file(
+        "core/src/lib.rs",
+        "pub fn core_changed() {}\n",
+        "core change",
+    );
 
     let package = repo.0.join("packages/binding");
     let extra = vec![PathBuf::from("core/src")];
@@ -382,7 +419,11 @@ fn verify_base_extra_scope_change_owes_a_decision_answered_by_a_receipt() {
     );
     let result = verify_extra_scoped(&package, &package, Some("base"), &extra, &[])
         .expect("verify should run");
-    assert_eq!(result, Verification::Fresh, "the binding's receipt answers it");
+    assert_eq!(
+        result,
+        Verification::Fresh,
+        "the binding's receipt answers it"
+    );
 }
 
 // --- verify without --base: receipt presence ---

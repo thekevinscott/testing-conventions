@@ -134,6 +134,10 @@ def test_rust_toolchain_wired_is_registered():
     assert "rust-toolchain-wired" in main.commands
 
 
+def test_static_gates_wired_is_registered():
+    assert "static-gates-wired" in main.commands
+
+
 def test_uv_provisioning_wired_is_registered():
     assert "uv-provisioning-wired" in main.commands
 

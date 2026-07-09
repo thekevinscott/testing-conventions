@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The Rust-build cache in the suite-executing and packaging jobs now keys on the
+  workspace-aware `target/` location** (#410). Cargo resolves the target directory at the
+  *workspace* root regardless of the invoking working directory, but the cache path was always
+  `<package_root>/target` — so a crate that's a member of an ancestor Cargo workspace cached a
+  directory `cargo` never wrote to, and every job recompiled the same wheel from scratch. The
+  cache path now redirects to the workspace root's `target/` for a workspace member, and is
+  unchanged for a standalone crate (or one that's itself the workspace root). Every
+  `astral-sh/setup-uv@v7` step in these jobs also gains an explicit `enable-cache: true`. No
+  config or API change; the `uses:` call is unchanged. See `MIGRATIONS.md`.
+
 - **`e2e verify`: a `--scope` (or `--extra-scope`) that resolves to no tracked path is now an error
   instead of a silent false `Fresh`** (#391). The documented "`--scope` must be `path` or a
   descendant of it" constraint was never enforced: a typo'd or outside `--scope` fell through as a

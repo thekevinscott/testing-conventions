@@ -952,6 +952,17 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+The suite-executing jobs' (`unit-coverage`, `coverage-changed`, `mutation`) and `packaging`'s
+Rust-build cache now keys on the workspace-aware `target/` location, not the derived package root
+unconditionally (#410). Cargo resolves the target directory at the *workspace* root regardless of
+the invoking working directory, so a crate that's a member of an ancestor Cargo workspace now
+caches at that workspace root's `target/`; a standalone crate (or one that's itself the workspace
+root) is unaffected — its cache location is unchanged. A monorepo package whose crate is a
+workspace member (dirsql PR #410's own case) sees its `uv sync` maturin build's cache actually hit
+on the second run instead of archiving (and restoring) an empty directory every time. Every
+`astral-sh/setup-uv@v7` step in the suite/packaging jobs also gains an explicit `enable-cache:
+true`. The `uses:` call is unchanged; no config or API change.
+
 The reusable workflow provisions Python with uv in every suite-executing job (#399); the
 `actions/setup-python` + `python -m pip install` arm is gone. A plain (`python_env == 'pip'`)
 package's suite now runs from a `uv venv` at the derived package root instead of the runner's

@@ -4,6 +4,8 @@ Unit-level: the pure helpers exercised in isolation (no filesystem, no mocks). T
 (`compute_outputs`) is covered by the integration suite with the filesystem boundary mocked, and
 the whole script end-to-end by the e2e suite against a real tree — both under `tests/`.
 """
+from pathlib import Path
+
 import detect
 
 
@@ -53,6 +55,14 @@ def test_build_command_language_empty_when_no_manifest_and_none_present():
 
 def test_build_command_language_empty_when_no_manifest_and_ambiguous():
     assert detect.build_command_language("", ["python", "typescript"]) == ""
+
+
+def test_derive_cargo_target_dir_standalone_uses_the_package_root():
+    assert detect.derive_cargo_target_dir(Path("packages/rust"), None) == "packages/rust/target"
+
+
+def test_derive_cargo_target_dir_workspace_member_uses_the_workspace_root():
+    assert detect.derive_cargo_target_dir(Path("packages/rust"), Path(".")) == "./target"
 
 
 def test_hermetic_for_this_repos_own_caller_with_no_version():

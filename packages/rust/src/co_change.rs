@@ -50,6 +50,13 @@ pub fn stale_sources(
     // Every changed path, so a subject's expected test is a set lookup rather
     // than a second walk of the diff.
     let changed: BTreeSet<&str> = entries.iter().map(|(_, path)| path.as_str()).collect();
+    // `<package root>/tests/` belongs to the suite tiers (integration / e2e),
+    // so nothing under it is a co-change subject.
+    let suite_tests = match language {
+        Language::Python => crate::tiers::suite_tests_dir(repo, "pyproject.toml"),
+        Language::TypeScript => crate::tiers::suite_tests_dir(repo, "package.json"),
+        Language::Rust => None,
+    };
 
     let mut stale = Vec::new();
     for (status, rel) in &entries {
@@ -57,6 +64,12 @@ pub fn stale_sources(
         // A test file, a support file (Python `conftest.py`), or anything this
         // language doesn't track is never a co-change subject.
         if !language.tracks(path) || language.is_test(path) || language.is_support(path) {
+            continue;
+        }
+        if suite_tests
+            .as_ref()
+            .is_some_and(|tests| repo.join(path).starts_with(tests))
+        {
             continue;
         }
         let expected = language

@@ -48,7 +48,8 @@ jobs:
   runs through the manifest's own hooks: `uv sync` compiles a maturin module; the install runs
   an npm package's `prepare` script.
 - **The config** — a `testing-conventions.toml` at the package root governs that package: its
-  floors, and `exempt` entries whose `path` resolves relative to the call's scan root.
+  floors, and `exempt` entries whose `path` resolves relative to the call's scan root
+  (`integration lint`'s suite subjects: relative to the package root the tiers derive from).
 - **The test tiers** — the standard's suite layout, derived from the package root: colocated
   unit tests sit beside the sources under `path`, the integration suite lives in
   `<package root>/tests/integration/`, and the e2e suite in `<package root>/tests/e2e/` (Rust

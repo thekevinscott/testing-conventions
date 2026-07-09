@@ -15,6 +15,20 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Derives the suite tiers from the package root (#418). `integration lint` takes its subjects from
+the standard suite directories — `<package root>/tests/integration/` and
+`<package root>/tests/e2e/`, both of which run first-party code for real and so are held to the
+integration rules — where the package root is the nearest directory at or above the scanned
+`path` holding the language's manifest (`pyproject.toml`, `package.json`, `Cargo.toml`), the walk
+stopping at the repository boundary. Rust scans the crate root's `tests/`, cargo's own layout. A
+test file under `<package root>/tests/` outside a standard tier is flagged by the new
+`unknown-tier` violation (waivable like any rule). The unit-tier scans (`unit colocated-test`,
+its co-change variant, `unit lint`) leave `<package root>/tests/` to the suites. A tree with no
+manifest — loose scripts — is scanned at `path` directly, unchanged. One workflow call per
+package now runs every tier from a single `path`; the split unit-job/integration-job pattern (a
+second `uses:` call with `path` pointed at the integration directory and a `gates` allowlist)
+collapses into the package's one call.
+
 Consolidates the reusable workflow's Python provisioning to uv (#399). The suite-executing jobs
 (`unit-coverage`, `coverage-changed`, `mutation`) provisioned Python two ways, selected by
 detect's `python_env`: `actions/setup-python` + `python -m pip install` for a plain package, or
@@ -700,6 +714,24 @@ and `--base` semantics are unchanged; only the consumer-visible **check names** 
 
 ### Required changes
 
+**Move each suite to its standard tier, or exempt it** (#418). `integration lint` finds the
+integration and e2e suites at `<package root>/tests/integration/` and `<package root>/tests/e2e/`
+(Rust: the crate root's `tests/`). A Python/TypeScript package whose suites live elsewhere moves
+them into the standard directories; a test file left under `<package root>/tests/` outside a tier
+fails with `unknown-tier` (waivable per file with a reasoned `exempt` entry). A repo carrying a
+separate integration-lint `uses:` call (`path` pointed at the integration directory, narrowed with
+`gates`) drops it — the package's own call now lints the suites.
+
+**Re-root integration-lint exemption paths at the package root** (#418). With a derived package
+root, `integration lint` resolves `exempt` paths relative to the package root instead of the
+scanned `path`. An exemption for a suite file updates its `path` accordingly (e.g.
+`billing_test.py` scanned at `tests/integration` becomes `tests/integration/billing_test.py` on
+the package's single call). A loose-script tree (no manifest) keeps scan-root-relative resolution.
+
+`config::Rule` gains the `UnknownTier` variant (id `unknown-tier`) (#418). Exhaustive `match`es on
+`Rule` add an arm; `testing-conventions.toml` files parse unchanged, and `rules =
+["unknown-tier"]` is now accepted in an `exempt` entry.
+
 **Branch protection: swap the static-gate check names** (#410). The four static gates are now steps
 of one `Static checks (<language>)` job per language, so the four old per-language check names no
 longer appear. Any branch-protection required-check list (or merge-queue / status-check
@@ -952,6 +984,16 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`integration lint` scans the derived suite tiers instead of the scanned `path` (#418). Three
+verdicts can move at the same invocation: a suite beside the scanned source directory is now
+linted (violations it always carried now fail the gate — previously the scan never reached it); a
+colocated unit test under the scanned `path` is no longer an integration-lint subject (unit tests
+patch first-party collaborators by design, so a false red there disappears); and a test file
+under `<package root>/tests/` outside a standard tier fails with `unknown-tier` where it was
+previously invisible. The unit-tier gates release `<package root>/tests/`: `unit lint` stops
+flagging integration/e2e tests as un-isolated units, and `unit colocated-test` (and co-change)
+stop demanding colocated twins for suite helpers.
+
 The suite-executing jobs' (`unit-coverage`, `coverage-changed`, `mutation`) and `packaging`'s
 Rust-build cache now keys on the workspace-aware `target/` location, not the derived package root
 unconditionally (#410). Cargo resolves the target directory at the *workspace* root regardless of
@@ -1193,6 +1235,17 @@ Exemptions (#32) change runtime behavior:
   failure (exit `4`) or usage error is still fatal. No API or config change.
 
 ### Verification
+
+```
+testing-conventions integration lint --language python <package>/src
+testing-conventions unit lint --language python <package>
+```
+
+Expected: the first call reports violations from `<package>/tests/integration` and
+`<package>/tests/e2e` (and `unknown-tier` for any stray `*_test.py` under `<package>/tests/`)
+even though `path` is the source directory; the second reports nothing for files under
+`<package>/tests/` (#418). In-repo, the dogfood `checks` job (`internals/checks/src`) now lints
+`internals/checks/tests/integration` + `tests/e2e` on the same single call, green.
 
 ```
 uv run --project internals/checks tc-checks uv-provisioning-wired

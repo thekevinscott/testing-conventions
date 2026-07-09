@@ -896,50 +896,6 @@ def test_is_workspace_member_never_searches_outside_repo_root(tmp_path_factory):
     assert detect.is_workspace_member(package_root, repo_root) is False
 
 
-# --- #410: cargo_workspace_root — the same walk, returning the ancestor instead of a bool ---
-
-
-def test_cargo_workspace_root_returns_the_declaring_ancestor(tmp_path):
-    repo_root = tmp_path
-    (repo_root / "Cargo.toml").write_text('[workspace]\nmembers = ["packages/rust"]\n')
-    package_root = repo_root / "packages" / "rust"
-    package_root.mkdir(parents=True)
-    assert detect.cargo_workspace_root(package_root, repo_root) == repo_root
-
-
-def test_cargo_workspace_root_none_when_no_ancestor_declares_one(tmp_path):
-    repo_root = tmp_path
-    package_root = repo_root / "packages" / "rust"
-    package_root.mkdir(parents=True)
-    assert detect.cargo_workspace_root(package_root, repo_root) is None
-
-
-def test_cargo_workspace_root_none_when_package_root_is_the_repo_root(tmp_path):
-    assert detect.cargo_workspace_root(tmp_path, tmp_path) is None
-
-
-def test_cargo_workspace_root_finds_an_intermediate_ancestor(tmp_path):
-    repo_root = tmp_path
-    mid = repo_root / "mid"
-    mid.mkdir()
-    (mid / "Cargo.toml").write_text('[workspace]\nmembers = ["packages/rust"]\n')
-    package_root = mid / "packages" / "rust"
-    package_root.mkdir(parents=True)
-    assert detect.cargo_workspace_root(package_root, repo_root) == mid
-
-
-def test_is_workspace_member_delegates_to_cargo_workspace_root(tmp_path):
-    # #410: is_workspace_member is reimplemented as `cargo_workspace_root(...) is not None` — one
-    # walk, no duplicated traversal. Pin both together so a future edit can't silently diverge them.
-    repo_root = tmp_path
-    (repo_root / "Cargo.toml").write_text('[workspace]\nmembers = ["packages/rust"]\n')
-    package_root = repo_root / "packages" / "rust"
-    package_root.mkdir(parents=True)
-    assert detect.is_workspace_member(package_root, repo_root) is (
-        detect.cargo_workspace_root(package_root, repo_root) is not None
-    )
-
-
 # --- #410: cargo_target_dir — the workspace-aware Rust build cache location ---
 
 

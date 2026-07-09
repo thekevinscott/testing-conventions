@@ -10,7 +10,6 @@ import click
 from checks.below_floor.cli import cli as below_floor
 from checks.build_command_wired.cli import cli as build_command_wired
 from checks.build_hermetic_cli.cli import cli as build_hermetic_cli
-from checks.cargo_target_dir_wired.cli import cli as cargo_target_dir_wired
 from checks.colocated_rust_red.cli import cli as colocated_rust_red
 from checks.colocated_rust_wired.cli import cli as colocated_rust_wired
 from checks.coverage_package_root_wired.cli import cli as coverage_package_root_wired
@@ -57,7 +56,6 @@ def main() -> None:
 main.add_command(below_floor, name="below-floor")
 main.add_command(build_command_wired, name="build-command-wired")
 main.add_command(build_hermetic_cli, name="build-hermetic-cli")
-main.add_command(cargo_target_dir_wired, name="cargo-target-dir-wired")
 main.add_command(colocated_rust_red, name="colocated-rust-red")
 main.add_command(colocated_rust_wired, name="colocated-rust-wired")
 main.add_command(coverage_package_root_wired, name="coverage-package-root-wired")

@@ -301,12 +301,10 @@ def read_cargo(package_root: Path) -> dict:
 def cargo_workspace_root(package_root: Path, repo_root: Path) -> Optional[Path]:
     """The nearest strict ancestor of `package_root` (walking up to `repo_root` inclusive, the
     same boundary handling `derive_package_root` uses) whose `Cargo.toml` carries a `[workspace]`
-    table, or `None` when none does (#410). Cargo resolves the target directory — and so `cargo
-    package`'s output, and where the suite jobs' Rust build cache must key — at the *workspace*
-    root regardless of the invoking working directory, so a workspace member's derived build must
-    redirect `--target-dir` back to its own tree rather than let the crate land where the
-    packaging job's scan never looks, and its cache path must point at the workspace root's
-    `target/` rather than a directory `cargo` never writes to.
+    table, or `None` when none does (#410). Cargo resolves the target directory at the *workspace*
+    root regardless of the invoking working directory, so the suite jobs' Rust build cache must
+    key on that ancestor's `target/`, not `package_root`'s own — the exact directory a workspace
+    member's build never writes to.
 
     A crate whose own `Cargo.toml` carries both `[package]` and `[workspace]` (a workspace-root
     package) is not a *member* of an ancestor workspace — its own target dir is already correct,
@@ -332,10 +330,31 @@ def cargo_workspace_root(package_root: Path, repo_root: Path) -> Optional[Path]:
 
 
 def is_workspace_member(package_root: Path, repo_root: Path) -> bool:
-    """True when `package_root`'s crate belongs to a Cargo workspace rooted at an ancestor (#360)
-    — delegates to `cargo_workspace_root` for the walk itself (#410: one walk, no duplicated
-    traversal)."""
-    return cargo_workspace_root(package_root, repo_root) is not None
+    """True when `package_root`'s crate belongs to a Cargo workspace rooted at an ancestor (#360):
+    some directory strictly above `package_root`, down to `repo_root` inclusive, has a
+    `Cargo.toml` with a `[workspace]` table. Cargo resolves the target directory — and so `cargo
+    package`'s output — at the *workspace* root regardless of the invoking working directory, so
+    a workspace member's derived build must redirect `--target-dir` back to its own tree rather
+    than let the crate land where the packaging job's scan never looks.
+
+    A crate whose own `Cargo.toml` carries both `[package]` and `[workspace]` (a workspace-root
+    package) is not a *member* of an ancestor workspace — its own target dir is already correct,
+    so this only inspects ancestors, never `package_root` itself.
+    """
+    package_root = package_root.resolve()
+    repo_root = repo_root.resolve()
+    if package_root == repo_root:
+        return False
+    ancestors = []
+    for ancestor in package_root.parents:
+        ancestors.append(ancestor)
+        if ancestor == repo_root:
+            break
+    else:
+        # The walk never reached repo_root (package_root isn't under it): fall back to
+        # checking repo_root itself, mirroring `derive_package_root`'s own boundary handling.
+        ancestors.append(repo_root)
+    return any("workspace" in read_cargo(ancestor) for ancestor in ancestors)
 
 
 def derive_cargo_target_dir(package_root_rel: Path, workspace_root_rel: Optional[Path]) -> str:

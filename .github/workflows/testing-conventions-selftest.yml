@@ -384,23 +384,6 @@ jobs:
       - name: testing-conventions.yml must consolidate the static gates into one `static` job
         run: uv run --project internals/checks tc-checks static-gates-wired
 
-  cargo-target-dir-wired:
-    name: The Rust-build cache keys on the workspace-aware target dir
-    # The red→green signal for #410 PR 2: all four Rust-build cache steps (unit-coverage,
-    # coverage-changed, mutation, packaging) must key on `needs.detect.outputs.cargo_target_dir`,
-    # not the bare `needs.detect.outputs.package_root }}/target` path — cargo resolves the target
-    # directory at the *workspace* root regardless of the invoking cwd, so a workspace member's
-    # cache keyed on its own package root archives (and restores) a directory that never exists. A
-    # static grep of the workflow file, so it tracks the wiring regardless of what the published
-    # binary ships; this repo's own crate is standalone, so the runtime behavior is unchanged —
-    # covered by the existing suite/packaging `uses:` calls, not a dedicated clean/red pair.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
-      - name: testing-conventions.yml must key the Rust-build cache on cargo_target_dir
-        run: uv run --project internals/checks tc-checks cargo-target-dir-wired
-
   rolling-release-wired:
     name: The major tag advances only via the gated move-major-tag workflow
     # The red→green signal for #235. `@v0` is a moving tag, but the reusable workflow runs

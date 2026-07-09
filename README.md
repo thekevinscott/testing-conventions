@@ -26,7 +26,7 @@ Every rule is a CLI command that fails CI on a violation.
 
 **E2E**
 
-- [`e2e attest`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) / [`e2e verify`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) — `attest` runs the e2e suite locally and records the commit it ran against; `verify` checks that receipt in CI and never runs e2e; an `[e2e]` config table joins shared source trees beside the package into the freshness walk ([#333](https://github.com/thekevinscott/testing-conventions/issues/333)).
+- [`e2e attest`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) / [`e2e verify`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) — `attest` runs the e2e command of your choosing locally and records a branch-keyed receipt; `verify` checks in CI that a branch changing the scoped source carries a receipt in its diff, and never runs e2e; an `[e2e]` config table joins shared source trees beside the package into the scoped diff ([#333](https://github.com/thekevinscott/testing-conventions/issues/333)).
 <!-- #endregion rules -->
 
 ## The three kinds of tests
@@ -169,49 +169,50 @@ run on demand, not for CI.
 - **Rust:** under `tests/`, typically driving the built binary (`CARGO_BIN_EXE_<name>` or `assert_cmd`).
 
 **Attestation:** CI never runs e2e (real contracts are slow, flaky, and cost
-money), but the suite shouldn't silently rot either. The agent runs it locally and
-attests that it did:
+money), and never demands a fixed amount of e2e running. What it asks of a branch
+that changes the code is one visible decision, recorded locally:
 
 ```
-testing-conventions e2e attest '<your e2e command>'
+testing-conventions e2e attest '<the e2e command you choose>'
 ```
 
-`attest` runs the suite and commits an `e2e-attestation.json` recording the command,
-the exit code, and the commit it ran against. In CI, `testing-conventions e2e verify`
-passes only if that attestation names the latest code commit. Push code without
-re-attesting and it goes stale, so CI prompts you to re-run e2e. CI confirms someone
-ran the suite against this code; it never runs the suite itself. On a pull request,
-`--base <ref>` scopes freshness to the commits the branch introduced — the same
-diff-relative model coverage and mutation use — so a branch that changed the source
-re-attests and a branch that didn't stays green, which keeps the gate squash-safe.
+The command is the judgment — the full suite, the one suite covering the changed
+contract, or a no-op for a change that needs none. `attest` runs it and commits a
+receipt under `e2e-attestations/`, keyed by branch, recording the command, the exit
+code, and the commit it ran against. In CI, `testing-conventions e2e verify --base
+<ref>` passes when the branch's diff (`<base>...HEAD`, the same diff-relative model
+coverage and mutation use) leaves the scoped source untouched, or carries a receipt.
+One receipt covers the branch: later pushes stay green, and because both checks read
+content rather than commit SHAs, rebases and squash merges never disturb a receipt.
+Parallel branches write distinct receipt files, so their PRs never conflict on one.
 
 **Shared source trees:** a package whose e2e artifact is compiled from a source tree beside it —
 a native core bound into several language bindings — declares that tree in its
-`testing-conventions.toml`, and a commit there stales the package's attestation the same way a
-change to its own source does ([#333](https://github.com/thekevinscott/testing-conventions/issues/333)):
+`testing-conventions.toml`, and a change there puts the e2e question to the branch the same way a
+change to the package's own source does ([#333](https://github.com/thekevinscott/testing-conventions/issues/333)):
 
 ```toml
 [e2e]
-# A source tree compiled into this package but living outside it: its commits
-# join the freshness walk.
+# A source tree compiled into this package but living outside it: its changes
+# join the scoped diff.
 extra_scope = ["packages/rust/src"]
-# Feature-gated subtrees compiled out of this package: their commits leave the
-# attestation fresh.
+# Feature-gated subtrees compiled out of this package: their changes owe no
+# decision.
 exclude = ["packages/rust/src/cli", "packages/rust/src/bin"]
 ```
 
 Both keys are lists of repo-root-relative directories, and they map to the repeatable
-`e2e verify --extra-scope <dir>` / `--exclude <dir>` flags: the attestation must name the newest
-in-range commit touching the union of `--scope` and every extra scope, with the excluded subtrees
-carved out. The reusable workflow reads the keys through `detect` and appends the flags itself, so
-the config table is the whole declaration a package makes; a package declaring neither key behaves
-exactly as before. The walk is git-level, so it holds identically across Python, TypeScript, and
+`e2e verify --extra-scope <dir>` / `--exclude <dir>` flags: the scoped diff covers the union of
+`--scope` and every extra scope, with the excluded subtrees carved out. The reusable workflow
+reads the keys through `detect` and appends the flags itself, so the config table is the whole
+declaration a package makes; a package declaring neither key scopes the diff to `--scope` alone.
+The diff is git-level, so it holds identically across Python, TypeScript, and
 Rust. See the [e2e explanation](https://thekevinscott.github.io/testing-conventions/explanation/e2e#a-shared-source-tree-beside-the-package)
 and the [config reference](https://thekevinscott.github.io/testing-conventions/reference/config#e2e-extra_scope-and-exclude).
 
 **Checked:** the e2e location is a convention, not its own gate, and CI never runs
-the suite. CI checks the attestation: `e2e verify` requires the committed
-`e2e-attestation.json` to name the latest code commit.
+the suite. CI checks the decision: `e2e verify` requires a branch that changed the
+scoped source to carry a committed receipt in its diff.
 
 ### Coverage
 

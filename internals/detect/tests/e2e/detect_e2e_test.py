@@ -177,6 +177,21 @@ def test_e2e_attestation_detected(run_detect):
     assert out["packaging_dist"] == "false"  # no dist/ alongside
 
 
+def test_e2e_attestation_receipts_directory_detected(run_detect):
+    # Branch-keyed receipts live under `e2e-attestations/`; a committed receipt
+    # there turns the verify-if-present gate on, exactly like the legacy single
+    # file (which stays recognized so an existing consumer's gate never silently
+    # skips mid-migration).
+    out = run_detect(root_files={"e2e-attestations/feature-one-abcd012345.json": "{}"})
+    assert out["e2e_attestation"] == "true"
+
+
+def test_e2e_attestation_receipts_directory_without_receipts_is_not_detected(run_detect):
+    # A stray non-receipt file under the directory is not a receipt.
+    out = run_detect(root_files={"e2e-attestations/README.md": ""})
+    assert out["e2e_attestation"] == "false"
+
+
 def test_e2e_runs_without_a_github_output_file(run_detect, capsys):
     # GITHUB_OUTPUT empty: the script still runs and prints a summary, writing no output file.
     out = run_detect(languages='["python"]', sources={"widget.py": "x = 1\n"}, github_output="")

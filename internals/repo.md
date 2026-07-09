@@ -62,7 +62,7 @@ package's own manifest instead.
 
 These are the primitive the four gate fixes (#278–#281) consume; deriving them is out of scope
 for what those jobs *do* with them (installing, building, discovering `dist/`, discovering
-`e2e-attestation.json`) — see each issue for its own gate-specific wiring.
+e2e receipts) — see each issue for its own gate-specific wiring.
 
 The `.github/selftest/monorepo/` fixture (no manifest or lockfile at its own root, mirroring a
 real per-package-lockfile monorepo) exercises the derivation end to end via the local

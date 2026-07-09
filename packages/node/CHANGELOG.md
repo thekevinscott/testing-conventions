@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed
+
+- **E2E attestation is one branch-keyed decision per branch** (shipped through this package's
+  bundled CLI; the full contract lives in `packages/rust/CHANGELOG.md`). `e2e attest '<cmd>'`
+  writes `e2e-attestations/<branch-slug>.json` — parallel pull requests write distinct files and
+  never merge-conflict — and the unrestricted command is the judgment the receipt records.
+  `e2e verify --base <ref>` reads the branch's content diff: a branch that left the scoped source
+  untouched owes nothing, one that changed it passes when its diff adds or updates a receipt, and
+  later pushes, rebases, and squash merges never disturb a receipt. The new **`e2e slug [branch]`**
+  subcommand prints the standardized receipt slug. **Breaking:** the single `e2e-attestation.json`
+  is retired; `attest` collects a committed one automatically. See `MIGRATIONS.md`.
+
 ### Added
 
 - **TypeScript mutation engine adapter** (#246, part of the #239 epic). Organized by folder:

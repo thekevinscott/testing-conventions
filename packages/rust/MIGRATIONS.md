@@ -15,6 +15,17 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Retires the exact-match e2e freshness contract in favor of **one branch-keyed decision per
+branch**. `e2e attest '<cmd>'` writes `e2e-attestations/<branch-slug>.json` — parallel
+pull requests write distinct files, so attestation merge conflicts are structurally gone — and
+prunes the receipts other branches left behind. The command is unrestricted and is itself the
+judgment being recorded: the full suite, a targeted subset, or a no-op are all valid receipts.
+`e2e verify --base <ref>` asks two content questions of `<base>...HEAD`: did the branch change
+the scoped source (no → pass, nothing owed), and does its diff add or update a receipt (yes →
+pass; no → fail, naming `attest` as the fix). Commit SHAs are no longer compared, so one receipt
+covers the branch — later pushes stay green, and rebases and squash merges never disturb it.
+Without `--base`, `verify` checks that a committed receipt is present.
+
 Derives the suite tiers from the package root (#418). `integration lint` takes its subjects from
 the standard suite directories — `<package root>/tests/integration/` and
 `<package root>/tests/e2e/`, both of which run first-party code for real and so are held to the
@@ -714,6 +725,16 @@ and `--base` semantics are unchanged; only the consumer-visible **check names** 
 
 ### Required changes
 
+**Re-attest once per open branch; delete the legacy `e2e-attestation.json`.** The single-file
+attestation is replaced by the `e2e-attestations/` directory. A branch open across the upgrade
+that changed scoped source runs `e2e attest '<cmd>'` once (writing its branch-keyed receipt); the
+legacy file at the package root is deleted whenever convenient — `verify` no longer reads it.
+`attest` must run on a checked-out branch: a detached `HEAD` is an error naming the fix.
+
+`e2e::Verification` loses its `Stale { attested, latest }` variant — freshness is no longer a
+SHA comparison — and `e2e::ATTESTATION_PATH` (the single-file location) is replaced by the
+receipts-directory constant. Exhaustive `match`es on `Verification` drop the `Stale` arm.
+
 **Move each suite to its standard tier, or exempt it** (#418). `integration lint` finds the
 integration and e2e suites at `<package root>/tests/integration/` and `<package root>/tests/e2e/`
 (Rust: the crate root's `tests/`). A Python/TypeScript package whose suites live elsewhere moves
@@ -984,6 +1005,14 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+The `e2e verify` gate re-demands a receipt only when scoped **content** changes, once per branch.
+A branch that attests and then pushes further scoped commits stays green (previously each scoped
+push re-demanded a fresh attestation naming its newest commit); a rebase or squash merge leaves a
+receipt standing (previously either could strand the recorded SHA and red the gate with nothing
+to re-run). The reusable workflow's e2e-verify job discovers receipts at `e2e-attestations/`
+instead of the single `e2e-attestation.json`, so a repo that has not yet re-attested with the new
+CLI has its gate skip (verify-if-present) rather than fail until its next scoped branch attests.
+
 `integration lint` scans the derived suite tiers instead of the scanned `path` (#418). Three
 verdicts can move at the same invocation: a suite beside the scanned source directory is now
 linted (violations it always carried now fail the gate — previously the scan never reached it); a
@@ -1235,6 +1264,18 @@ Exemptions (#32) change runtime behavior:
   failure (exit `4`) or usage error is still fatal. No API or config change.
 
 ### Verification
+
+```
+git checkout -b tc-migration-check
+testing-conventions e2e attest 'true'
+ls e2e-attestations/
+testing-conventions e2e verify --base origin/main
+```
+
+Expected: `attest` commits one `e2e-attestations/<branch-slug>.json` naming the branch;
+`verify` passes. Push a scoped source change on a second branch without attesting and `verify
+--base origin/main` fails there, naming `e2e attest` as the fix; rebasing the attested branch
+onto a moved `main` leaves its `verify` green.
 
 ```
 testing-conventions integration lint --language python <package>/src

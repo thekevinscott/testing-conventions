@@ -7,6 +7,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **E2E attestation is one branch-keyed decision per branch, not a SHA-fresh stamp per push.**
+  `e2e attest '<cmd>'` now writes `e2e-attestations/<branch-slug>.json` — keyed by the
+  branch so parallel pull requests write distinct files and never merge-conflict — recording the
+  command, timestamp, exit code, commit, and branch; it prunes the receipts other branches left
+  behind. The command is unrestricted and *is* the judgment being recorded: the full suite, a
+  subset, or a no-op are all valid receipts. `e2e verify --base <ref>` asks two content questions
+  of `<base>...HEAD`: a branch that left the scoped source untouched passes with no receipt owed,
+  and a branch that changed it passes when its diff adds or updates a receipt. It no longer
+  compares commit SHAs, so one receipt covers the branch — later pushes stay green, and rebases
+  and squash merges never disturb it. Without `--base`, `verify` checks receipt presence.
+  The filename derivation is public: **`e2e slug [branch]`** prints the standardized slug
+  (default: the checked-out branch), and `e2e::branch_slug` exposes it in the crate API;
+  `Attestation` gains a `branch` field recording the raw name. `attest` requires a checked-out
+  branch (a detached `HEAD` is an error naming the fix) and collects a committed legacy
+  `e2e-attestation.json` in the same receipt commit.
+  **Breaking:** the single `e2e-attestation.json` is replaced by the `e2e-attestations/`
+  directory (`e2e::ATTESTATION_PATH` by `e2e::RECEIPTS_DIR`), `Verification::Stale` is gone,
+  and the exact-match freshness contract is retired. See `MIGRATIONS.md`.
+
 - **The suite tiers derive from the package root** (#418). `integration lint` takes its subjects
   from the standard suite directories — `<package root>/tests/integration/` and
   `<package root>/tests/e2e/`, both run first-party code for real and so both are held to the

@@ -1,0 +1,7 @@
+{
+  "command": "npm run test:e2e",
+  "ran_at": 1783638984,
+  "exit_code": 0,
+  "commit": "96cef60b2d0e07c3a91c8d93684d3bdbc8b336b9",
+  "branch": "claude/e2e-attestation-conflicts-mrkc1b"
+}

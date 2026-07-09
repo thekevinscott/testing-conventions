@@ -1,16 +1,14 @@
-//! E2E tests for `e2e verify`: drive the built CLI binary in a
-//! throwaway git repo (no mocks) and assert it gates on the committed
-//! attestation — exit `0` when fresh, non-zero with the run-`attest` hint when
-//! the code has moved on. Never runs e2e.
-//!
-//! Starts red against the stub in `src/e2e.rs` and goes green once `verify` is
-//! implemented.
+//! E2E tests for `e2e verify`: drive the built CLI binary in a throwaway git
+//! repo (no mocks) and assert the exit codes and the actionable failure hint.
+//! The branch-diff semantics are pinned end-to-end in `e2e_receipts_e2e.rs`;
+//! this file covers presence (no `--base`), the `path` argument, the caller
+//! `--scope`, the `--extra-scope`/`--exclude` pair, and the #391 loud error.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// A throwaway git repo with one seed commit, removed on drop.
+/// A throwaway git repo with one seed commit on branch `work`, removed on drop.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -26,8 +24,7 @@ impl TempRepo {
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
         // Throwaway repos never sign — keep the suite hermetic regardless of the
-        // machine's global `commit.gpgsign`, now that `attest` inherits it instead
-        // of forcing it off.
+        // machine's global `commit.gpgsign`.
         git(&root, &["config", "commit.gpgsign", "false"]);
         std::fs::write(root.join("README.md"), "seed\n").unwrap();
         git(&root, &["add", "."]);
@@ -35,16 +32,28 @@ impl TempRepo {
             &root,
             &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "seed"],
         );
+        git(&root, &["checkout", "-q", "-b", "work"]);
         TempRepo(root)
     }
 
     fn commit_code(&self, name: &str, contents: &str) {
-        std::fs::write(self.0.join(name), contents).unwrap();
+        let full = self.0.join(name);
+        std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+        std::fs::write(&full, contents).unwrap();
         git(&self.0, &["add", name]);
         git(
             &self.0,
             &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "code"],
         );
+    }
+
+    fn head(&self) -> String {
+        let out = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&self.0)
+            .output()
+            .expect("git rev-parse should run");
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
     }
 }
 
@@ -63,289 +72,139 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-fn rev_parse(dir: &Path, rev: &str) -> String {
-    let out = Command::new("git")
-        .args(["rev-parse", rev])
-        .current_dir(dir)
-        .output()
-        .expect("git rev-parse should run");
-    assert!(out.status.success(), "git rev-parse {rev} failed");
-    String::from_utf8(out.stdout).unwrap().trim().to_string()
-}
-
-/// Run the built binary with `args`, cwd set to `repo`; return (exit code, stderr).
-fn run_cli(repo: &Path, args: &[&str]) -> (i32, String) {
+/// Run the built binary with `args` in `cwd`, returning (exit code, stdout+stderr).
+fn run_cli(cwd: &Path, args: &[&str]) -> (i32, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(args)
-        .current_dir(repo)
+        .current_dir(cwd)
         .output()
         .expect("the built binary should run");
-    (
-        out.status
-            .code()
-            .expect("the process should exit with a code"),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
-    )
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    (out.status.code().expect("an exit code"), text)
 }
 
 #[test]
-fn verify_exits_zero_when_the_attestation_is_fresh() {
+fn verify_exits_zero_on_a_committed_receipt() {
     let repo = TempRepo::new();
-    assert_eq!(
-        run_cli(&repo.0, &["e2e", "attest", "true"]).0,
-        0,
-        "attest should record the run"
+    let (code, _) = run_cli(&repo.0, &["e2e", "attest", "true"]);
+    assert_eq!(code, 0);
+
+    let (code, text) = run_cli(&repo.0, &["e2e", "verify"]);
+    assert_eq!(code, 0, "a committed receipt should pass: {text}");
+}
+
+#[test]
+fn verify_exits_nonzero_with_the_attest_hint_when_missing() {
+    let repo = TempRepo::new();
+    let (code, text) = run_cli(&repo.0, &["e2e", "verify"]);
+    assert_eq!(code, 1, "no receipt should fail");
+    assert!(
+        text.contains("e2e attest"),
+        "the failure names the fix: {text}"
     );
+}
+
+#[test]
+fn verify_with_path_argument_reads_the_package_receipts() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(&package).unwrap();
+    repo.commit_code("packages/widget/widget.rs", "pub fn widget() {}\n");
+    let (code, _) = run_cli(&package, &["e2e", "attest", "true"]);
+    assert_eq!(code, 0);
+
+    // Verified from the repo root, with the package as the path argument.
+    let (code, text) = run_cli(&repo.0, &["e2e", "verify", "packages/widget"]);
+    assert_eq!(code, 0, "the package's receipt should pass: {text}");
+
+    // The repo root itself carries no receipts.
     let (code, _) = run_cli(&repo.0, &["e2e", "verify"]);
-    assert_eq!(code, 0, "a fresh attestation should pass verify");
+    assert_eq!(code, 1, "discovery is scoped to the path argument");
 }
 
 #[test]
-fn verify_exits_nonzero_with_the_attest_hint_when_stale() {
+fn verify_with_base_and_scope_ignores_a_change_outside_the_scope() {
     let repo = TempRepo::new();
-    run_cli(&repo.0, &["e2e", "attest", "true"]);
-    // Move the code on without re-attesting.
-    repo.commit_code("widget.rs", "pub fn widget() {}\n");
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    let (code, _) = run_cli(&package, &["e2e", "attest", "true"]);
+    assert_eq!(code, 0);
+    let base = repo.head();
+    repo.commit_code("packages/widget/tests/widget_test.rs", "// test\n");
 
-    let (code, stderr) = run_cli(&repo.0, &["e2e", "verify"]);
-    assert_ne!(code, 0, "a stale attestation should fail verify");
-    assert!(
-        stderr.contains("attest"),
-        "the failure should hint to re-run attest; got: {stderr}"
-    );
-}
-
-// `e2e verify <path>` behaves identically to running with cwd
-// `<path>` — proven end-to-end by spawning the built binary with cwd fixed at
-// the *repo root* while the path argument names the package subdirectory
-// carrying the attestation. Before the CLI grows the `path` argument, passing
-// an extra positional here is a clap usage error (non-zero exit, no
-// attestation-shaped message), so these start red.
-
-#[test]
-fn verify_with_path_argument_exits_zero_when_the_package_attestation_is_fresh() {
-    let repo = TempRepo::new();
-    let package_rel = "packages/widget";
-    std::fs::create_dir_all(repo.0.join(package_rel)).unwrap();
-    // The package needs its own code commit before an attestation of it can be
-    // fresh — a never-committed directory has no code history the `.`
-    // pathspec (scoped to the package's cwd) can find.
-    repo.commit_code(&format!("{package_rel}/widget.rs"), "pub fn widget() {}\n");
-    // Attest scoped to the package subdirectory (cwd = the package).
-    assert_eq!(
-        run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]).0,
-        0,
-        "attest should record the run"
-    );
-    // Verify from the repo root, naming the package via the new positional
-    // argument — this must behave identically to running with cwd = package.
-    let (code, _) = run_cli(&repo.0, &["e2e", "verify", package_rel]);
-    assert_eq!(
-        code, 0,
-        "a fresh package-scoped attestation should pass verify via the path argument"
-    );
-}
-
-#[test]
-fn verify_with_path_argument_exits_nonzero_when_the_package_attestation_is_stale() {
-    let repo = TempRepo::new();
-    let package_rel = "packages/widget";
-    std::fs::create_dir_all(repo.0.join(package_rel)).unwrap();
-    repo.commit_code(&format!("{package_rel}/widget.rs"), "pub fn widget() {}\n");
-    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
-    // Move the package's code on without re-attesting.
-    repo.commit_code(
-        &format!("{package_rel}/widget2.rs"),
-        "pub fn widget2() {}\n",
-    );
-
-    let (code, stderr) = run_cli(&repo.0, &["e2e", "verify", package_rel]);
-    assert_ne!(
-        code, 0,
-        "a stale package-scoped attestation should fail verify via the path argument"
-    );
-    assert!(
-        stderr.contains("attest"),
-        "the failure should hint to re-run attest; got: {stderr}"
-    );
-}
-
-// `e2e verify <path> --scope <dir>` narrows the freshness walk to
-// `<dir>` while still reading the attestation from `<path>`.
-
-#[test]
-fn verify_with_scope_ignores_a_commit_outside_it() {
-    let repo = TempRepo::new();
-    let package_rel = "packages/widget";
-    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
-    std::fs::create_dir_all(repo.0.join(package_rel).join("tests")).unwrap();
-    repo.commit_code(
-        &format!("{package_rel}/src/widget.rs"),
-        "pub fn widget() {}\n",
-    );
-    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
-    // A commit outside the scoped src/ dir, but still inside the package root.
-    repo.commit_code(&format!("{package_rel}/tests/widget_test.rs"), "// test\n");
-
-    let (code, _) = run_cli(
+    let (code, text) = run_cli(
         &repo.0,
         &[
             "e2e",
             "verify",
-            package_rel,
+            "packages/widget",
             "--scope",
-            &format!("{package_rel}/src"),
-        ],
-    );
-    assert_eq!(
-        code, 0,
-        "a commit outside --scope should not trip freshness"
-    );
-}
-
-#[test]
-fn verify_with_no_scope_is_unchanged_from_today() {
-    // Regression guard: omitting --scope stays byte-identical to the
-    // whole-path freshness walk.
-    let repo = TempRepo::new();
-    let package_rel = "packages/widget";
-    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
-    repo.commit_code(
-        &format!("{package_rel}/src/widget.rs"),
-        "pub fn widget() {}\n",
-    );
-    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
-    repo.commit_code(&format!("{package_rel}/other.rs"), "pub fn other() {}\n");
-
-    let (code, _) = run_cli(&repo.0, &["e2e", "verify", package_rel]);
-    assert_ne!(
-        code, 0,
-        "with no --scope, a commit anywhere under path should still count as code"
-    );
-}
-
-#[test]
-fn verify_with_no_argument_is_unchanged_from_today() {
-    // Regression guard: `e2e verify` with no argument stays byte-identical —
-    // the default `.` resolves against cwd, exactly like the behavior
-    // covered above.
-    let repo = TempRepo::new();
-    run_cli(&repo.0, &["e2e", "attest", "true"]);
-    let (code, _) = run_cli(&repo.0, &["e2e", "verify"]);
-    assert_eq!(
-        code, 0,
-        "a fresh attestation at cwd should still pass with no argument"
-    );
-}
-
-// `e2e verify <path> --scope <dir> --base <ref>` restricts freshness to
-// the commits this branch introduced (`<base>..HEAD`), the squash-safe form the
-// reusable job needs. A PR that didn't touch the scoped source passes (exit 0)
-// even when the attestation is stale against absolute history; a PR that changed
-// the scoped source without re-attesting still fails.
-
-#[test]
-fn verify_with_base_exits_zero_on_an_unrelated_branch() {
-    let repo = TempRepo::new();
-    let package_rel = "packages/widget";
-    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
-    std::fs::create_dir_all(repo.0.join("packages/other")).unwrap();
-    repo.commit_code(
-        &format!("{package_rel}/src/widget.rs"),
-        "pub fn widget() {}\n",
-    );
-    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
-    // A later scoped commit the attestation does not name (stale vs history).
-    repo.commit_code(
-        &format!("{package_rel}/src/widget.rs"),
-        "pub fn widget() { /* v2 */ }\n",
-    );
-    let base = rev_parse(&repo.0, "HEAD");
-    // The PR touches a different package.
-    repo.commit_code("packages/other/thing.rs", "pub fn thing() {}\n");
-
-    let (code, _) = run_cli(
-        &repo.0,
-        &[
-            "e2e",
-            "verify",
-            package_rel,
-            "--scope",
-            &format!("{package_rel}/src"),
+            "packages/widget/src",
             "--base",
             &base,
         ],
     );
-    assert_eq!(
-        code, 0,
-        "--base must make an unrelated PR pass despite a stale-on-base attestation"
-    );
+    assert_eq!(code, 0, "a change outside --scope owes no decision: {text}");
 }
 
 #[test]
-fn verify_with_base_fails_when_the_branch_changed_scoped_source() {
+fn verify_with_base_demands_a_receipt_for_a_scoped_change() {
     let repo = TempRepo::new();
-    let package_rel = "packages/widget";
-    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    let (code, _) = run_cli(&package, &["e2e", "attest", "true"]);
+    assert_eq!(code, 0);
+    let base = repo.head();
     repo.commit_code(
-        &format!("{package_rel}/src/widget.rs"),
-        "pub fn widget() {}\n",
-    );
-    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
-    let base = rev_parse(&repo.0, "HEAD");
-    // The PR changes the scoped source without re-attesting.
-    repo.commit_code(
-        &format!("{package_rel}/src/widget.rs"),
+        "packages/widget/src/widget.rs",
         "pub fn widget() { /* v2 */ }\n",
     );
 
-    let (code, stderr) = run_cli(
+    let (code, text) = run_cli(
         &repo.0,
-        &[
-            "e2e",
-            "verify",
-            package_rel,
-            "--scope",
-            &format!("{package_rel}/src"),
-            "--base",
-            &base,
-        ],
+        &["e2e", "verify", "packages/widget", "--base", &base],
     );
-    assert_ne!(code, 0, "a scoped change on the branch should fail --base");
+    assert_eq!(code, 1, "an unanswered scoped change fails");
     assert!(
-        stderr.contains("attest"),
-        "the failure should hint to re-run attest; got: {stderr}"
+        text.contains("e2e attest"),
+        "the failure names the fix: {text}"
     );
+
+    // Attest on the branch and the same call passes.
+    let (code, _) = run_cli(&package, &["e2e", "attest", "true"]);
+    assert_eq!(code, 0);
+    let (code, text) = run_cli(
+        &repo.0,
+        &["e2e", "verify", "packages/widget", "--base", &base],
+    );
+    assert_eq!(code, 0, "the branch's receipt answers the nudge: {text}");
 }
 
-// `e2e verify <path> --base <ref> [--extra-scope <dir>]...
-// [--exclude <dir>]...` joins extra freshness roots (a shared source tree that is
-// a sibling of the package) into the walk. A non-excluded change under an extra
-// root stales the attestation; a change only under an excluded subtree stays
-// fresh. Before the binary grows the flags, passing them is a clap usage error
-// (non-zero exit, no attestation-shaped message), so these start red.
-
 #[test]
-fn verify_with_extra_scope_fails_on_a_non_excluded_core_change() {
+fn verify_with_extra_scope_demands_a_receipt_for_a_core_change() {
     let repo = TempRepo::new();
-    let package_rel = "packages/python";
-    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
-    std::fs::create_dir_all(repo.0.join("packages/rust/src")).unwrap();
-    repo.commit_code(
-        &format!("{package_rel}/src/lib.rs"),
-        "pub fn binding() {}\n",
-    );
-    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
-    let base = rev_parse(&repo.0, "HEAD");
-    // The PR touches only the shared core, outside the binding's own subtree.
+    let package = repo.0.join("packages/python");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/python/src/lib.rs", "pub fn binding() {}\n");
     repo.commit_code("packages/rust/src/core.rs", "pub fn core() {}\n");
+    repo.commit_code("packages/rust/src/cli/main.rs", "pub fn cli() {}\n");
+    let (code, _) = run_cli(&package, &["e2e", "attest", "true"]);
+    assert_eq!(code, 0);
+    let base = repo.head();
+    repo.commit_code("packages/rust/src/core.rs", "pub fn core() { /* v2 */ }\n");
 
-    let (code, stderr) = run_cli(
+    let (code, _) = run_cli(
         &repo.0,
         &[
             "e2e",
             "verify",
-            package_rel,
+            "packages/python",
             "--base",
             &base,
             "--extra-scope",
@@ -354,37 +213,33 @@ fn verify_with_extra_scope_fails_on_a_non_excluded_core_change() {
             "packages/rust/src/cli",
         ],
     );
-    assert_ne!(
-        code, 0,
-        "a non-excluded change under --extra-scope should fail verify"
-    );
-    assert!(
-        stderr.contains("attest"),
-        "the failure should hint to re-run attest; got: {stderr}"
+    assert_eq!(
+        code, 1,
+        "a non-excluded core change owes the binding a decision"
     );
 }
 
 #[test]
 fn verify_with_extra_scope_exits_zero_on_an_excluded_change() {
     let repo = TempRepo::new();
-    let package_rel = "packages/python";
-    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
-    std::fs::create_dir_all(repo.0.join("packages/rust/src/cli")).unwrap();
-    repo.commit_code(
-        &format!("{package_rel}/src/lib.rs"),
-        "pub fn binding() {}\n",
-    );
-    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
-    let base = rev_parse(&repo.0, "HEAD");
-    // A change only under the feature-gated cli/ subtree of the extra root.
+    let package = repo.0.join("packages/python");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/python/src/lib.rs", "pub fn binding() {}\n");
     repo.commit_code("packages/rust/src/cli/main.rs", "pub fn cli() {}\n");
+    let (code, _) = run_cli(&package, &["e2e", "attest", "true"]);
+    assert_eq!(code, 0);
+    let base = repo.head();
+    repo.commit_code(
+        "packages/rust/src/cli/main.rs",
+        "pub fn cli() { /* v2 */ }\n",
+    );
 
-    let (code, _) = run_cli(
+    let (code, text) = run_cli(
         &repo.0,
         &[
             "e2e",
             "verify",
-            package_rel,
+            "packages/python",
             "--base",
             &base,
             "--extra-scope",
@@ -393,98 +248,40 @@ fn verify_with_extra_scope_exits_zero_on_an_excluded_change() {
             "packages/rust/src/cli",
         ],
     );
-    assert_eq!(
-        code, 0,
-        "a change only under --exclude should not trip freshness"
-    );
+    assert_eq!(code, 0, "an excluded change owes no decision: {text}");
 }
 
-// --- #391: `e2e verify <path> --scope <bogus> --base <ref>` errors (non-zero)
-// instead of silently reporting the attestation Fresh. The documented "`scope`
-// must be `repo` or a descendant of it" constraint was never enforced, so a typo'd
-// `--scope` (a sibling package, or a path that isn't a descendant of `path`)
-// resolved to a pathspec matching nothing — and with `--base` set, an empty walk
-// reads as Fresh, a stale attestation that passes forever. Before the fix these
-// exit 0; after it they exit non-zero, naming the bad scope.
-
 #[test]
-fn verify_with_a_scope_matching_no_tracked_path_errors_rather_than_reporting_fresh() {
-    // The issue's exact scenario: `--scope packages/ts-utils` is a typo — not a
-    // descendant of `packages/widget` and matching no tracked path — passed
-    // alongside `--base`, so the empty walk would otherwise report Fresh.
+fn verify_with_a_scope_matching_no_tracked_path_errors_loudly() {
+    // #391: a typo'd scope must be a loud error naming the bad scope, never a
+    // silent pass over an empty diff.
     let repo = TempRepo::new();
-    let package_rel = "packages/widget";
-    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    let (code, _) = run_cli(&package, &["e2e", "attest", "true"]);
+    assert_eq!(code, 0);
+    let base = repo.head();
     repo.commit_code(
-        &format!("{package_rel}/src/widget.rs"),
-        "pub fn widget() {}\n",
-    );
-    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
-    let base = rev_parse(&repo.0, "HEAD");
-    // A genuinely stale scoped change the attestation does not name.
-    repo.commit_code(
-        &format!("{package_rel}/src/widget.rs"),
+        "packages/widget/src/widget.rs",
         "pub fn widget() { /* v2 */ }\n",
     );
 
-    let (code, stderr) = run_cli(
+    let (code, text) = run_cli(
         &repo.0,
         &[
             "e2e",
             "verify",
-            package_rel,
+            "packages/widget",
             "--scope",
-            "packages/ts-utils",
+            "packages/widget/ghost",
             "--base",
             &base,
         ],
     );
-    assert_ne!(
-        code, 0,
-        "a --scope matching no tracked path must fail, not report Fresh; stderr: {stderr}"
-    );
+    assert_ne!(code, 0, "a bogus --scope must fail");
     assert!(
-        stderr.contains("scope"),
-        "the failure should name --scope; got: {stderr}"
-    );
-}
-
-#[test]
-fn verify_with_a_valid_descendant_scope_still_reports_stale() {
-    // The other required case: a valid descendant `--scope` with a stale
-    // attestation still fails (Stale), proving validation doesn't over-reject.
-    let repo = TempRepo::new();
-    let package_rel = "packages/widget";
-    std::fs::create_dir_all(repo.0.join(package_rel).join("src")).unwrap();
-    repo.commit_code(
-        &format!("{package_rel}/src/widget.rs"),
-        "pub fn widget() {}\n",
-    );
-    run_cli(&repo.0.join(package_rel), &["e2e", "attest", "true"]);
-    let base = rev_parse(&repo.0, "HEAD");
-    repo.commit_code(
-        &format!("{package_rel}/src/widget.rs"),
-        "pub fn widget() { /* v2 */ }\n",
-    );
-
-    let (code, stderr) = run_cli(
-        &repo.0,
-        &[
-            "e2e",
-            "verify",
-            package_rel,
-            "--scope",
-            &format!("{package_rel}/src"),
-            "--base",
-            &base,
-        ],
-    );
-    assert_ne!(
-        code, 0,
-        "a stale valid-descendant scope must still fail; stderr: {stderr}"
-    );
-    assert!(
-        stderr.contains("attest"),
-        "the failure should hint to re-run attest; got: {stderr}"
+        text.contains("scope"),
+        "the error should name the bad scope: {text}"
     );
 }

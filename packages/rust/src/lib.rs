@@ -201,46 +201,52 @@ enum IntegrationRule {
     },
 }
 
-/// E2E attestation commands: record a local e2e run and (later)
-/// verify in CI that the latest code commit is attested.
+/// E2E attestation commands: record a local e2e decision and (later)
+/// verify in CI that a branch changing the scoped source carries a receipt.
 #[derive(Subcommand, Debug)]
 enum E2eCommand {
-    /// Run the e2e suite and write a committed attestation naming the current commit.
+    /// Run the e2e command of your choosing and commit the branch's receipt —
+    /// the command (full suite, targeted subset, or a no-op) is the judgment
+    /// the receipt records.
     Attest {
         /// The e2e command to run (e.g. `pnpm run e2e`), executed via the shell.
         command: String,
     },
-    /// Verify the committed attestation names the latest code commit (the CI gate).
+    /// Verify a receipt answers this branch's e2e nudge (the CI gate).
     Verify {
-        /// Directory whose committed e2e-attestation.json is verified (default: current directory).
+        /// Directory whose committed receipts (`e2e-attestations/`) are read
+        /// (default: current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Directory the "latest code commit" freshness walk is scoped to, if
-        /// narrower than `path` (default: `path` itself, byte-identical to before
-        /// this flag existed). Must be `path` or a descendant of it.
+        /// Directory defining what counts as scoped source, if narrower than
+        /// `path` (default: `path` itself). Must be `path` or a descendant of it.
         #[arg(long)]
         scope: Option<PathBuf>,
-        /// Opt-in diff-scoping: restrict freshness to the commits this
-        /// branch introduced (`<base>..HEAD`) rather than all reachable history.
-        /// A branch that didn't touch the scoped source passes with nothing to
-        /// re-attest — the way the changed-line coverage/mutation gates pass on an
-        /// empty diff, and what makes the gate safe for a squash-merging repo.
-        /// Absent means the whole history (byte-identical to before this flag).
+        /// Base ref for the branch's content diff (`<base>...HEAD`): a branch
+        /// whose diff leaves the scoped source untouched owes no decision, and
+        /// one that changed it passes when its diff adds or updates a receipt —
+        /// the way the changed-line coverage/mutation gates read the diff, and
+        /// indifferent to rebases and squash merges. Absent, presence of a
+        /// committed receipt is the whole check.
         #[arg(long)]
         base: Option<String>,
-        /// Extra freshness roots: repo-root-relative directories outside
-        /// `path` whose commits join the freshness walk — a shared source tree
-        /// beside the package (a native core bound into several bindings) that no
-        /// `--scope` at-or-below `path` can reach. Repeatable; the attestation
-        /// must name the newest in-range commit touching the union of `--scope`
-        /// and every `--extra-scope`. Absent means the walk covers only `--scope`.
+        /// Extra scopes: repo-root-relative directories outside `path` that
+        /// join the scoped diff — a shared source tree beside the package (a
+        /// native core bound into several bindings) that no `--scope`
+        /// at-or-below `path` can reach. Repeatable.
         #[arg(long = "extra-scope")]
         extra_scope: Vec<PathBuf>,
         /// Feature-gated subtrees carved back out of the `--extra-scope` union:
-        /// repo-root-relative directories (a core `cli/` compiled out of
-        /// the bindings) whose commits must not stale the attestation. Repeatable.
+        /// repo-root-relative directories (a core `cli/` compiled out of the
+        /// bindings) whose changes owe no decision. Repeatable.
         #[arg(long = "exclude")]
         exclude: Vec<PathBuf>,
+    },
+    /// Print the standardized receipt slug for a branch name — the receipt
+    /// lives at `e2e-attestations/<slug>.json`.
+    Slug {
+        /// Branch name to standardize (default: the checked-out branch).
+        branch: Option<String>,
     },
 }
 
@@ -311,6 +317,7 @@ where
                 &extra_scope,
                 &exclude,
             ),
+            E2eCommand::Slug { branch } => run_e2e_slug(branch.as_deref()),
         },
         Some(Command::Install { path }) => {
             agents::install(&path)?;
@@ -908,35 +915,34 @@ fn run_workflow(path: &Path) -> anyhow::Result<i32> {
     Ok(1)
 }
 
-/// Run `command` as an e2e suite and write a committed attestation naming the
-/// current commit. Force-runs: the attestation is written regardless of
-/// the command's exit code, so this exits `0` once the attestation is recorded.
+/// Run `command` as the branch's e2e decision and commit the receipt.
+/// Force-runs: the receipt is written regardless of the command's exit code,
+/// so this exits `0` once the receipt is recorded.
 fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
     let repo = std::env::current_dir()?;
     let attestation = e2e::attest(&repo, command)?;
     println!(
-        "e2e attestation recorded for commit {} (command exited {})",
-        attestation.commit, attestation.exit_code
+        "e2e receipt recorded for branch {} at {}/{}.json (command exited {})",
+        attestation.branch,
+        e2e::RECEIPTS_DIR,
+        e2e::branch_slug(&attestation.branch),
+        attestation.exit_code
     );
     Ok(0)
 }
 
-/// Verify the committed e2e attestation names the latest code commit — the
-/// CI side of the nudge. Exits `0` when fresh; otherwise prints the actionable
-/// hint and exits `1`. Never runs e2e, never judges the recorded run.
+/// Verify a receipt answers this branch's e2e nudge — the CI side. Exits `0`
+/// when it does; otherwise prints the actionable hint and exits `1`. Never
+/// runs e2e, never judges the recorded run.
 ///
-/// `path` is the directory whose committed `e2e-attestation.json` is checked
-/// — the default `.` resolves against the current directory, so a
-/// no-argument call behaves exactly like the `current_dir()` read.
-/// Passing a package subdirectory scopes discovery to it, matching a call made
-/// with that directory as cwd. `scope`, when set, narrows the "latest code
-/// commit" freshness walk to a directory under `path` instead of all of it
-/// — `None` behaves exactly like passing `path` itself. `base`, when set,
-/// restricts the walk to the commits this branch introduced (`<base>..HEAD`)
-/// instead of all history — `None` behaves exactly like before the flag.
-/// `extra_scopes` join repo-root-relative sibling trees into the walk and
-/// `excludes` carve feature-gated subtrees back out — both empty behaves
-/// exactly like before those flags.
+/// `path` is the directory whose committed receipts are read — the default `.`
+/// resolves against the current directory, so a no-argument call behaves
+/// exactly like a call made from `path` as cwd. `scope`, when set, narrows
+/// what counts as scoped source to a directory under `path` — `None` behaves
+/// exactly like passing `path` itself. `base` makes both checks content diffs
+/// of `<base>...HEAD`; absent, receipt presence is the whole check.
+/// `extra_scopes` join repo-root-relative sibling trees into the scoped diff
+/// and `excludes` carve feature-gated subtrees back out.
 fn run_e2e_verify(
     path: &Path,
     scope: Option<&Path>,
@@ -948,20 +954,28 @@ fn run_e2e_verify(
         e2e::Verification::Fresh => Ok(0),
         e2e::Verification::Missing => {
             eprintln!(
-                "e2e attestation missing — run `testing-conventions e2e attest '<your e2e command>'`"
-            );
-            Ok(1)
-        }
-        e2e::Verification::Stale { attested, latest } => {
-            eprintln!(
-                "e2e attestation out of date: attested {}, latest code commit {} — \
-                 run `testing-conventions e2e attest '<your e2e command>'`",
-                &attested[..attested.len().min(7)],
-                &latest[..latest.len().min(7)]
+                "no e2e receipt answers this change — run \
+                 `testing-conventions e2e attest '<your e2e command>'`; the command is \
+                 your judgment: the full suite, a targeted subset, or a no-op"
             );
             Ok(1)
         }
     }
+}
+
+/// Print the standardized receipt slug for `branch` (default: the checked-out
+/// branch) — the public form of the filename derivation, so scripts can locate
+/// a branch's receipt at `e2e-attestations/<slug>.json`.
+fn run_e2e_slug(branch: Option<&str>) -> anyhow::Result<i32> {
+    let slug = match branch {
+        Some(name) => e2e::branch_slug(name),
+        None => {
+            let repo = std::env::current_dir()?;
+            e2e::branch_slug(&e2e::current_branch(&repo)?)
+        }
+    };
+    println!("{slug}");
+    Ok(0)
 }
 
 #[cfg(test)]

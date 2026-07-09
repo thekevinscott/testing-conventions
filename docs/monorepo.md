@@ -37,7 +37,7 @@ jobs:
 
 - **The package root** — the nearest directory at or above `path` holding a `package.json`,
   `pyproject.toml`, or `Cargo.toml`. Dependency installs, builds, `dist/` discovery, and
-  `e2e-attestation.json` discovery all happen there.
+  `e2e-attestations/` receipt discovery all happen there.
 - **The languages** — every supported language with sources under `path` runs its gates.
 - **The package manager** — the manifest's `packageManager` field, else the package's lockfile
   (npm and pnpm).

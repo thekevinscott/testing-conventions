@@ -1,0 +1,4 @@
+# The package root the suite tiers derive from.
+[project]
+name = "myproject"
+version = "0.0.0"

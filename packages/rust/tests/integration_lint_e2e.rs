@@ -145,3 +145,26 @@ fn first_party_patch_waived_exits_zero() {
         0
     );
 }
+
+// The suite tiers derive from the package root, so the binary scanning the
+// package's source directory still lints the sibling suites.
+
+#[test]
+fn tier_layout_integration_suite_is_linted_from_a_src_scan() {
+    assert_eq!(lint_exit("tier_layout/red_integration/src"), 1);
+}
+
+#[test]
+fn tier_layout_e2e_suite_is_linted_from_a_src_scan() {
+    assert_eq!(lint_exit("tier_layout/red_e2e/src"), 1);
+}
+
+#[test]
+fn tier_layout_test_outside_a_standard_tier_is_flagged() {
+    assert_eq!(lint_exit("tier_layout/unknown_tier/src"), 1);
+}
+
+#[test]
+fn tier_layout_clean_suites_exit_zero() {
+    assert_eq!(lint_exit("tier_layout/clean/src"), 0);
+}

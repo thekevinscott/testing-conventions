@@ -270,3 +270,11 @@ fn wrong_module_red_flags_last_segment_only_match() {
 fn wrong_module_red_exits_nonzero() {
     assert_eq!(isolation_exit("wrong_module/red"), 1);
 }
+
+#[test]
+fn tier_layout_suites_are_not_unit_subjects() {
+    // `tests/integration/flow_test.py` deliberately runs first-party code for
+    // real. `<package root>/tests/` belongs to the suite tiers, so the
+    // unit-suite isolation rule reports nothing there.
+    assert_eq!(isolation_exit("tier_layout"), 0);
+}

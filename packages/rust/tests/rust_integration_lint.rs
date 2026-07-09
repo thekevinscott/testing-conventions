@@ -74,3 +74,11 @@ fn waived_first_party_double_exits_zero() {
     ];
     assert_eq!(run(argv).expect("a readable tree should not error"), 0);
 }
+
+#[test]
+fn tier_layout_tests_crate_is_linted_from_a_src_scan() {
+    // The integration suite derives from the crate root — the nearest
+    // `Cargo.toml` at or above the scanned `path` — so scanning `src/` still
+    // lints the crate's `tests/` directory (cargo's own suite layout).
+    assert_eq!(lint_exit("derived/src"), 1);
+}

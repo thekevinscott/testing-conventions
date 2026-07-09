@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed
+
+- **The suite tiers derive from the package root** (#418). `integration lint` takes its subjects
+  from the standard suite directories — `<package root>/tests/integration/` and
+  `<package root>/tests/e2e/`, both run first-party code for real and so both are held to the
+  integration rules — where the package root is the nearest directory at or above the scanned
+  `path` holding the language's manifest (`pyproject.toml`, `package.json`, `Cargo.toml`; the walk
+  stops at the repository boundary). Rust scans the crate root's `tests/`, cargo's own layout. A
+  test file under `<package root>/tests/` outside a standard tier is flagged by the new
+  **`unknown-tier`** violation (waivable like any rule), so a suite the scan would silently miss
+  is an error instead. The unit-tier scans (`unit colocated-test`, its co-change variant,
+  `unit lint`) leave `<package root>/tests/` to the suites. A tree with no manifest — loose
+  scripts — is scanned at `path` directly, unchanged. One workflow call per package now runs every
+  tier from a single `path`. **Breaking:** integration suites are found via the package root
+  rather than the scanned `path`, integration-lint exemption paths resolve relative to the package
+  root, `config::Rule` gains a variant, and the unit-tier gates release their claim on
+  `<package root>/tests/`. See `MIGRATIONS.md`.
+
 ### Fixed
 
 - **The Rust-build cache in the suite-executing and packaging jobs now keys on the

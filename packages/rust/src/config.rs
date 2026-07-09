@@ -241,6 +241,9 @@ pub enum Rule {
     UntypedMock,
     /// `integration lint` — a `vi.mock` of a first-party module in a TS integration test.
     NoFirstPartyMock,
+    /// `integration lint` — a test file under `<package root>/tests/` outside a
+    /// standard suite tier (`tests/integration/`, `tests/e2e/`).
+    UnknownTier,
     /// `unit mutation` — a surviving mutant the unit suite didn't catch ([`crate::mutation`]).
     Mutation,
 }
@@ -272,6 +275,7 @@ impl Rule {
             Rule::UnmockedCollaborator => "unmocked-collaborator",
             Rule::UntypedMock => "untyped-mock",
             Rule::NoFirstPartyMock => "no-first-party-mock",
+            Rule::UnknownTier => "unknown-tier",
             Rule::Mutation => "mutation",
         }
     }
@@ -293,6 +297,7 @@ impl Rule {
             Rule::UnmockedCollaborator,
             Rule::UntypedMock,
             Rule::NoFirstPartyMock,
+            Rule::UnknownTier,
             Rule::Mutation,
         ]
         .into_iter()

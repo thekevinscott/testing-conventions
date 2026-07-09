@@ -79,6 +79,46 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     Ok(violations)
 }
 
+/// Message for a test file under `<package root>/tests/` outside a standard
+/// suite tier.
+const UNKNOWN_TIER_MSG: &str = "test file sits under `tests/` outside the standard suite tiers; \
+     a suite lives in `tests/integration/` or `tests/e2e/`";
+
+/// Scan `package_root`'s suite tiers and return every lint violation, sorted by
+/// `(file, line)` for deterministic output.
+///
+/// The subjects are the standard suite directories — `tests/integration/` and
+/// `tests/e2e/`, both of which run first-party code for real and so are held to
+/// the integration rules ([`find_violations`]). A `*_test.py` under
+/// `<package root>/tests/` outside a standard tier is flagged as `unknown-tier`:
+/// the layout is part of the standard, so a suite the scan would silently miss
+/// is an error instead.
+pub fn find_suite_violations(package_root: &Path) -> Result<Vec<Violation>> {
+    let tests = package_root.join("tests");
+    let mut violations = Vec::new();
+    let tiers = ["integration", "e2e"].map(|tier| tests.join(tier));
+    for tier in &tiers {
+        if tier.is_dir() {
+            violations.extend(find_violations(tier)?);
+        }
+    }
+    if tests.is_dir() {
+        let mut strays = Vec::new();
+        collect_python_files(&tests, &mut strays, is_python_unit_test_file)?;
+        strays.retain(|file| !tiers.iter().any(|tier| file.starts_with(tier)));
+        for file in strays {
+            violations.push(Violation {
+                file,
+                line: 1,
+                rule: "unknown-tier",
+                message: UNKNOWN_TIER_MSG.to_string(),
+            });
+        }
+    }
+    violations.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
+    Ok(violations)
+}
+
 /// Scan the colocated Python unit tests under `root` and return every
 /// `unmocked-collaborator` violation: a first-party collaborator a
 /// unit test imports without mocking it. The Python arm of `unit lint`
@@ -97,6 +137,11 @@ pub fn find_unit_isolation_violations(root: impl AsRef<Path>) -> Result<Vec<Viol
     };
     let mut files = Vec::new();
     collect_python_files(root, &mut files, is_python_unit_test_file)?;
+    // `<package root>/tests/` belongs to the suite tiers (integration / e2e run
+    // first-party code for real), so its files are never unit subjects.
+    if let Some(tests) = crate::tiers::suite_tests_dir(root, "pyproject.toml") {
+        files.retain(|file| !file.starts_with(&tests));
+    }
     files.sort();
 
     let mut violations = Vec::new();

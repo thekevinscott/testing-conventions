@@ -120,6 +120,17 @@ pub fn missing_unit_tests(
     let root = root.as_ref();
     let mut files = Vec::new();
     collect_files(root, language, &mut files)?;
+    // `<package root>/tests/` belongs to the suite tiers (integration / e2e),
+    // so nothing under it is a colocated-unit subject. Rust's walk already
+    // skips `tests/` (an integration-crate directory in cargo's own layout).
+    let manifest = match language {
+        Language::Python => Some("pyproject.toml"),
+        Language::TypeScript => Some("package.json"),
+        Language::Rust => None,
+    };
+    if let Some(tests) = manifest.and_then(|m| crate::tiers::suite_tests_dir(root, m)) {
+        files.retain(|file| !file.starts_with(&tests));
+    }
 
     // Every tracked path we found, so a subject's expected twin is a lookup
     // rather than a second pass over the filesystem.

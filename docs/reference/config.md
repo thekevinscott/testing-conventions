@@ -67,8 +67,8 @@ A deliberate omission is a `[[<language>.exempt]]` entry:
 
 | Field | Meaning |
 | ----- | ------- |
-| `path` | The exempt file, **relative to the scanned `path`** of the call that loads this config. Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
-| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, `mutation`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), or an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`). |
+| `path` | The exempt file, **relative to the scanned `path`** of the call that loads this config — except for `integration lint`'s suite subjects, which resolve **relative to the [package root](../monorepo#everything-derives-from-the-package)** the tiers derive from (e.g. `tests/integration/billing_test.py`). Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
+| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, `mutation`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`), or the suite-layout rule (`unknown-tier`). |
 | `lines` | The lines a `coverage` / `mutation` exemption covers. **Required** with `coverage` / `mutation`, **rejected** with any other rule. |
 | `reason` | Why the omission is deliberate. **Required**: an empty reason is rejected on load. |
 

@@ -1,0 +1,5 @@
+# The package root the suite tiers derive from: the nearest manifest at or
+# above the scanned `path`.
+[project]
+name = "myproject"
+version = "0.0.0"

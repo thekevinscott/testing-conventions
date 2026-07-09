@@ -1,0 +1,5 @@
+# Declares the dist's own top-level package — `myproject` is first-party — and
+# marks the package root the suite tiers derive from.
+[project]
+name = "myproject"
+version = "0.0.0"

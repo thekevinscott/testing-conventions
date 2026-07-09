@@ -100,3 +100,18 @@ fn rust_cfg_not_test_module_is_flagged() {
         "stderr should name the orphan module; got: {stderr}"
     );
 }
+
+#[test]
+fn python_suite_helpers_are_not_colocated_subjects() {
+    // Suite support under `<package root>/tests/` belongs to the suite tiers —
+    // never a subject of the colocated-unit rule.
+    assert_eq!(unit_colocated_test_exit("python_tiers", "python"), 0);
+}
+
+#[test]
+fn typescript_suite_helpers_are_not_colocated_subjects() {
+    assert_eq!(
+        unit_colocated_test_exit("typescript_tiers", "typescript"),
+        0
+    );
+}

@@ -9,6 +9,7 @@ pub mod lint;
 pub mod mutation;
 pub mod packaging;
 pub mod patch_coverage;
+pub mod tiers;
 pub mod ts;
 pub mod violation;
 pub mod workflow;
@@ -743,23 +744,46 @@ fn run_unit_lint(
 /// Run the integration-test lints over `root` for `language`, printing each
 /// violation to stderr as `path:line: rule — message` and returning `1` when any
 /// are found, `0` otherwise.
+///
+/// The subjects derive from the package root — the nearest directory at or
+/// above `root` holding the language's manifest: the `tests/integration/` and
+/// `tests/e2e/` suites (Rust: the crate root's `tests/`, cargo's own layout).
+/// A tree with no manifest — loose scripts — is scanned at `root` directly, and
+/// exemption paths resolve relative to whichever root the scan used.
 fn run_integration_lint(
     root: &Path,
     language: IntegrationLintLanguage,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
-    let (raw, select): (Vec<lint::Violation>, ExemptSelect) = match language {
-        IntegrationLintLanguage::Python => (lint::find_violations(root)?, |c| {
-            c.exemptions(colocated_test::Language::Python)
-        }),
-        IntegrationLintLanguage::TypeScript => (ts::find_integration_violations(root)?, |c| {
-            c.exemptions(colocated_test::Language::TypeScript)
-        }),
-        IntegrationLintLanguage::Rust => (isolation::find_integration_violations(root)?, |c| {
-            c.rust_exemptions()
-        }),
+    let manifest = match language {
+        IntegrationLintLanguage::Python => "pyproject.toml",
+        IntegrationLintLanguage::TypeScript => "package.json",
+        IntegrationLintLanguage::Rust => "Cargo.toml",
     };
-    let violations = apply_waivers(raw, root, config_path, select)?;
+    let package_root = tiers::package_root(root, manifest);
+    let scan_root = package_root.as_deref().unwrap_or(root);
+    let (raw, select): (Vec<lint::Violation>, ExemptSelect) = match language {
+        IntegrationLintLanguage::Python => (
+            match &package_root {
+                Some(package_root) => lint::find_suite_violations(package_root)?,
+                None => lint::find_violations(root)?,
+            },
+            |c| c.exemptions(colocated_test::Language::Python),
+        ),
+        IntegrationLintLanguage::TypeScript => (
+            match &package_root {
+                Some(package_root) => ts::find_suite_violations(package_root)?,
+                None => ts::find_integration_violations(root)?,
+            },
+            |c| c.exemptions(colocated_test::Language::TypeScript),
+        ),
+        IntegrationLintLanguage::Rust => {
+            (isolation::find_integration_violations(scan_root)?, |c| {
+                c.rust_exemptions()
+            })
+        }
+    };
+    let violations = apply_waivers(raw, scan_root, config_path, select)?;
     if violations.is_empty() {
         return Ok(0);
     }

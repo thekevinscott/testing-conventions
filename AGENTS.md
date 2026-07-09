@@ -196,6 +196,22 @@ Follow the `move-major-tag` (`move_major_tag.py` + colocated unit test + `tests/
 a CLI argument (`… check.py "${{ steps.detect.outputs.package_root }}"`), never an env
 side-channel — see **Never pass data through the environment**.
 
+## Wiring gates are earned
+
+A `*_wired` checks module — a `tc-checks` subcommand plus its own selftest job — guards wiring
+whose regression is **silent and correctness-affecting**: a shipped rule silently stops running, or
+a consumer's build passes when it shouldn't (`gates_wired`, `isolation_wired`,
+`coverage_package_root_wired`, `static_gates_wired`). That is the whole franchise. Plumbing whose
+regression costs CI speed or hygiene — a cache path, a concurrency group, runner minutes — takes
+direct unit/e2e tests of the derivation and stops there: a speed regression announces itself in CI
+timings, and a second layer asserting the workflow YAML *references* an output protects nothing a
+consumer relies on. The #410 cache fix is the worked example: `cargo_target_dir` is derived and
+tested in `internals/detect`, the four cache steps consume it, and no wiring gate ships.
+
+A wiring gate is also a standing tax — it pins the workflow's text, so every future edit to that
+job co-changes the gate — which is why it must buy correctness, not reassurance. When a spec or a
+precedent-match suggests one for plumbing, cite this section and ship the direct tests instead.
+
 ## PR workflow concurrency
 
 Every `pull_request`-triggered workflow in this repo (not a release, not a `workflow_run`
@@ -212,8 +228,8 @@ burning runner-minutes to completion. A workflow that also triggers on `push: [m
 `dogfood.yml`) guards the flag instead: `cancel-in-progress: ${{ github.event_name ==
 'pull_request' }}`, so a `main` run is never cancelled out from under itself. This is CI
 hygiene on internal tooling, not shipped product behavior, so it does not earn a `tc-checks`
-wiring gate (see **Logic lives in scripts, not workflow YAML** for what does) — just copy the
-block into any new `pull_request` workflow.
+wiring gate (see **Wiring gates are earned**) — just copy the block into any new
+`pull_request` workflow.
 
 ## Affirmative voice
 
@@ -242,6 +258,27 @@ dividers and decorative separators (`// -----`) are noise too.
 ## Docs-only changes
 
 A PR that touches **only** documentation — the `docs/` site and Markdown files like `README.md` / `AGENTS.md`, with nothing under `packages/` — changes no tested behavior, so the red/green workflow above is skipped: no red integration/e2e tests, and nothing needs to go red on CI first. The rest of the bar holds — every existing test stays green and the docs site still builds — so go straight to the change.
+
+## CI-hygiene changes
+
+A PR whose behavior change is confined to CI plumbing — workflow YAML, cache and concurrency
+wiring, and the detect outputs that feed them, with no change to what a consumer's gates enforce —
+skips the witnessed-red-on-CI round-trip. Tests still come first: tested source (an
+`internals/detect` derivation, a `.github/scripts/` module) gets its red tests, witnessed red
+**locally**, then the implementation. Every other bar holds — docs in the same PR, all existing
+tests green. The CI round-trip is reserved for changes to enforced rule behavior, where the red
+run proves the gate can actually fail; for plumbing, the failure mode is CI speed, and a local
+red plus green CI on the finished PR is the whole story.
+
+## Specs state problems, not process
+
+An issue spec states the problem, the diagnosis, and the acceptance criteria. It does not
+enumerate implementation artifacts, pre-decide every fork, or restate the workflow this file
+already governs — per-issue process legislation is where disproportionate ceremony comes from
+(#410's original spec ordered a wiring gate and a refactor its own fix didn't need, both cut in
+review). A spec that says "execute exactly as written" is reserved for forks that are genuinely
+dangerous to leave open (the CI-hermeticity layers, a breaking rename's migration steps). The
+implementer holds the judgment calls, held to this file's bar.
 
 ## Out of scope
 

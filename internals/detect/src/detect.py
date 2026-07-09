@@ -298,13 +298,15 @@ def read_cargo(package_root: Path) -> dict:
         return {}
 
 
-def is_workspace_member(package_root: Path, repo_root: Path) -> bool:
-    """True when `package_root`'s crate belongs to a Cargo workspace rooted at an ancestor (#360):
-    some directory strictly above `package_root`, down to `repo_root` inclusive, has a
-    `Cargo.toml` with a `[workspace]` table. Cargo resolves the target directory — and so `cargo
-    package`'s output — at the *workspace* root regardless of the invoking working directory, so
-    a workspace member's derived build must redirect `--target-dir` back to its own tree rather
-    than let the crate land where the packaging job's scan never looks.
+def cargo_workspace_root(package_root: Path, repo_root: Path) -> Optional[Path]:
+    """The nearest strict ancestor of `package_root` (walking up to `repo_root` inclusive, the
+    same boundary handling `derive_package_root` uses) whose `Cargo.toml` carries a `[workspace]`
+    table, or `None` when none does (#410). Cargo resolves the target directory — and so `cargo
+    package`'s output, and where the suite jobs' Rust build cache must key — at the *workspace*
+    root regardless of the invoking working directory, so a workspace member's derived build must
+    redirect `--target-dir` back to its own tree rather than let the crate land where the
+    packaging job's scan never looks, and its cache path must point at the workspace root's
+    `target/` rather than a directory `cargo` never writes to.
 
     A crate whose own `Cargo.toml` carries both `[package]` and `[workspace]` (a workspace-root
     package) is not a *member* of an ancestor workspace — its own target dir is already correct,
@@ -313,7 +315,7 @@ def is_workspace_member(package_root: Path, repo_root: Path) -> bool:
     package_root = package_root.resolve()
     repo_root = repo_root.resolve()
     if package_root == repo_root:
-        return False
+        return None
     ancestors = []
     for ancestor in package_root.parents:
         ancestors.append(ancestor)
@@ -323,7 +325,28 @@ def is_workspace_member(package_root: Path, repo_root: Path) -> bool:
         # The walk never reached repo_root (package_root isn't under it): fall back to
         # checking repo_root itself, mirroring `derive_package_root`'s own boundary handling.
         ancestors.append(repo_root)
-    return any("workspace" in read_cargo(ancestor) for ancestor in ancestors)
+    for ancestor in ancestors:
+        if "workspace" in read_cargo(ancestor):
+            return ancestor
+    return None
+
+
+def is_workspace_member(package_root: Path, repo_root: Path) -> bool:
+    """True when `package_root`'s crate belongs to a Cargo workspace rooted at an ancestor (#360)
+    — delegates to `cargo_workspace_root` for the walk itself (#410: one walk, no duplicated
+    traversal)."""
+    return cargo_workspace_root(package_root, repo_root) is not None
+
+
+def derive_cargo_target_dir(package_root_rel: Path, workspace_root_rel: Optional[Path]) -> str:
+    """The repo-root-relative Rust `target/` directory the suite/packaging jobs' cache step should
+    key on (#410): the workspace root's `target/` when `workspace_root_rel` is given (the package
+    is a workspace member — cargo resolves the target dir there regardless of the invoking cwd),
+    else `package_root_rel`'s own `target/` — unchanged from before for a standalone crate or one
+    that's itself the workspace root.
+    """
+    root = workspace_root_rel if workspace_root_rel is not None else package_root_rel
+    return f"{root}/target"
 
 
 def derive_packaging(package_root: Path, primary: str, repo_root: Path) -> str:
@@ -486,6 +509,15 @@ def compute_outputs(
     primary = primary_language(package_root)
     bc_language = build_command_language(primary, present)
     packaging_build = derive_packaging(package_root, primary, repo)
+    workspace_root = cargo_workspace_root(package_root, repo)
+    if workspace_root is not None:
+        try:
+            workspace_root_rel = workspace_root.relative_to(repo.resolve())
+        except ValueError:
+            workspace_root_rel = Path(".")
+    else:
+        workspace_root_rel = None
+    cargo_target_dir = derive_cargo_target_dir(package_root_rel, workspace_root_rel)
     return {
         "languages": _to_json(present),
         # Whole-tree colocated-test (#274): the file-paired languages plus rust — the rust
@@ -510,6 +542,11 @@ def compute_outputs(
         "ts_package_manager": ts_package_manager(package_root),
         "python_env": python_env(package_root),
         "provision_rust": provision_rust(package_root),
+        # #410: the workspace-aware Rust build cache location — the workspace root's `target/`
+        # for a workspace-member crate (cargo resolves it there regardless of invoking cwd), else
+        # the package root's own. Emitted unconditionally; the cache steps' own `if` guards
+        # already decide whether it matters.
+        "cargo_target_dir": cargo_target_dir,
         "config": config,
         # #289/#335: the `[<primary>].build_command` declaration, read from the package's own
         # config (`config` above) — the suite-executing and packaging jobs run it. Read from the

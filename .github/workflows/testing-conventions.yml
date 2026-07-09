@@ -231,6 +231,11 @@ jobs:
       ts_package_manager: ${{ steps.scan_hermetic.outputs.ts_package_manager || steps.scan_published.outputs.ts_package_manager }}
       python_env: ${{ steps.scan_hermetic.outputs.python_env || steps.scan_published.outputs.python_env }}
       provision_rust: ${{ steps.scan_hermetic.outputs.provision_rust || steps.scan_published.outputs.provision_rust }}
+      # The workspace-aware Rust build cache location (#410): the workspace root's `target/` for
+      # a workspace-member crate, else the package root's own — cargo resolves the target
+      # directory at the workspace root regardless of the invoking cwd, so a bare
+      # `package_root`-keyed cache archives (and restores) a directory `cargo` never writes to.
+      cargo_target_dir: ${{ steps.scan_hermetic.outputs.cargo_target_dir || steps.scan_published.outputs.cargo_target_dir }}
       # The config file every job's `--config` should receive (#277): `inputs.config`
       # verbatim unless it's the default, in which case a package-root
       # testing-conventions.toml wins if present — so a per-package call stops naming it.
@@ -391,8 +396,9 @@ jobs:
       # rust arm already set its own up above): auto-derived from the package root's
       # own manifest (`provision_rust`, #277), or forced by the manual `rust_toolchain`
       # override (#263) for a build no manifest field expresses. Plus a cargo registry
-      # + target cache (keyed at the package root) so the core isn't recompiled from
-      # scratch every run.
+      # + target cache (keyed at the workspace-aware `cargo_target_dir`, #410 — the
+      # workspace root's target/ for a workspace-member crate, else the package root's
+      # own) so the core isn't recompiled from scratch every run.
       - if: (inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') && matrix.language != 'rust'
         uses: dtolnay/rust-toolchain@stable
       - if: inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true'
@@ -402,7 +408,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ${{ needs.detect.outputs.package_root }}/target
+            ${{ needs.detect.outputs.cargo_target_dir || format('{0}/target', needs.detect.outputs.package_root) }}
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
@@ -419,6 +425,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.12'
+          enable-cache: true
       - if: matrix.language == 'python'
         name: Provision the Python suite environment (uv)
         working-directory: ${{ needs.detect.outputs.package_root }}
@@ -510,7 +517,7 @@ jobs:
       # Provision cargo for a build the package manifest declares, or the manual
       # `rust_toolchain` override for a build no manifest field expresses (#263/#277),
       # as in the whole-tree coverage job — plus the registry + target cache, keyed at
-      # the package root.
+      # the workspace-aware `cargo_target_dir` (#410).
       - if: (inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') && matrix.language != 'rust'
         uses: dtolnay/rust-toolchain@stable
       - if: inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true'
@@ -520,7 +527,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ${{ needs.detect.outputs.package_root }}/target
+            ${{ needs.detect.outputs.cargo_target_dir || format('{0}/target', needs.detect.outputs.package_root) }}
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
@@ -537,6 +544,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.12'
+          enable-cache: true
       - if: matrix.language == 'python'
         name: Provision the Python suite environment (uv)
         working-directory: ${{ needs.detect.outputs.package_root }}
@@ -618,8 +626,8 @@ jobs:
       # (not just an explicit `build_command`) needs cargo already on PATH. Auto-provisions
       # whenever the package root's own manifest declares a Rust-compiling build too
       # (detect's `provision_rust`, #277), not only when the caller passes `rust_toolchain`;
-      # the rust arm sets its own toolchain up below, so skip it here. `target` caches under
-      # the package root (#279), mirroring the coverage jobs (#278).
+      # the rust arm sets its own toolchain up below, so skip it here. `target` caches at
+      # the workspace-aware `cargo_target_dir` (#279, #410), mirroring the coverage jobs (#278).
       - if: (inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') && matrix.language != 'rust'
         uses: dtolnay/rust-toolchain@stable
       - if: inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true'
@@ -629,7 +637,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ${{ needs.detect.outputs.package_root }}/target
+            ${{ needs.detect.outputs.cargo_target_dir || format('{0}/target', needs.detect.outputs.package_root) }}
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
@@ -654,6 +662,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.12'
+          enable-cache: true
       - if: matrix.language == 'python'
         name: Provision the Python suite environment (uv)
         working-directory: ${{ needs.detect.outputs.package_root }}
@@ -839,7 +848,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ${{ needs.detect.outputs.package_root }}/target
+            ${{ needs.detect.outputs.cargo_target_dir || format('{0}/target', needs.detect.outputs.package_root) }}
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
@@ -850,6 +859,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.12'
+          enable-cache: true
       # TypeScript `<pm> pack` runs the package's own prepare/prepack lifecycle, so its dev
       # deps (and a bare `build` script named in build_command below) need the manager and the
       # project's node_modules — both derived from the package's own manifest/lockfile (#277).

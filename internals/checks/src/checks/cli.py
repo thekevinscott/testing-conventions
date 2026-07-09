@@ -39,6 +39,7 @@ from checks.python_mutation_clean.cli import cli as python_mutation_clean
 from checks.red_path_hermetic_wired.cli import cli as red_path_hermetic_wired
 from checks.rolling_release_wired.cli import cli as rolling_release_wired
 from checks.rust_toolchain_wired.cli import cli as rust_toolchain_wired
+from checks.static_gates_wired.cli import cli as static_gates_wired
 from checks.uv_provisioning_wired.cli import cli as uv_provisioning_wired
 from checks.verify_release.cli import cli as verify_release
 from checks.verify_release_wired.cli import cli as verify_release_wired
@@ -84,6 +85,7 @@ main.add_command(python_mutation_clean, name="python-mutation-clean")
 main.add_command(red_path_hermetic_wired, name="red-path-hermetic-wired")
 main.add_command(rolling_release_wired, name="rolling-release-wired")
 main.add_command(rust_toolchain_wired, name="rust-toolchain-wired")
+main.add_command(static_gates_wired, name="static-gates-wired")
 main.add_command(uv_provisioning_wired, name="uv-provisioning-wired")
 main.add_command(verify_release, name="verify-release")
 main.add_command(verify_release_wired, name="verify-release-wired")

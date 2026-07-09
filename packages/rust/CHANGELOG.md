@@ -184,6 +184,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **BREAKING: the four static gates run as steps of one `static` job per language** (#410). The
+  colocated-test gate (with its co-change variant), unit-lint, and integration-lint each scanned
+  source in under a second yet paid full job setup — checkout, CLI bootstrap, ~20s apiece. They now
+  run as steps of one `Static checks (<language>)` job per language, dropping a single-language call
+  from ten job slots to seven. Each step keeps its own `gates` membership and language set, so
+  `gates` and `--base` semantics are unchanged. Breaking only in the consumer-visible **check
+  names**: `Colocated test (…)`, `Colocated test — co-change (…)`, `Unit lint (…)`, and
+  `Integration lint (…)` are replaced by `Static checks (<language>)`, so any branch-protection
+  required-check list pinning an old name must swap it. No `conventions.yml` change is needed. See
+  `MIGRATIONS.md`.
+
 - **BREAKING: the reusable workflow provisions Python with uv alone** (#399). The suite-executing
   jobs (`unit-coverage`, `coverage-changed`, `mutation`) each carried two Python provisioning
   arms, selected by detect's `python_env` — `actions/setup-python` + `python -m pip install` for a

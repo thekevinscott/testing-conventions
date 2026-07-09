@@ -11,17 +11,22 @@ name: Testing Conventions
 #     conventions:
 #       uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
 #
-# The principle is **one consumer-facing rule command → one job**, fanned out per
-# language. It runs the published `testing-conventions` binary via `npx` (a
+# The principle is **one suite-executing rule command → one job**, fanned out per
+# language — with the four static source scans (colocated-test, its co-change variant,
+# unit-lint, integration-lint) consolidated into a single `static` job per language,
+# since each is a sub-second scan that would otherwise pay full job setup for <1s of
+# work (#410). It runs the published `testing-conventions` binary via `npx` (a
 # prebuilt, per-platform npm package — no Rust toolchain, no compile from source),
 # failing the build on any violation. The shipped rule jobs are:
 #
-#   - unit colocated-test  — every source file has a colocated unit test (all langs;
-#                            the rust arm checks inline `#[cfg(test)]` presence, #40/#274)
-#   - unit lint            — the unit-suite isolation lint (Python, TypeScript, Rust)
+#   - static               — the four static source scans as steps of one job per
+#                            language (#410): unit colocated-test (every source file has
+#                            a colocated unit test, all langs; the rust arm checks inline
+#                            `#[cfg(test)]` presence, #40/#274) with its co-change variant,
+#                            unit lint (the unit-suite isolation lint), and integration lint
+#                            (the integration mocking lints) — Python, TypeScript, Rust
 #   - unit coverage        — the unit coverage floor (Python, TypeScript, and Rust
 #                            via cargo-llvm-cov, #37)
-#   - integration lint     — the integration mocking lints (Python, TypeScript, Rust)
 #   - packaging            — no test files in the built distribution
 #
 # Diff-scoped variants run as their own jobs on `pull_request` only (they need
@@ -200,6 +205,10 @@ jobs:
       integration_lint_languages: ${{ steps.scan_hermetic.outputs.integration_lint_languages || steps.scan_published.outputs.integration_lint_languages }}
       # `unit lint` (#125): python/typescript + rust, also kept off the coverage matrix.
       isolation_languages: ${{ steps.scan_hermetic.outputs.isolation_languages || steps.scan_published.outputs.isolation_languages }}
+      # The `static` job's matrix (#410): the same rust-inclusive union the colocated/isolation/
+      # integration sets hold, under its own name so a future per-set divergence in detect needs no
+      # workflow change. The four static gates run as steps of that one job.
+      static_languages: ${{ steps.scan_hermetic.outputs.static_languages || steps.scan_published.outputs.static_languages }}
       # `unit coverage` (#37/#171): present python/typescript, plus rust whenever a
       # crate is present — Rust coverage is zero-config now (`lines = 100` by default,
       # #206) — the matrix the whole-tree and changed-line coverage jobs fan out over.
@@ -276,64 +285,45 @@ jobs:
           caller_repository: ${{ github.repository }}
           version: ${{ inputs.version }}
 
-  colocated-test:
-    name: Colocated test (${{ matrix.language }})
+  static:
+    name: Static checks (${{ matrix.language }})
     needs: detect
-    # Only the requested languages with sources present (#94); skip the job
-    # entirely when that leaves nothing, or when a `gates` allowlist leaves the
-    # colocated-test gate out (#262). The matrix is `colocated_test_languages`
-    # (#274) — the file-paired languages plus rust, whose arm checks inline
-    # `#[cfg(test)]` presence (#40). That's a new detect output, so until a
-    # release moves `@v0` to a detect that emits it (this PR's own run still pins
-    # the old `@v0`), it's empty — fall back to `languages` (the python/typescript
-    # set) so the matrix stays valid, the #204 `mutation_languages` pattern.
-    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && (needs.detect.outputs.colocated_test_languages || needs.detect.outputs.languages) != '[]' }}
+    # The four static gates — colocated-test (with its co-change variant), unit-lint,
+    # integration-lint — run as steps of one job per language: each is a sub-second
+    # source scan, so a job apiece paid ~20s of setup per gate for <1s of work. The
+    # job runs when ANY member gate is allowlisted; each step guards its own gate and
+    # its own language set, so `gates` semantics are unchanged (#262).
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"colocated-test"') || contains(inputs.gates, '"unit-lint"') || contains(inputs.gates, '"integration-lint"')) && (needs.detect.outputs.static_languages || needs.detect.outputs.integration_lint_languages) != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        language: ${{ fromJSON(needs.detect.outputs.colocated_test_languages || needs.detect.outputs.languages) }}
+        language: ${{ fromJSON(needs.detect.outputs.static_languages || needs.detect.outputs.integration_lint_languages) }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history on pull requests only: the co-change step diffs
+          # `...HEAD`; the other steps parse the tree. The values are quoted —
+          # a bare 0 is falsy in expressions, so `&& 0 || 1` would always yield 1.
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
       - name: Check colocated test
-        # node/npx ship on ubuntu-latest; `-y` skips the install prompt and
-        # `${VERSION:+@...}` pins the version only when one was requested.
+        if: ${{ (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && contains(needs.detect.outputs.colocated_test_languages || needs.detect.outputs.languages, format('"{0}"', matrix.language)) }}
         env:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
           VERSION: ${{ inputs.version }}
-          # Forward the config so `exempt` entries apply to the whole-tree check,
-          # matching every other job (lint / coverage / co-change / mutation).
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
         run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit colocated-test --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
-
-  colocated-test-changed:
-    name: Colocated test — co-change (${{ matrix.language }})
-    needs: detect
-    # Diff-scoped co-change (#161): on a PR, a modified or deleted source whose
-    # colocated test didn't co-change fails. Rust is excluded by the rule (inline
-    # `#[cfg(test)]` units can't go stale), so this rides the python/typescript
-    # `languages` set. PR-only — it needs a base ref and full history. Rides the
-    # colocated-test gate: a gate's diff-scoped variant travels with it (#262).
-    if: ${{ github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && needs.detect.outputs.languages != '[]' }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        language: ${{ fromJSON(needs.detect.outputs.languages) }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          # Co-change diffs `<base>...HEAD`, so the base ref must be reachable.
-          fetch-depth: 0
-      - name: Download the CLI built from HEAD (hermetic, #356)
-        if: needs.detect.outputs.cli_command != ''
-        uses: ./.github/actions/download-hermetic-cli
       - name: Check co-change vs ${{ inputs.base }}
+        # `!cancelled()`: a failing earlier gate must not hide this gate's result —
+        # the job still fails when any step failed. PR-only (needs the base ref);
+        # rust is excluded by the rule via the `languages` membership test (inline
+        # `#[cfg(test)]` units can't go stale).
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && contains(needs.detect.outputs.languages, format('"{0}"', matrix.language)) }}
         env:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
@@ -342,32 +332,8 @@ jobs:
           BASE: ${{ inputs.base }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
         run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit colocated-test --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
-
-  unit-lint:
-    name: Unit lint (${{ matrix.language }})
-    needs: detect
-    # `unit lint` is a static AST check (no language toolchain), like
-    # colocated-test — a cheap matrix job, not a toolchain-heavy one like coverage.
-    # It enforces the rule for Python (#42), TypeScript (#43/#76/#77), and Rust (#44).
-    # The matrix is `isolation_languages` — the requested-and-present set, which
-    # (unlike `languages`) includes rust — so a requested-but-absent language is
-    # skipped, not failed. #56 (config-driven `check`) will later drive which
-    # rules/languages run here; a `gates` allowlist that leaves unit-lint out
-    # skips the job (#262).
-    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"unit-lint"')) && needs.detect.outputs.isolation_languages != '[]' }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        language: ${{ fromJSON(needs.detect.outputs.isolation_languages) }}
-    steps:
-      - uses: actions/checkout@v6
-      - name: Download the CLI built from HEAD (hermetic, #356)
-        if: needs.detect.outputs.cli_command != ''
-        uses: ./.github/actions/download-hermetic-cli
       - name: Check unit lint
-        # Static check — just the binary via npx, no toolchain. `--config` applies
-        # the #102 `[[<language>.exempt]]` waivers, like the other unit jobs.
+        if: ${{ !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"unit-lint"')) && contains(needs.detect.outputs.isolation_languages, format('"{0}"', matrix.language)) }}
         env:
           LANGUAGE: ${{ matrix.language }}
           SCAN_PATH: ${{ inputs.path }}
@@ -375,6 +341,15 @@ jobs:
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
         run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+      - name: Lint integration tests
+        if: ${{ !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"integration-lint"')) && contains(needs.detect.outputs.integration_lint_languages, format('"{0}"', matrix.language)) }}
+        env:
+          LANGUAGE: ${{ matrix.language }}
+          SCAN_PATH: ${{ inputs.path }}
+          VERSION: ${{ inputs.version }}
+          CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
+          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
+        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} integration lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   unit-coverage:
     name: Unit-test coverage (${{ matrix.language }})
@@ -747,38 +722,6 @@ jobs:
           # published path, word-split into the flag+path hermetically.
           TS_MUTATION_ADAPTER_ARGS: ${{ needs.detect.outputs.ts_mutation_adapter_args }}
         run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit mutation --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH" $TS_MUTATION_ADAPTER_ARGS
-
-  integration-lint:
-    name: Integration lint (${{ matrix.language }})
-    needs: detect
-    # `integration lint` (mocking mechanism & style) ships for Python (#58),
-    # TypeScript (#43/#75), and Rust (#44), so the matrix fans out over every
-    # requested language with sources present — the `integration_lint_languages` set,
-    # which adds rust on top of the colocated languages (#126). Skipped — not
-    # failed — when that set is empty, or when a `gates` allowlist leaves
-    # integration-lint out (#262). #56 (config-driven `check`) will eventually
-    # drive which rules/languages run here.
-    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"integration-lint"')) && needs.detect.outputs.integration_lint_languages != '[]' }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        language: ${{ fromJSON(needs.detect.outputs.integration_lint_languages) }}
-    steps:
-      - uses: actions/checkout@v6
-      - name: Download the CLI built from HEAD (hermetic, #356)
-        if: needs.detect.outputs.cli_command != ''
-        uses: ./.github/actions/download-hermetic-cli
-      - name: Lint integration tests
-        # `--config` so a consumer's #102 waivers are honored, matching the
-        # unit-coverage job (an absent file waives nothing).
-        env:
-          LANGUAGE: ${{ matrix.language }}
-          SCAN_PATH: ${{ inputs.path }}
-          VERSION: ${{ inputs.version }}
-          CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
-          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
-        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} integration lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   e2e-verify:
     name: E2E attestation freshness (e2e verify)

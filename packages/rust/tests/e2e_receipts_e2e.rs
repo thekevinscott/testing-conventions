@@ -145,6 +145,33 @@ fn attest_then_later_pushes_stay_green() {
 }
 
 #[test]
+fn slug_prints_the_standardized_name_for_an_argument() {
+    // The filename derivation is public: scripts locate a branch's receipt at
+    // `e2e-attestations/$(testing-conventions e2e slug <branch>).json`.
+    let repo = TempRepo::new();
+    let (code, text) = run(&repo.0, &["e2e", "slug", "Feature/One"]);
+    assert_eq!(code, 0);
+    assert_eq!(text.trim(), "feature-one");
+}
+
+#[test]
+fn slug_defaults_to_the_checked_out_branch() {
+    let repo = TempRepo::new();
+    repo.branch("feature/two");
+    let (code, text) = run(&repo.0, &["e2e", "slug"]);
+    assert_eq!(code, 0);
+    assert_eq!(text.trim(), "feature-two");
+}
+
+#[test]
+fn slug_with_no_argument_errors_on_a_detached_head() {
+    let repo = TempRepo::new();
+    git(&repo.0, &["checkout", "-q", "--detach"]);
+    let (code, text) = run(&repo.0, &["e2e", "slug"]);
+    assert_ne!(code, 0, "no branch to standardize: {text}");
+}
+
+#[test]
 fn verify_base_fails_a_scoped_change_with_no_receipt_naming_attest() {
     let repo = TempRepo::new();
     repo.branch("feature/code");

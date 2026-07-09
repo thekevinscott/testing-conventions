@@ -1,21 +1,22 @@
 //! Integration tests for `e2e attest`.
 //!
-//! `attest` reads HEAD and commits, so each test builds a throwaway git repo
-//! with one seed commit (the "code commit"), runs `attest`, and asserts it
-//! recorded the run against that commit, wrote the attestation file, and
-//! committed it on top. These are the clean (passing
-//! command) and red (failing command) cases.
-//!
-//! These start red against the stub in `src/e2e.rs` and go green once `attest`
-//! is implemented.
+//! `attest` reads HEAD and the checked-out branch, runs the given command, and
+//! commits the branch's receipt under `e2e-attestations/`. Each test builds a
+//! throwaway git repo with one seed commit on a work branch, runs `attest`, and
+//! asserts it recorded the run, wrote the receipt, and committed it on top —
+//! the clean (passing command) and red (failing command) cases.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use testing_conventions::e2e::{attest, Attestation, ATTESTATION_PATH};
+use testing_conventions::e2e::{attest, Attestation, RECEIPTS_DIR};
 
-/// A throwaway git repo with one seed commit, removed on drop.
+/// The work branch every test attests on, and its receipt's committed path.
+const BRANCH: &str = "work";
+const RECEIPT: &str = "e2e-attestations/work.json";
+
+/// A throwaway git repo with one seed commit on branch `work`, removed on drop.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -40,6 +41,7 @@ impl TempRepo {
             &root,
             &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "seed"],
         );
+        git(&root, &["checkout", "-q", "-b", BRANCH]);
         TempRepo(root)
     }
 
@@ -93,32 +95,33 @@ fn require_unsatisfiable_signing(repo: &Path) {
 }
 
 #[test]
-fn attest_names_head_writes_the_file_and_commits_it() {
+fn attest_records_the_run_writes_the_receipt_and_commits_it() {
     let repo = TempRepo::new();
     let code_commit = repo.head();
 
     let att = attest(&repo.0, "true").expect("attest should succeed");
 
-    // Records the run against the current code commit.
+    // Records the run against the current code commit and branch.
     assert_eq!(att.command, "true");
     assert_eq!(att.exit_code, 0);
     assert_eq!(att.commit, code_commit);
+    assert_eq!(att.branch, BRANCH);
 
-    // Writes the attestation file, and the on-disk contents match the return.
-    let path = repo.0.join(ATTESTATION_PATH);
-    assert!(path.is_file(), "the attestation file should be written");
+    // Writes the branch's receipt, and the on-disk contents match the return.
+    let path = repo.0.join(RECEIPT);
+    assert!(path.is_file(), "the receipt should be written");
     let on_disk: Attestation =
         serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(on_disk, att);
 
     // Commits it on top: HEAD advanced and its parent is the code commit, so the
-    // attestation rides as the commit naming the code beneath it.
+    // receipt rides as the commit naming the code beneath it.
     let new_head = repo.head();
     assert_ne!(new_head, code_commit, "attest should create a commit");
     assert_eq!(
         rev_parse(&repo.0, &format!("{new_head}^")),
         code_commit,
-        "the attestation commit's parent is the attested code commit"
+        "the receipt commit's parent is the attested code commit"
     );
 }
 
@@ -135,7 +138,7 @@ fn attest_runs_the_command() {
 #[test]
 fn attest_records_a_failing_run_and_still_commits() {
     // Force a run, not a pass: a non-zero command still produces a committed
-    // attestation recording the failure.
+    // receipt recording the failure.
     let repo = TempRepo::new();
     let code_commit = repo.head();
 
@@ -143,11 +146,39 @@ fn attest_records_a_failing_run_and_still_commits() {
 
     assert_eq!(att.exit_code, 3, "the command's exit code is recorded");
     assert_eq!(att.commit, code_commit);
-    assert!(repo.0.join(ATTESTATION_PATH).is_file());
+    assert!(repo.0.join(RECEIPT).is_file());
     assert_ne!(
         repo.head(),
         code_commit,
         "a failing run is still committed (force-run, not force-pass)"
+    );
+}
+
+#[test]
+fn attest_collects_the_retired_single_file_attestation() {
+    // The migration is one attest away: a committed legacy `e2e-attestation.json`
+    // is removed in the same receipt commit.
+    let repo = TempRepo::new();
+    std::fs::write(repo.0.join("e2e-attestation.json"), "{}\n").unwrap();
+    git(&repo.0, &["add", "e2e-attestation.json"]);
+    git(&repo.0, &["commit", "-q", "-m", "legacy attestation"]);
+
+    attest(&repo.0, "true").expect("attest should succeed");
+
+    assert!(
+        !repo.0.join("e2e-attestation.json").exists(),
+        "the legacy single file is collected by attest"
+    );
+    assert!(repo.0.join(RECEIPT).is_file());
+    let status = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(&repo.0)
+        .output()
+        .unwrap();
+    assert!(
+        status.stdout.is_empty(),
+        "the removal is committed, not left dirty: {}",
+        String::from_utf8_lossy(&status.stdout)
     );
 }
 
@@ -172,9 +203,9 @@ fn attest_errors_outside_a_git_repo() {
 fn attest_honors_repo_commit_signing() {
     // The nudge targets locked-down repos — exactly the ones whose branch
     // protection requires *verified* signatures. So `attest` must honor the repo's
-    // `commit.gpgsign` instead of forcing it off: an unsigned attestation commit
+    // `commit.gpgsign` instead of forcing it off: an unsigned receipt commit
     // can't land there. With signing required but unsatisfiable, honoring the
-    // policy means the commit (and so `attest`) fails loudly; the old forced
+    // policy means the commit (and so `attest`) fails loudly; a forced
     // `commit.gpgsign=false` instead skips signing and wrongly succeeds.
     let repo = TempRepo::new();
     require_unsatisfiable_signing(&repo.0);
@@ -186,4 +217,10 @@ fn attest_honors_repo_commit_signing() {
         "attest must honor the repo's commit.gpgsign (attempt the signature) \
          instead of forcing it off and committing unsigned"
     );
+}
+
+#[test]
+fn receipts_dir_is_the_public_location() {
+    // The committed path is the public contract scripts rely on.
+    assert_eq!(RECEIPTS_DIR, "e2e-attestations");
 }

@@ -153,7 +153,9 @@ fn attest_filenames_are_portable_for_any_branch_name() {
     // Slashes, unicode, and length all sanitize to a portable filename; the raw
     // name lives inside the receipt.
     let repo = TempRepo::new();
-    let long = format!("wip/Émil's{}", "x".repeat(300));
+    // Long enough to exercise truncation, short enough that git itself can
+    // store the ref (a ref's final path segment is one filesystem filename).
+    let long = format!("wip/Émil's{}", "x".repeat(150));
     repo.branch(&long);
 
     attest(&repo.0, "true").expect("attest should succeed");

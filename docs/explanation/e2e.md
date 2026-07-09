@@ -32,7 +32,10 @@ The mechanism is a pair:
 
   The receipt is keyed by the branch name, sanitized to a lowercase, truncated slug so any branch
   name yields a valid, portable filename; the raw branch name is recorded inside the receipt.
-  Parallel pull requests therefore write distinct files and merge cleanly beside each other. `attest` also deletes the receipts other
+  Parallel pull requests therefore write distinct files and merge cleanly beside each other. The
+  derivation is public: `testing-conventions e2e slug [branch]` prints the slug (default: the
+  checked-out branch), so a script locates a branch's receipt at
+  `e2e-attestations/$(testing-conventions e2e slug).json`. `attest` also deletes the receipts other
   branches left behind — once their PRs merge those files are dead weight, since `verify` reads
   only the current branch's diff — so the directory carries one live receipt at a time.
 

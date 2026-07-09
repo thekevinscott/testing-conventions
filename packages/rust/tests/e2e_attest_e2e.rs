@@ -1,17 +1,16 @@
 //! E2E tests for `e2e attest`: drive the built CLI binary in a
 //! throwaway git repo (no mocks) and assert it force-runs the command, exits
-//! `0`, and commits an attestation on top.
-//!
-//! Starts red against the stub in `src/e2e.rs` and goes green once `attest` is
-//! implemented.
+//! `0`, and commits the branch's receipt.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use testing_conventions::e2e::ATTESTATION_PATH;
+/// The work branch every test attests on, and its receipt's committed path.
+const BRANCH: &str = "work";
+const RECEIPT: &str = "e2e-attestations/work.json";
 
-/// A throwaway git repo with one seed commit, removed on drop.
+/// A throwaway git repo with one seed commit on branch `work`, removed on drop.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -36,6 +35,7 @@ impl TempRepo {
             &root,
             &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "seed"],
         );
+        git(&root, &["checkout", "-q", "-b", BRANCH]);
         TempRepo(root)
     }
 
@@ -77,7 +77,7 @@ fn attest_exit(repo: &Path, command: &str) -> i32 {
 
 /// Configure `repo` to require signed commits, but point signing at a program
 /// that does not exist — so any *attempted* signature fails. Honoring the repo's
-/// `commit.gpgsign` then means the attestation commit is attempted and fails
+/// `commit.gpgsign` then means the receipt commit is attempted and fails
 /// (non-zero exit), rather than silently committed unsigned.
 fn require_unsatisfiable_signing(repo: &Path) {
     git(repo, &["config", "gpg.format", "ssh"]);
@@ -93,7 +93,7 @@ fn require_unsatisfiable_signing(repo: &Path) {
 }
 
 #[test]
-fn attest_exits_zero_and_commits_an_attestation() {
+fn attest_exits_zero_and_commits_the_receipt() {
     let repo = TempRepo::new();
     let code_commit = repo.head();
 
@@ -103,13 +103,13 @@ fn attest_exits_zero_and_commits_an_attestation() {
         "attest force-runs and exits 0"
     );
     assert!(
-        repo.0.join(ATTESTATION_PATH).is_file(),
-        "attest should write the attestation file"
+        repo.0.join(RECEIPT).is_file(),
+        "attest should write the branch's receipt"
     );
     assert_ne!(
         repo.head(),
         code_commit,
-        "attest should commit the attestation on top"
+        "attest should commit the receipt on top"
     );
 }
 
@@ -119,14 +119,14 @@ fn attest_exits_zero_even_when_the_command_fails() {
     // so attest itself exits 0.
     let repo = TempRepo::new();
     assert_eq!(attest_exit(&repo.0, "exit 1"), 0);
-    assert!(repo.0.join(ATTESTATION_PATH).is_file());
+    assert!(repo.0.join(RECEIPT).is_file());
 }
 
 #[test]
 fn attest_fails_when_required_signing_cannot_be_satisfied() {
     // E2E mirror of the integration check: a repo that requires signed commits but
     // whose signer is unsatisfiable. Honoring `commit.gpgsign` (no forced-off) means
-    // the attestation commit is attempted and fails, so the binary exits non-zero —
+    // the receipt commit is attempted and fails, so the binary exits non-zero —
     // rather than silently committing unsigned and exiting 0.
     let repo = TempRepo::new();
     require_unsatisfiable_signing(&repo.0);

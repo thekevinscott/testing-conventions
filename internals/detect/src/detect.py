@@ -78,11 +78,18 @@ def has_dist(root: Path) -> bool:
 
 
 def has_attestation(root: Path) -> bool:
-    """True if a committed `e2e-attestation.json` sits at `root` (the e2e-verify default-on,
-    #186). Called with the package root, not the checkout root (#281): a monorepo package
-    carries its own attestation, scoped to it exactly like `e2e verify <path>` is.
+    """True if committed e2e receipts sit at `root` (the e2e-verify default-on, #186): a
+    `.json` receipt under `e2e-attestations/` (the branch-keyed layout), or the legacy
+    single `e2e-attestation.json` — recognizing both keeps an existing consumer's gate on
+    through the migration. Called with the package root, not the checkout root (#281): a
+    monorepo package carries its own receipts, scoped to it exactly like `e2e verify <path>`.
     """
-    return (root / "e2e-attestation.json").is_file()
+    if (root / "e2e-attestation.json").is_file():
+        return True
+    receipts = root / "e2e-attestations"
+    return receipts.is_dir() and any(
+        entry.suffix == ".json" and entry.is_file() for entry in receipts.iterdir()
+    )
 
 
 _MANIFESTS: tuple[str, ...] = ("package.json", "pyproject.toml", "Cargo.toml")

@@ -30,11 +30,9 @@ The mechanism is a pair:
   valid receipts. `attest` writes regardless of the command's exit code: the record is the
   decision and what ran, and the honest result is part of the record.
 
-  The receipt is keyed by the branch name — a sanitized, truncated slug for readability, suffixed
-  with a short hash of the raw name so any branch name (slashes, unicode, case-only twins,
-  filesystem-reserved words) yields a valid, unique, portable filename — and the raw branch name
-  is recorded inside the receipt. Parallel pull requests therefore write distinct files and merge
-  cleanly beside each other. `attest` also deletes the receipts other
+  The receipt is keyed by the branch name, sanitized to a lowercase, truncated slug so any branch
+  name yields a valid, portable filename; the raw branch name is recorded inside the receipt.
+  Parallel pull requests therefore write distinct files and merge cleanly beside each other. `attest` also deletes the receipts other
   branches left behind — once their PRs merge those files are dead weight, since `verify` reads
   only the current branch's diff — so the directory carries one live receipt at a time.
 

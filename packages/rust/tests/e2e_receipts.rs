@@ -1,7 +1,7 @@
 //! Integration tests for the branch-keyed e2e receipt contract.
 //!
 //! `attest` writes one receipt per branch under `e2e-attestations/` — keyed by a
-//! sanitized slug of the branch name plus a short hash of the raw name — and
+//! sanitized lowercase slug of the branch name — and
 //! prunes the receipts other branches left behind. `verify` asks two content
 //! questions of the branch's diff: an untouched scoped source owes nothing, and a
 //! changed one is answered by a receipt added or updated in that same diff. No
@@ -128,14 +128,9 @@ fn attest_writes_a_branch_keyed_receipt_and_no_single_file() {
     let names = repo.receipt_names();
     assert_eq!(names.len(), 1, "one receipt for the branch, got {names:?}");
     let name = &names[0];
-    assert!(
-        name.starts_with("feature-one-"),
-        "the filename leads with the sanitized branch slug: {name}"
-    );
-    assert!(name.ends_with(".json"), "a JSON receipt: {name}");
-    assert!(
-        name.len() >= "feature-one-".len() + 6 + ".json".len(),
-        "a hash suffix follows the slug: {name}"
+    assert_eq!(
+        name, "feature-one.json",
+        "the filename is the sanitized branch slug"
     );
 
     // The receipt records the branch and the run.
@@ -180,28 +175,6 @@ fn attest_filenames_are_portable_for_any_branch_name() {
 }
 
 #[test]
-fn attest_keys_case_only_branch_twins_to_distinct_portable_names() {
-    // `Foo` and `foo` are distinct branches; their receipts must not collide as
-    // paths on a case-insensitive filesystem, so the sanitized slugs share a
-    // lowercase prefix and the hash of the raw name separates them.
-    let upper = TempRepo::new();
-    upper.branch("CaseTwin");
-    attest(&upper.0, "true").expect("attest should succeed");
-    let upper_name = upper.receipt_names().remove(0);
-
-    let lower = TempRepo::new();
-    lower.branch("casetwin");
-    attest(&lower.0, "true").expect("attest should succeed");
-    let lower_name = lower.receipt_names().remove(0);
-
-    assert_ne!(
-        upper_name.to_lowercase(),
-        lower_name.to_lowercase(),
-        "case-only twins must differ even case-folded: {upper_name} vs {lower_name}"
-    );
-}
-
-#[test]
 fn attest_overwrites_its_own_receipt_in_place() {
     let repo = TempRepo::new();
     repo.branch("feature/one");
@@ -231,7 +204,7 @@ fn attest_prunes_receipts_other_branches_left_behind() {
 
     let names = repo.receipt_names();
     assert_eq!(names.len(), 1, "stale sibling receipts are pruned: {names:?}");
-    assert!(names[0].starts_with("feature-two-"));
+    assert_eq!(names[0], "feature-two.json");
 }
 
 #[test]

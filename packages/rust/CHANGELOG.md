@@ -8,7 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - **E2E attestation is one branch-keyed decision per branch, not a SHA-fresh stamp per push.**
-  `e2e attest '<cmd>'` now writes `e2e-attestations/<branch-slug>-<hash>.json` — keyed by the
+  `e2e attest '<cmd>'` now writes `e2e-attestations/<branch-slug>.json` — keyed by the
   branch so parallel pull requests write distinct files and never merge-conflict — recording the
   command, timestamp, exit code, commit, and branch; it prunes the receipts other branches left
   behind. The command is unrestricted and *is* the judgment being recorded: the full suite, a

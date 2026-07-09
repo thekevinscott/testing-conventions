@@ -16,7 +16,7 @@ Each entry has five sections, in order:
 ### Summary
 
 Retires the exact-match e2e freshness contract in favor of **one branch-keyed decision per
-branch**. `e2e attest '<cmd>'` writes `e2e-attestations/<branch-slug>-<hash>.json` — parallel
+branch**. `e2e attest '<cmd>'` writes `e2e-attestations/<branch-slug>.json` — parallel
 pull requests write distinct files, so attestation merge conflicts are structurally gone — and
 prunes the receipts other branches left behind. The command is unrestricted and is itself the
 judgment being recorded: the full suite, a targeted subset, or a no-op are all valid receipts.
@@ -1272,7 +1272,7 @@ ls e2e-attestations/
 testing-conventions e2e verify --base origin/main
 ```
 
-Expected: `attest` commits one `e2e-attestations/<branch-slug>-<hash>.json` naming the branch;
+Expected: `attest` commits one `e2e-attestations/<branch-slug>.json` naming the branch;
 `verify` passes. Push a scoped source change on a second branch without attesting and `verify
 --base origin/main` fails there, naming `e2e attest` as the fix; rebasing the attested branch
 onto a moved `main` leaves its `verify` green.

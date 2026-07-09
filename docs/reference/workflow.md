@@ -4,8 +4,11 @@ description: The reusable GitHub Actions workflow — every input, every check a
 
 # Workflow
 
-The reusable workflow is the adoption surface: one `uses:` call runs every check as its own job.
-This page is the canonical record of its inputs, the checks it runs, and its versioning contract.
+The reusable workflow is the adoption surface: one `uses:` call runs every check. The four static
+source scans (colocated-test, its co-change variant, unit-lint, and integration-lint) run as steps
+of one `Static checks (<language>)` job per language; the toolchain-heavy suites each run as their
+own job. This page is the canonical record of its inputs, the checks it runs, and its versioning
+contract.
 To adopt it, start with [Getting Started](../getting-started) or [Adopt on a
 monorepo](../monorepo).
 
@@ -31,15 +34,20 @@ jobs:
 
 ## The checks and when they run
 
-Each check runs as its own job per language present and fails the build on a violation, with the
-offending files in the log. Each links to its explanation page.
+Each check fails the build on a violation, with the offending files in the log. Each links to its
+explanation page. The four static source scans (colocated-test, its co-change variant, unit-lint,
+integration-lint) run as steps of one `Static checks (<language>)` job per language — each a
+sub-second scan, so one job's setup covers all four; the toolchain-heavy suites (`unit coverage`,
+its changed-line variant, `unit mutation`) each run as their own job. Every check keeps its own
+`gates` membership and `--base` semantics — a gate left out of `gates` is skipped whether it runs as
+a job or a step.
 
 | Check | Runs | Notes |
 | --- | --- | --- |
-| [`unit colocated-test`](../explanation/colocated-test) | always | Python, TypeScript, and Rust (inline `#[cfg(test)]` presence). Plus the diff-scoped co-change (`--base`) job on pull requests, for Python and TypeScript — Rust units are inline, so a sibling test can't go stale and co-change doesn't apply. |
+| [`unit colocated-test`](../explanation/colocated-test) | always | Python, TypeScript, and Rust (inline `#[cfg(test)]` presence). Runs as a step of the `Static checks (<language>)` job. Plus the diff-scoped co-change (`--base`) step on pull requests, for Python and TypeScript — Rust units are inline, so a sibling test can't go stale and co-change doesn't apply. |
 | [`unit coverage`](../explanation/coverage) | always | The language's [default floor](./config#coverage), plus the changed-line (`--base`) job on pull requests. |
-| [`unit lint`](../explanation/isolation) | always | Python, TypeScript, Rust. |
-| [`integration lint`](../explanation/isolation) | always | Python, TypeScript, Rust. |
+| [`unit lint`](../explanation/isolation) | always | Python, TypeScript, Rust. Runs as a step of the `Static checks (<language>)` job. |
+| [`integration lint`](../explanation/isolation) | always | Python, TypeScript, Rust. Runs as a step of the `Static checks (<language>)` job. |
 | [`unit mutation`](../explanation/mutation) | pull requests only | Diff-scoped to the `<base>...HEAD` changed lines; a binary gate — any un-exempted survivor on a changed line fails. Installs and runs from the derived package root: TypeScript picks `npm ci` or `pnpm install --frozen-lockfile` from the package's own manifest/lockfile; Python is provisioned with uv, identically to the coverage jobs (see below). |
 | [`packaging`](../explanation/packaging) | when a build is derivable, an artifact is named, or a dist is committed | **Build-then-scan** (#335): derives the distribution build from the package's own manifest — `uv build` (Python `[project]`), `<pm> pack --pack-destination dist` (TypeScript), `cargo package` (Rust `[package]`) — provisions the toolchain, runs it at the derived package root, and scans the result (`dist/` for a wheel/sdist/tarball, `target/package/` for a crate). So a native monorepo adopts with `gates: ["packaging"]` and no bespoke build job. A named `packaging_artifact` is scanned as-is instead, and a committed `dist/` is scanned in place when the manifest can't state a build; **skipped, never failed** when none of the three holds. A `path`-scoped call builds and inspects only its own package. Needs a `testing-conventions` release whose `detect` derives `packaging_build` — a `version` pinned older falls back to locate-or-skip. |
 | [`e2e verify`](../explanation/e2e) | when an attestation is present, on pull requests | Runs when a committed `e2e-attestation.json` sits at the [package root](../monorepo) (`path`'s nearest manifest directory, the repo root for a single-package repo); **skipped, never failed** otherwise. Diff-scoped like the changed-line coverage/mutation jobs, so it runs on `pull_request` only: freshness is measured over the scoped source this branch changed (`<base>..HEAD`), not the newest scoped commit in all history (#319) — a branch that changed none of it passes, so an unrelated PR stays green and a squash-merging repo can adopt the gate. The walk is also scoped to the caller's own `path`, not the (possibly broader) package root (#294) — a commit outside `path` but inside the package root doesn't trip a false-stale. A package whose e2e artifact is compiled from a shared source tree beside it (a native core bound into several bindings) declares that tree as an [extra freshness root](../explanation/e2e#a-shared-source-tree-beside-the-package) — `[e2e] extra_scope` / `exclude` in its own `testing-conventions.toml` — so `e2e verify` also accepts a repeatable `--extra-scope <dir>` / `--exclude <dir>` (#333), and the job appends the detected values as those flags — `detect` reads `[e2e] extra_scope` / `exclude` from the package's own config and renders them, so a package declaring neither is byte-identical to before. `run_e2e` forces it on. Needs a `testing-conventions` release carrying the `e2e verify <path> --scope <dir> --base <ref>` arguments (#281, #294, #319) — a `version` pinned older verifies the checkout root instead. |

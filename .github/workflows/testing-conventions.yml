@@ -11,17 +11,22 @@ name: Testing Conventions
 #     conventions:
 #       uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
 #
-# The principle is **one consumer-facing rule command → one job**, fanned out per
-# language. It runs the published `testing-conventions` binary via `npx` (a
+# The principle is **one suite-executing rule command → one job**, fanned out per
+# language — with the four static source scans (colocated-test, its co-change variant,
+# unit-lint, integration-lint) consolidated into a single `static` job per language,
+# since each is a sub-second scan that would otherwise pay full job setup for <1s of
+# work (#410). It runs the published `testing-conventions` binary via `npx` (a
 # prebuilt, per-platform npm package — no Rust toolchain, no compile from source),
 # failing the build on any violation. The shipped rule jobs are:
 #
-#   - unit colocated-test  — every source file has a colocated unit test (all langs;
-#                            the rust arm checks inline `#[cfg(test)]` presence, #40/#274)
-#   - unit lint            — the unit-suite isolation lint (Python, TypeScript, Rust)
+#   - static               — the four static source scans as steps of one job per
+#                            language (#410): unit colocated-test (every source file has
+#                            a colocated unit test, all langs; the rust arm checks inline
+#                            `#[cfg(test)]` presence, #40/#274) with its co-change variant,
+#                            unit lint (the unit-suite isolation lint), and integration lint
+#                            (the integration mocking lints) — Python, TypeScript, Rust
 #   - unit coverage        — the unit coverage floor (Python, TypeScript, and Rust
 #                            via cargo-llvm-cov, #37)
-#   - integration lint     — the integration mocking lints (Python, TypeScript, Rust)
 #   - packaging            — no test files in the built distribution
 #
 # Diff-scoped variants run as their own jobs on `pull_request` only (they need

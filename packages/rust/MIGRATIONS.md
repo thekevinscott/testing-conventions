@@ -690,7 +690,30 @@ bailed exit `3` as a "baseline build/test failure". A diff-scoped run where ever
 touched lines times out under a slow suite now passes with zero survivors instead of a false error.
 A genuine baseline failure (exit `4`, or a usage error) stays fatal. No config or API change.
 
+Consolidates the reusable workflow's four static gates into one `static` job per language (#410).
+The colocated-test job (with its co-change variant), unit-lint, and integration-lint each scanned
+source in under a second yet paid full job setup — checkout, CLI bootstrap, ~20s apiece. They now
+run as steps of one `Static checks (<language>)` job per language, so a single-language call drops
+from ten job slots to seven. Each step keeps its own `gates` membership and language set, so `gates`
+and `--base` semantics are unchanged; only the consumer-visible **check names** change (see
+**Required changes**). No CLI, API, or config change.
+
 ### Required changes
+
+**Branch protection: swap the static-gate check names** (#410). The four static gates are now steps
+of one `Static checks (<language>)` job per language, so the four old per-language check names no
+longer appear. Any branch-protection required-check list (or merge-queue / status-check
+configuration) pinning an old name must swap it for `Static checks (<language>)`:
+
+| Removed check | Replacement |
+|---|---|
+| `Colocated test (python\|typescript\|rust)` | `Static checks (<language>)` |
+| `Colocated test — co-change (python\|typescript)` | `Static checks (<language>)` |
+| `Unit lint (python\|typescript\|rust)` | `Static checks (<language>)` |
+| `Integration lint (python\|typescript\|rust)` | `Static checks (<language>)` |
+
+No `conventions.yml` change is needed — the caller's `uses:` call is unchanged; only the check names
+in the reusable workflow's own output change.
 
 `config::PythonConfig` gains `build_command: Option<String>` and `reason: String` (#289). Both
 carry serde defaults, so a `testing-conventions.toml` without them parses unchanged; but a struct

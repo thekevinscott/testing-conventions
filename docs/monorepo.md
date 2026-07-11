@@ -31,6 +31,16 @@ jobs:
       path: packages/rust
 ```
 
+Each `path` names a **source directory**, and the whole package still runs: the unit-tier
+checks and language detection scan `path`, while the install, the build, the packaging check,
+and the `tests/integration/` and `tests/e2e/` suites run at the **package root** — the nearest
+directory at or above `path` holding a manifest. The `typescript` call above scans
+`packages/ts/src` and runs its suites and build at `packages/ts`. On a single-package
+repository the drop-in carries no inputs — `path` defaults to `src`
+([Getting Started](./getting-started)); on a monorepo each call names its package's source
+directory, because `path` is the only scoping mechanism
+([workflow reference](./reference/workflow)).
+
 ## Everything derives from the package
 
 `path` is the scan root and the only scoping mechanism. From it, each call derives:

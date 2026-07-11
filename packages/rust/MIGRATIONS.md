@@ -15,6 +15,13 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Points an unknown-config-key rejection at `MIGRATIONS.md` (#426). The loader's
+`deny_unknown_fields` self-guard already rejected a key outside the schema, naming the key and
+the accepted set; the error now also points at this file, because a stale key left by a release's
+rename or removal is indistinguishable from a typo at parse time — the migration record is where
+that mapping lives. No config change is required and no interface changes (see **Behavior changes
+without code changes**).
+
 Renames the reusable workflow's `path` input to **`source`** (#423). Meaning and default
 (`src`) are unchanged: the input names the package's source directory — the scan root the
 unit-tier checks and language detection recurse, and the anchor everything else (the package
@@ -1026,6 +1033,11 @@ The `--lang` flag and its implicit `python` default are gone — a clean break, 
 a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
+
+An unknown key in a `testing-conventions.toml` is still rejected on load, now with one added line
+pointing at `MIGRATIONS.md` (#426). A config that loads today loads unchanged; only the failure
+text for an already-failing config grows. Type errors and other malformed TOML are untouched — the
+pointer rides the `unknown field` rejection alone.
 
 The `e2e verify` gate re-demands a receipt only when scoped **content** changes, once per branch.
 A branch that attests and then pushes further scoped commits stays green (previously each scoped

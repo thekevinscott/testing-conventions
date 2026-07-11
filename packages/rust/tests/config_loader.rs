@@ -288,3 +288,28 @@ fn an_unknown_field_in_a_coverage_table_still_errors() {
         "an unknown key inside a coverage table must still be rejected"
     );
 }
+
+#[test]
+fn an_unknown_key_error_points_at_migrations() {
+    // The upgrade path rides the rejection: a stale key after a release rename/removal is
+    // indistinguishable from a typo at parse time, so the error hands the reader the record
+    // of renamed/removed keys alongside serde's expected-field list.
+    let err =
+        load_config(fixture("unknown_key.toml")).expect_err("an unknown key must be rejected");
+    let chain = format!("{err:#}");
+    assert!(
+        chain.contains("MIGRATIONS.md"),
+        "the unknown-key error must point at MIGRATIONS.md, got: {chain}"
+    );
+}
+
+#[test]
+fn an_unknown_nested_key_error_points_at_migrations() {
+    let err = load_config(fixture("e2e_unknown_key.toml"))
+        .expect_err("an unknown [e2e] key must be rejected");
+    let chain = format!("{err:#}");
+    assert!(
+        chain.contains("MIGRATIONS.md"),
+        "the nested unknown-key error must point at MIGRATIONS.md, got: {chain}"
+    );
+}

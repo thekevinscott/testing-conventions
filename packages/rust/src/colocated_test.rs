@@ -152,6 +152,12 @@ pub fn missing_unit_tests(
         if !language.has_code(&contents) {
             continue;
         }
+        // A type-only TypeScript module (only `type` / `interface` / `import type` /
+        // `export type`) erases to zero runtime JavaScript, so it has no behavior to test —
+        // a non-subject like a `.d.ts` file, needing no colocated test or exemption.
+        if language == Language::TypeScript && crate::ts::is_type_only_module(&contents, source) {
+            continue;
+        }
         let relative = source
             .strip_prefix(root)
             .unwrap_or(source)

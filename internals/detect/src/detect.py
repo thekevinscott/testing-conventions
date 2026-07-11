@@ -139,7 +139,7 @@ def derive_package_root(scan_root: Path, repo_root: Path) -> Path:
     `repo_root`, so every existing consumer is untouched.
 
     `working_directory` was considered and rejected as a second, consumer-facing coordinate
-    system (docs/monorepo.md): `path` stays the only scoping input, and everything else the
+    system (docs/monorepo.md): `source` stays the only scoping input, and everything else the
     suite-executing jobs need is derived from it and the package's own manifest.
     """
     scan_root = scan_root.resolve()

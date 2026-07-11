@@ -175,7 +175,7 @@ pub fn verify(repo: &Path) -> Result<Verification> {
 ///
 /// `repo` and `scope` serve different roles: `repo` is where the receipts live
 /// (the package root — a manifest's own natural home), while `scope` is what
-/// counts as "code" (the directory a `path`-scoped call actually named, which
+/// counts as "code" (the directory a `source`-scoped call actually named, which
 /// can be narrower — a package root commonly also holds `tests/`, docs, and
 /// config files that aren't the attestable source). `scope` must be `repo` or
 /// a descendant of it.

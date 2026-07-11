@@ -19,7 +19,7 @@ WIRED = """\
     steps:
       - name: Verify the e2e attestation is current
         env:
-          SCAN_PATH: ${{ inputs.path }}
+          SCAN_PATH: ${{ inputs.source }}
           BASE: ${{ inputs.base }}
           EXTRA_SCOPE: ${{ needs.detect.outputs.e2e_extra_scope }}
           EXCLUDE: ${{ needs.detect.outputs.e2e_exclude }}

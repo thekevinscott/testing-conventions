@@ -27,7 +27,7 @@ WIRED = """\
       - name: Verify the e2e attestation is current
         env:
           PACKAGE_ROOT: ${{ needs.detect.outputs.package_root }}
-          SCAN_PATH: ${{ inputs.path }}
+          SCAN_PATH: ${{ inputs.source }}
           BASE: ${{ inputs.base }}
           EXTRA_SCOPE: ${{ needs.detect.outputs.e2e_extra_scope }}
           EXCLUDE: ${{ needs.detect.outputs.e2e_exclude }}
@@ -55,7 +55,7 @@ MISSING_SCOPE_FLAG_ONLY = """\
   e2e-verify:
     if: ${{ github.event_name == 'pull_request' }}
     env:
-      SCAN_PATH: ${{ inputs.path }}
+      SCAN_PATH: ${{ inputs.source }}
       BASE: ${{ inputs.base }}
     run: npx -y testing-conventions e2e verify "$PACKAGE_ROOT" --base "$BASE"
 
@@ -79,7 +79,7 @@ MISSING_BASE_FLAG_ONLY = """\
   e2e-verify:
     if: ${{ github.event_name == 'pull_request' }}
     env:
-      SCAN_PATH: ${{ inputs.path }}
+      SCAN_PATH: ${{ inputs.source }}
       BASE: ${{ inputs.base }}
     run: npx -y testing-conventions e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH"
 
@@ -91,7 +91,7 @@ MISSING_BASE_ENV_ONLY = """\
   e2e-verify:
     if: ${{ github.event_name == 'pull_request' }}
     env:
-      SCAN_PATH: ${{ inputs.path }}
+      SCAN_PATH: ${{ inputs.source }}
       BASE: something-else
     run: npx -y testing-conventions e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE"
 
@@ -103,7 +103,7 @@ MISSING_PULL_REQUEST_GATE = """\
   e2e-verify:
     if: ${{ inputs.gates == '' || contains(inputs.gates, '"e2e-verify"') }}
     env:
-      SCAN_PATH: ${{ inputs.path }}
+      SCAN_PATH: ${{ inputs.source }}
       BASE: ${{ inputs.base }}
     run: npx -y testing-conventions e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE"
 
@@ -117,7 +117,7 @@ MISSING_EXTRA_SCOPE_ARG_ONLY = """\
   e2e-verify:
     if: ${{ github.event_name == 'pull_request' }}
     env:
-      SCAN_PATH: ${{ inputs.path }}
+      SCAN_PATH: ${{ inputs.source }}
       BASE: ${{ inputs.base }}
       EXTRA_SCOPE: ${{ needs.detect.outputs.e2e_extra_scope }}
       EXCLUDE: ${{ needs.detect.outputs.e2e_exclude }}
@@ -131,7 +131,7 @@ MISSING_EXTRA_SCOPE_ENV_ONLY = """\
   e2e-verify:
     if: ${{ github.event_name == 'pull_request' }}
     env:
-      SCAN_PATH: ${{ inputs.path }}
+      SCAN_PATH: ${{ inputs.source }}
       BASE: ${{ inputs.base }}
       EXTRA_SCOPE: something-else
       EXCLUDE: ${{ needs.detect.outputs.e2e_exclude }}
@@ -145,7 +145,7 @@ MISSING_EXCLUDE_ARG_ONLY = """\
   e2e-verify:
     if: ${{ github.event_name == 'pull_request' }}
     env:
-      SCAN_PATH: ${{ inputs.path }}
+      SCAN_PATH: ${{ inputs.source }}
       BASE: ${{ inputs.base }}
       EXTRA_SCOPE: ${{ needs.detect.outputs.e2e_extra_scope }}
       EXCLUDE: ${{ needs.detect.outputs.e2e_exclude }}
@@ -159,7 +159,7 @@ MISSING_EXCLUDE_ENV_ONLY = """\
   e2e-verify:
     if: ${{ github.event_name == 'pull_request' }}
     env:
-      SCAN_PATH: ${{ inputs.path }}
+      SCAN_PATH: ${{ inputs.source }}
       BASE: ${{ inputs.base }}
       EXTRA_SCOPE: ${{ needs.detect.outputs.e2e_extra_scope }}
       EXCLUDE: something-else

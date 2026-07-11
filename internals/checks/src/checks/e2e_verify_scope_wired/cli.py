@@ -1,8 +1,8 @@
 """The e2e-verify-scope-wired check — repo-only (#294 #319 #333, #321).
 
 Backs the `tc-checks e2e-verify-scope-wired` subcommand: the reusable workflow's e2e-verify job
-must (a) pass `--scope` naming `inputs.path` (the caller's own scoping input), not rely on the
-derived `package_root` (which can be a real parent of `path`); (b) pass `--base` naming
+must (a) pass `--scope` naming `inputs.source` (the caller's own scoping input), not rely on the
+derived `package_root` (which can be a real parent of `source`); (b) pass `--base` naming
 `inputs.base` under a `github.event_name == 'pull_request'` gate, so freshness is diff-relative
 (`<base>..HEAD`) rather than history-absolute — the model that keeps the gate adoptable by a
 squash-merging repo (#319); and (c) append detect's rendered `$EXTRA_SCOPE` / `$EXCLUDE`
@@ -28,7 +28,7 @@ from checks.utils.check_failed import CheckFailed
 _JOB_START = re.compile(r"^  e2e-verify:", re.MULTILINE)
 _NEXT_JOB = re.compile(r"^  packaging:", re.MULTILINE)
 _HAS_SCOPE_FLAG = re.compile(r"--scope")
-_HAS_SCAN_PATH_FROM_INPUTS_PATH = re.compile(r"SCAN_PATH:\s*.*inputs\.path")
+_HAS_SCAN_PATH_FROM_INPUTS_SOURCE = re.compile(r"SCAN_PATH:\s*.*inputs\.source")
 _HAS_BASE_FLAG = re.compile(r"--base")
 _HAS_BASE_FROM_INPUTS_BASE = re.compile(r"BASE:\s*.*inputs\.base")
 _HAS_PULL_REQUEST_GATE = re.compile(r"github\.event_name == 'pull_request'")
@@ -40,9 +40,9 @@ _HAS_EXCLUDE_ARG = re.compile(r"\$EXCLUDE")
 _HAS_EXCLUDE_FROM_DETECT = re.compile(r"EXCLUDE:\s*.*e2e_exclude")
 
 _SCOPE_ERROR = (
-    "the e2e-verify job doesn't pass --scope naming inputs.path — the freshness walk "
+    "the e2e-verify job doesn't pass --scope naming inputs.source — the freshness walk "
     "is scoped to the derived package_root instead, which can be broader than what the "
-    "caller's own path input names (#294)"
+    "caller's own source input names (#294)"
 )
 _BASE_ERROR = (
     "the e2e-verify job doesn't pass --base naming inputs.base — the freshness walk "
@@ -77,11 +77,11 @@ def extract_e2e_verify_block(workflow_text: str) -> str:
 
 
 def find_missing_wiring(workflow_text: str) -> Optional[str]:
-    """None if the e2e-verify job passes --scope naming inputs.path and --base naming
+    """None if the e2e-verify job passes --scope naming inputs.source and --base naming
     inputs.base under a pull-request gate, and appends the detect-rendered $EXTRA_SCOPE /
     $EXCLUDE arguments from detect's outputs; else the first error message."""
     block = extract_e2e_verify_block(workflow_text)
-    if not _HAS_SCOPE_FLAG.search(block) or not _HAS_SCAN_PATH_FROM_INPUTS_PATH.search(block):
+    if not _HAS_SCOPE_FLAG.search(block) or not _HAS_SCAN_PATH_FROM_INPUTS_SOURCE.search(block):
         return _SCOPE_ERROR
     if not _HAS_BASE_FLAG.search(block) or not _HAS_BASE_FROM_INPUTS_BASE.search(block):
         return _BASE_ERROR
@@ -101,6 +101,6 @@ def cli(workflow: str) -> None:
     if problem is not None:
         raise CheckFailed(problem)
     click.echo(
-        "e2e-verify scopes the freshness walk to inputs.path, diffs inputs.base on PRs, and "
+        "e2e-verify scopes the freshness walk to inputs.source, diffs inputs.base on PRs, and "
         "appends detect's extra-scope/exclude roots"
     )

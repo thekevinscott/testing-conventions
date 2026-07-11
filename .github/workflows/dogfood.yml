@@ -24,7 +24,7 @@ name: Dogfood
 #   e2e-verify    — dogfoods the e2e attestation nudge (#71): packages/node carries a
 #                   tests/e2e suite and a committed e2e-attestation.json, and CI runs
 #                   the reusable workflow's own `e2e-verify` job, scoped to `packages/node`
-#                   via `path` — the in-repo whole-hog proof for this gate (#281). Before
+#                   via `source` — the in-repo whole-hog proof for this gate (#281). Before
 #                   #281 this had to be a bespoke job (build the CLI from source, `cd
 #                   packages/node`) because the reusable workflow's e2e-verify job could
 #                   only check the checkout root, not a package subdirectory. NOTE: the
@@ -94,7 +94,7 @@ jobs:
     uses: ./.github/workflows/testing-conventions.yml
     with:
       version: ${{ inputs.version }}
-      path: packages/python/python
+      source: packages/python/python
 
   colocated-test:
     name: Colocated test (packages/node/src)
@@ -102,20 +102,20 @@ jobs:
     uses: ./.github/workflows/testing-conventions.yml
     with:
       version: ${{ inputs.version }}
-      path: packages/node/src
+      source: packages/node/src
       gates: '["colocated-test"]'
 
   e2e-verify:
     name: E2E attestation (packages/node)
     # #281: the shipped reusable workflow's own e2e-verify job, scoped to packages/node
-    # via `path` and to just this gate via `gates` — replaces the old bespoke
+    # via `source` and to just this gate via `gates` — replaces the old bespoke
     # build-from-source job now that the reusable workflow's e2e-verify job accepts a
     # package subdirectory instead of only the checkout root.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       version: ${{ inputs.version }}
-      path: packages/node
+      source: packages/node
       gates: '["e2e-verify"]'
 
   checks:
@@ -126,9 +126,9 @@ jobs:
     # `.github/scripts` helper conventions over them as loose scripts (a pyproject inside the
     # `.github/scripts` scan flips the tool into package-mode for the whole directory).
     #
-    # `path` is the *inner* importable-package dir (internals/checks/src), not the package root
+    # `source` is the *inner* importable-package dir (internals/checks/src), not the package root
     # — exactly as the Python plugin scans packages/python/python, not packages/python. The
-    # unit-tier gates recurse `path` (the colocated `*_test.py` units under src/), and the suite
+    # unit-tier gates recurse `source` (the colocated `*_test.py` units under src/), and the suite
     # tiers derive from the package root (internals/checks, where the pyproject lives):
     # integration lint scans internals/checks/tests/integration + tests/e2e from this same call
     # (#418), and the coverage/mutation venv provisions there too.
@@ -136,7 +136,7 @@ jobs:
     uses: ./.github/workflows/testing-conventions.yml
     with:
       version: ${{ inputs.version }}
-      path: internals/checks/src
+      source: internals/checks/src
 
   # internals/detect (#363) is NOT dogfooded here, unlike internals/checks above. Its
   # colocated detect_test.py alone doesn't reach the coverage floor — compute_outputs's

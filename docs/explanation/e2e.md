@@ -43,22 +43,22 @@ The mechanism is a pair:
   the CI half, run by the [workflow](../reference/workflow) on pull requests. It asks two
   questions, each a plain content diff of `<base>...HEAD`:
 
-  1. **Did this branch change the scoped source?** The scope is `--scope` (default: `path`
+  1. **Did this branch change the scoped source?** The scope is `--scope` (default: `source`
      itself), joined with every `--extra-scope` and minus every `--exclude`, with the receipts
      themselves excluded. An empty diff passes: the branch owes no decision.
   2. **Does this branch's diff add or update a receipt?** A receipt added or updated under
-     `path`'s `e2e-attestations/` passes; otherwise the gate fails, naming the fix — run
+     `source`'s `e2e-attestations/` passes; otherwise the gate fails, naming the fix — run
      `e2e attest` with the command of your choosing.
 
   It never runs the suite, never inspects the recorded command or exit code, and never compares
   commit SHAs. Deleting another branch's receipt (the prune above) is not a decision — only an
-  added or updated receipt answers question 2. In a monorepo, `path` names the package —
+  added or updated receipt answers question 2. In a monorepo, `source` names the package —
   `e2e verify packages/widget` behaves exactly like running `e2e verify` with `packages/widget`
   as the current directory (#281) — and `--scope` narrows what counts as code independently of
   where the receipts live (#294), so a commit touching the package's `tests/`, docs, or config —
   outside what the caller actually scoped their call to — owes no decision. `--scope` names
-  `path` or a directory beneath it that git tracks; a `--scope` that resolves to no tracked path
-  (a typo, or a directory outside `path`) is an error that names the bad scope and exits
+  `source` or a directory beneath it that git tracks; a `--scope` that resolves to no tracked path
+  (a typo, or a directory outside `source`) is an error that names the bad scope and exits
   non-zero, so a misconfigured scope fails loudly at the gate rather than waving a branch through
   (#391).
 
@@ -84,7 +84,7 @@ gates: a branch that touched none of the scoped source passes trivially, so unre
 green and a squash-merging repo adopts the gate unchanged (#319).
 
 Without `--base`, `verify` has no branch to read a diff from, so it checks presence: a committed
-receipt at `path` passes. The reusable workflow always passes `--base`.
+receipt at `source` passes. The reusable workflow always passes `--base`.
 
 ## A shared source tree beside the package
 
@@ -97,7 +97,7 @@ point `--scope` at it, and a PR changing only the core would owe no binding a de
 e2e coverage is exactly what it puts at risk.
 
 `--extra-scope <dir>` closes that gap. It names a **repo-root-relative** directory — outside the
-package's own `path`, which is the whole point — that joins the scoped diff. A binding declares
+package's own `source`, which is the whole point — that joins the scoped diff. A binding declares
 the shared core as an extra scope, and a core change puts the e2e question to the branch the same
 way a change to the binding's own source would. The flag is repeatable; each occurrence adds one
 root. `--exclude <dir>` carves a feature-gated subtree back out: dirsql's core `cli/` and `bin/`

@@ -35,15 +35,15 @@ stdlib (`json`, `dataclasses`, `std::collections`) is nobody's collaborator.
 ## Where each check finds its subjects
 
 The two checks split the tree by the standard's layout. `unit lint` scans the colocated unit
-tests under the call's `path`, leaving `<package root>/tests/` to the suite tiers.
+tests under the call's `source`, leaving `<package root>/tests/` to the suite tiers.
 `integration lint` derives its subjects from the package root — the nearest directory at or
-above `path` holding the language's manifest — per the standard layout: the integration suite in
+above `source` holding the language's manifest — per the standard layout: the integration suite in
 `tests/integration/`, the e2e suite in `tests/e2e/`. Both suites run first-party code for real,
 so both are held to the integration rules. (Rust's cargo layout keeps both out-of-crate suites
 in the crate root's `tests/`, so that whole directory is the subject there.) A test file under
 `<package root>/tests/` outside a standard tier is flagged as `unknown-tier`: the layout is part
 of the standard, and a suite the scan would silently miss is an error instead. A tree with no
-manifest — loose scripts — is scanned at `path` directly.
+manifest — loose scripts — is scanned at `source` directly.
 
 ## What `unit lint` flags
 

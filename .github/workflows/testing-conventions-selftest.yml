@@ -34,7 +34,7 @@ name: Testing Conventions (self-test)
 # package root, so a per-package `uses:` call finds its own `dist/` with no build/upload step:
 #   packaging-package-root-wired  asserts the packaging job reads `needs.detect.outputs.package_root`
 #                                  — the red→green signal for the wiring itself.
-#   packaging-package-root-clean  a `path`-scoped call over a fixture package with its own
+#   packaging-package-root-clean  a `source`-scoped call over a fixture package with its own
 #                                  committed `dist/` passes with no `packaging_artifact` — the
 #                                  acceptance scenario itself.
 #   packaging-package-root-red    drives the published `packaging` command on the sibling
@@ -183,7 +183,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["python"]'
-      path: .github/selftest/clean
+      source: .github/selftest/clean
       config: .github/selftest/clean/testing-conventions.toml
 
   absent-language-skipped:
@@ -199,7 +199,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["python", "typescript"]'
-      path: .github/selftest/clean
+      source: .github/selftest/clean
       config: .github/selftest/clean/testing-conventions.toml
 
   no-source-library-passes:
@@ -214,7 +214,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["python", "typescript"]'
-      path: .github/selftest/no-sources
+      source: .github/selftest/no-sources
 
   integration-lint-config-waiver:
     name: Integration lint forwards the consumer's --config (#102 waiver honored)
@@ -230,7 +230,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["python"]'
-      path: .github/selftest/integration-waiver
+      source: .github/selftest/integration-waiver
       config: .github/selftest/integration-waiver/testing-conventions.toml
 
   integration-lint-rust:
@@ -250,7 +250,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["rust"]'
-      path: .github/selftest/integration-rust/clean
+      source: .github/selftest/integration-rust/clean
 
   integration-lint-new-arms-trip:
     name: The TypeScript and Rust integration-lint arms fail on a violation
@@ -475,7 +475,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["rust"]'
-      path: .github/selftest/isolation/rust-clean
+      source: .github/selftest/isolation/rust-clean
 
   isolation-red:
     name: A crate with an un-isolated unit trips the lint check
@@ -512,7 +512,7 @@ jobs:
   packaging-clean:
     name: A clean built artifact passes the packaging check
     # The reusable workflow's `uses:` clean path for packaging: download the
-    # uploaded wheel and inspect it. `path` points at the source-free fixture so the
+    # uploaded wheel and inspect it. `source` points at the source-free fixture so the
     # source-matrix jobs all skip (#94) and only the packaging job runs — the whole
     # call must pass.
     needs: [upload-clean-dist, build-cli]
@@ -520,7 +520,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["python"]'
-      path: .github/selftest/no-sources
+      source: .github/selftest/no-sources
       packaging_artifact: selftest-clean-dist
 
   packaging-red:
@@ -569,7 +569,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["rust"]'
-      path: .github/selftest/coverage-rust/clean
+      source: .github/selftest/coverage-rust/clean
       config: .github/selftest/coverage-rust/clean/testing-conventions.toml
 
   coverage-rust-red:
@@ -639,11 +639,11 @@ jobs:
         run: uv run --project internals/checks tc-checks e2e-verify-checks-out-pr-head
 
   e2e-verify-scoped-to-path:
-    name: e2e-verify passes --scope inputs.path and --base inputs.base on PRs
+    name: e2e-verify passes --scope inputs.source and --base inputs.base on PRs
     # Red→green wiring signal for #294 and #319: the e2e-verify job's `e2e verify`
-    # invocation must (a) pass `--scope` naming `inputs.path` (the caller's own
+    # invocation must (a) pass `--scope` naming `inputs.source` (the caller's own
     # scoping input), not rely on the derived `package_root` (which can be a real
-    # parent of `path` — a package root also holding tests/docs/config outside the
+    # parent of `source` — a package root also holding tests/docs/config outside the
     # caller's scanned directory), and (b) pass `--base` naming `inputs.base` under a
     # `github.event_name == 'pull_request'` gate, so freshness is diff-relative
     # (`<base>..HEAD`) rather than history-absolute — the model that keeps the gate
@@ -651,7 +651,7 @@ jobs:
     # `$EXTRA_SCOPE` / `$EXCLUDE` extra-freshness-root arguments (#333). The check itself
     # lives in the repo-only checks package (internals/checks) as a colocated-tested
     # `@click.command()` rather than inline bash — an earlier inline version embedded a
-    # literal `${{ inputs.path }}` in a grep pattern, which GitHub Actions templated (and
+    # literal `${{ inputs.source }}` in a grep pattern, which GitHub Actions templated (and
     # stripped) before the shell ever ran it, breaking the check silently. It tracks the
     # workflow file regardless of what the published binary ships; runtime behavior is
     # covered by the Rust e2e tests (`e2e_verify.rs`, `e2e_verify_e2e.rs`).
@@ -677,7 +677,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["python"]'
-      path: .github/selftest/diff-clean
+      source: .github/selftest/diff-clean
       config: .github/selftest/diff-clean/testing-conventions.toml
       base: origin/main
 
@@ -796,7 +796,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["python"]'
-      path: .github/selftest/build-command
+      source: .github/selftest/build-command
       config: .github/selftest/build-command/testing-conventions.toml
       gates: '["colocated-test", "unit-lint", "integration-lint"]'
 
@@ -817,7 +817,7 @@ jobs:
     # The precedence half of #262: `packaging_artifact` normally forces the packaging job
     # on — and this artifact is the RED wheel, which fails the packaging rule when
     # inspected. With a `gates` allowlist that leaves packaging out, the allowlist must
-    # win and the packaging job skip: the call passes only because it does. `path` points
+    # win and the packaging job skip: the call passes only because it does. `source` points
     # at the source-free fixture so the one named gate has nothing to run and skips too
     # (#94) — every job but detect skips, and the run passes.
     needs: [upload-red-dist, build-cli]
@@ -825,7 +825,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["python"]'
-      path: .github/selftest/no-sources
+      source: .github/selftest/no-sources
       packaging_artifact: selftest-red-dist
       gates: '["colocated-test"]'
 
@@ -872,7 +872,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["python"]'
-      path: .github/selftest/build-command
+      source: .github/selftest/build-command
       config: .github/selftest/build-command/rust-toolchain.toml
       rust_toolchain: true
       base: origin/main
@@ -896,7 +896,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["python"]'
-      path: .github/selftest/build-command
+      source: .github/selftest/build-command
       config: .github/selftest/build-command/build-command.toml
       base: origin/main
 
@@ -1022,7 +1022,7 @@ jobs:
   monorepo-coverage-ts:
     name: The monorepo npm TS fixture passes unit-coverage from its own package root
     # Runtime half of #278, for the fixture from dirsql PR #410's motivating scenario: a TS
-    # package with its own package-lock.json and no root manifest. Only `path` is set — the
+    # package with its own package-lock.json and no root manifest. Only `source` is set — the
     # #278 goal for a per-package call (`languages`/`config` are optional refinements; config
     # is already derived from the package root by #277). This call (an in-repo `uses:` with no
     # pinned `version`) runs `detect` hermetically from HEAD (#356), so it exercises this
@@ -1032,19 +1032,19 @@ jobs:
     uses: ./.github/workflows/testing-conventions.yml
     with:
       version: ${{ inputs.version }}
-      path: .github/selftest/monorepo/packages/ts
+      source: .github/selftest/monorepo/packages/ts
       gates: '["unit-coverage"]'
 
   monorepo-coverage-py:
     name: The monorepo uv Python fixture passes unit-coverage from its own package root
     # Same hermetic derivation as monorepo-coverage-ts (#356): this call runs `detect` from
     # HEAD, so the fixture's `attrs` third-party dependency is installed via this commit's own
-    # `python_env` resolution, not a pre-release-lagged `@v0`. Only `path` is set.
+    # `python_env` resolution, not a pre-release-lagged `@v0`. Only `source` is set.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       version: ${{ inputs.version }}
-      path: .github/selftest/monorepo/packages/py
+      source: .github/selftest/monorepo/packages/py
       gates: '["unit-coverage"]'
   # ---- #280: packaging discovers dist/ at the derived package root, not the checkout root ----
   #
@@ -1074,7 +1074,7 @@ jobs:
     name: A per-package dist/ passes the packaging check with no packaging_artifact
     # The runtime half of #280, and the acceptance scenario itself: `clean/` is its own package
     # root (a `package.json` sitting there) with a committed `clean/dist/` — no build job, no
-    # upload-artifact, no `packaging_artifact` input, just `path` naming the package. The whole
+    # upload-artifact, no `packaging_artifact` input, just `source` naming the package. The whole
     # call must pass. `gates` scopes the call to packaging alone (this fixture carries no
     # source, so every other gate's matrix is empty and would skip regardless — this just keeps
     # the job fast and its intent explicit).
@@ -1082,7 +1082,7 @@ jobs:
     uses: ./.github/workflows/testing-conventions.yml
     with:
       version: ${{ inputs.version }}
-      path: .github/selftest/packaging-package-root/clean
+      source: .github/selftest/packaging-package-root/clean
       gates: '["packaging"]'
 
   packaging-package-root-red:
@@ -1127,7 +1127,7 @@ jobs:
     name: Mutation over the monorepo fixture's npm TS package (per-package call)
     # The runtime half of #279's TS fix: a per-package `uses:` call over
     # `.github/selftest/monorepo/packages/ts` (npm, its own lockfile, no root
-    # manifest) with only `path`/`config` set, scoped to just the `mutation` gate.
+    # manifest) with only `source`/`config` set, scoped to just the `mutation` gate.
     # `base: origin/main` gives the diff-scoped mutation gate real changed lines to
     # scope to — the whole fixture is new relative to `main` (it landed in the
     # still-unmerged #277), and `add()`'s existing test kills every default mutant.
@@ -1142,7 +1142,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["typescript"]'
-      path: .github/selftest/monorepo/packages/ts/src
+      source: .github/selftest/monorepo/packages/ts/src
       config: .github/selftest/monorepo/packages/ts/testing-conventions.toml
       gates: '["mutation"]'
       base: origin/main
@@ -1165,7 +1165,7 @@ jobs:
     with:
       version: ${{ inputs.version }}
       languages: '["python"]'
-      path: .github/selftest/monorepo/packages/py/src
+      source: .github/selftest/monorepo/packages/py/src
       config: .github/selftest/monorepo/packages/py/testing-conventions.toml
       gates: '["mutation"]'
       base: origin/main

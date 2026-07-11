@@ -64,7 +64,7 @@ rules = ["colocated-test"]
 reason = "pure re-export barrel; no logic of its own"
 ```
 
-- `path` is relative to the scanned `path`, and must point to a file that exists — a stale entry
+- `path` is relative to the scanned `source`, and must point to a file that exists — a stale entry
   is a hard error, so the list can't silently rot.
 - `rules` names the checks the entry lifts (`colocated-test`, a mutation or lint rule). For
   `coverage` / `mutation`, see the line-scoped form below — those are never whole-file.

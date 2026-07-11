@@ -1,5 +1,5 @@
 ---
-description: Adopt the standard on a monorepo — one workflow call per package, scoped by `path`.
+description: Adopt the standard on a monorepo — one workflow call per package, scoped by `source`.
 ---
 
 # Adopt on a Monorepo
@@ -18,37 +18,37 @@ jobs:
   python:
     uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
     with:
-      path: packages/python/yourpkg
+      source: packages/python/yourpkg
 
   typescript:
     uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
     with:
-      path: packages/ts/src
+      source: packages/ts/src
 
   rust:
     uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
     with:
-      path: packages/rust
+      source: packages/rust
 ```
 
-Each `path` names a **source directory**, and the whole package still runs: the unit-tier
-checks and language detection scan `path`, while the install, the build, the packaging check,
+Each `source` names a **source directory**, and the whole package still runs: the unit-tier
+checks and language detection scan `source`, while the install, the build, the packaging check,
 and the `tests/integration/` and `tests/e2e/` suites run at the **package root** — the nearest
-directory at or above `path` holding a manifest. The `typescript` call above scans
+directory at or above `source` holding a manifest. The `typescript` call above scans
 `packages/ts/src` and runs its suites and build at `packages/ts`. On a single-package
-repository the drop-in carries no inputs — `path` defaults to `src`
+repository the drop-in carries no inputs — `source` defaults to `src`
 ([Getting Started](./getting-started)); on a monorepo each call names its package's source
-directory, because `path` is the only scoping mechanism
+directory, because `source` is the only scoping mechanism
 ([workflow reference](./reference/workflow)).
 
 ## Everything derives from the package
 
-`path` is the scan root and the only scoping mechanism. From it, each call derives:
+`source` is the scan root and the only scoping mechanism. From it, each call derives:
 
-- **The package root** — the nearest directory at or above `path` holding a `package.json`,
+- **The package root** — the nearest directory at or above `source` holding a `package.json`,
   `pyproject.toml`, or `Cargo.toml`. Dependency installs, builds, `dist/` discovery, and
   `e2e-attestations/` receipt discovery all happen there.
-- **The languages** — every supported language with sources under `path` runs its gates.
+- **The languages** — every supported language with sources under `source` runs its gates.
 - **The package manager** — the manifest's `packageManager` field, else the package's lockfile
   (npm and pnpm).
 - **The Python environment** — a `pyproject.toml` with a `[project]` table is provisioned with
@@ -61,11 +61,11 @@ directory, because `path` is the only scoping mechanism
   floors, and `exempt` entries whose `path` resolves relative to the call's scan root
   (`integration lint`'s suite subjects: relative to the package root the tiers derive from).
 - **The test tiers** — the standard's suite layout, derived from the package root: colocated
-  unit tests sit beside the sources under `path`, the integration suite lives in
+  unit tests sit beside the sources under `source`, the integration suite lives in
   `<package root>/tests/integration/`, and the e2e suite in `<package root>/tests/e2e/` (Rust
   keeps both out-of-crate suites in the crate root's `tests/`, cargo's own layout).
   `integration lint` takes its subjects from the derived suite directories, and the unit-tier
-  scans cover `path` and leave `<package root>/tests/` to the suites — one call runs every tier
+  scans cover `source` and leave `<package root>/tests/` to the suites — one call runs every tier
   of the package.
 
 Two optional inputs refine a call: `languages` restricts the detected set explicitly, and

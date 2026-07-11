@@ -115,3 +115,31 @@ fn typescript_suite_helpers_are_not_colocated_subjects() {
         0
     );
 }
+
+#[test]
+fn type_only_typescript_modules_do_not_fail_the_run() {
+    // The type_only fixture holds type-only `.ts` modules (`shape.ts`, `aliases.ts`)
+    // with no colocated test and no exemption, beside one paired runtime module. A
+    // type-only module has no behavior to test, so the run finds no orphan and exits
+    // zero — the nine hand-written exemptions in putitoutthere#479 become unnecessary.
+    let (code, stderr) = unit_colocated_test_output("typescript/type_only", "typescript");
+    assert_eq!(
+        code, 0,
+        "type-only modules are not subjects; stderr: {stderr}"
+    );
+}
+
+#[test]
+fn a_mixed_type_and_runtime_module_still_fails_the_run() {
+    // The boundary, end to end: `mixed.ts` carries runtime code alongside a type, so
+    // it stays a subject and the run exits non-zero naming it.
+    let (code, stderr) = unit_colocated_test_output("typescript/type_only_mixed", "typescript");
+    assert_eq!(
+        code, 1,
+        "a module with runtime code stays a subject; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("mixed.ts"),
+        "stderr should name the orphan module; got: {stderr}"
+    );
+}

@@ -28,7 +28,12 @@ matching-named unit test.
   is skipped (no logic), a non-empty one needs a test or an
   [exemption](../guide/configure#exempt-a-file).
 - **TypeScript** — `foo.ts` / `.tsx` / `.mts` / `.cts` → a colocated `foo.test.*` of the matching
-  extension. Declaration files (`*.d.ts`) carry no runtime code and are ignored.
+  extension. Declaration files (`*.d.ts`) carry no runtime code and are ignored. A **type-only
+  module** — one whose top level is exclusively `type` / `interface` / `import type` /
+  `export type` declarations — is ignored for the same reason: TypeScript erases types, so it
+  compiles to zero runtime JavaScript and has no behavior to test (the parser decides this, so a
+  module gains subject status the moment it adds a runtime `const`, function, or `export`). This
+  mirrors the Rust arm, which already skips type-only files, and needs no exemption.
 - **Rust** — units are inline `#[cfg(test)]` modules, not sibling files, so the check is presence
   of the inline module: a `src` file that defines a function with a body but has no `#[cfg(test)]`
   module is an orphan. A test module is one gated by a positively-required `test` — `#[cfg(test)]`

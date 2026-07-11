@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **An unknown config key is rejected with a pointer to `MIGRATIONS.md`** (#426). The loader's
+  `deny_unknown_fields` self-guard already named the rejected key and the accepted set; the error
+  now also points at the migration record, since a stale key left by a release's rename or removal
+  reads identically to a typo at parse time. Type errors and other malformed TOML are unchanged.
 - **The reusable workflow's `path` input is renamed `source`** (#423). Same meaning, same
   default (`src`): the package's source directory, the scan root every derivation anchors on.
   Every `uses:` call that sets the input renames the key (`path:` → `source:`, value

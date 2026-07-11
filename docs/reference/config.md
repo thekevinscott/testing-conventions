@@ -11,7 +11,10 @@ exemptions](../explanation/scoping).
 
 The file is named by the workflow's `config` input (default `testing-conventions.toml`, resolved
 per call — a [monorepo](../monorepo) passes one per package). The loader validates the schema:
-unknown keys, malformed TOML, and reason-less `exempt` entries are rejected. Each `[python]` /
+unknown keys, malformed TOML, and reason-less `exempt` entries are rejected. An unknown-key
+error names the key, lists the accepted keys, and points at the package's
+[`MIGRATIONS.md`](https://github.com/thekevinscott/testing-conventions/blob/main/packages/rust/MIGRATIONS.md),
+which records every key a release renamed or removed alongside its replacement. Each `[python]` /
 `[typescript]` / `[rust]` table is optional, and within it both `coverage` and `exempt` are
 optional.
 

@@ -15,6 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Stops flagging type-only TypeScript modules as `colocated-test` subjects (#429). A `.ts` module
+whose top level is exclusively `type` / `interface` / `import type` / `export type` declarations
+compiles to zero runtime JavaScript, so it has no behavior to unit-test; the parser now treats it
+as a non-subject, the same as a `.d.ts` file and the same as the Rust arm's existing type-only
+skip. Such a module needs no colocated test and no exemption. A module that adds any runtime
+construct (a `const`, function, class, `enum`, `namespace`, or value `import` / `export`) stays a
+subject. No config change is required, and consumers who wrote `colocated-test` exemptions solely
+for type-only modules can delete them (see **Behavior changes without code changes**).
+
 Points an unknown-config-key rejection at `MIGRATIONS.md` (#426). The loader's
 `deny_unknown_fields` self-guard already rejected a key outside the schema, naming the key and
 the accepted set; the error now also points at this file, because a stale key left by a release's
@@ -1033,6 +1042,15 @@ The `--lang` flag and its implicit `python` default are gone — a clean break, 
 a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
+
+A type-only TypeScript module stops being a `colocated-test` subject (#429). A package that
+previously red on such a module — or carried a `colocated-test` exemption to keep it green — now
+passes with no test and no exemption; a `[[typescript.exempt]]` entry written *solely* for a
+type-only module can be deleted. Left in place it is a harmless no-op rather than an error: the
+staleness guard fires only when an entry's `path` names no existing file, and the module still
+exists — so the redundant entry loads without complaint until you remove it. A module mixing a
+type with runtime code is unaffected — it was a subject before and stays one. The Python and Rust
+arms are unchanged (Rust already skipped its type-only files).
 
 An unknown key in a `testing-conventions.toml` is still rejected on load, now with one added line
 pointing at `MIGRATIONS.md` (#426). A config that loads today loads unchanged; only the failure

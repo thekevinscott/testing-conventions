@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **A type-only TypeScript module is no longer a `colocated-test` subject** (#429). A `.ts` /
+  `.tsx` / `.mts` / `.cts` module whose top level is exclusively `type` / `interface` /
+  `import type` / `export type` declarations erases to zero runtime JavaScript, so it has no
+  behavior to unit-test — the parser now recognizes it as a non-subject, like a `.d.ts` file and
+  like the Rust arm's existing type-only skip. It needs no colocated test and no exemption. A
+  module that adds any runtime construct (a `const`, function, class, `enum`, `namespace`, or
+  value `import`/`export`) stays a subject. See `MIGRATIONS.md`.
 - **An unknown config key is rejected with a pointer to `MIGRATIONS.md`** (#426). The loader's
   `deny_unknown_fields` self-guard already named the rejected key and the accepted set; the error
   now also points at the migration record, since a stale key left by a release's rename or removal

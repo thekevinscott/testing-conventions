@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **The reusable workflow's `path` input is renamed `source`** (#423). Same meaning, same
+  default (`src`): the package's source directory, the scan root every derivation anchors on.
+  Every `uses:` call that sets the input renames the key (`path:` → `source:`, value
+  unchanged); GitHub rejects a call still passing `path:` before any job runs. See
+  `MIGRATIONS.md`.
+
 - **E2E attestation is one branch-keyed decision per branch, not a SHA-fresh stamp per push.**
   `e2e attest '<cmd>'` now writes `e2e-attestations/<branch-slug>.json` — keyed by the
   branch so parallel pull requests write distinct files and never merge-conflict — recording the

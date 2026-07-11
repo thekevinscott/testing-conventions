@@ -87,7 +87,7 @@ Consistency is a feature: the same idea uses the same word everywhere.
   (except a named lint like `no-first-party-mock`), or "test".
 - **the drop-in** — the six-line reusable-workflow snippet a consumer adds. Not "the action" (it's a
   reusable workflow, not a composite action).
-- **the scan root** — the directory the `path` input names; the only scoping mechanism.
+- **the scan root** — the directory the `source` input names; the only scoping mechanism.
 - **floor** — a coverage threshold. Coverage has a *floor*; you don't "set coverage to 100".
 - **first-party / external** — the isolation boundary. "External" = third-party packages *and*
   effectful standard-library APIs. Don't say "third-party" when you mean both.
@@ -105,9 +105,9 @@ Consistency is a feature: the same idea uses the same word everywhere.
 Voice:
 
 - Second person, present tense, active. "The check fails the build", not "the build will be failed".
-- Imperative in tutorials and how-tos ("Add one file", "Point `path` at `src`").
+- Imperative in tutorials and how-tos ("Add one file", "Point `source` at `src`").
 - One canonical phrasing per fact. The strict default is **"a 100% floor"**; mutation is **"a
-  binary gate, not a score"**; scoping is **"`path` scopes the scan; exemptions name the
+  binary gate, not a score"**; scoping is **"`source` scopes the scan; exemptions name the
   omissions"**. Reuse those exact phrasings rather than re-inventing them per page.
 - Cross-link generously, but each link earns its place: How-to → Explanation for *why*, How-to →
   Reference for *exact*, Explanation → How-to for *do it*.

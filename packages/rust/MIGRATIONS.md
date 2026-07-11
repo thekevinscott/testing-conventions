@@ -15,6 +15,14 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Renames the reusable workflow's `path` input to **`source`** (#423). Meaning and default
+(`src`) are unchanged: the input names the package's source directory — the scan root the
+unit-tier checks and language detection recurse, and the anchor everything else (the package
+root, the suite tiers, the build) derives from. Breaking for every `uses:` call that sets it;
+a call omitting the input is unaffected. GitHub rejects a call still passing `path:` at call
+time ("Invalid input, path is not defined in the referenced workflow"), so a stale caller
+breaks loudly, before any job runs (see **Required changes**).
+
 Retires the exact-match e2e freshness contract in favor of **one branch-keyed decision per
 branch**. `e2e attest '<cmd>'` writes `e2e-attestations/<branch-slug>.json` — parallel
 pull requests write distinct files, so attestation merge conflicts are structurally gone — and
@@ -30,14 +38,14 @@ Derives the suite tiers from the package root (#418). `integration lint` takes i
 the standard suite directories — `<package root>/tests/integration/` and
 `<package root>/tests/e2e/`, both of which run first-party code for real and so are held to the
 integration rules — where the package root is the nearest directory at or above the scanned
-`path` holding the language's manifest (`pyproject.toml`, `package.json`, `Cargo.toml`), the walk
+`source` holding the language's manifest (`pyproject.toml`, `package.json`, `Cargo.toml`), the walk
 stopping at the repository boundary. Rust scans the crate root's `tests/`, cargo's own layout. A
 test file under `<package root>/tests/` outside a standard tier is flagged by the new
 `unknown-tier` violation (waivable like any rule). The unit-tier scans (`unit colocated-test`,
 its co-change variant, `unit lint`) leave `<package root>/tests/` to the suites. A tree with no
-manifest — loose scripts — is scanned at `path` directly, unchanged. One workflow call per
-package now runs every tier from a single `path`; the split unit-job/integration-job pattern (a
-second `uses:` call with `path` pointed at the integration directory and a `gates` allowlist)
+manifest — loose scripts — is scanned at `source` directly, unchanged. One workflow call per
+package now runs every tier from a single `source`; the split unit-job/integration-job pattern (a
+second `uses:` call with `source` pointed at the integration directory and a `gates` allowlist)
 collapses into the package's one call.
 
 Consolidates the reusable workflow's Python provisioning to uv (#399). The suite-executing jobs
@@ -725,6 +733,20 @@ and `--base` semantics are unchanged; only the consumer-visible **check names** 
 
 ### Required changes
 
+**Rename `path:` to `source:` on every `uses:` call** (#423). One line per call; the value is
+unchanged. A call that never set `path` (the single-package drop-in) needs no change.
+
+```yaml
+# Before:
+    uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
+    with:
+      path: packages/ts/src
+# After:
+    uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
+    with:
+      source: packages/ts/src
+```
+
 **Re-attest once per open branch; delete the legacy `e2e-attestation.json`.** The single-file
 attestation is replaced by the `e2e-attestations/` directory. A branch open across the upgrade
 that changed scoped source runs `e2e attest '<cmd>'` once (writing its branch-keyed receipt); the
@@ -740,12 +762,12 @@ integration and e2e suites at `<package root>/tests/integration/` and `<package 
 (Rust: the crate root's `tests/`). A Python/TypeScript package whose suites live elsewhere moves
 them into the standard directories; a test file left under `<package root>/tests/` outside a tier
 fails with `unknown-tier` (waivable per file with a reasoned `exempt` entry). A repo carrying a
-separate integration-lint `uses:` call (`path` pointed at the integration directory, narrowed with
+separate integration-lint `uses:` call (`source` pointed at the integration directory, narrowed with
 `gates`) drops it — the package's own call now lints the suites.
 
 **Re-root integration-lint exemption paths at the package root** (#418). With a derived package
 root, `integration lint` resolves `exempt` paths relative to the package root instead of the
-scanned `path`. An exemption for a suite file updates its `path` accordingly (e.g.
+scanned `source`. An exemption for a suite file updates its `path` accordingly (e.g.
 `billing_test.py` scanned at `tests/integration` becomes `tests/integration/billing_test.py` on
 the package's single call). A loose-script tree (no manifest) keeps scan-root-relative resolution.
 

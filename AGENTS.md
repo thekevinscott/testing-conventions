@@ -1,6 +1,6 @@
 ## North Star
 
-A consuming package adopts `conventions.yml` whole-hog with a call carrying only `path`. One `uses:` call per package, and all seven gates run: layout, package manager, Python environment, native-build toolchain, dist location, attestation location, and config file are all derived from `path` and the package's own manifest — a `testing-conventions.toml` at the package root is discovered, never named. `languages` and `config` survive as optional refinements. `build_command` is a **necessary declaration, not an escape hatch**: where an ecosystem standardizes the build the tool derives it, and where it structurally can't (npm names no build command) a compiling package states its build in one line — a fact, requiring no justification. `gates` and `rust_toolchain` are the true escape hatches — they *skip* or *override* something that already works — so they remain held to the exemption bar (near-forbidden, reasoned).
+A consuming package adopts `conventions.yml` whole-hog with a call carrying only `source`. One `uses:` call per package, and all seven gates run: layout, package manager, Python environment, native-build toolchain, dist location, attestation location, and config file are all derived from `source` and the package's own manifest — a `testing-conventions.toml` at the package root is discovered, never named. `languages` and `config` survive as optional refinements. `build_command` is a **necessary declaration, not an escape hatch**: where an ecosystem standardizes the build the tool derives it, and where it structurally can't (npm names no build command) a compiling package states its build in one line — a fact, requiring no justification. `gates` and `rust_toolchain` are the true escape hatches — they *skip* or *override* something that already works — so they remain held to the exemption bar (near-forbidden, reasoned).
 
 Follow red/green testing methodology. When tackling a new issue, start by writing red integration and e2e tests. Run the e2e tests locally.
 
@@ -12,7 +12,7 @@ Only when failing integration tests are witnessed on CI (and e2e tests fail loca
 
 Zero-config is the floor, and it is earned by **deriving relentlessly** — every fact an ecosystem
 *standardizes* (`uv build`, `cargo package`, a wired `prepare`/`prepack`, a lockfile, a manifest
-field) is derived from `path` and the manifest, never asked for. But where an ecosystem
+field) is derived from `source` and the manifest, never asked for. But where an ecosystem
 **structurally** offers no standard to derive from — no spec-defined command, no guaranteed field
 or script name (npm defines no build command; the build script is `build` in one package and
 `compile` in the next) — do **not** paper over the gap with a heuristic that guesses one. A guess
@@ -187,7 +187,7 @@ Two reasons this is a rule, not a preference:
   holds it to the shipped bar — colocated test, isolation, the coverage floor, integration-lint,
   and diff-scoped mutation — so a script earns real coverage for free.
 - **GitHub templates `run:` text for `${{ }}` before the shell sees it.** A literal
-  `${{ inputs.path }}` embedded in a `grep` pattern gets evaluated (and stripped) by that
+  `${{ inputs.source }}` embedded in a `grep` pattern gets evaluated (and stripped) by that
   templating, silently breaking the check. A file the workflow *invokes* is never templated, so
   extracting to a script sidesteps the whole class (#301, #302).
 

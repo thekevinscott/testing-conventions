@@ -42,11 +42,11 @@ name: Testing Conventions
 # repo (a squash-stale attestation never reds an unrelated PR).
 #
 # The `detect` job runs the repo-only detect action (`.github/actions/detect`, tested
-# by pytest, #189): it scans `path` and auto-detects every supported language *present*
+# by pytest, #189): it scans `source` and auto-detects every supported language *present*
 # (#185), and the rule jobs fan out over those. `languages` is an optional restrictor
 # (empty default ⇒ auto-detect all; a JSON array ⇒ only those named), so the zero-input
 # drop-in covers Python, TypeScript, and Rust alike. A language with no sources under
-# `path` is dropped from the matrix and skipped, not failed (#94). The action also
+# `source` is dropped from the matrix and skipped, not failed (#94). The action also
 # recognizes a crate (`Cargo.toml` / `*.rs`) and emits separate
 # `colocated_test_languages` (#274), `integration_lint_languages`,
 # `isolation_languages`, and `coverage_languages` sets that add Rust, plus
@@ -88,11 +88,11 @@ name: Testing Conventions
 #
 # `languages` is a JSON array (when set) so the matrix can fan out over it directly
 # (reusable-workflow inputs can't be native lists); empty — the default — means
-# auto-detect every supported language present under `path` (#185).
+# auto-detect every supported language present under `source` (#185).
 #
 # `unit coverage` (whole-tree) and `unit coverage --base` (changed-line) install, provision,
 # and build at the *derived package root* (#277/#278) — the nearest directory at-or-above
-# `path`, down to the checkout root, holding a `package.json` / `pyproject.toml` / `Cargo.toml`
+# `source`, down to the checkout root, holding a `package.json` / `pyproject.toml` / `Cargo.toml`
 # (`.` for a single-package repo, so an existing single-package call is unaffected). The
 # TypeScript package manager, the Python environment model (a bare `uv venv`, or `uv sync` for a
 # `pyproject.toml` with a `[project]` table — which also builds a maturin package's native
@@ -148,10 +148,10 @@ on:
   workflow_call:
     inputs:
       languages:
-        description: 'Optional JSON array restricting which languages to check, e.g. ["python"]. Empty (the default) auto-detects every supported language present under `path` (#185).'
+        description: 'Optional JSON array restricting which languages to check, e.g. ["python"]. Empty (the default) auto-detects every supported language present under `source` (#185).'
         type: string
         default: ''
-      path:
+      source:
         description: 'Directory scanned recursively for sources.'
         type: string
         default: 'src'
@@ -193,7 +193,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       # JSON array of the requested python/typescript languages with sources under
-      # `path` — the matrix the co-change `*-changed` job fans out over (rust units
+      # `source` — the matrix the co-change `*-changed` job fans out over (rust units
       # are inline `#[cfg(test)]` modules, so a sibling test can't go stale and
       # co-change doesn't apply).
       languages: ${{ steps.scan_hermetic.outputs.languages || steps.scan_published.outputs.languages }}
@@ -225,7 +225,7 @@ jobs:
       packaging_dist: ${{ steps.scan_hermetic.outputs.packaging_dist || steps.scan_published.outputs.packaging_dist }}
       e2e_attestation: ${{ steps.scan_hermetic.outputs.e2e_attestation || steps.scan_published.outputs.e2e_attestation }}
       # The monorepo primitive (#277): everything a suite-executing job needs to install,
-      # build, and run at the right directory, derived from `path` and the package's own
+      # build, and run at the right directory, derived from `source` and the package's own
       # manifest rather than a second, consumer-facing scoping input.
       package_root: ${{ steps.scan_hermetic.outputs.package_root || steps.scan_published.outputs.package_root }}
       ts_package_manager: ${{ steps.scan_hermetic.outputs.ts_package_manager || steps.scan_published.outputs.ts_package_manager }}
@@ -274,7 +274,7 @@ jobs:
         uses: ./.github/actions/detect
         with:
           languages: ${{ inputs.languages }}
-          path: ${{ inputs.path }}
+          path: ${{ inputs.source }}
           config: ${{ inputs.config }}
           caller_repository: ${{ github.repository }}
           version: ${{ inputs.version }}
@@ -285,7 +285,7 @@ jobs:
         uses: thekevinscott/testing-conventions/.github/actions/detect@v0
         with:
           languages: ${{ inputs.languages }}
-          path: ${{ inputs.path }}
+          path: ${{ inputs.source }}
           config: ${{ inputs.config }}
           caller_repository: ${{ github.repository }}
           version: ${{ inputs.version }}
@@ -318,7 +318,7 @@ jobs:
         if: ${{ (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && contains(needs.detect.outputs.colocated_test_languages || needs.detect.outputs.languages, format('"{0}"', matrix.language)) }}
         env:
           LANGUAGE: ${{ matrix.language }}
-          SCAN_PATH: ${{ inputs.path }}
+          SCAN_PATH: ${{ inputs.source }}
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
@@ -331,7 +331,7 @@ jobs:
         if: ${{ !cancelled() && github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && contains(needs.detect.outputs.languages, format('"{0}"', matrix.language)) }}
         env:
           LANGUAGE: ${{ matrix.language }}
-          SCAN_PATH: ${{ inputs.path }}
+          SCAN_PATH: ${{ inputs.source }}
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
@@ -341,7 +341,7 @@ jobs:
         if: ${{ !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"unit-lint"')) && contains(needs.detect.outputs.isolation_languages, format('"{0}"', matrix.language)) }}
         env:
           LANGUAGE: ${{ matrix.language }}
-          SCAN_PATH: ${{ inputs.path }}
+          SCAN_PATH: ${{ inputs.source }}
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
@@ -350,7 +350,7 @@ jobs:
         if: ${{ !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"integration-lint"')) && contains(needs.detect.outputs.integration_lint_languages, format('"{0}"', matrix.language)) }}
         env:
           LANGUAGE: ${{ matrix.language }}
-          SCAN_PATH: ${{ inputs.path }}
+          SCAN_PATH: ${{ inputs.source }}
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
@@ -472,7 +472,7 @@ jobs:
       - name: Check unit-test coverage
         env:
           LANGUAGE: ${{ matrix.language }}
-          SCAN_PATH: ${{ inputs.path }}
+          SCAN_PATH: ${{ inputs.source }}
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
@@ -585,7 +585,7 @@ jobs:
       - name: Check changed-line coverage vs ${{ inputs.base }}
         env:
           LANGUAGE: ${{ matrix.language }}
-          SCAN_PATH: ${{ inputs.path }}
+          SCAN_PATH: ${{ inputs.source }}
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
@@ -720,7 +720,7 @@ jobs:
       - name: Check mutation on the lines changed vs ${{ inputs.base }}
         env:
           LANGUAGE: ${{ matrix.language }}
-          SCAN_PATH: ${{ inputs.path }}
+          SCAN_PATH: ${{ inputs.source }}
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
@@ -769,7 +769,7 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           PACKAGE_ROOT: ${{ needs.detect.outputs.package_root }}
-          SCAN_PATH: ${{ inputs.path }}
+          SCAN_PATH: ${{ inputs.source }}
           BASE: ${{ inputs.base }}
           # Extra freshness roots and their excludes (#333), pre-rendered by detect as repeated
           # `--extra-scope`/`--exclude` arguments — empty when the package declares no `[e2e]`
@@ -779,8 +779,8 @@ jobs:
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
         # The attestation file lives at the derived package root (#281), matching
         # `detect`'s package-scoped `e2e_attestation` flag above; the freshness walk
-        # is scoped to the caller's own `path` (#294) — narrower than the package
-        # root whenever a package also carries tests/docs/config outside `path` — and
+        # is scoped to the caller's own `source` (#294) — narrower than the package
+        # root whenever a package also carries tests/docs/config outside `source` — and
         # to the `<base>..HEAD` diff (#319), so only a change this branch made to the
         # scoped source trips it. `$EXTRA_SCOPE` / `$EXCLUDE` are detect's pre-rendered
         # `--extra-scope`/`--exclude` arguments for a shared source tree beside the

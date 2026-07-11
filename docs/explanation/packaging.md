@@ -30,7 +30,7 @@ The check unpacks each distribution and scans for the language's test pattern:
 
 In the [workflow](../reference/workflow) the check is **build-then-scan**: the packaging job
 derives the distribution build from the package's own manifest, runs it, and scans what it wrote.
-The build the tool derives, from `path` and the manifest alone:
+The build the tool derives, from `source` and the manifest alone:
 
 - **Python** (a `pyproject.toml` with a `[project]` table) → `uv build`, writing `dist/*.whl` and
   `*.tar.gz`. The PEP 517 build resolves its own build dependencies and compiles a maturin/PyO3

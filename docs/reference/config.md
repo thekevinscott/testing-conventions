@@ -67,7 +67,7 @@ A deliberate omission is a `[[<language>.exempt]]` entry:
 
 | Field | Meaning |
 | ----- | ------- |
-| `path` | The exempt file, **relative to the scanned `path`** of the call that loads this config — except for `integration lint`'s suite subjects, which resolve **relative to the [package root](../monorepo#everything-derives-from-the-package)** the tiers derive from (e.g. `tests/integration/billing_test.py`). Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
+| `path` | The exempt file, **relative to the scanned `source`** of the call that loads this config — except for `integration lint`'s suite subjects, which resolve **relative to the [package root](../monorepo#everything-derives-from-the-package)** the tiers derive from (e.g. `tests/integration/billing_test.py`). Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
 | `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, `mutation`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`), or the suite-layout rule (`unknown-tier`). |
 | `lines` | The lines a `coverage` / `mutation` exemption covers. **Required** with `coverage` / `mutation`, **rejected** with any other rule. |
 | `reason` | Why the omission is deliberate. **Required**: an empty reason is rejected on load. |
@@ -161,7 +161,7 @@ The value is discovered in the package's own `testing-conventions.toml` at the
 [package root](../monorepo), exactly like the config file itself — a fact about the package's build
 (*my artifact is compiled from that tree*), not a `uses:`-call input. `detect` renders the lists as
 repeated `--extra-scope` / `--exclude` arguments and the `e2e-verify` job appends them; a package
-declaring neither scopes the diff to its own `path` alone. Both are lists of directory paths, so a path
+declaring neither scopes the diff to its own `source` alone. Both are lists of directory paths, so a path
 with a space is not supported. This is git-level and language-agnostic — it holds across Python,
 TypeScript, and Rust identically. Like `build_command`, the tool's own config loader never acts on
 these keys — it accepts the table so the rest of the config still loads — while `detect` and the

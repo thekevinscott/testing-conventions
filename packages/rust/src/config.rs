@@ -449,18 +449,40 @@ impl LineScope {
     }
 }
 
+/// The migration record: every key a release renamed or removed, alongside its replacement.
+/// An unknown-key rejection points here — a stale key left by a rename reads identically to a
+/// typo at parse time, so the record is the only thing that distinguishes upgrade from mistake.
+const MIGRATIONS_URL: &str =
+    "https://github.com/thekevinscott/testing-conventions/blob/main/packages/rust/MIGRATIONS.md";
+
+/// Append the migration pointer to a `deny_unknown_fields` rejection, passing every other TOML
+/// parse error through untouched. The `serde` message already names the key and lists the
+/// accepted ones; the pointer supplies the upgrade path serde can't know — the key may be one a
+/// release renamed or removed, and [`MIGRATIONS_URL`] is where that mapping lives.
+fn annotate_toml_error(err: toml::de::Error) -> anyhow::Error {
+    if err.message().contains("unknown field") {
+        anyhow::anyhow!(err).context(format!(
+            "an unrecognized key can be a typo or a key a release renamed or removed — see {MIGRATIONS_URL}"
+        ))
+    } else {
+        anyhow::anyhow!(err)
+    }
+}
+
 /// Read one config file at `path` into a [`Config`], validating it on the way.
 ///
 /// The validation is the config's self-guard: `serde`'s `deny_unknown_fields`
 /// rejects keys that aren't part of the schema, missing required keys and
 /// wrong-typed values are type errors, malformed TOML fails to parse, and every
 /// `exempt` entry must name a rule and carry a non-empty reason. Any of these
-/// surfaces as an `Err` rather than a silently-accepted default.
+/// surfaces as an `Err` rather than a silently-accepted default. An unknown-key
+/// rejection additionally points at `MIGRATIONS.md` (see [`annotate_toml_error`]).
 pub fn load_config(path: impl AsRef<Path>) -> Result<Config> {
     let path = path.as_ref();
     let contents = std::fs::read_to_string(path)
         .with_context(|| format!("reading config file `{}`", path.display()))?;
     let config: Config = toml::from_str(&contents)
+        .map_err(annotate_toml_error)
         .with_context(|| format!("parsing config file `{}`", path.display()))?;
     config
         .validate()
@@ -636,6 +658,34 @@ mod tests {
         let config: Config = toml::from_str(toml_src)?;
         config.validate()?;
         Ok(config)
+    }
+
+    /// The `toml::de::Error` from parsing `toml_src` into a [`Config`] — the exact error type
+    /// [`annotate_toml_error`] receives from `load_config`.
+    fn toml_error(toml_src: &str) -> toml::de::Error {
+        toml::from_str::<Config>(toml_src).expect_err("the source should fail to parse")
+    }
+
+    #[test]
+    fn annotate_points_an_unknown_key_error_at_migrations() {
+        let annotated = annotate_toml_error(toml_error("[python]\nbogus = true\n"));
+        let chain = format!("{annotated:#}");
+        assert!(chain.contains("MIGRATIONS.md"), "got: {chain}");
+        // The serde message — the rejected key and the accepted set — survives underneath.
+        assert!(chain.contains("unknown field `bogus`"), "got: {chain}");
+    }
+
+    #[test]
+    fn annotate_leaves_a_non_unknown_key_error_untouched() {
+        // A type error is not an unknown-key rejection, so no migration pointer is appended —
+        // the record has nothing to say about a well-named key given the wrong type.
+        let annotated = annotate_toml_error(toml_error(
+            "[python]\ncoverage = { fail_under = \"lots\" }\n",
+        ));
+        assert!(
+            !format!("{annotated:#}").contains("MIGRATIONS.md"),
+            "got: {annotated:#}"
+        );
     }
 
     #[test]

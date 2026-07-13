@@ -31,50 +31,60 @@ jobs:
       source: packages/rust
 ```
 
-Each `source` names a **source directory**, and the whole package still runs: the unit-tier
-checks and language detection scan `source`, while the install, the build, the packaging check,
-and the `tests/integration/` and `tests/e2e/` suites run at the **package root** — the nearest
-directory at or above `source` holding a manifest. The `typescript` call above scans
-`packages/ts/src` and runs its suites and build at `packages/ts`. On a single-package
-repository the drop-in carries no inputs — `source` defaults to `src`
-([Getting Started](./getting-started)); on a monorepo each call names its package's source
-directory, because `source` is the only scoping mechanism
-([workflow reference](./reference/workflow)).
+Each `source` names a **source directory** — nothing more. It is the recursive scan root for
+exactly two things: language detection and the unit-tier checks (colocated-test, unit-lint, unit
+coverage, mutation). It is *not* the package root, and it is not where the standard looks for
+suites, builds, or config — those are all **derived**, by walking upward from `source` to the
+nearest manifest, never by scanning downward from `source`. The `typescript` call above scans
+`packages/ts/src` for sources and unit tests, but installs, builds, and runs suites at
+`packages/ts` — the derived package root, one level up. On a single-package repository the
+drop-in carries no inputs — `source` defaults to `src`, which also happens to be the package
+root's immediate child, so the distinction is invisible until a monorepo pulls the two apart.
 
-## Everything derives from the package
+## `source` vs. the package root
 
-`source` is the scan root and the only scoping mechanism. From it, each call derives:
+Two roots, two jobs, and confusing them is the single most common adoption mistake:
 
-- **The package root** — the nearest directory at or above `source` holding a `package.json`,
-  `pyproject.toml`, or `Cargo.toml`. Dependency installs, builds, `dist/` discovery, and
-  `e2e-attestations/` receipt discovery all happen there.
-- **The languages** — every supported language with sources under `source` runs its gates.
-- **The package manager** — the manifest's `packageManager` field, else the package's lockfile
-  (npm and pnpm).
-- **The Python environment** — a `pyproject.toml` with a `[project]` table is provisioned with
-  uv, and the suite runs inside that environment.
-- **The native toolchain** — a manifest that declares a Rust-compiling build (a maturin
-  backend, a napi config, a `Cargo.toml` at the package root) provisions cargo, and the build
-  runs through the manifest's own hooks: `uv sync` compiles a maturin module; the install runs
-  an npm package's `prepare` script.
-- **The config** — a `testing-conventions.toml` at the package root governs that package: its
-  floors, and `exempt` entries whose `path` resolves relative to the call's scan root
-  (`integration lint`'s suite subjects: relative to the package root the tiers derive from).
-- **The test tiers** — the standard's suite layout, derived from the package root: colocated
-  unit tests sit beside the sources under `source`, the integration suite lives in
-  `<package root>/tests/integration/`, and the e2e suite in `<package root>/tests/e2e/` (Rust
-  keeps both out-of-crate suites in the crate root's `tests/`, cargo's own layout).
-  `integration lint` takes its subjects from the derived suite directories, and the unit-tier
-  scans cover `source` and leave `<package root>/tests/` to the suites — one call runs every tier
-  of the package.
+- **`source`** is a directory you name. It is scanned **recursively**: colocated-test and
+  unit-lint take every matching file under it as a subject, and language detection looks under it
+  for each language's file extensions. Nothing about a suite, a build, or a config file lives at
+  `source` — it only ever holds first-party sources and their colocated unit tests.
+- **The package root** is never named — it's **derived**, by walking upward from `source` through
+  its ancestors until one holds a `package.json`, `pyproject.toml`, or `Cargo.toml` (stopping at
+  the repository boundary). Every other gate — suites, install, build, packaging, e2e receipts,
+  config discovery — reads from **fixed, non-configurable paths relative to this derived root**,
+  never from `source` and never recursively.
 
-> **Suite discovery is derived, never recursive.** `source` is scanned recursively for *sources*
-> and colocated unit tests, but `integration lint` doesn't recursively search that scan for suite
-> files — it walks up from `source` to the package root and looks only at the two fixed paths
-> `<package root>/tests/integration/` and `<package root>/tests/e2e/` (plural **`tests`**). A
-> package whose suites live at `test/integration/` (singular) sits outside those paths entirely —
-> the check finds nothing there and stays silently green, whatever directory `source` points at.
-> Renaming `test/` to `tests/` at the package root is the fix, not moving files under `source`.
+Moving a file *into* `source` only ever helps the two things that scan `source`. It does nothing
+for a gate that reads from the package root — if that gate isn't finding its subjects, the fix is
+almost always a path at the package root being named wrong (singular instead of plural, or the
+wrong directory entirely), not a file living in the wrong place relative to `source`.
+
+## What each gate scans, and from where
+
+| Gate | Subjects | Root it derives from | How it finds them |
+| --- | --- | --- | --- |
+| Language detection | file extensions per language | `source` | Recursive scan of `source` |
+| `unit colocated-test` | source files paired with same-named unit tests | `source` | Recursive scan of `source`; `<package root>/tests/` is explicitly excluded |
+| `unit lint` | colocated unit test files | `source` | Recursive scan of `source`; `<package root>/tests/` is explicitly excluded |
+| `unit coverage` / `unit mutation` | source + colocated unit tests | `source` (scanned); package root (installed/run) | Recursive scan of `source` for subjects; toolchain provisioning and the suite run happen at the package root |
+| `integration lint` | integration and e2e suite files | package root | **Fixed paths only** — `<package root>/tests/integration/` and `<package root>/tests/e2e/` (plural **`tests`**; Rust: the crate root's `tests/`). Never a recursive scan of `source`, and not configurable |
+| Package manager | `packageManager` field, else lockfile | package root | Read from the manifest at the package root |
+| Python environment | a `pyproject.toml` `[project]` table | package root | Read from the manifest at the package root |
+| Native toolchain | a Rust-compiling build declaration (maturin backend, napi config, `Cargo.toml`) | package root | Read from the manifest at the package root |
+| `packaging` | the built distribution | package root | Derives the build from the manifest and scans what it writes — `dist/` (Python/TypeScript) or `target/package/` (Rust), all at the package root |
+| `e2e verify` | committed receipts | package root | **Fixed path** — `<package root>/e2e-attestations/`. Never a recursive scan |
+| Config file | `testing-conventions.toml` | package root, falling back to repo root | Fixed filename, discovered upward from `source` |
+
+A package whose suites live at `test/integration/` (singular) rather than `tests/integration/`
+(plural) sits outside every fixed path above — `integration lint` finds nothing there and stays
+silently green, no matter what `source` scans. Renaming `test/` to `tests/` at the package root is
+the fix; moving files under `source` changes nothing, because `integration lint` never reads
+`source` at all.
+
+The config file's own `exempt` entries follow the same split: an entry's `path` resolves relative
+to `source` for every gate except `integration lint`, whose suite subjects resolve relative to the
+package root the suite tiers derive from — the same root as the row above, not `source`.
 
 Two optional inputs refine a call: `languages` restricts the detected set explicitly, and
 `config` names a config file somewhere other than the package root.

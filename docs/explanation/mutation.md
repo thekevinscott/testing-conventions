@@ -7,7 +7,7 @@ description: Why mutation testing is the verification rung coverage can't reach,
 Coverage tells you which lines your tests *ran*. **Mutation testing** tells you whether your tests
 would *notice if those lines were wrong* — the question coverage can't answer. It's the
 verification rung above the [coverage floor](./coverage): the top of the
-[unit ladder](./#the-unit-ladder-exist-run-verify). The [workflow](../reference/workflow) runs it
+[unit ladder](./#the-unit-ladder-exist-→-run-→-verify). The [workflow](../reference/workflow) runs it
 on every pull request, diff-scoped to the changed lines.
 
 ## Coverage runs your code; mutation checks your tests
@@ -86,6 +86,7 @@ pull requests only, over the `<base>...HEAD` changed lines.
 
 ## The engines
 
+<!-- #region engines -->
 Each language wraps its standard engine; the tool drives the engine, and you provide the test
 runner that runs your own suite:
 
@@ -96,6 +97,7 @@ runner that runs your own suite:
 | Rust | [cargo-mutants](https://github.com/sourcefrog/cargo-mutants), provisioned on first use (a pinned `cargo install` into the tool's own cache) and run from there; concurrent invocations share one provisioning install rather than each racing to install their own | the cargo toolchain that builds and tests your crate |
 
 A run lists each survivor with its file, line, and mutation, and fails on any un-exempted one.
+<!-- #endregion engines -->
 
 ## Timeouts: a mutant timeout is inconclusive, a baseline timeout is fatal
 

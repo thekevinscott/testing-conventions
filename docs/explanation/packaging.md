@@ -19,12 +19,14 @@ manifest quietly started shipping `*_test.py` to every consumer.
 
 ## What it enforces
 
+<!-- #region enforces -->
 The check unpacks each distribution and scans for the language's test pattern:
 
 - **Python** — no `*_test.py` in the wheel (`.whl`) or sdist (`.tar.gz`).
 - **TypeScript** — no `*.test.*` in the `npm pack` tarball (`.tgz`).
 - **Rust** — no crate-root `tests/` directory in the `.crate`. Inline `#[cfg(test)]` units compile
   out of the consumer artifact for free; only the integration `tests/` needs a Cargo `exclude`.
+<!-- #endregion enforces -->
 
 ## How the workflow gets an artifact to scan
 

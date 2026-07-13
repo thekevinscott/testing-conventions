@@ -4,7 +4,7 @@ description: Why the coverage floor is a strict 100% with reasoned exemptions �
 
 # Coverage
 
-`unit coverage` is the second rung of the [unit ladder](./#the-unit-ladder-exist-run-verify): does
+`unit coverage` is the second rung of the [unit ladder](./#the-unit-ladder-exist-→-run-→-verify): does
 the test **run** the code? This page explains why the floor is a strict 100% rather than a
 comfortable 85, and how the same floor gates a pull request's changed lines.
 
@@ -23,9 +23,10 @@ or named with a reason, and the whole omission surface is auditable in one file.
 
 ## What it enforces
 
+<!-- #region enforces -->
 The floor applies to the **unit suite only** — test files are excluded from the denominator, and
 exempted files/lines are lifted from it. The exact keys and defaults are in the
-[configuration reference](../reference/config#coverage).
+[configuration reference](/reference/config#coverage).
 
 - **Python** — the suite runs under `coverage.py` with branch coverage on; the combined line +
   branch total meets `fail_under`.
@@ -38,9 +39,10 @@ exempted files/lines are lifted from it. The exact keys and defaults are in the
   sub-line metric with a harsher bar and no cross-language analog, `functions` mirrors
   TypeScript's, and `branch` instruments on a nightly toolchain, which the crate pins in its own
   `rust-toolchain.toml` (with `llvm-tools-preview`) — the coverage run reads that pin, in CI and
-  locally alike (the [config reference](../reference/config#coverage) has the exact keys). Keeping
+  locally alike (the [config reference](/reference/config#coverage) has the exact keys). Keeping
   them opt-in keeps Rust's default floor line-shaped like Python's — the
-  [parity](./#parity-over-cleverness) call, with the asymmetry named here.
+  [parity](/explanation/#parity-over-cleverness) call, with the asymmetry named here.
+<!-- #endregion enforces -->
 
 ## The changed-line floor
 

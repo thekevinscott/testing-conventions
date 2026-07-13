@@ -56,6 +56,19 @@ export default defineConfig({
           items: [
             { text: 'Workflow', link: '/reference/workflow' },
             { text: 'Configuration', link: '/reference/config' },
+            {
+              text: 'Checks',
+              link: '/reference/checks/',
+              items: [
+                { text: 'unit colocated-test', link: '/reference/checks/colocated-test' },
+                { text: 'unit lint', link: '/reference/checks/unit-lint' },
+                { text: 'unit coverage', link: '/reference/checks/unit-coverage' },
+                { text: 'unit mutation', link: '/reference/checks/mutation' },
+                { text: 'integration lint', link: '/reference/checks/integration-lint' },
+                { text: 'packaging', link: '/reference/checks/packaging' },
+                { text: 'e2e verify', link: '/reference/checks/e2e-verify' },
+              ],
+            },
           ],
         },
         {

@@ -7,7 +7,8 @@ description: The testing-conventions.toml schema — every coverage key and its 
 One TOML file is the single source of truth for what the rules require: coverage floors and
 reason-required exemptions. This page is the canonical record of its schema and every default.
 For the task, see [Configure the rules](../guide/configure); for the design, [Scoping and
-exemptions](../explanation/scoping).
+exemptions](../explanation/scoping); for the per-check view — every key and exemption rule that
+touches one check, on that check's page — see [Checks](./checks/).
 
 The file is named by the workflow's `config` input (default `testing-conventions.toml`, resolved
 per call — a [monorepo](../monorepo) passes one per package). The loader validates the schema:
@@ -70,7 +71,7 @@ A deliberate omission is a `[[<language>.exempt]]` entry:
 
 | Field | Meaning |
 | ----- | ------- |
-| `path` | The exempt file, **relative to the scanned `source`** of the call that loads this config — except for `integration lint`'s suite subjects, which resolve **relative to the [package root](../monorepo#everything-derives-from-the-package)** the tiers derive from (e.g. `tests/integration/billing_test.py`). Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
+| `path` | The exempt file, **relative to the scanned `source`** of the call that loads this config — except for `integration lint`'s suite subjects, which resolve **relative to the [package root](../monorepo#source-vs-the-package-root)** the tiers derive from (e.g. `tests/integration/billing_test.py`). Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
 | `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, `mutation`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`), or the suite-layout rule (`unknown-tier`). |
 | `lines` | The lines a `coverage` / `mutation` exemption covers. **Required** with `coverage` / `mutation`, **rejected** with any other rule. |
 | `reason` | Why the omission is deliberate. **Required**: an empty reason is rejected on load. |

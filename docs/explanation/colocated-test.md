@@ -4,7 +4,7 @@ description: Why every source file carries a colocated, matching-named unit test
 
 # Colocated tests
 
-`unit colocated-test` is the first rung of the [unit ladder](./#the-unit-ladder-exist-run-verify):
+`unit colocated-test` is the first rung of the [unit ladder](./#the-unit-ladder-exist-→-run-→-verify):
 does a test **exist**? This page explains why the standard pins *where* that test lives and *what
 it's named* — and why, on a pull request, a changed source must change its test with it.
 
@@ -21,12 +21,13 @@ source went away.
 
 ## What it enforces
 
+<!-- #region enforces -->
 The check is **tree-wide presence**: every source file under the scan root has its colocated,
 matching-named unit test.
 
 - **Python** — `foo.py` → `foo_test.py`, side by side. `__init__.py` is not special: an empty one
   is skipped (no logic), a non-empty one needs a test or an
-  [exemption](../guide/configure#exempt-a-file).
+  [exemption](/guide/configure#exempt-a-file).
 - **TypeScript** — `foo.ts` / `.tsx` / `.mts` / `.cts` → a colocated `foo.test.*` of the matching
   extension. Declaration files (`*.d.ts`) carry no runtime code and are ignored. A **type-only
   module** — one whose top level is exclusively `type` / `interface` / `import type` /
@@ -43,7 +44,8 @@ matching-named unit test.
   `examples/`, and `build.rs` are skipped.
 
 Empty or comment-only files are never subjects, and a file with a `colocated-test`
-[exemption](../guide/configure#exempt-a-file) is deliberately omitted, with a reason.
+[exemption](/guide/configure#exempt-a-file) is deliberately omitted, with a reason.
+<!-- #endregion enforces -->
 
 ## Co-change: a stale test is an invisible orphan
 
@@ -58,7 +60,7 @@ requests the check also runs **commit-scoped** over the `<base>...HEAD` diff (Py
 
 Changing a test on its own is always fine. Rust units are inline in the same file, so a sibling
 test can't go stale and the co-change check doesn't apply. A `co-change`
-[exemption](../guide/configure#exempt-a-file) lifts the check for a file, independently of the
+[exemption](/guide/configure#exempt-a-file) lifts the check for a file, independently of the
 presence exemption.
 
 Co-change and [changed-line coverage](./coverage#the-changed-line-floor) are complementary:

@@ -264,7 +264,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         uses: ./.github/actions/download-hermetic-cli
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: The rust/typescript integration-lint arms trip on a violation and pass when clean
         # The assertion (drive each published invocation, then pass/fail on its exit code) is a
         # tested check in the repo-only checks package (internals/checks, #321/#328); `uv run`
@@ -279,7 +279,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         uses: ./.github/actions/download-hermetic-cli
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -300,7 +300,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         uses: ./.github/actions/download-hermetic-cli
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - uses: dtolnay/rust-toolchain@stable
       # The published CLI provisions cargo-mutants itself now (#242); only the cargo
       # toolchain is needed here. Cache the provisioning dir so it's reused across runs.
@@ -334,7 +334,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         uses: ./.github/actions/download-hermetic-cli
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -354,7 +354,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must invoke `unit mutation`
         run: uv run --project internals/checks tc-checks mutation-wired
 
@@ -366,7 +366,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must invoke `unit lint`
         run: uv run --project internals/checks tc-checks isolation-wired
 
@@ -380,7 +380,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must consolidate the static gates into one `static` job
         run: uv run --project internals/checks tc-checks static-gates-wired
 
@@ -395,7 +395,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: move-major-tag.yml is gated and release.yml moves no tag inline
         run: uv run --project internals/checks tc-checks rolling-release-wired
 
@@ -410,7 +410,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: move-major-tag.yml gates @v0 on the pre-move verification
         run: uv run --project internals/checks tc-checks verify-release-wired
 
@@ -424,7 +424,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: dogfood-github-helpers.yml must invoke all five Python arms
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
@@ -441,7 +441,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must offer a hermetic build-from-HEAD mode
         run: uv run --project internals/checks tc-checks hermetic-wired
 
@@ -454,7 +454,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - id: detect
         uses: ./.github/actions/detect
         with:
@@ -489,7 +489,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         uses: ./.github/actions/download-hermetic-cli
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: A crate with an out-of-module unit-test call must fail `unit lint`
         # The assertion (drive the published `unit lint`, then pass/fail on its non-zero exit) is a
         # tested check in the repo-only checks package (internals/checks, #321/#328); `uv run`
@@ -534,7 +534,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         uses: ./.github/actions/download-hermetic-cli
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: A wheel that ships a `*_test.py` must fail `packaging`
         # The assertion (drive the published `packaging`, then pass/fail on its non-zero exit) is a
         # tested check in the repo-only checks package (internals/checks, #321/#328); `uv run`
@@ -553,7 +553,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must fan unit-coverage over rust
         run: uv run --project internals/checks tc-checks coverage-rust-wired
 
@@ -584,7 +584,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         uses: ./.github/actions/download-hermetic-cli
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
@@ -605,7 +605,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must run the --base checks
         run: uv run --project internals/checks tc-checks diff-scoped-wired
 
@@ -618,7 +618,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must wire opt-in `e2e verify`
         run: uv run --project internals/checks tc-checks e2e-verify-wired
 
@@ -634,7 +634,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: e2e-verify's checkout must pin the PR head commit
         run: uv run --project internals/checks tc-checks e2e-verify-checks-out-pr-head
 
@@ -658,7 +658,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: the e2e-verify job must scope, diff, and append the extra freshness roots
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the
         # `tc-checks` group's subcommand, from the repo root so the check's default
@@ -691,7 +691,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must use the detect action
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
@@ -702,7 +702,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: packaging must gate on detect's packaging_dist output
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
@@ -713,7 +713,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: e2e-verify must gate on detect's e2e_attestation output
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
@@ -733,7 +733,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must wire a build_command step
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
@@ -753,7 +753,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must build the distribution before scanning
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
@@ -775,7 +775,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must wire a `gates` allowlist
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
@@ -848,7 +848,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must wire a `rust_toolchain` setup step
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
@@ -916,7 +916,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must fan colocated-test over rust
         run: uv run --project internals/checks tc-checks colocated-rust-wired
 
@@ -933,7 +933,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         uses: ./.github/actions/download-hermetic-cli
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: A bodied fn with no inline test module must fail `unit colocated-test`
         # The assertion (drive the hermetic `unit colocated-test --language rust`, then pass/fail on
         # its non-zero exit) is a tested check in the repo-only checks package (internals/checks,
@@ -954,7 +954,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - id: detect
         uses: ./.github/actions/detect
         with:
@@ -976,7 +976,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - id: detect
         uses: ./.github/actions/detect
         with:
@@ -1013,7 +1013,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: The coverage jobs must reference needs.detect.outputs.package_root
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
@@ -1064,7 +1064,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml's packaging job must reference package_root
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
@@ -1097,7 +1097,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Download the CLI built from HEAD (hermetic, #356)
         uses: ./.github/actions/download-hermetic-cli
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: A per-package dist/ shipping a test file must fail packaging
         # The assertion (drive the published `packaging` on the per-package tarball, then pass/fail
         # on its non-zero exit) is a tested check in the repo-only checks package (internals/checks,
@@ -1117,7 +1117,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml's mutation job must reference package_root
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
@@ -1183,7 +1183,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must provision Python with uv alone
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.
@@ -1201,7 +1201,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: every direct-drive red-path job must download the hermetic CLI
         # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
         # group's subcommand, from the repo root so the check's default workflow path resolves.

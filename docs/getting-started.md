@@ -95,5 +95,9 @@ refreshes the block; everything outside its markers stays yours. `install` reads
 ## Next
 
 - A repository with several packages adopts per package — see [Adopt on a monorepo](./monorepo).
+  If a gate isn't finding its subjects, read [`source` vs. the package
+  root](./monorepo#source-vs-the-package-root) and the [gate-by-gate discovery
+  table](./monorepo#what-each-gate-scans-and-from-where) first — most gates read fixed paths at
+  the derived package root, not wherever `source` happens to point.
 - [The testing model](./explanation/) explains what each check enforces and why.
 - [Configure the rules](./guide/configure) tunes a floor or exempts a file, with a reason.

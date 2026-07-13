@@ -111,6 +111,8 @@ Inside CI jobs the Python toolchain comes from **uv, and this repo's own mutatio
 
 The consumer-path jobs are the deliberate exception, and only for the CLI binary they validate: `dogfood-github-helpers.yml` still runs `npx testing-conventions` (the ergonomic a consumer gets), and `python.yml` still `pip install`s the built `dist/*.whl` to load the pytest plugin the way an installed consumer does. Even there the *adapter* the mutation arm spawns resolves from source via `PYTHONPATH`, because its version skew is a separate defect the published-binary exception was never meant to cover. The direct-drive red-path self-test jobs route through `hermetic-cli` rather than ad-hoc `npx` (#379), and the reusable workflow's own Python provisioning is uv-only (#399).
 
+Every job that provisions uv pins `astral-sh/setup-uv@v7`, whose bundled Node 24 runtime runs the action natively on the GitHub-hosted runner.
+
 ## Hermetic mode: building detect + the CLI from HEAD (#356)
 
 Every job in the reusable workflow resolves two mutable external references at run time: the

@@ -26,8 +26,9 @@ structure prevents — it's how a tutorial silently grows into a reference.
 | **Explanation** | "Why is it this way" — understanding | Discursive prose; context and trade-offs | `explanation/` |
 
 The four modes are equally *important*, not equally *sized* — and for this tool the honest
-proportions are: two tutorials, one guide, two reference pages, and an Explanation section that
-carries the intellectual weight (one page per check).
+proportions are: two tutorials, one guide, a Reference section that carries the lookup weight
+(the workflow, the config schema, and one page per check), and an Explanation section that
+carries the intellectual weight.
 
 ### What each mode must *not* do
 
@@ -37,18 +38,39 @@ carries the intellectual weight (one page per check).
 - **How-to** — task-focused steps, not a lecture. State the *why* in one line and link to an
   Explanation page; link to Reference for exact keys and schemas. A guide that spends more words
   explaining the concept than performing the task is really an Explanation page.
-- **Reference** — describe what *is*, completely and without teaching. No tutorials, no opinions, no
-  motivation beyond a one-line "why" where it aids lookup. It must be *correct first*: a stale
-  reference is worse than none. Issue numbers and history stay in `CHANGELOG.md`, never here.
+- **Reference** — describe what *is*, completely and without teaching. No tutorials, no opinions.
+  It must be *correct first*: a stale reference is worse than none. **One sanctioned hybrid:** each
+  check's page under `reference/checks/` opens with a "Why this check exists" section — the
+  lint-rule-page genre (ESLint, Ruff, Clippy): a reader landing on a check's page gets its complete
+  picture, motivation included. An issue number appears only where the design is incomprehensible
+  without its history, never as decoration; everything else historical stays in `CHANGELOG.md`.
 - **Explanation** — the "why". Concepts, design rationale, trade-offs, the bigger picture. No
-  step-by-step instructions; link to the guide and reference instead. **One sanctioned hybrid:**
-  each check's page carries a compact, factual "What it enforces" section (per-language behavior)
-  before the why — the checks have no separate per-command reference, so the precision facts live
-  on the check's own page, kept dry and clearly sectioned.
+  step-by-step instructions; link to the guide and reference instead. Each check essay keeps its
+  compact, factual "What it enforces" section — authored here inside `#region` markers and
+  included into the check's reference page, so the precision facts are written once and rendered
+  in both places.
 
 When a page wants to do two jobs, split it and cross-link. The mutation pages are the worked
 example: [Explanation — Mutation](./explanation/mutation) carries the concept and the engines;
 [Configure the rules](./guide/configure) carries the exemption mechanics.
+
+## Duplication is deliberate
+
+A reader arrives with a perspective — following a tutorial, looking up a fact, seeking the why —
+and wherever they land must be sufficient on its own. So the same fact appears on every page whose
+reader needs it: a check's coverage keys live on the check's page *and* in the config schema; its
+motivation opens the check's page *and* fills its essay. Exhaustive and duplicative beats
+non-duplicative. Two disciplines keep the copies honest:
+
+- **Single-source identical text.** A fragment that would be word-for-word identical in two places
+  is authored once inside `<!-- #region name -->` / `<!-- #endregion name -->` markers and pulled
+  into the other page with `<!--@include: <path>#name-->` — the pattern the README rules list
+  already uses. Links inside a shared region are root-absolute (`/reference/config#coverage`,
+  never `../reference/config`), so they resolve from every including page. Restate by hand only
+  where the two renderings genuinely differ in voice or depth.
+- **Sweep every statement.** A PR that changes a check's behavior updates every place that states
+  it: the check's reference page, its essay, the workflow table, the config schema. The docs land
+  in the same PR as the change, so the sweep is part of writing them, not a follow-up.
 
 ## Open with the why
 
@@ -67,12 +89,16 @@ them in sync with `.vitepress/config.ts`.
 - **How-to Guides** (`/guide/`) — `configure.md`, the one guide: the reader's single recurring task
   is responding to a red check (relax a floor, exempt a file or line, with a reason).
 - **Reference** (`/reference/`) — `workflow.md` (every input, every check and its run condition,
-  the `@v0` contract) and `config.md` (the TOML schema, every default, the shared test configs).
-  Every public fact lives on exactly one of these two pages; a fact stated anywhere else links
-  here.
-- **Explanation** (`/explanation/`) — `index.md` (the testing model) and one page per check:
+  the `@v0` contract), `config.md` (the TOML schema, every default, the shared test configs), and
+  `checks/` — one page per check, each the complete record of that check: motivation,
+  per-language behavior, run conditions, configuration surface, exemption rule names. A check's
+  page is the single starting point for that check; the same facts also appear wherever another
+  page's reader needs them (see **Duplication is deliberate**).
+- **Explanation** (`/explanation/`) — `index.md` (the testing model) and the essays:
   `colocated-test`, `coverage`, `mutation`, `isolation`, `packaging`, `e2e`, plus `scoping` (the
-  scoping/exemption design). This is where the docs invest.
+  scoping/exemption design). Essays map to concepts, not checks 1:1 — `isolation` covers both
+  lint checks, because they enforce one boundary from opposite sides; the two check pages under
+  `reference/checks/` each link to it.
 
 A new page picks its directory by mode, not by topic — and the default for a new page is *no new
 page*: fewer, denser pages beat a page per feature.

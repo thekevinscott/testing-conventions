@@ -55,7 +55,9 @@ exactly what the other checks already demand: fast, deterministic, isolated unit
 
 ## The checks
 
-Every check is a CI job that fails the build on a violation, with the offending files in the log:
+Every check is a CI job that fails the build on a violation, with the offending files in the log.
+Each check's complete factual record — behavior, run conditions, configuration surface — lives on
+its own page under [Reference — Checks](/reference/checks/); the pages below carry the why:
 
 - [Colocated tests](./colocated-test) — every source file has a colocated, matching-named unit
   test, and a changed source changes its test with it.

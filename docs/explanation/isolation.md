@@ -18,6 +18,7 @@ kinds of test:
 
 ## The first-party/external line
 
+<!-- #region boundary -->
 Both checks turn on the same distinction, drawn deterministically with no module resolution:
 
 | Specifier | Origin | Example |
@@ -31,6 +32,7 @@ Both checks turn on the same distinction, drawn deterministically with no module
 the filesystem, the clock, randomness, the network, subprocess. An un-mocked external call is what
 makes a test slow, flaky, or a charge on someone's bill, so the boundary is drawn there. Pure
 stdlib (`json`, `dataclasses`, `std::collections`) is nobody's collaborator.
+<!-- #endregion boundary -->
 
 ## Where each check finds its subjects
 
@@ -47,6 +49,7 @@ manifest — loose scripts — is scanned at `source` directly.
 
 ## What `unit lint` flags
 
+<!-- #region unit-lint-flags -->
 The unit suite's side: every collaborator is mocked.
 
 - **TypeScript** — `unmocked-collaborator`: any runtime import a unit test doesn't `vi.mock()`.
@@ -80,9 +83,11 @@ The unit suite's side: every collaborator is mocked.
   *non-test* builds, so it is production code and its out-of-module calls are left alone. The scan
   reads the crate's own unit source, skipping `tests/` integration crates and the `target/` build
   directory, so a locally-built crate is scanned the same as a fresh checkout.
+<!-- #endregion unit-lint-flags -->
 
 ## What `integration lint` flags
 
+<!-- #region integration-lint-flags -->
 The integration suite's side: first-party code runs for real.
 
 - **TypeScript** — `no-first-party-mock`: a `vi.mock()` / `vi.doMock()` of a first-party module.
@@ -96,6 +101,7 @@ The integration suite's side: first-party code runs for real.
   explicitly instead of patching a module global).
 - **Rust** — `no-first-party-double`: a `#[double]` (mockall_double) of the crate under test or a
   `path` dependency. Only external crates and `std` may be doubled.
+<!-- #endregion integration-lint-flags -->
 
 A non-literal target (`vi.mock(name)`, `patch(target)`) can't be classified deterministically and
 is left alone — the checks are deterministic first.

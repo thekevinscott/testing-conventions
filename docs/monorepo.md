@@ -68,6 +68,14 @@ directory, because `source` is the only scoping mechanism
   scans cover `source` and leave `<package root>/tests/` to the suites — one call runs every tier
   of the package.
 
+> **Suite discovery is derived, never recursive.** `source` is scanned recursively for *sources*
+> and colocated unit tests, but `integration lint` doesn't recursively search that scan for suite
+> files — it walks up from `source` to the package root and looks only at the two fixed paths
+> `<package root>/tests/integration/` and `<package root>/tests/e2e/` (plural **`tests`**). A
+> package whose suites live at `test/integration/` (singular) sits outside those paths entirely —
+> the check finds nothing there and stays silently green, whatever directory `source` points at.
+> Renaming `test/` to `tests/` at the package root is the fix, not moving files under `source`.
+
 Two optional inputs refine a call: `languages` restricts the detected set explicitly, and
 `config` names a config file somewhere other than the package root.
 

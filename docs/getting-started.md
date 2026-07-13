@@ -95,5 +95,9 @@ refreshes the block; everything outside its markers stays yours. `install` reads
 ## Next
 
 - A repository with several packages adopts per package — see [Adopt on a monorepo](./monorepo).
+  If a package's integration or e2e suite isn't showing up in any check, read
+  [monorepo suite discovery](./monorepo#everything-derives-from-the-package) first — discovery
+  looks at fixed, plural-named paths (`tests/integration/`, `tests/e2e/`), not wherever `source`
+  happens to point.
 - [The testing model](./explanation/) explains what each check enforces and why.
 - [Configure the rules](./guide/configure) tunes a floor or exempts a file, with a reason.

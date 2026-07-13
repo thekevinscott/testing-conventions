@@ -241,6 +241,37 @@ fn a_typescript_barrel_is_an_orphan_until_explicitly_exempted() {
 }
 
 #[test]
+fn a_type_only_typescript_module_is_not_a_subject() {
+    // A `.ts` module of only type/interface/`import type`/`export type` declarations
+    // compiles to zero runtime JS — no behavior to unit-test — so it is not a
+    // colocated-test subject, exactly like a `.d.ts` declaration file. The fixture's
+    // `shape.ts` / `aliases.ts` are type-only and untested; `widget.ts` is paired.
+    assert!(
+        relative_orphans(&fixture("typescript/type_only"), Language::TypeScript).is_empty(),
+        "type-only modules are not subjects and need no colocated test or exemption"
+    );
+    assert_eq!(
+        unit_colocated_test_exit("typescript/type_only", "typescript"),
+        0
+    );
+}
+
+#[test]
+fn a_typescript_module_mixing_a_type_and_runtime_code_stays_a_subject() {
+    // The boundary: `mixed.ts` pairs a `type` with a runtime `const`, so it has
+    // behavior and remains an orphan until it gets a colocated test. Guards the
+    // type-only recognition against over-skipping a module that ships runtime code.
+    assert_eq!(
+        relative_orphans(&fixture("typescript/type_only_mixed"), Language::TypeScript),
+        vec!["mixed.ts"],
+    );
+    assert_eq!(
+        unit_colocated_test_exit("typescript/type_only_mixed", "typescript"),
+        1
+    );
+}
+
+#[test]
 fn a_stale_exempt_entry_is_an_error() {
     // The fixture exempts `ghost.py`, which doesn't exist — config can't rot.
     assert!(

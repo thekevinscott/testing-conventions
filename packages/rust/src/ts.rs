@@ -16,7 +16,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use oxc::allocator::Allocator;
-use oxc::ast::ast::{Argument, CallExpression, Expression, ImportDeclaration, ImportOrExportKind};
+use oxc::ast::ast::{
+    Argument, CallExpression, Declaration, Expression, ImportDeclaration, ImportOrExportKind,
+    Statement,
+};
 use oxc::ast_visit::{walk, Visit};
 use oxc::parser::Parser;
 use oxc::span::{SourceType, Span};
@@ -489,6 +492,59 @@ fn line_of(source: &str, offset: u32) -> usize {
         + 1
 }
 
+/// `true` when `source` (a module at `path`) is **type-only** — its top level is
+/// exclusively type declarations, so it compiles to zero runtime JavaScript and has no
+/// behavior to unit-test, exactly like a `.d.ts` file.
+///
+/// The colocated-test presence rule reads this to skip such a module as a non-subject
+/// ([`crate::colocated_test`]). A statement counts as type-only when it is a `type` alias, an
+/// `interface`, an `import type` / `export type`, or an `export` whose declaration is itself a
+/// type — an `enum` or `namespace` emits runtime code and does **not** qualify, and any runtime
+/// statement (a `const`, a function, a class, a value `import`/`export`, a bare expression)
+/// makes the module a subject. An empty module is not type-only — an empty/comment-only file is
+/// already a non-subject on its own ([`crate::colocated_test::Language::has_code`]), so this
+/// answers only for a module that actually declares something.
+///
+/// A file that fails to parse is conservatively **not** type-only: the presence rule then keeps
+/// it as a subject rather than skip a module it couldn't read.
+pub fn is_type_only_module(source: &str, path: &Path) -> bool {
+    let allocator = Allocator::default();
+    let Ok(source_type) = SourceType::from_path(path) else {
+        return false;
+    };
+    let ret = Parser::new(&allocator, source, source_type).parse();
+    if ret.panicked || !ret.diagnostics.is_empty() {
+        return false;
+    }
+    let body = &ret.program.body;
+    !body.is_empty() && body.iter().all(is_type_only_statement)
+}
+
+/// `true` when a top-level statement contributes no runtime code — see [`is_type_only_module`].
+fn is_type_only_statement(statement: &Statement) -> bool {
+    match statement {
+        Statement::TSTypeAliasDeclaration(_) | Statement::TSInterfaceDeclaration(_) => true,
+        Statement::ImportDeclaration(decl) => decl.import_kind.is_type(),
+        Statement::ExportAllDeclaration(decl) => decl.export_kind.is_type(),
+        Statement::ExportNamedDeclaration(decl) => {
+            // `export type { X }` (kind Type, no declaration), or an inline `export type Foo` /
+            // `export interface Foo` (a type declaration). `export { value }` / `export const …`
+            // is runtime.
+            if decl.export_kind.is_type() {
+                return true;
+            }
+            match &decl.declaration {
+                Some(Declaration::TSTypeAliasDeclaration(_))
+                | Some(Declaration::TSInterfaceDeclaration(_)) => true,
+                Some(_) => false,
+                // A specifier-only `export { … }` with no `type` kind re-exports runtime bindings.
+                None => false,
+            }
+        }
+        _ => false,
+    }
+}
+
 /// Recursively collect every TypeScript test file under `dir` into `out`.
 fn collect_ts_test_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries =
@@ -566,6 +622,55 @@ mod tests {
         );
         // `vitest` is the runner; `./widget.js` is the unit under test (extension ignored).
         assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    /// Whether `source` (named `foo.ts`) is a type-only module.
+    fn type_only(source: &str) -> bool {
+        is_type_only_module(source, Path::new("foo.ts"))
+    }
+
+    #[test]
+    fn type_only_recognizes_a_pure_type_module() {
+        assert!(type_only(
+            "export interface Shape { kind: string }\nexport type Id = string;\n"
+        ));
+        assert!(type_only(
+            "import type { Shape } from './shape';\nexport type Wrapped = Shape;\n"
+        ));
+        assert!(type_only("export type { Id } from './shape';\n"));
+        assert!(type_only(
+            "type Local = number;\ninterface Bare { x: Local }\n"
+        ));
+        assert!(type_only("export type * from './shapes';\n"));
+    }
+
+    #[test]
+    fn type_only_rejects_any_runtime_construct() {
+        // A runtime `const` / function / class makes the module a subject.
+        assert!(!type_only(
+            "export type T = number;\nexport const version: T = 1;\n"
+        ));
+        assert!(!type_only(
+            "export interface I {}\nexport function make(): I { return {}; }\n"
+        ));
+        // A value `import` / `export` is runtime, even next to a type.
+        assert!(!type_only(
+            "import { x } from './x';\nexport type T = typeof x;\n"
+        ));
+        assert!(!type_only("export * from './widget';\n"));
+        assert!(!type_only("export { thing } from './thing';\n"));
+        // `enum` and `namespace` emit runtime code, so they are not type-only.
+        assert!(!type_only("export enum Color { Red, Green }\n"));
+        assert!(!type_only("export namespace N { export const x = 1; }\n"));
+    }
+
+    #[test]
+    fn type_only_is_false_for_empty_or_unparsable() {
+        // An empty/comment-only file is a non-subject on its own account, not via this path.
+        assert!(!type_only(""));
+        assert!(!type_only("// just a comment\n"));
+        // A parse failure is conservatively not type-only — the module stays a subject.
+        assert!(!type_only("export type T = ;;;\nconst {{{ = \n"));
     }
 
     #[test]

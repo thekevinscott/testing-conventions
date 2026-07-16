@@ -21,8 +21,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use common::ts_adapter;
-use testing_conventions::mutation::measure_typescript;
+use common::{expect_tested, ts_adapter};
+use testing_conventions::mutation::{measure_typescript, Measurement};
 
 /// A baseline whose `add` is fully pinned by its test — no survivors.
 const BASELINE: &str = "export function add(a: number, b: number): number {\n  return a + b;\n}\n";
@@ -147,17 +147,23 @@ fn base_scopes_the_run_to_the_changed_lines() {
     repo.write("index.test.ts", WITH_SURVIVOR_TEST);
     repo.commit("add an assertion-light isPositive");
 
-    let survivors = measure_typescript(
-        &repo.0,
-        &[],
-        &std::collections::BTreeMap::new(),
-        Some(&base),
-        &ts_adapter(),
-    )
-    .expect("stryker runs");
+    let (count, survivors) = expect_tested(
+        measure_typescript(
+            &repo.0,
+            &[],
+            &std::collections::BTreeMap::new(),
+            Some(&base),
+            &ts_adapter(),
+        )
+        .expect("stryker runs"),
+    );
     // The added `isPositive` (lines 5-7) is in the diff and assertion-light, so its
     // mutants survive; `add` (lines 1-3) is unchanged, so it's out of scope and never
     // mutated.
+    assert!(
+        count >= survivors.len(),
+        "every survivor was judged, so the count covers them"
+    );
     assert!(
         !survivors.is_empty(),
         "the added weak function should leave a survivor on the changed lines"
@@ -186,14 +192,16 @@ fn base_within_a_src_scan_path_resolves_upward_imports() {
     repo.write("src/index.test.ts", UPWARD_WITH_SURVIVOR_TEST);
     repo.commit("add an assertion-light isPositive");
 
-    let survivors = measure_typescript(
-        &repo.0.join("src"),
-        &[],
-        &std::collections::BTreeMap::new(),
-        Some(&base),
-        &ts_adapter(),
-    )
-    .expect("stryker runs");
+    let (_, survivors) = expect_tested(
+        measure_typescript(
+            &repo.0.join("src"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            Some(&base),
+            &ts_adapter(),
+        )
+        .expect("stryker runs"),
+    );
     // The added `isPositive` (lines 8-10) is in the diff and assertion-light, so its mutants
     // survive; the unchanged `add` and `VERSION` are out of scope and never mutated.
     assert!(
@@ -209,9 +217,10 @@ fn base_within_a_src_scan_path_resolves_upward_imports() {
 }
 
 #[test]
-fn base_with_no_mutatable_changed_files_skips_the_run() {
+fn base_with_no_mutatable_changed_files_reports_the_engine_not_run() {
     // The only change on the diff is to a test file, which is never mutated — so the
-    // diff scopes to nothing and the run is skipped entirely (no survivors, no Stryker).
+    // diff scopes to nothing, the run is skipped entirely (no Stryker), and the
+    // measurement says so, telling this pass apart from an all-killed run.
     let repo = TempRepo::new("notests");
     repo.write("index.ts", BASELINE);
     repo.write("index.test.ts", BASELINE_TEST);
@@ -223,7 +232,7 @@ fn base_with_no_mutatable_changed_files_skips_the_run() {
     );
     repo.commit("tweak only the test file");
 
-    let survivors = measure_typescript(
+    let measurement = measure_typescript(
         &repo.0,
         &[],
         &std::collections::BTreeMap::new(),
@@ -231,8 +240,9 @@ fn base_with_no_mutatable_changed_files_skips_the_run() {
         &ts_adapter(),
     )
     .expect("no run needed");
-    assert!(
-        survivors.is_empty(),
-        "a test-file-only diff has nothing mutatable; got {survivors:?}"
+    assert_eq!(
+        measurement,
+        Measurement::EngineNotRun,
+        "a test-file-only diff has nothing mutatable, so the engine never ran"
     );
 }

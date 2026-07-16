@@ -17,6 +17,17 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use testing_conventions::mutation::{Measurement, Survivor};
+
+/// The `(count, survivors)` of a [`Measurement`] whose engine ran — panics on
+/// [`Measurement::EngineNotRun`], failing the calling test.
+pub fn expect_tested(measurement: Measurement) -> (usize, Vec<Survivor>) {
+    match measurement {
+        Measurement::Tested { count, survivors } => (count, survivors),
+        Measurement::EngineNotRun => panic!("the engine must run for this measurement"),
+    }
+}
+
 /// The line a diff-scoped `unit mutation` run prints when the changed lines hold nothing
 /// mutatable — the engine-skipped pass, distinct from the all-killed success.
 pub const ENGINE_NOT_RUN: &str = "unit mutation: no mutatable changed lines — engine not run";

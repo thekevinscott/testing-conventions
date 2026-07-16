@@ -35,6 +35,23 @@ pub struct Survivor {
     pub description: String,
 }
 
+/// One mutation measurement: whether the engine ran, and what it found. Telling
+/// [`Measurement::EngineNotRun`] from an all-killed [`Measurement::Tested`] keeps a
+/// vacuous pass visible — a diff-scoped run that never built a mutant reads differently
+/// from one that tested mutants and caught every one, and a counted pass carries its
+/// own evidence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Measurement {
+    /// The `--base` diff carried no mutatable changed lines; the engine never ran.
+    EngineNotRun,
+    /// The engine ran: `count` viable, conclusive mutants judged (caught or missed),
+    /// `survivors` the un-exempted surviving ones.
+    Tested {
+        count: usize,
+        survivors: Vec<Survivor>,
+    },
+}
+
 /// The `(file, line)` locations an engine produced a viable mutant for — the input the
 /// line-scoped guard reads to tell an over-exemption (a listed line whose mutants
 /// were all caught) from an out-of-scope line (no mutant there).
@@ -147,6 +164,17 @@ pub fn mutated_lines(report: &MutantsReport) -> MutatedLines {
         .collect()
 }
 
+/// The number of viable, conclusive mutants in a cargo-mutants report — `CaughtMutant`
+/// plus `MissedMutant`, the same set [`mutated_lines`] reads. A passing run states this
+/// count as its evidence.
+fn conclusive_count(report: &MutantsReport) -> usize {
+    report
+        .outcomes
+        .iter()
+        .filter(|outcome| outcome.summary == "CaughtMutant" || outcome.summary == "MissedMutant")
+        .count()
+}
+
 /// The shared whole-file evaluation core: drop the survivors lifted by a file-level
 /// `mutation` exemption (a file-path match), leaving the rule's findings. The
 /// line-scoped path ([`evaluate_scoped`]) generalizes this to per-line exemptions with
@@ -250,6 +278,16 @@ impl MutantStatus {
                 | MutantStatus::Timeout
         )
     }
+
+    /// Whether the suite **judged** this mutant (`Survived` / `Killed` / `NoCoverage`) —
+    /// the conclusive set a passing run counts as its evidence. A `Timeout` ran but
+    /// judged nothing; `CompileError` / `RuntimeError` never produced a viable mutant.
+    fn is_conclusive(self) -> bool {
+        matches!(
+            self,
+            MutantStatus::Survived | MutantStatus::Killed | MutantStatus::NoCoverage
+        )
+    }
 }
 
 /// One mutant in the normalized result set: the engine-agnostic shape every language
@@ -318,6 +356,15 @@ fn normalized_mutated_lines(mutants: &[NormalizedMutant]) -> MutatedLines {
         .collect()
 }
 
+/// The number of conclusive mutants in a normalized result set — the count a passing
+/// run states as its evidence, parity with [`conclusive_count`].
+fn normalized_conclusive_count(mutants: &[NormalizedMutant]) -> usize {
+    mutants
+        .iter()
+        .filter(|mutant| mutant.status.is_conclusive())
+        .count()
+}
+
 /// A one-line description for a normalized mutant: the mutator name, plus the replacement
 /// (flattened + capped via [`one_line`]) when the engine reported one.
 fn describe_normalized(mutant: &NormalizedMutant) -> String {
@@ -327,7 +374,9 @@ fn describe_normalized(mutant: &NormalizedMutant) -> String {
     }
 }
 
-/// Run cargo-mutants over the crate at `root` and return its un-exempted survivors.
+/// Run cargo-mutants over the crate at `root` and return the [`Measurement`]: the
+/// un-exempted survivors plus the conclusive-mutant count, or
+/// [`Measurement::EngineNotRun`] for a `base` diff with no changed lines under the crate.
 ///
 /// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested (via
 /// cargo-mutants' `--in-diff`); without it, the whole crate. `exempt` is the file-level
@@ -340,13 +389,13 @@ pub fn measure_rust(
     exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
     base: Option<&str>,
     features: &[String],
-) -> Result<Vec<Survivor>> {
+) -> Result<Measurement> {
     let out = MutantsOut::new();
     let diff = match base {
         // An empty diff (no changed lines under the crate — a PR that doesn't touch it)
-        // means nothing to mutate: no survivors, no cargo-mutants run.
+        // means nothing to mutate: the engine is skipped, and the caller reports it.
         Some(base) => match write_base_diff(root, base, &out)? {
-            None => return Ok(Vec::new()),
+            None => return Ok(Measurement::EngineNotRun),
             Some(path) => Some(path),
         },
         None => None,
@@ -356,18 +405,28 @@ pub fn measure_rust(
     let outcomes = out.0.join("mutants.out").join("outcomes.json");
     // cargo-mutants writes no `outcomes.json` when a run produces no mutants (e.g. an
     // `--in-diff` that matches none of the crate's lines). `run_cargo_mutants` already
-    // bailed on a fatal exit, so a missing report here is "no mutants" → no survivors.
+    // bailed on a fatal exit, so a missing report here is an engine run that judged
+    // zero mutants.
     let json = match std::fs::read_to_string(&outcomes) {
         Ok(json) => json,
-        Err(_) => return Ok(Vec::new()),
+        Err(_) => {
+            return Ok(Measurement::Tested {
+                count: 0,
+                survivors: Vec::new(),
+            })
+        }
     };
     let report = parse_mutants_report(&json)?;
-    evaluate_scoped(
+    let survivors = evaluate_scoped(
         cargo_mutants_survivors(&report),
         &mutated_lines(&report),
         exempt,
         exempt_lines,
-    )
+    )?;
+    Ok(Measurement::Tested {
+        count: conclusive_count(&report),
+        survivors,
+    })
 }
 
 /// Collapse a (possibly multi-line) replacement to a single trimmed line, capped, so a
@@ -382,9 +441,8 @@ fn one_line(replacement: &str) -> String {
     }
 }
 
-/// Run the bundled TypeScript mutation adapter over the scan path at `root` and return its
-/// un-exempted survivors — the TS arm of the mutation rule, parity with
-/// [`measure_rust`].
+/// Run the bundled TypeScript mutation adapter over the scan path at `root` and return
+/// the [`Measurement`] — the TS arm of the mutation rule, parity with [`measure_rust`].
 ///
 /// The consumer installs **nothing** Stryker-related: the npm package ships a Node
 /// adapter that drives Stryker through its own Node API and emits the engine-agnostic
@@ -416,16 +474,17 @@ pub fn measure_typescript(
     exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
     base: Option<&str>,
     adapter: &Path,
-) -> Result<Vec<Survivor>> {
+) -> Result<Measurement> {
     let package_root =
         crate::tiers::package_root(root, "package.json").unwrap_or_else(|| root.to_path_buf());
     let prefix = scan_prefix(root, &package_root);
     let mutate = match base {
         Some(base) => {
             let ranges = mutate_ranges(root, base)?;
-            // Nothing mutatable changed on the diff: no run, no survivors.
+            // Nothing mutatable changed on the diff: the engine is skipped, and the
+            // caller reports it.
             if ranges.is_empty() {
-                return Ok(Vec::new());
+                return Ok(Measurement::EngineNotRun);
             }
             Some(prefix_mutate_specs(ranges, prefix.as_deref()))
         }
@@ -433,7 +492,11 @@ pub fn measure_typescript(
     };
     let json = run_ts_adapter(&package_root, adapter, mutate.as_deref(), prefix.as_deref())?;
     let mutants = to_scan_relative(parse_normalized_results(&json)?, prefix.as_deref());
-    evaluate_normalized(&mutants, exempt, exempt_lines)
+    let survivors = evaluate_normalized(&mutants, exempt, exempt_lines)?;
+    Ok(Measurement::Tested {
+        count: normalized_conclusive_count(&mutants),
+        survivors,
+    })
 }
 
 /// The scan path relative to its package root, as a `/`-joined string — the prefix every
@@ -611,8 +674,8 @@ fn contiguous_runs(lines: &BTreeSet<u64>) -> Vec<(u64, u64)> {
     runs
 }
 
-/// Run the bundled Python mutation adapter over the project at `root` and return its
-/// un-exempted survivors — the Python arm of the mutation rule, parity with
+/// Run the bundled Python mutation adapter over the project at `root` and return the
+/// [`Measurement`] — the Python arm of the mutation rule, parity with
 /// [`measure_rust`] and [`measure_typescript`].
 ///
 /// The tool drives the engine: the wheel ships a Python adapter that runs cosmic-ray through
@@ -633,7 +696,7 @@ pub fn measure_python(
     exempt: &[String],
     exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
     base: Option<&str>,
-) -> Result<Vec<Survivor>> {
+) -> Result<Measurement> {
     let changed = match base {
         Some(base) => Some(crate::patch_coverage::changed_lines(root, base)?),
         None => None,
@@ -646,9 +709,10 @@ pub fn measure_python(
                 .filter(|file| is_mutatable_py(file))
                 .cloned()
                 .collect();
-            // Nothing mutatable changed on the diff: no run, no survivors.
+            // Nothing mutatable changed on the diff: the engine is skipped, and the
+            // caller reports it.
             if modules.is_empty() {
-                return Ok(Vec::new());
+                return Ok(Measurement::EngineNotRun);
             }
             modules
         }
@@ -663,7 +727,11 @@ pub fn measure_python(
                 .is_some_and(|lines| lines.contains(&u64::from(mutant.line)))
         });
     }
-    evaluate_normalized(&mutants, exempt, exempt_lines)
+    let survivors = evaluate_normalized(&mutants, exempt, exempt_lines)?;
+    Ok(Measurement::Tested {
+        count: normalized_conclusive_count(&mutants),
+        survivors,
+    })
 }
 
 /// Run the bundled Python mutation adapter over `root` and return the normalized-results JSON
@@ -1049,6 +1117,15 @@ mod tests {
     }
 
     #[test]
+    fn normalized_conclusive_count_is_survived_killed_and_nocoverage() {
+        // Survived (2) + NoCoverage (5) + Killed (9) were judged; Timeout ran but judged
+        // nothing, and CompileError / RuntimeError never produced a viable mutant.
+        let mutants = parse_normalized_results(NORMALIZED).unwrap();
+        assert_eq!(normalized_conclusive_count(&mutants), 3);
+        assert_eq!(normalized_conclusive_count(&[]), 0);
+    }
+
+    #[test]
     fn evaluate_normalized_reports_unexempted_survivors() {
         let mutants = parse_normalized_results(NORMALIZED).unwrap();
         let kept = evaluate_normalized(&mutants, &[], &BTreeMap::new()).unwrap();
@@ -1134,6 +1211,14 @@ mod tests {
         assert_eq!(survivors[0].file, "src/lib.rs");
         assert_eq!(survivors[0].line, 7);
         assert!(survivors[0].description.contains("replace > with =="));
+    }
+
+    #[test]
+    fn conclusive_count_is_caught_plus_missed() {
+        // The MissedMutant and the CaughtMutant were judged; the Baseline is not a mutant.
+        let report = parse_mutants_report(SAMPLE).unwrap();
+        assert_eq!(conclusive_count(&report), 2);
+        assert_eq!(conclusive_count(&MutantsReport { outcomes: vec![] }), 0);
     }
 
     #[test]

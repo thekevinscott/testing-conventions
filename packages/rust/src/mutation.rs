@@ -382,7 +382,7 @@ fn one_line(replacement: &str) -> String {
     }
 }
 
-/// Run the bundled TypeScript mutation adapter over the project at `root` and return its
+/// Run the bundled TypeScript mutation adapter over the scan path at `root` and return its
 /// un-exempted survivors — the TS arm of the mutation rule, parity with
 /// [`measure_rust`].
 ///
@@ -393,13 +393,23 @@ fn one_line(replacement: &str) -> String {
 /// (vitest) needs to be present, exactly as cargo-mutants needs a buildable crate and
 /// cosmic-ray needs pytest.
 ///
+/// The adapter runs at the **package root** — the nearest directory at or above `root`
+/// holding a `package.json` ([`crate::tiers::package_root`]) — so Stryker's file-copy
+/// sandbox contains the manifest and every other package-level file a source legitimately
+/// reaches above the scan path (`import pkg from '../package.json'`, a shared
+/// `../tsconfig`). The run stays scan-path-scoped end to end: mutate patterns address the
+/// scan path within the package, the scan path's colocated suite judges the mutants (the
+/// adapter's `--vitest-dir`), and the results are rebased scan-path-relative before
+/// gating, so exemption paths match every other check. A scan path that is itself the
+/// package root — or a loose tree with no manifest — runs in place, unprefixed.
+///
 /// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested —
 /// Stryker has no native git-diff mode, so the changed lines become `--mutate
 /// <file>:<line>-<line>` ranges (line granularity, matching cargo-mutants' `--in-diff`).
-/// Without it, the project's configured `mutate` set runs. `exempt` is the file-level
-/// exempt paths and `exempt_lines` the line-scoped ones. `adapter` is the path to
-/// the bundled Node adapter (`dist/mutation/main.js`) — the CLI receives it from the npm
-/// launcher's `--ts-mutation-adapter` argument and hands it down explicitly.
+/// Without it, the scan path's sources run ([`scan_scoped_mutate_globs`]). `exempt` is the
+/// file-level exempt paths and `exempt_lines` the line-scoped ones. `adapter` is the path
+/// to the bundled Node adapter (`dist/mutation/main.js`) — the CLI receives it from the
+/// npm launcher's `--ts-mutation-adapter` argument and hands it down explicitly.
 pub fn measure_typescript(
     root: &Path,
     exempt: &[String],
@@ -407,6 +417,9 @@ pub fn measure_typescript(
     base: Option<&str>,
     adapter: &Path,
 ) -> Result<Vec<Survivor>> {
+    let package_root =
+        crate::tiers::package_root(root, "package.json").unwrap_or_else(|| root.to_path_buf());
+    let prefix = scan_prefix(root, &package_root);
     let mutate = match base {
         Some(base) => {
             let ranges = mutate_ranges(root, base)?;
@@ -414,38 +427,105 @@ pub fn measure_typescript(
             if ranges.is_empty() {
                 return Ok(Vec::new());
             }
-            Some(ranges)
+            Some(prefix_mutate_specs(ranges, prefix.as_deref()))
         }
-        None => None,
+        None => prefix.as_deref().map(scan_scoped_mutate_globs),
     };
-    let json = run_ts_adapter(root, adapter, mutate.as_deref())?;
-    let mutants = parse_normalized_results(&json)?;
+    let json = run_ts_adapter(&package_root, adapter, mutate.as_deref(), prefix.as_deref())?;
+    let mutants = to_scan_relative(parse_normalized_results(&json)?, prefix.as_deref());
     evaluate_normalized(&mutants, exempt, exempt_lines)
 }
 
-/// Run the bundled TS mutation `adapter` over `root` and return the normalized-results JSON
-/// it writes. The adapter (a Node entry shipped with the npm package) drives Stryker via
-/// its Node API and emits a [`NormalizedMutant`] array — so the consumer drives the
-/// engine through this CLI alone; the npm package resolves `@stryker-mutator/*` from the
-/// tool's own tree.
+/// The scan path relative to its package root, as a `/`-joined string — the prefix every
+/// package-root-relative path carries for a scan path below the root. `None` when the scan
+/// path *is* the package root (nothing to prefix), which also covers a loose tree whose
+/// "package root" fell back to the scan path itself.
+fn scan_prefix(root: &Path, package_root: &Path) -> Option<String> {
+    let rel = root.strip_prefix(package_root).ok()?;
+    let parts: Vec<String> = rel
+        .components()
+        .map(|part| part.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("/"))
+    }
+}
+
+/// Prefix diff-scoped mutate specs (`<file>:<start>-<end>`, scan-path-relative) with the
+/// scan prefix, so they address the same files from the package root the adapter runs at.
+fn prefix_mutate_specs(specs: Vec<String>, prefix: Option<&str>) -> Vec<String> {
+    match prefix {
+        None => specs,
+        Some(prefix) => specs
+            .into_iter()
+            .map(|spec| format!("{prefix}/{spec}"))
+            .collect(),
+    }
+}
+
+/// Stryker's default `mutate` set re-rooted at the scan path: every source under it except
+/// test files and `__tests__` trees — the same shape Stryker itself defaults to for
+/// `{src,lib}`, addressed from the package root the adapter runs at.
+fn scan_scoped_mutate_globs(prefix: &str) -> Vec<String> {
+    const EXTENSIONS: &str = "+(cjs|mjs|js|ts|mts|cts|jsx|tsx|html|vue|svelte)";
+    vec![
+        format!("{prefix}/**/!(*.+(s|S)pec|*.+(t|T)est).{EXTENSIONS}"),
+        format!("!{prefix}/**/__tests__/**/*.{EXTENSIONS}"),
+    ]
+}
+
+/// Rebase package-root-relative mutant paths onto the scan path: strip the scan prefix so
+/// exemption matching and the reported survivors address scan-path-relative files, as every
+/// other check does. A mutant outside the scan path is outside the gate's scope and dropped.
+fn to_scan_relative(mutants: Vec<NormalizedMutant>, prefix: Option<&str>) -> Vec<NormalizedMutant> {
+    let Some(prefix) = prefix else {
+        return mutants;
+    };
+    let prefix = format!("{prefix}/");
+    mutants
+        .into_iter()
+        .filter_map(|mut mutant| {
+            mutant.file = mutant.file.strip_prefix(&prefix)?.to_string();
+            Some(mutant)
+        })
+        .collect()
+}
+
+/// Run the bundled TS mutation `adapter` at `package_root` and return the
+/// normalized-results JSON it writes. The adapter (a Node entry shipped with the npm
+/// package) drives Stryker via its Node API and emits a [`NormalizedMutant`] array — so
+/// the consumer drives the engine through this CLI alone; the npm package resolves
+/// `@stryker-mutator/*` from the tool's own tree. The adapter's working directory is
+/// Stryker's project root: the sandbox copies and resolves against it.
 ///
-/// `mutate`, when set, scopes the run to `--mutate` line ranges. Results are written to a
-/// temp file the adapter names via `--out` (so Stryker's own stdout logging can't corrupt
-/// them), then read back. `node` and the project's own test runner must be available; a
-/// non-zero adapter exit surfaces its captured output.
-fn run_ts_adapter(root: &Path, adapter: &Path, mutate: Option<&[String]>) -> Result<String> {
+/// `mutate`, when set, scopes the run to `--mutate` patterns; `vitest_dir`, when set,
+/// scopes vitest's test discovery to that directory within the project (the scan path).
+/// Results are written to a temp file the adapter names via `--out` (so Stryker's own
+/// stdout logging can't corrupt them), then read back. `node` and the project's own test
+/// runner must be available; a non-zero adapter exit surfaces its captured output.
+fn run_ts_adapter(
+    package_root: &Path,
+    adapter: &Path,
+    mutate: Option<&[String]>,
+    vitest_dir: Option<&str>,
+) -> Result<String> {
     let out = AdapterOut::new();
     std::fs::create_dir_all(&out.0).context("creating the mutation adapter output dir")?;
     let results = out.0.join("results.json");
 
     let mut command = Command::new("node");
     command
-        .current_dir(root)
+        .current_dir(package_root)
         .arg(adapter)
         .arg("--out")
         .arg(&results);
     if let Some(specs) = mutate {
         command.arg("--mutate").arg(specs.join(","));
+    }
+    if let Some(dir) = vitest_dir {
+        command.arg("--vitest-dir").arg(dir);
     }
     let output = command
         .output()
@@ -453,7 +533,7 @@ fn run_ts_adapter(root: &Path, adapter: &Path, mutate: Option<&[String]>) -> Res
     if !output.status.success() {
         bail!(
             "the TypeScript mutation adapter failed in `{}`:\n{}{}",
-            root.display(),
+            package_root.display(),
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr),
         );
@@ -1068,6 +1148,72 @@ mod tests {
         let report = parse_mutants_report(SAMPLE).unwrap();
         let exempt = vec!["src/elsewhere.rs".to_string()];
         assert_eq!(unexplained_survivors(&report, &exempt).len(), 1);
+    }
+
+    #[test]
+    fn scan_prefix_is_the_scan_path_relative_to_the_package_root() {
+        assert_eq!(
+            scan_prefix(Path::new("/repo/pkg/src"), Path::new("/repo/pkg")),
+            Some("src".to_string())
+        );
+        assert_eq!(
+            scan_prefix(Path::new("/repo/pkg/src/nested"), Path::new("/repo/pkg")),
+            Some("src/nested".to_string())
+        );
+        // The scan path is the package root itself: nothing to prefix.
+        assert_eq!(
+            scan_prefix(Path::new("/repo/pkg"), Path::new("/repo/pkg")),
+            None
+        );
+        // Relative scan paths resolve the same way.
+        assert_eq!(
+            scan_prefix(Path::new("pkg/src"), Path::new("pkg")),
+            Some("src".to_string())
+        );
+    }
+
+    #[test]
+    fn prefix_mutate_specs_rebases_diff_ranges_onto_the_package_root() {
+        let specs = vec!["index.ts:8-11".to_string(), "a/b.ts:2-2".to_string()];
+        assert_eq!(
+            prefix_mutate_specs(specs.clone(), Some("src")),
+            vec![
+                "src/index.ts:8-11".to_string(),
+                "src/a/b.ts:2-2".to_string()
+            ]
+        );
+        assert_eq!(prefix_mutate_specs(specs.clone(), None), specs);
+    }
+
+    #[test]
+    fn scan_scoped_mutate_globs_mirror_strykers_default_under_the_scan_path() {
+        assert_eq!(
+            scan_scoped_mutate_globs("src"),
+            vec![
+                "src/**/!(*.+(s|S)pec|*.+(t|T)est).+(cjs|mjs|js|ts|mts|cts|jsx|tsx|html|vue|svelte)"
+                    .to_string(),
+                "!src/**/__tests__/**/*.+(cjs|mjs|js|ts|mts|cts|jsx|tsx|html|vue|svelte)"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn to_scan_relative_strips_the_prefix_and_drops_out_of_scope_mutants() {
+        let mutants = parse_normalized_results(
+            r#"[
+                {"file": "src/a.ts", "line": 2, "status": "survived", "mutator": "X"},
+                {"file": "tests/e2e/t.ts", "line": 9, "status": "survived", "mutator": "X"}
+            ]"#,
+        )
+        .unwrap();
+        let rebased = to_scan_relative(mutants.clone(), Some("src"));
+        assert_eq!(rebased.len(), 1, "the out-of-scan-path mutant is dropped");
+        assert_eq!(rebased[0].file, "a.ts");
+        // No prefix (the scan path is the package root): paths pass through untouched.
+        let unchanged = to_scan_relative(mutants, None);
+        assert_eq!(unchanged.len(), 2);
+        assert_eq!(unchanged[0].file, "src/a.ts");
     }
 
     #[test]

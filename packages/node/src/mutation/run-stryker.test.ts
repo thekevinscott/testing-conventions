@@ -64,4 +64,20 @@ describe('runStryker', () => {
 
     expect(ctorOptions[0]).toMatchObject({ testRunner: 'vitest', mutate: ['src/a.ts:2-4'] });
   });
+
+  it('passes the vitest discovery dir through as the runner option', async () => {
+    runMutationTest.mockResolvedValue([]);
+
+    await runStryker({ vitestDir: 'src' });
+
+    expect(ctorOptions[0]).toMatchObject({ vitest: { dir: 'src' } });
+  });
+
+  it('omits the vitest runner option when no discovery dir is given', async () => {
+    runMutationTest.mockResolvedValue([]);
+
+    await runStryker();
+
+    expect(ctorOptions[0]).not.toHaveProperty('vitest');
+  });
 });

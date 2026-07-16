@@ -6,8 +6,9 @@ import type { NormalizedMutant } from './to-normalized.js';
 // all so the behaviors it owns — writing the JSON to a file or stdout, passing the parsed mutate
 // ranges through, and propagating a failed run — can be driven without a real mutation run.
 const { parseArgs, runStryker, writeFile } = vi.hoisted(() => ({
-  parseArgs: vi.fn<(argv: string[]) => { mutate?: string[]; out?: string }>(),
-  runStryker: vi.fn<(options?: { mutate?: string[] }) => Promise<NormalizedMutant[]>>(),
+  parseArgs: vi.fn<(argv: string[]) => { mutate?: string[]; out?: string; vitestDir?: string }>(),
+  runStryker:
+    vi.fn<(options?: { mutate?: string[]; vitestDir?: string }) => Promise<NormalizedMutant[]>>(),
   writeFile: vi.fn<() => Promise<void>>(),
 }));
 vi.mock('./parse-args.js', () => ({ parseArgs }));
@@ -45,6 +46,17 @@ describe('mutationCLI', () => {
     expect(runStryker).toHaveBeenCalledWith({});
     expect(write).toHaveBeenCalledWith('[]\n');
     expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  it('passes the parsed vitest discovery dir through', async () => {
+    parseArgs.mockReturnValue({ vitestDir: 'src' });
+    runStryker.mockResolvedValue([]);
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    await mutationCLI(['--vitest-dir', 'src']);
+
+    expect(runStryker).toHaveBeenCalledWith({ vitestDir: 'src' });
+    expect(write).toHaveBeenCalledWith('[]\n');
   });
 
   it('propagates a failed run so the caller can map it to an exit code', async () => {

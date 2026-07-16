@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[2] / "move_major_tag.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "src" / "move_major_tag.py"
 
 
 def _git(repo, *args):

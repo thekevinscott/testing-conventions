@@ -20,7 +20,7 @@ jobs:
   move-v0:
     needs: [verify-layout, verify-suite]
     steps:
-      - run: python3 .github/scripts/move-major-tag/move_major_tag.py
+      - run: python3 internals/move-major-tag/src/move_major_tag.py
 """
 
 

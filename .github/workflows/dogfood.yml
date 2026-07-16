@@ -122,9 +122,7 @@ jobs:
     name: Shipped reusable workflow over the self-test checks package
     # #321: the repo-only self-test checks are a uv package (internals/checks), so they're
     # dogfooded through the shipped reusable workflow like any other package — colocated test,
-    # isolation, coverage, integration-lint, and diff-scoped mutation. This replaces running the
-    # `.github/scripts` helper conventions over them as loose scripts (a pyproject inside the
-    # `.github/scripts` scan flips the tool into package-mode for the whole directory).
+    # isolation, coverage, integration-lint, and diff-scoped mutation.
     #
     # `source` is the *inner* importable-package dir (internals/checks/src), not the package root
     # — exactly as the Python plugin scans packages/python/python, not packages/python. The
@@ -138,13 +136,12 @@ jobs:
       version: ${{ inputs.version }}
       source: internals/checks/src
 
-  # internals/detect (#363) is NOT dogfooded here, unlike internals/checks above. Its
-  # colocated detect_test.py alone doesn't reach the coverage floor — compute_outputs's
-  # orchestration is exercised only by the integration suite (fs mocked) and the full script
-  # by the e2e suite, and `unit coverage` measures the colocated unit suite only, so scanning
-  # `internals/detect/src` fails the floor. (The old second blocker — the unit-suite isolation
-  # lint flagging the integration/e2e tests as un-isolated units — is gone: #418's tier
-  # derivation leaves `<package root>/tests/` to the suite lints.) detect.py keeps its
-  # existing, proven test-quality gate instead: detect-action.yml's dedicated pytest run
-  # across all three tiers (100% coverage via plain coverage.py, verified independently of
-  # this tool's own gates).
+  # internals/detect (#363) and internals/move-major-tag (#452) are NOT dogfooded here, unlike
+  # internals/checks above. Their colocated unit tests alone don't reach the coverage floor —
+  # each module's orchestration is exercised only by its integration suite (the boundary mocked)
+  # and the full script by its e2e suite, and `unit coverage` measures the colocated unit suite
+  # only, so scanning their src/ fails the floor. (The old second blocker — the unit-suite
+  # isolation lint flagging the integration/e2e tests as un-isolated units — is gone: #418's
+  # tier derivation leaves `<package root>/tests/` to the suite lints.) Each keeps its existing,
+  # proven test-quality gate instead: a dedicated pytest workflow across all three tiers
+  # (detect-action.yml, move-major-tag-tests.yml).

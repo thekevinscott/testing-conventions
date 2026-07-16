@@ -19,7 +19,7 @@ name: Move major tag
 # until the tag moves (`uses:` refs can't be dynamic) — and the coverage it would give is already
 # proven pre-merge by Layer 1's hermetic gate (#356). See docs/internals/repo.md, "Validated
 # promotion". All logic is in the colocated-tested `tc-checks verify-release` command
-# (internals/checks) and the `.github/scripts/move-major-tag` helper; this workflow wires
+# (internals/checks) and the `internals/move-major-tag` helper; this workflow wires
 # triggers, checkouts, and env.
 
 on:
@@ -122,4 +122,4 @@ jobs:
         env:
           SHA: ${{ needs.context.outputs.sha }}
           TAG: v0
-        run: python3 .github/scripts/move-major-tag/move_major_tag.py
+        run: python3 internals/move-major-tag/src/move_major_tag.py

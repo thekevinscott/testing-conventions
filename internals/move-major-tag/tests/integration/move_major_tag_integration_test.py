@@ -5,15 +5,12 @@ git is the one external here, so the `git` fixture patches the boundary function
 mocks; each test configures their return values and asserts which side effects ran. The patching
 lives in the fixture, never inline in a test body.
 """
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # .github/scripts/move-major-tag
-import move_major_tag as m  # noqa: E402
+import move_major_tag as m
 
 
 @pytest.fixture

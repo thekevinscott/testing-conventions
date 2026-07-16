@@ -2,7 +2,6 @@
 isn't copied into every check module.
 """
 REUSABLE_WORKFLOW = ".github/workflows/testing-conventions.yml"
-DOGFOOD_HELPERS_WORKFLOW = ".github/workflows/dogfood-github-helpers.yml"
 
 # The outputs `./.github/actions/detect` must produce for the monorepo TS fixture (#277).
 TS_FIXTURE_PACKAGE_ROOT = ".github/selftest/monorepo/packages/ts"

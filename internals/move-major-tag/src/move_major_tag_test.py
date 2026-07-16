@@ -4,11 +4,7 @@ Unit-level: the pure forward-only decision, exercised in isolation (no git, no m
 orchestration (`advance`) is covered by the integration suite with the git boundary mocked, and
 the end-to-end path by the e2e suite against a real repo — both under `tests/`.
 """
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import move_major_tag as m  # noqa: E402
+import move_major_tag as m
 
 
 def test_decide_bootstraps_when_tag_absent():

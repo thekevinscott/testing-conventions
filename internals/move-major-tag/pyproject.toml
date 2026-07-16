@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+# Repo-only: the forward-only `@v0` tag-advance helper (#235), invoked by the `Move major tag`
+# workflow as a plain script (`python3 <path>/move_major_tag.py`, stdlib only, no install step).
+# Never published to an index.
+name = "testing-conventions-move-major-tag"
+version = "0"
+description = "Repo-only implementation of the move-major-tag helper for testing-conventions (#452)."
+requires-python = ">=3.11"
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.hatch.build]
+exclude = ["**/*_test.py"]
+
+[tool.hatch.build.targets.wheel]
+# A single top-level module, not a package dir: map src/move_major_tag.py -> move_major_tag.py.
+include = ["src/move_major_tag.py"]
+
+[tool.hatch.build.targets.wheel.sources]
+src = ""
+
+[tool.pytest.ini_options]
+# `src` layout: put it on the path so move_major_tag.py and its colocated/integration/e2e tests
+# import it normally (`import move_major_tag`) — no per-file `sys.path.insert` hack.
+pythonpath = ["src"]

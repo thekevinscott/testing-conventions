@@ -70,10 +70,6 @@ def test_gates_wired_is_registered():
     assert "gates-wired" in main.commands
 
 
-def test_github_helpers_wired_is_registered():
-    assert "github-helpers-wired" in main.commands
-
-
 def test_hermetic_wired_is_registered():
     assert "hermetic-wired" in main.commands
 

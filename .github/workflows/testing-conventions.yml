@@ -142,7 +142,7 @@ name: Testing Conventions
 # gated by its own commit, not by whatever `@v0`/npm currently resolve to. There is no input
 # and no job for this: the derivation lives in tested Python (internals/detect), the build in
 # the caller workflows, and this file carries only guarded *steps* — a consumer's checks UI
-# and execution path are byte-for-byte unchanged. See internals/repo.md, "Hermetic mode".
+# and execution path are byte-for-byte unchanged. See docs/internals/repo.md, "Hermetic mode".
 
 on:
   workflow_call:
@@ -260,7 +260,7 @@ jobs:
       e2e_extra_scope: ${{ steps.scan_hermetic.outputs.e2e_extra_scope || steps.scan_published.outputs.e2e_extra_scope }}
       e2e_exclude: ${{ steps.scan_hermetic.outputs.e2e_exclude || steps.scan_published.outputs.e2e_exclude }}
       # The hermetic CLI invocation and the mutation job's pre-rendered adapter argument (#356),
-      # decided in detect.py (tested Python — see internals/repo.md, "Hermetic mode"), not here:
+      # decided in detect.py (tested Python — see docs/internals/repo.md, "Hermetic mode"), not here:
       # the artifact path when this repo gates itself, empty (-> the run lines' npx fallback)
       # for every other caller. Plain coalescing like every output above — no logic in YAML.
       cli_command: ${{ steps.scan_hermetic.outputs.cli_command || steps.scan_published.outputs.cli_command }}

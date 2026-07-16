@@ -9,6 +9,10 @@ export default defineConfig({
   title: 'testing-conventions',
   description: 'One config-driven standard for how tests are structured, isolated, and measured across Python, TypeScript, and Rust.',
   cleanUrls: true,
+  // internals/ holds contributor + agent supervision docs, not published-site
+  // content; excluding it keeps the public site byte-identical while letting
+  // the files live under docs/ alongside every other Markdown source.
+  srcExclude: ['internals/**'],
   vite: {
     plugins: [
       // Emit an agent-facing entry point alongside the HTML build, per the

@@ -1192,7 +1192,7 @@ toolchain (and its cache, under the package root) with no `rust_toolchain: true`
 monorepo consumer whose `build_command` assumed the checkout root (e.g. a relative path into a
 specific package) must update it to be relative to that package's own root, or use an
 absolute/`$GITHUB_WORKSPACE`-relative path instead. This reaches the `@v0` self-test and every
-consumer only once a release moves the `@v0` tag (internals/repo.md) — this PR's own CI still
+consumer only once a release moves the `@v0` tag (docs/internals/repo.md) — this PR's own CI still
 runs the previously published `detect` action.
 
 `install` writes a refreshed managed block (#353): the region's content hash changes, so the next
@@ -1364,7 +1364,7 @@ Expected: both parse, and matches show up in the `unit-coverage`, `coverage-chan
 the jobs reference `needs.detect.outputs.package_root`) plus the `monorepo-coverage-ts` /
 `monorepo-coverage-py` / `mutation-monorepo-ts` / `mutation-monorepo-py` runtime jobs — the latter
 only fully exercise the new install/build location once a release moves `@v0`
-(internals/repo.md); until then, verify by hand with the published-equivalent local actions, e.g.:
+(docs/internals/repo.md); until then, verify by hand with the published-equivalent local actions, e.g.:
 
 ```
 cd .github/selftest/monorepo/packages/ts && npm ci && npx vitest run

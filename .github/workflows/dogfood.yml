@@ -33,7 +33,7 @@ name: Dogfood
 #                   carries #281 — so right after #281 merges (before the next release
 #                   publishes it and `@v0` moves), this job runs the old binary against
 #                   the new workflow's `<path>` argument and fails with an unrecognized-
-#                   argument error until that release goes out (see internals/repo.md,
+#                   argument error until that release goes out (see docs/internals/repo.md,
 #                   "Self-test and the `@v0` path").
 
 on:

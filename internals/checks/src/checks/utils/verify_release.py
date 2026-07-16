@@ -4,7 +4,7 @@ The logic behind `tc-checks verify-release` (cli.py is a thin wrapper). Repo-onl
 the published tool; invoked by the verify-and-promote workflow (`move-major-tag.yml`) after a
 successful `Release`, gating the forward-only tag move on a green verification of the exact
 combination the tag is about to bless — the *new* workflow file, the *published* binary, the
-*current* `@v0` detect. See `internals/repo.md`, "Validated promotion".
+*current* `@v0` detect. See `docs/internals/repo.md`, "Validated promotion".
 
 Three operations the workflow wires as separate steps:
 

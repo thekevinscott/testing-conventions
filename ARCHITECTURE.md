@@ -12,8 +12,10 @@ packages/
   python/    maturin-built wheel that bundles the rust binary.
   node/      thin wrapper, resolves a per-platform optional dep
              whose payload is the rust binary.
-internals/   contributor + agent conventions (not published).
-docs/        VitePress site (published to GitHub Pages).
+internals/   real packages dogfooded like any other (detect, checks).
+docs/        VitePress site (published to GitHub Pages), including
+             docs/internals/ (contributor + agent conventions, excluded
+             from the published build via srcExclude).
 ```
 
 ## Release flow
@@ -33,6 +35,6 @@ the reusable workflow at `thekevinscott/putitoutthere`. Edits under
 
 ## Public-API surface
 
-Defined in `internals/repo.md`: every exported value/type, every CLI
+Defined in `docs/internals/repo.md`: every exported value/type, every CLI
 flag, every config key, every observable artifact. Changes to that
 surface require `CHANGELOG.md` + `MIGRATIONS.md` updates.

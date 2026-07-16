@@ -46,6 +46,11 @@ coverage floor instead of copy-pasting it. Purely additive: the `bin` entry and
 its CLI behavior are unchanged, and `vitest` is added as an *optional* peer
 dependency, so CLI-only consumers see no new install requirement.
 
+Adds `--vitest-dir <path>` to the bundled mutation adapter (part of the package-root sandbox
+fix; full notes in `packages/rust/MIGRATIONS.md`): the Rust core passes the scan path so
+vitest's test discovery inside Stryker's sandbox stays scoped to the colocated unit suite.
+Purely additive to an internal executable the binary spawns.
+
 ### Required changes
 
 None to code. Install-time: the bundled Stryker 9 requires **Node ≥20** — a consumer on an older Node

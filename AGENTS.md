@@ -35,6 +35,15 @@ Every PR starts with **documentation, written alongside the red tests** — both
 
 Strive for parity across the supported languages (Python, TypeScript, Rust). The bar is **least parity** — a rule or feature is offered only to the level the *least-capable* language can support. No language-only features (e.g. a Rust- or TypeScript-only rule): if a capability can't be met in one language, scope the feature down to the common denominator, or hold it until parity is reachable, rather than shipping it for some languages and not others. Any deliberate, unavoidable asymmetry must be called out explicitly in the rule's docs and reasoning.
 
+## PRs target main
+
+Every PR's base is `main` — never another working branch. Stacked PRs (a PR whose base is an
+unmerged PR's branch) are not used: a stacked child that "merges" lands only on its parent's
+branch, so the PR reads merged while `main` carries none of it — deletions and renames look
+landed that aren't — and every parent merge forces a retarget-and-rebase round on the children.
+When work depends on unmerged work, fold it into the same PR as ordered commits (one reviewable
+unit), or wait for the dependency to merge and branch from the new `main`.
+
 ## Rebase on request
 
 When asked to rebase, rebase the working branch onto the latest default branch and **push it

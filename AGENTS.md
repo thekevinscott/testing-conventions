@@ -66,6 +66,32 @@ merge** — do not wait to be told:
 
 Re-check both on every pass while shepherding — a PR that was mergeable an hour ago may not be now.
 
+## Session handoff doc
+
+Maintain one ongoing handoff doc per working session and deliver it to the user as a downloadable
+markdown file at every **stopping point**: after each major unit of work lands (a push, an observed
+red or green CI run, a merged PR, a finished investigation) or when blocked on user input. A
+stopping point marks a checkpoint, not the end — send the doc, then keep working.
+
+The doc is conversation-scoped: keep it in the session scratchpad or `/tmp` (e.g.
+`<scratchpad>/handoff.md`), outside the repo tree, and keep it out of every commit. Update the same
+doc in place and re-send it at each checkpoint (in hosted sessions, attach it via the file-delivery
+tool; locally, print its path), so the freshest copy sits near the bottom of the conversation.
+
+Write it standalone, so a brand-new session with zero context resumes from it alone:
+
+- Task and current status (done / in progress / next)
+- Branches, PRs, and issues with numbers and CI state — including where the red/green cadence
+  stands (red tests pushed? red witnessed on CI? implementation up?)
+- Key decisions and discovered constraints, with one-line reasons
+- Exact next steps, including commands to run
+- Anything waiting on the user
+
+Purpose: the prompt cache survives at most an hour of inactivity, so resuming a long conversation
+after hours away reprocesses the entire history at full cost. A current handoff doc near the end of
+the transcript lets the user scroll up, grab it, and start a cheap fresh session from the doc
+instead of resuming the stale one.
+
 ## Now over later
 
 When a change could be made **now** or deferred to **later**, always choose now. Don't punt

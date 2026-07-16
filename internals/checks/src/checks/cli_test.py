@@ -142,6 +142,10 @@ def test_static_gates_wired_is_registered():
     assert "static-gates-wired" in main.commands
 
 
+def test_suite_toolchain_pinned_wired_is_registered():
+    assert "suite-toolchain-pinned-wired" in main.commands
+
+
 def test_uv_provisioning_wired_is_registered():
     assert "uv-provisioning-wired" in main.commands
 

@@ -31,5 +31,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Unit + integration + e2e tests
-        # uv layers pytest into an ephemeral environment and runs the suite from disk — no pip.
-        run: uv run --with pytest --no-project python -m pytest .github/scripts/move-major-tag/ -v --import-mode=importlib
+        # uv layers the CI engine toolchain from the hash-pinned lock (`--with-requirements`) into
+        # an ephemeral environment and runs the suite from disk — no pip, versions pinned to the commit.
+        run: uv run --with-requirements "$GITHUB_WORKSPACE/.github/uv/engines.txt" --no-project python -m pytest .github/scripts/move-major-tag/ -v --import-mode=importlib

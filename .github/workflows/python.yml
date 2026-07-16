@@ -35,10 +35,11 @@ jobs:
           python-version: '3.13'
       - uses: astral-sh/setup-uv@v7
       - name: Build wheel
-        # uv provisions maturin and builds the wheel from disk — no pip. `--no-project` keeps
+        # uv provisions maturin from the hash-pinned lock (`--with-requirements`) and builds the
+        # wheel from disk — no pip, the build backend pinned to the commit. `--no-project` keeps
         # `packages/python`'s own `[project]` table out of the run env (maturin reads it as build
         # config instead), so this stays a build-tooling invocation, not a project sync.
-        run: uv run --with maturin --no-project maturin build --release -o dist
+        run: uv run --with-requirements "$GITHUB_WORKSPACE/.github/uv/engines.txt" --no-project maturin build --release -o dist
         working-directory: packages/python
       - uses: actions/upload-artifact@v7
         with:

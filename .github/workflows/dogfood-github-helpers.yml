@@ -54,7 +54,7 @@ jobs:
         # `npx testing-conventions` is the deliberate consumer path this job dogfoods. The
         # mutation arm spawns `python3 -m testing_conventions.mutation.main` (#248), though, and
         # PYTHONPATH resolves that adapter from source — the PR's code, not the released wheel —
-        # while uv layers the engines (coverage, pytest, cosmic-ray) onto the `python3` npx spawns.
+        # while uv layers the engines from the hash-pinned lock onto the `python3` npx spawns.
         env:
           PYTHONPATH: ${{ github.workspace }}/packages/python/python
         run: |
@@ -63,7 +63,7 @@ jobs:
           for dir in .github/scripts; do
             for rule in "unit colocated-test" "unit lint" "unit coverage" "integration lint" "unit mutation --base origin/main"; do
               echo "::group::testing-conventions $rule --language python $dir"
-              if ! uv run --with coverage --with pytest --with cosmic-ray --no-project npx -y testing-conventions $rule --language python "$dir"; then
+              if ! uv run --with-requirements "$GITHUB_WORKSPACE/.github/uv/engines.txt" --no-project npx -y testing-conventions $rule --language python "$dir"; then
                 echo "::error::\`$rule\` failed for $dir"
                 fail=1
               fi

@@ -34,10 +34,11 @@ jobs:
         with:
           python-version: '3.12'
       - name: Unit + integration + e2e tests
-        # uv layers pytest into an ephemeral environment and runs the suite from disk — no pip.
-        # detect.py is stdlib-only, so pytest is the only dependency; `internals/detect`'s own
-        # `[tool.pytest.ini_options] pythonpath = ["src"]` still puts it on the import path.
-        run: uv run --with pytest --no-project python -m pytest internals/detect/ -v --import-mode=importlib
+        # uv layers the CI engine toolchain from the hash-pinned lock (`--with-requirements`) into
+        # an ephemeral environment and runs the suite from disk — no pip, versions pinned to the
+        # commit. detect.py is stdlib-only, so pytest is the engine it needs; `internals/detect`'s
+        # own `[tool.pytest.ini_options] pythonpath = ["src"]` still puts it on the import path.
+        run: uv run --with-requirements "$GITHUB_WORKSPACE/.github/uv/engines.txt" --no-project python -m pytest internals/detect/ -v --import-mode=importlib
 
   action:
     name: action.yml — end-to-end (local use)

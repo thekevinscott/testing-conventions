@@ -1,0 +1,36 @@
+name: Engine lock
+
+# Guards the CI hermeticity of the Python engine toolchain (#437): every workflow layers
+# coverage / pytest / cosmic-ray / maturin onto its uv tool environments from the hash-pinned
+# .github/uv/engines.txt, never a bare, floating `uv run --with <engine>`. The check scans every
+# workflow file, so it runs whenever a workflow, the lock, or the check itself changes — a float
+# reintroduced in any workflow is caught in the PR that introduces it, not on the next engine
+# release. The logic is the colocated-tested `tc-checks engines-locked-wired`; this file wires the
+# trigger and the run, holding none itself.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/uv/**'
+      - 'internals/checks/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engines-locked-wired:
+    name: Every workflow layers the engine toolchain from the lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: no workflow floats a bare `--with <engine>`
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default paths resolve.
+        run: uv run --project internals/checks tc-checks engines-locked-wired

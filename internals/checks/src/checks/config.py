@@ -4,6 +4,17 @@ isn't copied into every check module.
 REUSABLE_WORKFLOW = ".github/workflows/testing-conventions.yml"
 DOGFOOD_HELPERS_WORKFLOW = ".github/workflows/dogfood-github-helpers.yml"
 
+# The directory holding every workflow the repo runs — the scan surface for engines-locked-wired.
+WORKFLOWS_DIR = ".github/workflows"
+
+# The CI Python engine toolchain and the hash-pinned lock that pins it (#437): the third-party
+# tools the repo's workflows layer onto uv tool environments (the test runner, the coverage and
+# mutation engines, the maturin build backend). A workflow layers them by pointing uv at the lock
+# (`--with-requirements .github/uv/engines.txt`); reintroducing a bare, floating `--with coverage`
+# is the regression engines-locked-wired guards against.
+CI_ENGINE_LOCK = ".github/uv/engines.txt"
+CI_ENGINES = ("coverage", "pytest", "cosmic-ray", "maturin")
+
 # The outputs `./.github/actions/detect` must produce for the monorepo TS fixture (#277).
 TS_FIXTURE_PACKAGE_ROOT = ".github/selftest/monorepo/packages/ts"
 TS_FIXTURE_PACKAGE_MANAGER = "npm"

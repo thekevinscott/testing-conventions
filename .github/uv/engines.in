@@ -1,0 +1,11 @@
+# The CI Python engine toolchain — the third-party tools this repo's workflows layer onto uv tool
+# environments: the test runner, the coverage engine, the mutation engine, and the maturin build
+# backend. Compiled to the hash-pinned lock beside it so every workflow resolves the same versions
+# as a function of the commit under test, exactly as `uv.lock` pins every other uv surface here.
+#
+# Regenerate after editing (the deliberate, diff-visible upgrade):
+#   uv pip compile .github/uv/engines.in -o .github/uv/engines.txt --generate-hashes --universal
+coverage
+pytest
+cosmic-ray
+maturin

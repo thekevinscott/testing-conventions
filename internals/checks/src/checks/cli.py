@@ -23,7 +23,6 @@ from checks.e2e_verify_checks_out_pr_head.cli import cli as e2e_verify_checks_ou
 from checks.e2e_verify_scope_wired.cli import cli as e2e_verify_scope_wired
 from checks.e2e_verify_wired.cli import cli as e2e_verify_wired
 from checks.gates_wired.cli import cli as gates_wired
-from checks.github_helpers_wired.cli import cli as github_helpers_wired
 from checks.hermetic_wired.cli import cli as hermetic_wired
 from checks.integration_lint_new_arms_trip.cli import cli as integration_lint_new_arms_trip
 from checks.isolation_red.cli import cli as isolation_red
@@ -69,7 +68,6 @@ main.add_command(e2e_verify_checks_out_pr_head, name="e2e-verify-checks-out-pr-h
 main.add_command(e2e_verify_scope_wired, name="e2e-verify-scope-wired")
 main.add_command(e2e_verify_wired, name="e2e-verify-wired")
 main.add_command(gates_wired, name="gates-wired")
-main.add_command(github_helpers_wired, name="github-helpers-wired")
 main.add_command(hermetic_wired, name="hermetic-wired")
 main.add_command(integration_lint_new_arms_trip, name="integration-lint-new-arms-trip")
 main.add_command(isolation_red, name="isolation-red")

@@ -75,7 +75,7 @@ reason = "i + 1 < len(headers) on job_block.py:50: i is bound only by enumerate(
 # capture/text contract, i.e. testing the standard library, not this code. Everything else in the
 # helpers is killed for real: the nonzero-exit raise (`if result.returncode:`, via signal/exit tests),
 # and every parse and decision downstream. This is the `build_hermetic_cli` case — a boundary CI can't
-# exercise — which is why the helper lives here (exemptions available) rather than `.github/scripts`.
+# exercise — which is why the helper lives here (exemptions available) rather than as a loose script.
 [[python.exempt]]
 path = "checks/utils/verify_release.py"
 rules = ["mutation"]

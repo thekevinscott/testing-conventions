@@ -190,9 +190,9 @@ The two layers of the CI-hermeticity invariant (above) change the *consequence* 
 wrong, not the constraint. The workflow-under-test and the binary-under-test still can't change in
 one atomic release, so this stays a two-PR sequence. What moved is the failure: a same-commit
 CLI-plus-workflow change that reaches a job running the **published** binary is now caught in-PR
-where a job builds from HEAD (Layer 1), and for the consumer-path jobs that deliberately keep `npx
-testing-conventions` (`dogfood-github-helpers.yml`, `python.yml`), the gated promotion (Layer 2)
-catches the skew before `@v0` moves. Either way the break surfaces before a consumer sees it, rather
+where a job builds from HEAD (Layer 1), and for the consumer-path surface that deliberately keeps
+the published artifacts (`python.yml`'s wheel install, the `@v0` path itself), the gated promotion
+(Layer 2) catches the skew before `@v0` moves. Either way the break surfaces before a consumer sees it, rather
 than poisoning `main`/dogfood silently and going red only on the next release.
 
 ## Never pass data through the environment
@@ -212,22 +212,24 @@ together is not.
 
 **A workflow's `run:` step holds no logic** — it wires a trigger, a checkout, and env, then invokes
 a standalone, colocated-tested script. Any assertion, parse, or multi-line decision (`grep`/`awk`
-wiring checks, output validation, red-path exit-code checks) belongs in a `.github/scripts/<name>/`
-module with its own unit test, run as `run: python3 .github/scripts/<name>/check_<name>.py`.
+wiring checks, output validation, red-path exit-code checks) belongs in a tested module under
+`internals/` — a `tc-checks` subcommand in `internals/checks` for self-test assertions, or a small
+uv package of its own (`internals/detect`, `internals/move-major-tag`) for a standalone helper,
+invoked as `run: python3 internals/<name>/src/<name>.py`.
 
 Two reasons this is a rule, not a preference:
 
 - **A script carries tests; an inline block carries none.** Logic in YAML is untested prose,
-  exercised only by a full CI run. Under `.github/scripts/`, `dogfood-github-helpers.yml` already
-  holds it to the shipped bar — colocated test, isolation, the coverage floor, integration-lint,
-  and diff-scoped mutation — so a script earns real coverage for free.
+  exercised only by a full CI run. An `internals/` module carries colocated unit tests plus
+  integration/e2e tiers with their own red/green workflow, and `internals/checks` is additionally
+  dogfooded to the shipped bar (coverage floor, diff-scoped mutation).
 - **GitHub templates `run:` text for `${{ }}` before the shell sees it.** A literal
   `${{ inputs.source }}` embedded in a `grep` pattern gets evaluated (and stripped) by that
   templating, silently breaking the check. A file the workflow *invokes* is never templated, so
   extracting to a script sidesteps the whole class (#301, #302).
 
-Follow the `move-major-tag` (`move_major_tag.py` + colocated unit test + `tests/`) and
-`check_e2e_verify_wired` precedents for structure. Passing a value from a step to a script is
+Follow the `internals/move-major-tag` (`src/move_major_tag.py` + colocated unit test + `tests/`)
+and `check_e2e_verify_wired` precedents for structure. Passing a value from a step to a script is
 a CLI argument (`… check.py "${{ steps.detect.outputs.package_root }}"`), never an env
 side-channel — see **Never pass data through the environment**.
 
@@ -299,7 +301,7 @@ A PR that touches **only** documentation — the `docs/` site and Markdown files
 A PR whose behavior change is confined to CI plumbing — workflow YAML, cache and concurrency
 wiring, and the detect outputs that feed them, with no change to what a consumer's gates enforce —
 skips the witnessed-red-on-CI round-trip. Tests still come first: tested source (an
-`internals/detect` derivation, a `.github/scripts/` module) gets its red tests, witnessed red
+`internals/detect` derivation, an `internals/` helper module) gets its red tests, witnessed red
 **locally**, then the implementation. Every other bar holds — docs in the same PR, all existing
 tests green. The CI round-trip is reserved for changes to enforced rule behavior, where the red
 run proves the gate can actually fail; for plumbing, the failure mode is CI speed, and a local

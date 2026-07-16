@@ -288,9 +288,8 @@ jobs:
         # what fails a consumer's build. The assertion is a tested check in the repo-only checks
         # package (internals/checks, #321/#328). The published `unit coverage --language python`
         # measures with coverage.py + pytest through a bare `python3`, which under `uv run` is the
-        # checks venv (click only) — so `--with coverage --with pytest` layers them into that
-        # environment for the run (no `pip`).
-        run: uv run --with coverage --with pytest --project internals/checks tc-checks below-floor
+        # checks venv — it carries both, pinned in its uv.lock.
+        run: uv run --project internals/checks tc-checks below-floor
 
   mutation-gate:
     name: An un-exempted survivor trips the mutation gate
@@ -324,8 +323,8 @@ jobs:
     # environment. The published npm binary (`npx`) does not put that module on the path — it
     # must be importable by the `python3` it spawns. PYTHONPATH resolves the adapter from source
     # (this PR's code, not the released wheel), and under `uv run` that `python3` is the checks
-    # venv, so `--with cosmic-ray --with pytest` layers the adapter's engine and its pytest runner
-    # into that environment for the run (no `pip`, no published wheel). Drive the published command
+    # venv — it carries the adapter's engine (cosmic-ray) and its pytest runner, pinned in its
+    # uv.lock. Drive the published command
     # over a mutation-clean fixture: it clears the gate only when the adapter resolves. (Whole-tree,
     # not `--base`, so the adapter always runs — a `--base` diff with no changed Python lines
     # returns early and never spawns it, which is why this trap stayed hidden.)
@@ -341,10 +340,10 @@ jobs:
       - name: A mutation-clean Python library clears `unit mutation`
         # The zero exit proves the source adapter resolves (#258). The assertion is a tested check
         # in the repo-only checks package (internals/checks, #321/#328); `uv run` syncs it and runs
-        # the subcommand, with the engine layered in via `--with` and the adapter on PYTHONPATH.
+        # the subcommand, with the adapter on PYTHONPATH.
         env:
           PYTHONPATH: ${{ github.workspace }}/packages/python/python
-        run: uv run --with cosmic-ray --with pytest --project internals/checks tc-checks python-mutation-clean
+        run: uv run --project internals/checks tc-checks python-mutation-clean
 
   mutation-wired:
     name: The reusable workflow enforces unit mutation
@@ -413,22 +412,6 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - name: move-major-tag.yml gates @v0 on the pre-move verification
         run: uv run --project internals/checks tc-checks verify-release-wired
-
-  github-helpers-wired:
-    name: The .github helpers are dogfooded through every Python arm
-    # Red→green wiring signal for #237's last arm: dogfood-github-helpers.yml holds the
-    # repo's own helper scripts (detect.py, move_major_tag.py) to the same rules as any
-    # shipped package. The four whole-tree arms landed with the gate (#236); this asserts
-    # the diff-scoped mutation gate (`unit mutation --base`, the rung above coverage) is
-    # invoked too — the same static-grep style as mutation-wired / diff-scoped-wired.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
-      - name: dogfood-github-helpers.yml must invoke all five Python arms
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
-        run: uv run --project internals/checks tc-checks github-helpers-wired
 
   hermetic-wired:
     name: The reusable workflow derives a hermetic (build-from-HEAD) mode

@@ -1,6 +1,6 @@
 name: Move major tag (tests)
 
-# Red/green tests for the repo-only move-major-tag helper (.github/scripts/move-major-tag). The
+# Red/green tests for the repo-only move-major-tag helper (internals/move-major-tag). The
 # forward-only tag-advance logic lives in move_major_tag.py — not inline in move-major-tag.yml —
 # so it carries integration tests (the git boundary mocked) and e2e tests (a real git repo with
 # a local remote), run with pytest. This is the gate that goes red before the logic lands and
@@ -9,7 +9,7 @@ name: Move major tag (tests)
 on:
   pull_request:
     paths:
-      - '.github/scripts/move-major-tag/**'
+      - 'internals/move-major-tag/**'
       - '.github/workflows/move-major-tag-tests.yml'
   workflow_dispatch:
 
@@ -31,5 +31,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Unit + integration + e2e tests
-        # uv layers pytest into an ephemeral environment and runs the suite from disk — no pip.
-        run: uv run --with pytest --no-project python -m pytest .github/scripts/move-major-tag/ -v --import-mode=importlib
+        # pytest is a dev-dependency of internals/move-major-tag, pinned in its uv.lock.
+        working-directory: internals/move-major-tag
+        run: uv run pytest -v --import-mode=importlib

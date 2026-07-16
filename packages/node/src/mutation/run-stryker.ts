@@ -38,6 +38,13 @@ export async function runStryker(options: RunStrykerOptions = {}): Promise<Norma
   const cliOptions: PartialStrykerOptions = {
     testRunner: 'vitest',
     plugins: [vitestRunnerPlugin],
+    // Stryker runs in place: mutants are applied to the project's real tree (backed up under
+    // .stryker-tmp, restored at run end) rather than to a sandbox copy, so everything the run
+    // touches resolves through the project's own node_modules. Stryker's ts-config
+    // preprocessor rewrites sandbox copies by importing `typescript` from
+    // @stryker-mutator/core's location — absent from this package's isolated production
+    // install — and stays out of an in-place run entirely.
+    inPlace: true,
     // Results come from runMutationTest()'s return value, so no file/stdout reporter is needed.
     reporters: [],
     ...(options.mutate ? { mutate: options.mutate } : {}),

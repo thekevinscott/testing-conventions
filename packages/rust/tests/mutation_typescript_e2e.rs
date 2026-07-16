@@ -178,7 +178,7 @@ fn survivors_fail_the_gate_by_default() {
 fn a_src_scan_path_with_an_upward_import_fails_on_survivors() {
     // The standard `{package.json, src/**}` layout whose source imports `../package.json`,
     // scanned at `src/`: the gate reaches the survivors and lists them scan-path-relative —
-    // the sandbox is rooted at the package root, so the upward import resolves and the run
+    // the run is rooted at the package root, so the upward import resolves and the run
     // is judged on mutants, never on module resolution.
     let package = Staged::upward("upward_survivors");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
@@ -202,7 +202,7 @@ fn a_src_scan_path_with_an_upward_import_fails_on_survivors() {
 
 #[test]
 fn a_src_scan_path_with_an_upward_import_passes_when_all_mutants_are_killed() {
-    // The killed twin clears the gate: the upward import resolves in the sandbox and every
+    // The killed twin clears the gate: the upward import resolves from the package root and every
     // mutant under the scan path is caught.
     let package = Staged::upward("upward_killed");
     assert_eq!(unit_mutation_exit(&package.path().join("src"), None), 0);

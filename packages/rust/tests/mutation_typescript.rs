@@ -11,7 +11,7 @@
 //! The fixtures are **runner-only**: they install just vitest. That the gate still runs
 //! Stryker over them proves the tool bundles and drives the engine; the
 //! project provides only its own test runner. Each test runs against its own staged copy
-//! (vitest `node_modules` symlinked) so the parallel Stryker sandboxes never collide, and
+//! (vitest `node_modules` symlinked) so the parallel in-place Stryker runs never collide, and
 //! passes the freshly-built adapter path ([`common::ts_adapter`]) straight to the rule.
 //! Requires the built node adapter and the fixtures' vitest (`npm ci` in
 //! `tests/fixtures/unit_mutation/typescript`).
@@ -69,7 +69,7 @@ fn survivors_are_reported() {
 #[test]
 fn a_src_scan_path_with_an_upward_import_reports_scan_relative_survivors() {
     // The standard package layout: `{package.json, src/**}`, scanned at `src/`, where a
-    // source imports `../package.json`. The gate roots Stryker's sandbox at the package
+    // source imports `../package.json`. The gate roots Stryker's in-place run at the package
     // root (so the upward import resolves), mutates only the scan path, judges mutants by
     // the scan path's colocated suite alone (the fixture's `tests/` tier fails loudly if
     // ever run), and reports survivors scan-path-relative.
@@ -96,7 +96,7 @@ fn a_src_scan_path_with_an_upward_import_reports_scan_relative_survivors() {
 
 #[test]
 fn a_src_scan_path_with_an_upward_import_passes_when_all_mutants_are_killed() {
-    // The killed twin: the same layout clears the gate — the sandbox resolves
+    // The killed twin: the same layout clears the gate — the package-root run resolves
     // `../package.json`, and every mutant under the scan path is caught.
     let package = Staged::upward("upward_killed");
     let (_, survivors) = expect_tested(

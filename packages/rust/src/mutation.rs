@@ -452,14 +452,18 @@ fn one_line(replacement: &str) -> String {
 /// cosmic-ray needs pytest.
 ///
 /// The adapter runs at the **package root** — the nearest directory at or above `root`
-/// holding a `package.json` ([`crate::tiers::package_root`]) — so Stryker's file-copy
-/// sandbox contains the manifest and every other package-level file a source legitimately
-/// reaches above the scan path (`import pkg from '../package.json'`, a shared
-/// `../tsconfig`). The run stays scan-path-scoped end to end: mutate patterns address the
+/// holding a `package.json` ([`crate::tiers::package_root`]) — and Stryker runs **in
+/// place** there: mutants are applied to the package's real tree (backed up under
+/// `.stryker-tmp`, restored at run end), so the manifest, the package's `tsconfig.json`,
+/// and every reference a source legitimately makes above the scan path
+/// (`import pkg from '../package.json'`, a shared `../tsconfig`) resolve exactly as they
+/// do in the tree — including for the engine's own tooling, which a sandbox copy would
+/// resolve from the isolated install's tree instead. The run stays scan-path-scoped end
+/// to end: mutate patterns address the
 /// scan path within the package, the scan path's colocated suite judges the mutants (the
 /// adapter's `--vitest-dir`), and the results are rebased scan-path-relative before
 /// gating, so exemption paths match every other check. A scan path that is itself the
-/// package root — or a loose tree with no manifest — runs in place, unprefixed.
+/// package root — or a loose tree with no manifest — runs at the scan path, unprefixed.
 ///
 /// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested —
 /// Stryker has no native git-diff mode, so the changed lines become `--mutate
@@ -561,7 +565,7 @@ fn to_scan_relative(mutants: Vec<NormalizedMutant>, prefix: Option<&str>) -> Vec
 /// package) drives Stryker via its Node API and emits a [`NormalizedMutant`] array — so
 /// the consumer drives the engine through this CLI alone; the npm package resolves
 /// `@stryker-mutator/*` from the tool's own tree. The adapter's working directory is
-/// Stryker's project root: the sandbox copies and resolves against it.
+/// Stryker's project root: the in-place run mutates and resolves against it.
 ///
 /// `mutate`, when set, scopes the run to `--mutate` patterns; `vitest_dir`, when set,
 /// scopes vitest's test discovery to that directory within the project (the scan path).

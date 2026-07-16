@@ -1,8 +1,9 @@
 //! Shared test helper for the mutation suites.
 //!
-//! The engines write into the project dir — Stryker its sandbox, cosmic-ray mutates
-//! files in place — so two runs in the same fixture would collide when cargo runs tests
-//! in parallel. [`Staged`] copies a fixture project into a unique temp dir (for
+//! The engines write into the project dir — Stryker and cosmic-ray both mutate files in
+//! place (Stryker keeps its backup under `.stryker-tmp`) — so two runs in the same
+//! fixture would collide when cargo runs tests in parallel, and the committed fixtures
+//! would hold mutants while any run is live. [`Staged`] copies a fixture project into a unique temp dir (for
 //! TypeScript, with the runner-only `node_modules` symlinked rather than copied) so every
 //! test gets a pristine, isolated project and the committed fixtures are never written to.
 //!

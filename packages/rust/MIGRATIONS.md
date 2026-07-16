@@ -747,6 +747,14 @@ from ten job slots to seven. Each step keeps its own `gates` membership and lang
 and `--base` semantics are unchanged; only the consumer-visible **check names** change (see
 **Required changes**). No CLI, API, or config change.
 
+Roots the TypeScript mutation gate's Stryker sandbox at the **package root** — the nearest
+directory at or above the scan path holding a `package.json` — while the run stays
+scan-path-scoped: mutate patterns address the scan path, the scan path's colocated unit suite
+judges the mutants, and exemption paths and survivor output are unchanged. A source that imports
+above the scan path (`import pkg from '../package.json'`) now resolves inside the sandbox, so the
+gate measures mutants instead of dying in the initial (dry) test run. No config or API change
+(see **Behavior changes without code changes**).
+
 ### Required changes
 
 **Rename `path:` to `source:` on every `uses:` call** (#423). One line per call; the value is
@@ -1315,6 +1323,15 @@ Exemptions (#32) change runtime behavior:
   survivors — so the run reports zero survivors and the gate stays green; only a real baseline
   failure (exit `4`) or usage error is still fatal. No API or config change.
 
+`unit mutation --language typescript` runs Stryker from the package root instead of the scan
+path. A package whose source imports above the scan path — previously an initial-test-run error
+on every source-touching diff — now clears or fails the gate on its mutants alone. Stryker's
+scratch directory (`.stryker-tmp`) appears under the package root rather than the scan path, and
+a `stryker.conf.json` is discovered at the package root (Stryker's new working directory) rather
+than at the scan path. A `{ "inPlace": true }` Stryker config added at the scan path to work
+around the old sandbox root has no further effect and can be deleted. A scan path that is itself
+the package root, or a tree with no `package.json` at or above it, runs exactly as before.
+
 ### Verification
 
 ```
@@ -1738,3 +1755,11 @@ testing-conventions install && testing-conventions install
 Expected: the first run writes the `<!-- testing-conventions:begin … -->` block into `AGENTS.md`
 (creating the file if needed); the second run leaves the file byte-identical. Both exit `0` and
 print nothing.
+
+```
+testing-conventions unit mutation --language typescript --base origin/main <package>/src
+```
+
+Expected: in a package laid out `{package.json, src/**}` whose `src` imports `../package.json`,
+a source-touching branch reports mutants (all caught, or listed survivors) instead of failing
+the initial test run with `Cannot find module '../package.json'`.

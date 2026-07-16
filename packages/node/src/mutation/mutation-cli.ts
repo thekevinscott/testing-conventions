@@ -10,11 +10,16 @@ import { runStryker } from './run-stryker.js';
  * Stryker through the Node API and emits the normalized results as JSON. `--out <path>` writes
  * them to a file (the rule passes a temp file, so Stryker's own stdout logging can't corrupt
  * them); without it, the JSON goes to stdout. `--mutate <a,b,...>` scopes the run to those Stryker
- * mutate patterns. Rejects on a failed run; `main.ts` maps that onto a non-zero exit code.
+ * mutate patterns, and `--vitest-dir <path>` scopes vitest's test discovery to that directory
+ * (the scan path within the package). Rejects on a failed run; `main.ts` maps that onto a
+ * non-zero exit code.
  */
 export async function mutationCLI(argv: string[]): Promise<void> {
-  const { mutate, out } = parseArgs(argv);
-  const results = await runStryker(mutate === undefined ? {} : { mutate });
+  const { mutate, out, vitestDir } = parseArgs(argv);
+  const results = await runStryker({
+    ...(mutate === undefined ? {} : { mutate }),
+    ...(vitestDir === undefined ? {} : { vitestDir }),
+  });
   const json = `${JSON.stringify(results)}\n`;
   if (out === undefined) {
     process.stdout.write(json);

@@ -63,6 +63,51 @@ fn survivors_are_reported() {
 }
 
 #[test]
+fn a_src_scan_path_with_an_upward_import_reports_scan_relative_survivors() {
+    // The standard package layout: `{package.json, src/**}`, scanned at `src/`, where a
+    // source imports `../package.json`. The gate roots Stryker's sandbox at the package
+    // root (so the upward import resolves), mutates only the scan path, judges mutants by
+    // the scan path's colocated suite alone (the fixture's `tests/` tier fails loudly if
+    // ever run), and reports survivors scan-path-relative.
+    let package = Staged::upward("upward_survivors");
+    let survivors = measure_typescript(
+        &package.path().join("src"),
+        &[],
+        &std::collections::BTreeMap::new(),
+        None,
+        &ts_adapter(),
+    )
+    .expect("stryker runs");
+    assert!(
+        !survivors.is_empty(),
+        "the assertion-light suite should leave survivors under the scan path"
+    );
+    assert!(
+        survivors.iter().all(|m| m.file == "index.ts"),
+        "survivors are reported relative to the scan path; got {survivors:?}"
+    );
+}
+
+#[test]
+fn a_src_scan_path_with_an_upward_import_passes_when_all_mutants_are_killed() {
+    // The killed twin: the same layout clears the gate — the sandbox resolves
+    // `../package.json`, and every mutant under the scan path is caught.
+    let package = Staged::upward("upward_killed");
+    let survivors = measure_typescript(
+        &package.path().join("src"),
+        &[],
+        &std::collections::BTreeMap::new(),
+        None,
+        &ts_adapter(),
+    )
+    .expect("stryker runs");
+    assert!(
+        survivors.is_empty(),
+        "every mutant should be caught; got {survivors:?}"
+    );
+}
+
+#[test]
 fn a_mutation_exemption_drops_the_survivors() {
     // Exempting the survivors' file lifts all of them — an equivalent / deliberately
     // defensive mutation, waived with a reason via `[[typescript.exempt]] rules = ["mutation"]`.

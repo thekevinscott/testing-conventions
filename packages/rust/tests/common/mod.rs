@@ -43,6 +43,24 @@ impl Staged {
         )
     }
 
+    /// Stage an upward-import TypeScript fixture (`upward_killed` / `upward_survivors`):
+    /// the standard `{package.json, src/**, tests/**}` package layout whose `src/` imports
+    /// `../package.json`. The staged path is the **package root**; the mutation tests scan
+    /// its `src/` subdirectory.
+    pub fn upward(project: &str) -> Self {
+        Self::stage(
+            "typescript",
+            project,
+            &[
+                "package.json",
+                "src/index.ts",
+                "src/index.test.ts",
+                "tests/integration/tiers.test.ts",
+            ],
+            true,
+        )
+    }
+
     /// Stage a Python fixture (`killed` / `survivors`); cosmic-ray and pytest resolve
     /// from the ambient install, so there's no `node_modules` to link.
     pub fn python(project: &str) -> Self {
@@ -63,7 +81,11 @@ impl Staged {
         ));
         std::fs::create_dir_all(&dst).expect("create staged project dir");
         for file in files {
-            std::fs::copy(fixtures.join(project).join(file), dst.join(file))
+            let to = dst.join(file);
+            if let Some(parent) = to.parent() {
+                std::fs::create_dir_all(parent).expect("create staged subdirectory");
+            }
+            std::fs::copy(fixtures.join(project).join(file), to)
                 .unwrap_or_else(|e| panic!("copy fixture {lang}/{project}/{file}: {e}"));
         }
         if link_node_modules {

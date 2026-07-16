@@ -18,6 +18,10 @@ describe('parseArgs', () => {
     expect(parseArgs(['--mutate', 'src/a.ts:2'])).toEqual({ mutate: ['src/a.ts:2'] });
   });
 
+  it('parses --vitest-dir', () => {
+    expect(parseArgs(['--vitest-dir', 'src'])).toEqual({ vitestDir: 'src' });
+  });
+
   it('returns an empty object when neither flag is present', () => {
     expect(parseArgs([])).toEqual({});
   });

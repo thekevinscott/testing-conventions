@@ -11,6 +11,12 @@ export interface RunStrykerOptions {
    * diff-scoped gate). Omitted ⇒ Stryker's configured/default `mutate` set.
    */
   mutate?: string[];
+  /**
+   * Directory vitest discovers tests in (the vitest runner's `vitest.dir`), relative to the
+   * project root — the scan path within the package, so the colocated unit suite alone judges
+   * the mutants. Omitted ⇒ vitest's configured/default discovery over the whole project.
+   */
+  vitestDir?: string;
 }
 
 // The bundled vitest runner plugin's absolute path. Stryker discovers plugins relative to the
@@ -35,6 +41,7 @@ export async function runStryker(options: RunStrykerOptions = {}): Promise<Norma
     // Results come from runMutationTest()'s return value, so no file/stdout reporter is needed.
     reporters: [],
     ...(options.mutate ? { mutate: options.mutate } : {}),
+    ...(options.vitestDir === undefined ? {} : { vitest: { dir: options.vitestDir } }),
   };
   const results = await new Stryker(cliOptions).runMutationTest();
   const projectRoot = process.cwd();

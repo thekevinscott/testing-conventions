@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Fixed
+
+- **`unit mutation --language typescript` roots Stryker's sandbox at the package root, so a
+  source that imports above the scan path resolves.** The runner previously ran Stryker with its
+  project root at the scan path (e.g. `packages/<pkg>/src`), so the sandbox held only the scan
+  path's files and any upward reference — `import pkg from '../package.json'`, a shared
+  `../tsconfig` — was absent, killing the initial (dry) test run before a single mutant ran. The
+  rule now derives the package root (the nearest directory at or above the scan path holding a
+  `package.json`, the same walk the suite-tier scans use) and roots the adapter there, while the
+  run stays scan-path-scoped end to end: `--base` mutate ranges and the whole-path mutate set
+  address the scan path within the package, the scan path's colocated suite is the judge (the
+  package's `tests/` tiers stay out of the run), and survivors are still reported
+  scan-path-relative, so exemption paths are unchanged. A scan path that is itself the package
+  root, or a loose tree with no manifest, runs exactly as before.
+
 ### Changed
 
 - **A type-only TypeScript module is no longer a `colocated-test` subject** (#429). A `.ts` /

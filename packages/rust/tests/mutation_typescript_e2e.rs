@@ -109,6 +109,40 @@ fn survivors_fail_the_gate_by_default() {
 }
 
 #[test]
+fn a_src_scan_path_with_an_upward_import_fails_on_survivors() {
+    // The standard `{package.json, src/**}` layout whose source imports `../package.json`,
+    // scanned at `src/`: the gate reaches the survivors and lists them scan-path-relative —
+    // the sandbox is rooted at the package root, so the upward import resolves and the run
+    // is judged on mutants, never on module resolution.
+    let package = Staged::upward("upward_survivors");
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "typescript"])
+        .arg("--ts-mutation-adapter")
+        .arg(ts_adapter())
+        .arg(package.path().join("src"))
+        .output()
+        .expect("the built binary should run");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "the assertion-light suite leaves survivors; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("unexplained surviving mutant") && stderr.contains("index.ts"),
+        "the survivors are listed scan-path-relative; got: {stderr}"
+    );
+}
+
+#[test]
+fn a_src_scan_path_with_an_upward_import_passes_when_all_mutants_are_killed() {
+    // The killed twin clears the gate: the upward import resolves in the sandbox and every
+    // mutant under the scan path is caught.
+    let package = Staged::upward("upward_killed");
+    assert_eq!(unit_mutation_exit(&package.path().join("src"), None), 0);
+}
+
+#[test]
 fn an_exempted_survivor_passes_the_gate() {
     // The survivor's file carries a `mutation` exemption, so the gate clears it (an
     // equivalent / deliberately-defensive mutation, lifted with a reason) — the only

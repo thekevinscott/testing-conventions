@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Fixed
+
+- **The mutation adapter scopes vitest to the scan path within the package** (part of the
+  package-root sandbox fix recorded in `packages/rust/CHANGELOG.md`). The adapter accepts a
+  `--vitest-dir <path>` argument and passes it through as the vitest runner's `vitest.dir`, so
+  when the Rust core roots Stryker's sandbox at the package root, the mutants are still judged by
+  the scan path's colocated unit suite alone — the package's `tests/` tiers stay out of the run.
+
 ### Changed
 
 - **E2E attestation is one branch-keyed decision per branch** (shipped through this package's

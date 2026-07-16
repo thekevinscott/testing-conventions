@@ -97,6 +97,18 @@ runner that runs your own suite:
 | Rust | [cargo-mutants](https://github.com/sourcefrog/cargo-mutants), provisioned on first use (a pinned `cargo install` into the tool's own cache) and run from there; concurrent invocations share one provisioning install rather than each racing to install their own | the cargo toolchain that builds and tests your crate |
 
 A run lists each survivor with its file, line, and mutation, and fails on any un-exempted one.
+Survivor paths are reported relative to the scanned path, so exemptions address the same paths
+every other check uses.
+
+Each engine runs where its ecosystem expects: cargo-mutants at the crate root, cosmic-ray at the
+scanned path (it mutates the tree in place), and Stryker at the **package root** — the nearest
+directory at or above the scanned path holding a `package.json`. Stryker copies the project into
+a sandbox and runs the suite there; rooting that sandbox at the package root puts the manifest
+and every other package-level file inside it, so a source that reaches above the scanned path —
+`import pkg from '../package.json'`, a shared `../tsconfig` — resolves in the sandbox exactly as
+it does in the tree. Mutation stays scoped to the scanned path, and the scanned path's colocated
+unit suite is what judges each mutant; the package's other suite tiers (`tests/`) stay out of the
+run.
 <!-- #endregion engines -->
 
 ## Timeouts: a mutant timeout is inconclusive, a baseline timeout is fatal

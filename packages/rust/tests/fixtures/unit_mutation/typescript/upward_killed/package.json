@@ -1,0 +1,6 @@
+{
+  "name": "tc-upward-killed",
+  "private": true,
+  "version": "1.2.3",
+  "description": "The standard package layout — `{package.json, src/**}` with the suite tiers under `tests/` — whose source imports `../package.json` from inside `src/`. Scanned at `src/`, the gate must root Stryker's sandbox at this package root so that upward import resolves, mutate only `src/`, and judge mutants by the colocated suite alone. Every mutant is caught."
+}

@@ -31,5 +31,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Unit + integration + e2e tests
-        # uv layers pytest into an ephemeral environment and runs the suite from disk — no pip.
-        run: uv run --with pytest --no-project python -m pytest .github/scripts/move-major-tag/ -v --import-mode=importlib
+        # The loose helper scripts are no uv project of their own; pytest comes from
+        # internals/checks's environment, pinned in its uv.lock.
+        working-directory: internals/checks
+        run: uv run pytest ../../.github/scripts/move-major-tag/ -v --import-mode=importlib

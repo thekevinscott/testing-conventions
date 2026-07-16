@@ -13,6 +13,9 @@ version = "0"
 description = "Repo-only implementation of the `detect` composite action for testing-conventions (#363)."
 requires-python = ">=3.11"
 
+[dependency-groups]
+dev = ["pytest"]
+
 [tool.hatch.build]
 exclude = ["**/*_test.py"]
 

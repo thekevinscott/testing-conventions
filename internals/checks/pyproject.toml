@@ -20,8 +20,8 @@ dependencies = ["click>=8.1"]
 tc-checks = "checks.cli:main"
 
 [dependency-groups]
-# The CI test engines. Jobs with no uv project of their own (rust.yml, dogfood-github-helpers,
-# move-major-tag-tests) borrow this environment for them.
+# The CI test engines. rust.yml's integration job (a Rust crate, no uv project of its own)
+# borrows this environment for them.
 dev = ["coverage", "pytest", "cosmic-ray"]
 
 [tool.hatch.build]

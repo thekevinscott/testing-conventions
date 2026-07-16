@@ -22,7 +22,7 @@ jobs:
   move-v0:
     needs: [context, verify-layout, verify-suite]
     steps:
-      - run: python3 .github/scripts/move-major-tag/move_major_tag.py
+      - run: python3 internals/move-major-tag/src/move_major_tag.py
 """
 
 
@@ -47,7 +47,7 @@ def test_error_when_a_suite_workflow_is_not_dispatched():
 
 
 def test_error_when_no_job_runs_the_move_helper():
-    text = WIRED.replace("python3 .github/scripts/move-major-tag/move_major_tag.py", "echo done")
+    text = WIRED.replace("python3 internals/move-major-tag/src/move_major_tag.py", "echo done")
     assert "move_major_tag.py" in check_move_gated_on_verification(text)
 
 

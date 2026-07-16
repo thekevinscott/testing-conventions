@@ -66,6 +66,10 @@ def test_e2e_verify_wired_is_registered():
     assert "e2e-verify-wired" in main.commands
 
 
+def test_engines_drift_is_registered():
+    assert "engines-drift" in main.commands
+
+
 def test_engines_locked_wired_is_registered():
     assert "engines-locked-wired" in main.commands
 

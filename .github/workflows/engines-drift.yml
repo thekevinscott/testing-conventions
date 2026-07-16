@@ -1,0 +1,32 @@
+name: Engine drift
+
+# The early-warning signal locking the CI engine toolchain (#437) traded away: with the engines
+# pinned, a breaking coverage / pytest / cosmic-ray / maturin release goes unnoticed until someone
+# advances the lock. This job restores it outside the required-check set — it recompiles the engine
+# toolchain at latest and reds when the result diverges from the committed lock, naming what moved.
+# Scheduled and not a required check, so a red blocks nothing; it is the prompt to advance the pin
+# (`uv pip compile --upgrade .github/uv/engines.in`) and re-test deliberately, rather than have the
+# drift land tangled into an unrelated bump.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'  # weekly, Monday 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: The engine lock still matches the latest resolution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      # Recompile the toolchain at latest — the same flags the committed lock was built with, plus
+      # `--upgrade`. A plain tool invocation with no logic; the parse-and-compare that decides red
+      # is the colocated-tested `tc-checks engines-drift`, handed this file's path.
+      - name: Resolve the engine toolchain at latest
+        run: uv pip compile .github/uv/engines.in -o "$RUNNER_TEMP/engines-latest.txt" --generate-hashes --universal --upgrade
+      - name: Compare the latest resolution to the committed lock
+        run: uv run --project internals/checks tc-checks engines-drift --latest "$RUNNER_TEMP/engines-latest.txt"

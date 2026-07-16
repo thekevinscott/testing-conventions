@@ -22,6 +22,7 @@ from checks.diff_scoped_wired.cli import cli as diff_scoped_wired
 from checks.e2e_verify_checks_out_pr_head.cli import cli as e2e_verify_checks_out_pr_head
 from checks.e2e_verify_scope_wired.cli import cli as e2e_verify_scope_wired
 from checks.e2e_verify_wired.cli import cli as e2e_verify_wired
+from checks.engines_drift.cli import cli as engines_drift
 from checks.engines_locked_wired.cli import cli as engines_locked_wired
 from checks.gates_wired.cli import cli as gates_wired
 from checks.github_helpers_wired.cli import cli as github_helpers_wired
@@ -70,6 +71,7 @@ main.add_command(diff_scoped_wired, name="diff-scoped-wired")
 main.add_command(e2e_verify_checks_out_pr_head, name="e2e-verify-checks-out-pr-head")
 main.add_command(e2e_verify_scope_wired, name="e2e-verify-scope-wired")
 main.add_command(e2e_verify_wired, name="e2e-verify-wired")
+main.add_command(engines_drift, name="engines-drift")
 main.add_command(engines_locked_wired, name="engines-locked-wired")
 main.add_command(gates_wired, name="gates-wired")
 main.add_command(github_helpers_wired, name="github-helpers-wired")

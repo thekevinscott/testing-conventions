@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`unit mutation --language typescript` runs Stryker in place, so a package-level
+  `tsconfig.json` reaches a mutant verdict in the production install** (#460). With the sandbox
+  rooted at the package root, the package's `tsconfig.json` sat inside the sandboxed project, so
+  Stryker's ts-config preprocessor rewrote the sandbox copy by importing `typescript` resolved
+  from `@stryker-mutator/core`'s own location — and the isolated production install
+  (`npx -y testing-conventions`) carries only the npm package's declared dependencies, so every
+  source-touching TS mutation run on a package with a `tsconfig.json` died at startup with
+  `ERR_MODULE_NOT_FOUND`. The bundled adapter now sets Stryker's `inPlace: true`: no sandbox
+  copy is made, the preprocessor stays out of the run, and `typescript`, `../package.json`, and
+  every other upward or tooling reference resolve through the package's real tree. Stryker backs
+  mutated files up under `.stryker-tmp` at the package root and restores them when the run ends.
+  The run stays scan-path-scoped end to end: mutate patterns, the colocated-suite judge, and
+  scan-path-relative survivor paths are unchanged.
 - **`unit mutation --language typescript` roots Stryker's sandbox at the package root, so a
   source that imports above the scan path resolves.** The runner previously ran Stryker with its
   project root at the scan path (e.g. `packages/<pkg>/src`), so the sandbox held only the scan

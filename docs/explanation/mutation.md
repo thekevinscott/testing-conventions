@@ -118,14 +118,17 @@ Survivor paths are reported relative to the scanned path, so exemptions address 
 every other check uses.
 
 Each engine runs where its ecosystem expects: cargo-mutants at the crate root, cosmic-ray at the
-scanned path (it mutates the tree in place), and Stryker at the **package root** — the nearest
-directory at or above the scanned path holding a `package.json`. Stryker copies the project into
-a sandbox and runs the suite there; rooting that sandbox at the package root puts the manifest
-and every other package-level file inside it, so a source that reaches above the scanned path —
-`import pkg from '../package.json'`, a shared `../tsconfig` — resolves in the sandbox exactly as
-it does in the tree. Mutation stays scoped to the scanned path, and the scanned path's colocated
-unit suite is what judges each mutant; the package's other suite tiers (`tests/`) stay out of the
-run.
+scanned path, and Stryker at the **package root** — the nearest directory at or above the scanned
+path holding a `package.json`. All three mutate the tree **in place**: Stryker applies each mutant
+to the package's real files (a backup lives under `.stryker-tmp` for the duration of the run, and
+the run restores every file when it ends), so everything a run touches resolves exactly as it does
+in your editor — a source that reaches above the scanned path (`import pkg from '../package.json'`,
+a shared `../tsconfig`) resolves through the real tree, the package's `tsconfig.json` is read where
+it lies, and tooling resolves from the package's own `node_modules`. Mutation stays scoped to the
+scanned path, and the scanned path's colocated unit suite is what judges each mutant; the package's
+other suite tiers (`tests/`) stay out of the run. In-place mutation is built for the ephemeral CI
+checkout the workflow runs in; run it locally on a clean working tree, since the sources hold
+mutants while the run is live.
 <!-- #endregion engines -->
 
 ## Timeouts: a mutant timeout is inconclusive, a baseline timeout is fatal

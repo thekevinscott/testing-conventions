@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The mutation adapter runs Stryker in place** (`inPlace: true`; #460, the gate-level behavior
+  change is recorded in `packages/rust/CHANGELOG.md`). Stryker applies each mutant to the
+  package's real tree — a backup lives under `.stryker-tmp` and the run restores every file when
+  it ends — and reads the package's `tsconfig.json` where it lies. Running against the real tree
+  keeps Stryker's sandbox ts-config preprocessor out of the run; that preprocessor rewrites
+  sandbox copies by importing `typescript` from `@stryker-mutator/core`'s own location, a package
+  the isolated production install (`npx -y testing-conventions`) does not carry, so on any
+  package with a `tsconfig.json` the copy-sandbox run died at startup with
+  `ERR_MODULE_NOT_FOUND`. In-place composes with the package-root rooting and `--vitest-dir`
+  scoping: the run stays scan-path-scoped and the colocated unit suite judges the mutants. The
+  adapter sets `inPlace` itself — it is the execution model, not a default a `stryker.conf.json`
+  overrides.
 - **The mutation adapter scopes vitest to the scan path within the package** (part of the
   package-root sandbox fix recorded in `packages/rust/CHANGELOG.md`). The adapter accepts a
   `--vitest-dir <path>` argument and passes it through as the vitest runner's `vitest.dir`, so

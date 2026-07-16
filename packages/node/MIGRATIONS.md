@@ -51,6 +51,14 @@ fix; full notes in `packages/rust/MIGRATIONS.md`): the Rust core passes the scan
 vitest's test discovery inside Stryker's sandbox stays scoped to the colocated unit suite.
 Purely additive to an internal executable the binary spawns.
 
+Sets Stryker's `inPlace: true` in the bundled mutation adapter (#460; full notes in
+`packages/rust/MIGRATIONS.md`): Stryker applies each mutant to the package's real tree, backing
+files up under `.stryker-tmp` and restoring them when the run ends, and reads the package's
+`tsconfig.json` where it lies. Running in place keeps Stryker's sandbox ts-config preprocessor —
+which imports `typescript` from `@stryker-mutator/core`'s own location, a package this package's
+isolated install does not carry — out of the run. The adapter sets the option on every run; a
+consumer's `{ "inPlace": true }` workaround config is now inert and can be deleted.
+
 ### Required changes
 
 None to code. Install-time: the bundled Stryker 9 requires **Node ≥20** — a consumer on an older Node

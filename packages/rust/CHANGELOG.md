@@ -725,7 +725,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   effectful use can't be told at the import head, so the clock / filesystem stay
   caught by the patch-by-string convention (a documented non-goal). Same
   `unmocked-collaborator` rule (still waivable via #102), no new `config::Rule`. See
-  [`internals/python/isolation.md`](../../internals/python/isolation.md).
+  [`docs/internals/python/isolation.md`](../../docs/internals/python/isolation.md).
 - **Python unit isolation** — `unmocked-collaborator` (#42, slice 2). `unit isolation
   --language python <PATH>` now flags a colocated unit test (`*_test.py` / `test_*.py`)
   that **imports a first-party collaborator without mocking it** — a unit test must
@@ -740,7 +740,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ["unmocked-collaborator"]`. Library API: `testing_conventions::lint::find_unit_isolation_violations`.
   Un-mocked third-party / effectful-stdlib imports are a follow-up slice; value-type
   imports and cross-file (`conftest.py`) mocks are documented non-goals. See
-  [`internals/python/isolation.md`](../../internals/python/isolation.md).
+  [`docs/internals/python/isolation.md`](../../docs/internals/python/isolation.md).
 - **Rust colocated-test** — `unit colocated-test --language rust <PATH>` now checks
   inline-`#[cfg(test)]` **presence** (#40), the Rust arm of the colocated-test rule.
   Rust units are inline `#[cfg(test)]` modules, so a `src` file that defines a
@@ -760,7 +760,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   declared package flags nothing. Waivable like the other lints via
   `[[python.exempt]] rules = ["no-first-party-patch"]` (#32/#102). The
   `patch.object(module, …)` and non-literal-target forms are documented non-goals.
-  See [`internals/python/isolation.md`](../../internals/python/isolation.md) for the
+  See [`docs/internals/python/isolation.md`](../../docs/internals/python/isolation.md) for the
   design and the deferred unit direction.
 - Config-driven **waivers for the isolation rules** (#102). The escape hatch from
   #32 (a reason-required `[[<lang>.exempt]]` entry, auditable in one diff) now

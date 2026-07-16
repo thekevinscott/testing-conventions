@@ -25,7 +25,7 @@ Both honor the config `exempt` waiver (see [Waiver](#waiver)).
 
 ## Approach: `rustpython` AST heuristic, no name resolution
 
-Detection reuses [`lint.rs`](../../packages/rust/src/lint.rs)'s machinery: each
+Detection reuses [`lint.rs`](../../../packages/rust/src/lint.rs)'s machinery: each
 Python test file is parsed with `rustpython_parser` and walked with a `Visitor`.
 Like the existing `integration lint` rules (#48–#52), this is a **deterministic
 syntactic heuristic** — it reads what is written (`patch("…")` string targets,
@@ -179,7 +179,7 @@ list is a tunable heuristic, not an exhaustive map (à la #19).
   <PATH>` (the home for deterministic integration-test lints) — `no-first-party-patch`
   joins #48–#52 there, no new subcommand. Unit (slice 2): a Python arm of
   `unit lint --language python <PATH>`.
-- **Module.** Lives in [`lint.rs`](../../packages/rust/src/lint.rs), the Python
+- **Module.** Lives in [`lint.rs`](../../../packages/rust/src/lint.rs), the Python
   AST home, reusing its `is_patch_call` / patch-target extraction and the shared
   `Violation` shape — the Python parallel to all-Rust-in-`isolation.rs`,
   all-TypeScript-in-`ts.rs`.

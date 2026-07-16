@@ -17,7 +17,7 @@ name: Move major tag
 # The narrow scope (detect stays at the current `@v0`, not re-pinned to the release) is
 # structurally forced — the new-workflow × detect-at-the-new-tag combination is unconstructable
 # until the tag moves (`uses:` refs can't be dynamic) — and the coverage it would give is already
-# proven pre-merge by Layer 1's hermetic gate (#356). See internals/repo.md, "Validated
+# proven pre-merge by Layer 1's hermetic gate (#356). See docs/internals/repo.md, "Validated
 # promotion". All logic is in the colocated-tested `tc-checks verify-release` command
 # (internals/checks) and the `.github/scripts/move-major-tag` helper; this workflow wires
 # triggers, checkouts, and env.

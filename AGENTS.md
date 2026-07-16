@@ -29,7 +29,7 @@ everything an ecosystem standardizes is still derived, for every language it sta
 
 ## Docs first
 
-Every PR starts with **documentation, written alongside the red tests** — both come before the implementation. Update the public-facing docs (the `docs/` site and `README.md`) when the change is user-visible; when a change has **no public-facing surface** (an internal refactor, a private command, tooling), document it in the internal docs (`internals/`) instead. There is always a docs update in every PR — public or internal. (A docs-only PR is just that update, with no red tests — see below.)
+Every PR starts with **documentation, written alongside the red tests** — both come before the implementation. Update the public-facing docs (the `docs/` site and `README.md`) when the change is user-visible; when a change has **no public-facing surface** (an internal refactor, a private command, tooling), document it in the internal docs (`docs/internals/`) instead. There is always a docs update in every PR — public or internal. (A docs-only PR is just that update, with no red tests — see below.)
 
 ## Cross-language parity
 
@@ -153,14 +153,14 @@ invariant in two layers, and new CI work stays inside them:
 So when adding or changing a required check, ask what mutable reference it reads. If the answer is a
 tag, a package, or "the last release," either pin it to the commit under test (Layer 1) or gate the
 thing that moves it (Layer 2) — a required check never depends on state that can change without a
-commit. `internals/repo.md` carries the mechanics ("Hermetic mode", "Validated promotion") and the
+commit. `docs/internals/repo.md` carries the mechanics ("Hermetic mode", "Validated promotion") and the
 full worked-example history ("Self-test and the `@v0` path").
 
 ## Two-step rollout for workflow-consumed CLI changes
 
 The reusable workflow (`.github/workflows/testing-conventions.yml`) never runs this repo's own
 source — its `run:` steps shell out to `npx testing-conventions`, the **published** npm package
-(see `internals/repo.md`, "Self-test and the `@v0` path"). A PR that both adds a CLI flag/subcommand
+(see `docs/internals/repo.md`, "Self-test and the `@v0` path"). A PR that both adds a CLI flag/subcommand
 *and* edits the workflow to pass it in the same commit makes that job invoke a binary that doesn't
 understand the new argument yet — the workflow file changed, but the published binary it calls
 didn't. That job runs in this repo's own `dogfood.yml`, which is a required check: the PR cannot

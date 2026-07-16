@@ -947,7 +947,7 @@ jobs:
   # their fixtures against. These two jobs drive the *local* detect action (not the
   # `@v0`-pinned one the reusable workflow's `detect` job uses), so — like
   # `detect-routes-python` above — they aren't blocked by the `@v0` rolling-release lag
-  # (internals/repo.md): a detect.py change takes effect here immediately.
+  # (docs/internals/repo.md): a detect.py change takes effect here immediately.
 
   detect-package-root-ts:
     name: detect resolves the monorepo fixture's npm TS package
@@ -1009,7 +1009,7 @@ jobs:
     # job's own block (by anchoring on the next job's header), so it tracks the workflow file
     # regardless of what the published binary ships; the runtime behavior is covered by the
     # monorepo `uses:` calls below (blocked from truly exercising the new outputs until a
-    # release moves `@v0`, per internals/repo.md).
+    # release moves `@v0`, per docs/internals/repo.md).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

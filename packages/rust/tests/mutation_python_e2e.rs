@@ -16,7 +16,7 @@ mod common;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use common::Staged;
+use common::{tested_count, GitRepo, Staged, ENGINE_NOT_RUN};
 
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unit_mutation")
@@ -38,10 +38,71 @@ fn unit_mutation_exit(project: &Path, config: Option<&str>) -> i32 {
 }
 
 #[test]
-fn killed_project_passes_with_no_survivors() {
-    // Every mutant is caught, so the project clears the gate.
+fn killed_project_passes_and_states_the_tested_count() {
+    // Every mutant is caught, so the project clears the gate — and the success line
+    // states how many mutants the engine judged, the evidence telling this pass apart
+    // from an engine-skipped one.
     let project = Staged::python("killed");
-    assert_eq!(unit_mutation_exit(project.path(), None), 0);
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "python"])
+        .arg(project.path())
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "every mutant is caught; stderr: {stderr}"
+    );
+    assert!(
+        tested_count(&stdout) > 0,
+        "the engine ran, so the count is non-zero; got: {stdout}"
+    );
+}
+
+#[test]
+fn a_diff_with_no_mutatable_changed_lines_reports_the_engine_not_run() {
+    // Only a test file changes on the diff, so the run is skipped — and the output says
+    // the engine never ran, distinct from the all-killed success, keeping the vacuous
+    // pass visible in the job log. The exit code stays 0: an empty diff owes no run.
+    // The skip happens before the adapter is spawned, so this holds with no cosmic-ray
+    // in the environment.
+    let repo = GitRepo::new("py-vacuous");
+    repo.write("calc.py", "def add(a, b):\n    return a + b\n");
+    repo.write(
+        "calc_test.py",
+        "from calc import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n",
+    );
+    repo.commit("baseline");
+    let base = repo.head();
+    repo.write(
+        "calc_test.py",
+        "from calc import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n    assert add(-1, 1) == 0\n",
+    );
+    repo.commit("tweak only the test file");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "python"])
+        .args(["--base", &base])
+        .arg(repo.path())
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "an empty module set passes; stderr: {stderr}"
+    );
+    assert!(
+        stdout.contains(ENGINE_NOT_RUN),
+        "the skip is stated; got: {stdout}"
+    );
+    assert!(
+        !stdout.contains("every mutation was caught"),
+        "an engine-skipped pass never claims mutants were caught; got: {stdout}"
+    );
 }
 
 #[test]

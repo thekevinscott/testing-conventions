@@ -17,6 +17,27 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+/// The line a diff-scoped `unit mutation` run prints when the changed lines hold nothing
+/// mutatable — the engine-skipped pass, distinct from the all-killed success.
+pub const ENGINE_NOT_RUN: &str = "unit mutation: no mutatable changed lines — engine not run";
+
+/// The `<n>` from a passing run's counted success line — `unit mutation: no surviving
+/// mutants — every mutation was caught (<n> mutant(s) tested)`. Panics (failing the
+/// calling test) when stdout carries no such line or the line deviates from that exact
+/// shape, so the assertion pins the full message format, not a substring.
+pub fn tested_count(stdout: &str) -> u64 {
+    const PREFIX: &str = "unit mutation: no surviving mutants — every mutation was caught (";
+    const SUFFIX: &str = " mutant(s) tested)";
+    let line = stdout
+        .lines()
+        .find(|line| line.starts_with("unit mutation: no surviving mutants"))
+        .unwrap_or_else(|| panic!("no success line in stdout: {stdout:?}"));
+    line.strip_prefix(PREFIX)
+        .and_then(|rest| rest.strip_suffix(SUFFIX))
+        .and_then(|count| count.parse().ok())
+        .unwrap_or_else(|| panic!("the success line does not state the tested count: {line:?}"))
+}
+
 /// The freshly-built TypeScript mutation adapter (`packages/node/dist/mutation/main.js`),
 /// which the rule spawns for the TS arm. `CARGO_MANIFEST_DIR` is `packages/rust`,
 /// so the sibling node package is one level up. Requires the node package to be built
@@ -107,6 +128,73 @@ impl Drop for Staged {
         // Remove the node_modules symlink first (if any) so we never recurse into the
         // shared toolchain.
         let _ = std::fs::remove_file(self.0.join("node_modules"));
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// A throwaway git repo for the diff-scoped (`--base`) e2e runs, removed on drop. The
+/// caller writes files, commits a baseline, and commits the change under test; the two
+/// heads bound the `<base>...HEAD` diff the CLI is pointed at.
+pub struct GitRepo(PathBuf);
+
+impl GitRepo {
+    pub fn new(slug: &str) -> Self {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "tc-mut-e2e-{}-{}-{}",
+            slug,
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed),
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        Self::git(&root, &["init", "-q"]);
+        Self::git(&root, &["config", "user.email", "test@example.com"]);
+        Self::git(&root, &["config", "user.name", "Test"]);
+        GitRepo(root)
+    }
+
+    pub fn write(&self, rel: &str, contents: &str) {
+        let path = self.0.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, contents).unwrap();
+    }
+
+    pub fn commit(&self, message: &str) {
+        Self::git(&self.0, &["add", "-A"]);
+        Self::git(
+            &self.0,
+            &["-c", "commit.gpgsign=false", "commit", "-q", "-m", message],
+        );
+    }
+
+    /// The current `HEAD` commit id — captured after the baseline commit to serve as `--base`.
+    pub fn head(&self) -> String {
+        let out = std::process::Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&self.0)
+            .output()
+            .expect("git rev-parse should run");
+        assert!(out.status.success(), "git rev-parse failed");
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    }
+
+    /// The repo's root directory.
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+
+    fn git(dir: &Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .expect("git should run");
+        assert!(status.success(), "git {args:?} failed");
+    }
+}
+
+impl Drop for GitRepo {
+    fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }

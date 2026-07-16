@@ -15,6 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Makes `unit mutation`'s vacuous pass visible (#459). A `--base` run whose changed lines hold
+nothing mutatable skips the engine (unchanged) and now reports `unit mutation: no mutatable
+changed lines — engine not run`, distinct from the all-killed success; a run that tested mutants
+states the count it tested (`… every mutation was caught (6 mutant(s) tested)`), in all three
+language arms. Exit codes are unchanged — both cases pass. One breaking SDK change: the
+`mutation::measure_*` functions return the new `mutation::Measurement` enum instead of the bare
+survivor list (see **Required changes**); CLI output changes shape on every passing run (see
+**Behavior changes without code changes**).
+
 Stops flagging type-only TypeScript modules as `colocated-test` subjects (#429). A `.ts` module
 whose top level is exclusively `type` / `interface` / `import type` / `export type` declarations
 compiles to zero runtime JavaScript, so it has no behavior to unit-test; the parser now treats it
@@ -757,6 +766,27 @@ gate measures mutants instead of dying in the initial (dry) test run. No config 
 
 ### Required changes
 
+**Match on `mutation::Measurement` where the mutation measure functions are called** (#459).
+`mutation::measure_rust`, `measure_typescript`, and `measure_python` return
+`Result<mutation::Measurement>` instead of `Result<Vec<Survivor>>`: `Measurement::EngineNotRun`
+when a `--base` diff carried no mutatable changed lines (the engine was skipped), or
+`Measurement::Tested { count, survivors }` when the engine ran — `count` the viable, conclusive
+mutants it judged (caught or missed), `survivors` the un-exempted surviving ones. A caller that
+treated the empty vector as "pass" reads `EngineNotRun` and `Tested` with empty `survivors` as
+the two pass cases they always were, now distinguishable. Signatures are otherwise unchanged.
+
+```rust
+// Before:
+let survivors = mutation::measure_rust(root, &exempt, &exempt_lines, base, &features)?;
+if survivors.is_empty() { /* pass */ }
+// After:
+match mutation::measure_rust(root, &exempt, &exempt_lines, base, &features)? {
+    mutation::Measurement::EngineNotRun => { /* pass: nothing mutatable changed */ }
+    mutation::Measurement::Tested { count, survivors } if survivors.is_empty() => { /* pass */ }
+    mutation::Measurement::Tested { survivors, .. } => { /* findings */ }
+}
+```
+
 **Rename `path:` to `source:` on every `uses:` call** (#423). One line per call; the value is
 unchanged. A call that never set `path` (the single-package drop-in) needs no change.
 
@@ -1051,6 +1081,12 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+Every passing `unit mutation` run prints a more specific success line (#459). A run that tested
+mutants appends the count — `unit mutation: no surviving mutants — every mutation was caught (6
+mutant(s) tested)` — and a `--base` run whose changed lines hold nothing mutatable prints
+`unit mutation: no mutatable changed lines — engine not run` instead of the all-killed line.
+Exit codes are unchanged; anything parsing the old success line byte-for-byte updates its match.
+
 A type-only TypeScript module stops being a `colocated-test` subject (#429). A package that
 previously red on such a module — or carried a `colocated-test` exemption to keep it green — now
 passes with no test and no exemption; a `[[typescript.exempt]]` entry written *solely* for a
@@ -1333,6 +1369,15 @@ around the old sandbox root has no further effect and can be deleted. A scan pat
 the package root, or a tree with no `package.json` at or above it, runs exactly as before.
 
 ### Verification
+
+```
+testing-conventions unit mutation --language rust --base HEAD~1 <crate>
+```
+
+Expected (#459): on a commit touching no mutatable crate lines, the run passes printing
+`unit mutation: no mutatable changed lines — engine not run`; on a commit touching well-tested
+source it passes printing `unit mutation: no surviving mutants — every mutation was caught
+(<n> mutant(s) tested)` with a non-zero count.
 
 ```
 git checkout -b tc-migration-check

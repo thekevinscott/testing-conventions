@@ -8,8 +8,12 @@
 //! caught) and `survivors` (a coverage-passing but assertion-light suite whose mutants
 //! all survive).
 
+mod common;
+
 use std::path::PathBuf;
 use std::process::Command;
+
+use common::{tested_count, GitRepo, ENGINE_NOT_RUN};
 
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unit_mutation")
@@ -31,9 +35,70 @@ fn unit_mutation_exit(crate_name: &str, config: Option<&str>) -> i32 {
 }
 
 #[test]
-fn killed_crate_passes_with_no_survivors() {
-    // Every mutant is caught, so the crate clears the gate.
-    assert_eq!(unit_mutation_exit("killed", None), 0);
+fn killed_crate_passes_and_states_the_tested_count() {
+    // Every mutant is caught, so the crate clears the gate — and the success line states
+    // how many mutants the engine judged, the evidence telling this pass apart from an
+    // engine-skipped one.
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "rust"])
+        .arg(fixtures().join("rust").join("killed"))
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "every mutant is caught; stderr: {stderr}"
+    );
+    assert!(
+        tested_count(&stdout) > 0,
+        "the engine ran, so the count is non-zero; got: {stdout}"
+    );
+}
+
+#[test]
+fn a_diff_without_crate_changes_reports_the_engine_not_run() {
+    // The diff touches nothing under the crate (only a top-level note), so the run is
+    // skipped — and the output says the engine never ran, distinct from the all-killed
+    // success, keeping the vacuous pass visible in the job log. The exit code stays 0:
+    // an empty diff owes no run.
+    let repo = GitRepo::new("rust-vacuous");
+    repo.write(
+        "crate/Cargo.toml",
+        "[package]\nname = \"tc_mut_vacuous\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n",
+    );
+    repo.write(
+        "crate/src/lib.rs",
+        "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n",
+    );
+    repo.write("notes.md", "before\n");
+    repo.commit("baseline");
+    let base = repo.head();
+    repo.write("notes.md", "before\nafter\n");
+    repo.commit("tweak a top-level note, not the crate");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "rust"])
+        .args(["--base", &base])
+        .arg(repo.path().join("crate"))
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "an empty crate-relative diff passes; stderr: {stderr}"
+    );
+    assert!(
+        stdout.contains(ENGINE_NOT_RUN),
+        "the skip is stated; got: {stdout}"
+    );
+    assert!(
+        !stdout.contains("every mutation was caught"),
+        "an engine-skipped pass never claims mutants were caught; got: {stdout}"
+    );
 }
 
 #[test]

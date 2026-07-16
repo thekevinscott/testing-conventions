@@ -22,6 +22,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **`unit mutation` states which fact made a pass green** (#459). A run that tested mutants
+  reports the count — `unit mutation: no surviving mutants — every mutation was caught (6
+  mutant(s) tested)` — so the pass carries its own evidence. A `--base` run whose changed lines
+  hold nothing mutatable skips the engine (as before) and now says so — `unit mutation: no
+  mutatable changed lines — engine not run` — instead of printing the same success as a run that
+  killed every mutant, in all three language arms. Exit codes are unchanged (both cases pass);
+  this is reporting, not gating. One breaking SDK change: `mutation::measure_rust` /
+  `measure_typescript` / `measure_python` return the new `mutation::Measurement` (engine-not-run
+  vs. tested-with-count) instead of the bare survivor list. See `MIGRATIONS.md`.
 - **A type-only TypeScript module is no longer a `colocated-test` subject** (#429). A `.ts` /
   `.tsx` / `.mts` / `.cts` module whose top level is exclusively `type` / `interface` /
   `import type` / `export type` declarations erases to zero runtime JavaScript, so it has no

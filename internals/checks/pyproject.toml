@@ -19,6 +19,11 @@ dependencies = ["click>=8.1"]
 # in the group.
 tc-checks = "checks.cli:main"
 
+[dependency-groups]
+# The CI test engines. Jobs with no uv project of their own (rust.yml, dogfood-github-helpers,
+# move-major-tag-tests) borrow this environment for them.
+dev = ["coverage", "pytest", "cosmic-ray"]
+
 [tool.hatch.build]
 exclude = ["**/*_test.py"]
 

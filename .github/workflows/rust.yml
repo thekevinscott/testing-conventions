@@ -71,13 +71,18 @@ jobs:
           workspaces: packages/rust
       # The coverage rule's integration/e2e tests (#26) shell out to coverage.py; the Python
       # mutation rule's tests (#248) drive the in-process cosmic-ray adapter via
-      # `python3 -m testing_conventions.mutation.main`. uv layers those engines onto the test run
-      # below (`--with coverage --with pytest --with cosmic-ray`), and PYTHONPATH there resolves
-      # the adapter from source — no pip, no published wheel.
+      # `python3 -m testing_conventions.mutation.main`. The engines come from internals/checks's
+      # venv, pinned in its uv.lock; PYTHONPATH resolves the adapter from source — no published
+      # wheel.
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - uses: astral-sh/setup-uv@v7
+      - name: Put the pinned Python engines on PATH
+        working-directory: internals/checks
+        run: |
+          uv sync
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       # The TypeScript coverage rule's integration/e2e tests (#31) shell out to
       # vitest; install the fixtures' toolchain so `npx vitest` resolves it.
       - uses: actions/setup-node@v6
@@ -126,9 +131,7 @@ jobs:
       # adapter (`python3 -m testing_conventions.mutation.main`, spawned over staged temp
       # fixtures) at the source package; a consumer resolves it from the installed wheel's
       # site-packages instead.
-      # `uv run` wraps the cargo command so the engines (`--with`) sit on `PATH` for the
-      # `python3` that nextest's test binaries spawn; PYTHONPATH resolves the adapter from source.
-      - run: uv run --with coverage --with pytest --with cosmic-ray --no-project cargo llvm-cov nextest --ignore-filename-regex 'main\.rs' --fail-under-lines 95
+      - run: cargo llvm-cov nextest --ignore-filename-regex 'main\.rs' --fail-under-lines 95
         env:
           PYTHONPATH: ${{ github.workspace }}/packages/python/python
 

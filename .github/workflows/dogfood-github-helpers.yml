@@ -44,6 +44,11 @@ jobs:
         with:
           python-version: '3.12'
       - uses: astral-sh/setup-uv@v7
+      - name: Put the pinned Python engines on PATH
+        working-directory: internals/checks
+        run: |
+          uv sync
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Enforce the conventions on the helper scripts
         # The Python arms that apply to loose first-party scripts: a colocated unit test per
         # source, unit-suite isolation, the coverage floor, the integration mocking lint, and
@@ -54,7 +59,8 @@ jobs:
         # `npx testing-conventions` is the deliberate consumer path this job dogfoods. The
         # mutation arm spawns `python3 -m testing_conventions.mutation.main` (#248), though, and
         # PYTHONPATH resolves that adapter from source — the PR's code, not the released wheel —
-        # while uv layers the engines (coverage, pytest, cosmic-ray) onto the `python3` npx spawns.
+        # while the engines (coverage, pytest, cosmic-ray) reach that `python3` from
+        # internals/checks's venv, pinned in its uv.lock and put on PATH above.
         env:
           PYTHONPATH: ${{ github.workspace }}/packages/python/python
         run: |
@@ -63,7 +69,7 @@ jobs:
           for dir in .github/scripts; do
             for rule in "unit colocated-test" "unit lint" "unit coverage" "integration lint" "unit mutation --base origin/main"; do
               echo "::group::testing-conventions $rule --language python $dir"
-              if ! uv run --with coverage --with pytest --with cosmic-ray --no-project npx -y testing-conventions $rule --language python "$dir"; then
+              if ! npx -y testing-conventions $rule --language python "$dir"; then
                 echo "::error::\`$rule\` failed for $dir"
                 fail=1
               fi

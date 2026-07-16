@@ -1,5 +1,7 @@
 [build-system]
-requires = ["maturin>=1.7,<2.0"]
+# Pinned exactly: the wheel is the shipped artifact, so its build toolchain is a function of
+# the commit.
+requires = ["maturin==1.14.1"]
 build-backend = "maturin"
 
 [project]

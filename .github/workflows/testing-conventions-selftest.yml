@@ -1189,6 +1189,24 @@ jobs:
         # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks uv-provisioning-wired
 
+  # ---- #438: the reusable workflow pins the consumer suite toolchain (coverage / pytest) ----
+
+  suite-toolchain-pinned-wired:
+    name: The reusable workflow pins the consumer suite toolchain
+    # Red→green wiring signal for #438: the `uv pip install` that provisions a consumer's suite
+    # runs in the consumer's required check, so a floating `coverage`/`pytest` reads a mutable
+    # external reference that can red a consumer's build with no commit to blame. The workflow
+    # ships to a consumer's checkout at @v0, which holds none of this repo's own locks, so the pin
+    # lives inline in the workflow YAML. A static check over that file, so it tracks the pin directly.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: testing-conventions.yml must pin coverage / pytest to exact versions
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks suite-toolchain-pinned-wired
+
   # ---- #379: the direct-drive red-path jobs run the hermetic CLI, not the published npx ----
 
   red-path-hermetic-wired:

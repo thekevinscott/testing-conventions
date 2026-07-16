@@ -418,9 +418,11 @@ jobs:
       # builds/installs the project itself, so a maturin package's native module compiles right
       # here (cargo already provisioned above). A plain package has no project to sync, so a bare
       # `uv venv` stands in. The union suite toolchain installs into that same venv, which goes on
-      # PATH: coverage.py + pytest for the coverage gate, the testing-conventions adapter wheel for
-      # mutation (named last, so the #92 subcommand-drift guard reads it as an install argument,
-      # not an invocation).
+      # PATH: coverage.py + pytest for the coverage gate — pinned to exact versions (#438), since a
+      # consumer's required check must resolve these third-party engines reproducibly, and this
+      # workflow ships to a consumer's checkout at @v0 where an inline pin is the only one that
+      # travels — plus the testing-conventions adapter wheel for mutation (named last, so the #92
+      # subcommand-drift guard reads it as an install argument, not an invocation).
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
@@ -434,7 +436,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
-          uv pip install coverage pytest testing-conventions
+          uv pip install "coverage==7.15.2" "pytest==9.1.1" testing-conventions
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       # TypeScript shells out to vitest, so install the project's own deps — the
       # manager (pnpm or npm, #277) and the install location (the package root, #278)
@@ -537,9 +539,11 @@ jobs:
       # builds/installs the project itself, so a maturin package's native module compiles right
       # here (cargo already provisioned above). A plain package has no project to sync, so a bare
       # `uv venv` stands in. The union suite toolchain installs into that same venv, which goes on
-      # PATH: coverage.py + pytest for the coverage gate, the testing-conventions adapter wheel for
-      # mutation (named last, so the #92 subcommand-drift guard reads it as an install argument,
-      # not an invocation).
+      # PATH: coverage.py + pytest for the coverage gate — pinned to exact versions (#438), since a
+      # consumer's required check must resolve these third-party engines reproducibly, and this
+      # workflow ships to a consumer's checkout at @v0 where an inline pin is the only one that
+      # travels — plus the testing-conventions adapter wheel for mutation (named last, so the #92
+      # subcommand-drift guard reads it as an install argument, not an invocation).
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
@@ -553,7 +557,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
-          uv pip install coverage pytest testing-conventions
+          uv pip install "coverage==7.15.2" "pytest==9.1.1" testing-conventions
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
@@ -671,7 +675,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
-          uv pip install coverage pytest testing-conventions
+          uv pip install "coverage==7.15.2" "pytest==9.1.1" testing-conventions
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       # TypeScript drives Stryker, which runs the project's test runner — install the
       # project's deps (which must include @stryker-mutator/core and a runner plugin) with

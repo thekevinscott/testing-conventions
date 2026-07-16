@@ -59,9 +59,12 @@ for a single-package repo, so an existing single-package call is unaffected. Pyt
 by **uv** in all three jobs, with identical steps: an installable package (a `pyproject.toml` with
 a `[project]` table) is synced first — `uv sync` installs the project's own dependencies and
 builds/installs the project itself — while a plain package gets a fresh `uv venv`; the suite
-toolchain (`coverage`, `pytest`, and the `testing-conventions` adapter wheel) then installs into
-that same `.venv`, which goes on the suite's `PATH` — so cosmic-ray's spawned pytest (for
-`unit mutation`) and the coverage run import the project's dependencies and the adapter together.
+toolchain — `coverage` and `pytest` pinned to exact versions, plus the `testing-conventions`
+adapter wheel — then installs into that same `.venv`, which goes on the suite's `PATH`, so
+cosmic-ray's spawned pytest (for `unit mutation`) and the coverage run import the project's
+dependencies and the adapter together. Pinning the engines keeps your gate resolving the same
+`coverage` and `pytest` on every run; those versions advance when a `testing-conventions` release
+advances them. (The engine's own transitive dependencies resolve compatibly under the pin.)
 uv reads its own index/network configuration (`UV_INDEX_URL`, `uv.toml`); a private index is
 declared there. TypeScript runs under `vitest`
 v8 coverage, installed with the package's own lockfile (`pnpm install --frozen-lockfile` or

@@ -107,6 +107,85 @@ fn a_suite_that_cannot_run_is_an_error_not_a_silent_pass() {
 }
 
 #[test]
+fn a_package_root_vitest_config_governs_a_src_scan() {
+    // The standard package layout — `{package.json, vitest.config.ts, src/**, tests/**}`,
+    // scanned at `src/` — where the package-root config is load-bearing: its setup file is
+    // the only thing that covers `src/boot.ts`, and the `tests/` tier fails loudly if the
+    // run ever collects it. Pins the anchoring answer the docs state: vitest resolves the
+    // package-root config with its own upward search from the scan path (as pytest does),
+    // config-file-relative paths (the setup file) resolve beside the config, and discovery
+    // and measurement stay scoped to the scan path.
+    assert_eq!(
+        measure_typescript(&codebase("pkg_config").join("src"), FULL, &[]).unwrap(),
+        Outcome::Pass
+    );
+}
+
+#[test]
+fn consumer_coverage_thresholds_neither_decide_nor_rewrite() {
+    // A consumer config's own `coverage.thresholds` must not decide the gate's outcome,
+    // and `autoUpdate` must never rewrite the consumer's file during a gate run. The
+    // staged package pins both at once: its config demands `lines: 99` with `autoUpdate`
+    // while its sources sit at ~66% — above the gate's configured floor, below the
+    // consumer's own. The gate's floor is the only floor (Pass), and the config file is
+    // left byte-identical. Staged into a temp copy so the vitest run never touches a
+    // committed fixture.
+    let staged = std::env::temp_dir().join(format!("tc-ts-cov-thresholds-{}", std::process::id()));
+    let src = staged.join("src");
+    std::fs::create_dir_all(&src).unwrap();
+    for file in ["package.json", "vitest.setup.ts"] {
+        std::fs::copy(codebase("pkg_config").join(file), staged.join(file)).unwrap();
+    }
+    for file in ["boot.ts", "widget.ts", "widget.test.ts"] {
+        std::fs::copy(
+            codebase("pkg_config").join("src").join(file),
+            src.join(file),
+        )
+        .unwrap();
+    }
+    std::fs::write(
+        staged.join("vitest.config.ts"),
+        "import { defineConfig } from 'vitest/config';\n\nexport default defineConfig({\n  test: {\n    setupFiles: ['./vitest.setup.ts'],\n    coverage: {\n      thresholds: { lines: 99, autoUpdate: true },\n    },\n  },\n});\n",
+    )
+    .unwrap();
+    // Uncovered source drags the measurement below the consumer's 99 (and keeps it above
+    // the gate's floor below).
+    std::fs::write(
+        src.join("extra.ts"),
+        "export function unused(n: number): string {\n  if (n > 0) return 'positive';\n  return 'other';\n}\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/unit_coverage/typescript/node_modules"),
+        staged.join("node_modules"),
+    )
+    .unwrap();
+
+    let floor = TypeScriptThresholds {
+        lines: 50,
+        branches: 50,
+        functions: 50,
+        statements: 50,
+    };
+    let config_before = std::fs::read(staged.join("vitest.config.ts")).unwrap();
+    let outcome = measure_typescript(&src, floor, &[]);
+    let config_after = std::fs::read(staged.join("vitest.config.ts")).unwrap();
+    let _ = std::fs::remove_file(staged.join("node_modules"));
+    let _ = std::fs::remove_dir_all(&staged);
+    assert_eq!(
+        outcome
+            .expect("the gate's own floor decides; the consumer threshold must not error the run"),
+        Outcome::Pass,
+        "above the gate's floor, below the consumer's own threshold"
+    );
+    assert_eq!(
+        config_before, config_after,
+        "the consumer's vitest.config.ts must be left byte-identical"
+    );
+}
+
+#[test]
 fn a_package_root_config_file_is_not_counted_as_uncovered_source() {
     // `full_with_config/` is fully tested (identical to `full/`) but also
     // carries its own `vitest.config.ts` — the shape a per-package monorepo

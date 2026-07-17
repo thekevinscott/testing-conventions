@@ -1,0 +1,6 @@
+{
+  "name": "tc-pkg-config",
+  "private": true,
+  "version": "1.0.0",
+  "description": "The standard package layout — `{package.json, vitest.config.ts, src/**, tests/**}`, scanned at `src/` — whose package-root vitest config is load-bearing: its setup file is the only thing that covers `src/boot.ts`, and the `tests/` tier fails loudly if the gate ever runs it. Pins the anchoring answer: vitest resolves this config with its own upward search from the scan path, while discovery and measurement stay scoped to `src/`. The thresholds sit at the measured value so the committed file is stable; the threshold-neutralization behavior is pinned by a staged temp copy in coverage_ts.rs."
+}

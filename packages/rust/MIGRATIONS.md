@@ -24,6 +24,15 @@ language arms. Exit codes are unchanged — both cases pass. One breaking SDK ch
 survivor list (see **Required changes**); CLI output changes shape on every passing run (see
 **Behavior changes without code changes**).
 
+Clears the consumer vitest config's own coverage thresholds during TypeScript coverage runs
+(#458). vitest resolves a package-root `vitest.config.*` with its own upward search from the
+scanned path — environment, setup files, aliases, and plugins already govern the gate's run —
+but the config's `coverage.thresholds` also decided the run's exit and, with
+`thresholds.autoUpdate: true`, rewrote the consumer's config file during a gate run. The gate
+now clears them explicitly: the `testing-conventions.toml` floors alone decide, and the config
+file is left byte-identical. No config change is required (see **Behavior changes without code
+changes**). Where each arm's measurement anchors is now documented, with pinning tests.
+
 Stops flagging type-only TypeScript modules as `colocated-test` subjects (#429). A `.ts` module
 whose top level is exclusively `type` / `interface` / `import type` / `export type` declarations
 compiles to zero runtime JavaScript, so it has no behavior to unit-test; the parser now treats it
@@ -1099,6 +1108,19 @@ mutant(s) tested)` — and a `--base` run whose changed lines hold nothing mutat
 `unit mutation: no mutatable changed lines — engine not run` instead of the all-killed line.
 Exit codes are unchanged; anything parsing the old success line byte-for-byte updates its match.
 
+The TypeScript coverage runs clear the vitest config's own coverage thresholds (#458). Two
+things change for a package whose `vitest.config.*` sets `coverage.thresholds`. First, those
+thresholds (`lines` / `branches` / `functions` / `statements`, `100`, `perFile`) no longer
+decide the gate's exit — a run that previously failed on
+`ERROR: Coverage for … does not meet global threshold` while clearing the
+`testing-conventions.toml` floors now passes; the configured floors are the only floors.
+Second, `thresholds.autoUpdate: true` no longer rewrites the config file during a gate run —
+the file is left byte-identical (previously a gate run could commit-dirty the working tree by
+bumping the thresholds to the measured value). Everything else about the run is unchanged:
+vitest resolves the package-root config with its own upward search from the scanned path, as it
+always did, and Python and Rust coverage are untouched (pytest resolves its configuration with
+its own upward search; cargo anchors at the crate root).
+
 A type-only TypeScript module stops being a `colocated-test` subject (#429). A package that
 previously red on such a module — or carried a `colocated-test` exemption to keep it green — now
 passes with no test and no exemption; a `[[typescript.exempt]]` entry written *solely* for a
@@ -1398,6 +1420,16 @@ Expected (#459): on a commit touching no mutatable crate lines, the run passes p
 `unit mutation: no mutatable changed lines — engine not run`; on a commit touching well-tested
 source it passes printing `unit mutation: no surviving mutants — every mutation was caught
 (<n> mutant(s) tested)` with a non-zero count.
+
+cd <package root>   # the directory holding package.json, with vitest.config.* beside it
+testing-conventions unit coverage --language typescript --config testing-conventions.toml src
+```
+
+Expected (#458): the run applies the package-root config's setup files and environment (vitest's
+own upward search finds it, as before) and judges the `testing-conventions.toml` floors over
+`src`'s sources — the config's own `coverage.thresholds` produce no
+`ERROR: Coverage for … does not meet global threshold` line, and `git status` shows the vitest
+config file untouched afterward even with `thresholds.autoUpdate: true` set.
 
 ```
 git checkout -b tc-migration-check

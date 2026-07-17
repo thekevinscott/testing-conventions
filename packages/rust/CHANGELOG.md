@@ -20,6 +20,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   mutated files up under `.stryker-tmp` at the package root and restores them when the run ends.
   The run stays scan-path-scoped end to end: mutate patterns, the colocated-suite judge, and
   scan-path-relative survivor paths are unchanged.
+- **`unit coverage --language typescript` clears the consumer vitest config's own coverage
+  thresholds, so the gate's floors alone decide — and the config file is never rewritten**
+  (#458). vitest resolves a package-root `vitest.config.*` with its own upward search from the
+  scanned path, so the consumer's environment, setup files, aliases, and plugins already govern
+  the gate's run — but so did the config's `coverage.thresholds`: a threshold above the measured
+  value failed the gate's run outright regardless of the `testing-conventions.toml` floors, and
+  `thresholds.autoUpdate: true` **rewrote the consumer's config file during a gate run**. The
+  run now passes explicit threshold-clearing flags (all four metrics plus `autoUpdate: false`),
+  so the configured floors are the only floors and the consumer's file is left byte-identical.
+  Where each measurement anchors — vitest's and pytest's own upward config search from the
+  scanned path, cargo's crate root — is now documented per arm (#458's audit), with pinning
+  tests for the load-bearing cases.
 - **`unit mutation --language typescript` roots Stryker's sandbox at the package root, so a
   source that imports above the scan path resolves.** The runner previously ran Stryker with its
   project root at the scan path (e.g. `packages/<pkg>/src`), so the sandbox held only the scan

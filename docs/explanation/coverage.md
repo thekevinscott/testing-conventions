@@ -44,6 +44,35 @@ exempted files/lines are lifted from it. The exact keys and defaults are in the
   [parity](/explanation/#parity-over-cleverness) call, with the asymmetry named here.
 <!-- #endregion enforces -->
 
+## Where each measurement runs
+
+<!-- #region runs -->
+Each coverage run anchors where the consumer's own test run anchors, so the gate measures the
+suite under the same configuration your own runs use:
+
+- **TypeScript** — vitest runs at the **scanned path** and resolves its configuration with its
+  own upward search, so the package-root `vitest.config.*` that governs your own `vitest run`
+  governs the gate's run the same way: environment, setup files (resolved beside the config
+  file), aliases, and plugins all apply. The gate owns the measurement itself: its flags set the
+  coverage scope (the scanned path's sources are the denominator, and the package's suite tiers
+  under `tests/` stay out of the run), its floors come from your `testing-conventions.toml`
+  config, and the run clears the config file's own global coverage thresholds — the gate's
+  floors decide, and your config file is left untouched (a `thresholds.autoUpdate` never
+  rewrites it during a gate run).
+- **Python** — coverage.py runs at the **scanned path**, and pytest resolves its rootdir and
+  configuration with its own upward search — so a package-root `[tool.pytest.ini_options]` /
+  `pytest.ini` and the `conftest.py` files below it apply to the gate's run exactly as to your
+  own `pytest` run. The measurement itself is owned by the gate — branch coverage on, test files
+  and exempted paths omitted, floors from your `testing-conventions.toml` config — so a
+  `.coveragerc` / `[tool.coverage]` table is deliberately not consulted: the gate holds the same
+  keys it overrides in a vitest config, and report paths stay scanned-path-relative, addressing
+  the same paths every other check uses. (`# pragma: no cover` is coverage.py's built-in default
+  and applies without configuration.)
+- **Rust** — `cargo llvm-cov --lib` anchors at the **crate root** by construction: cargo resolves
+  the manifest upward from the scanned path, and `.cargo/config.toml` / `rust-toolchain.toml`
+  discovery is cargo's and rustup's own, exactly as in your own `cargo test`.
+<!-- #endregion runs -->
+
 ## The changed-line floor
 
 On pull requests, the same configured floor is *also* measured over only the lines the

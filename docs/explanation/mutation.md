@@ -129,6 +129,16 @@ scanned path, and the scanned path's colocated unit suite is what judges each mu
 other suite tiers (`tests/`) stay out of the run. In-place mutation is built for the ephemeral CI
 checkout the workflow runs in; run it locally on a clean working tree, since the sources hold
 mutants while the run is live.
+
+Each engine's own configuration is the tool's, and the test runner's configuration is yours.
+cosmic-ray's whole config (module paths, excludes, timeout, test command) is rendered in-process
+by the bundled adapter, so a cosmic-ray config file in the tree plays no part in the run; Stryker
+is driven through its Node API with the adapter's options — the runner, in-place execution, the
+mutate scope — taking precedence over a `stryker.conf.json`, which still supplies anything the
+adapter leaves unset. The runner judging each mutant resolves its configuration exactly as in
+your own runs: pytest finds its rootdir, config, and `conftest.py` files with its own upward
+search from the scanned path, and vitest resolves the package's `vitest.config.*` with its own
+upward search from Stryker's package-root, in-place run.
 <!-- #endregion engines -->
 
 ## Timeouts: a mutant timeout is inconclusive, a baseline timeout is fatal

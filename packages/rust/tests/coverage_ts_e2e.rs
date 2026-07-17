@@ -62,6 +62,14 @@ fn full_exits_zero_against_a_100_floor() {
 }
 
 #[test]
+fn a_src_scan_below_a_package_root_config_exits_zero_against_a_100_floor() {
+    // The standard package layout scanned at `src/`: the package-root `vitest.config.ts`
+    // governs the run (its setup file is the only thing covering `src/boot.ts`), the
+    // `tests/` tier stays out, and the run clears the 100 floor end to end.
+    assert_eq!(unit_coverage_exit("pkg_config/src", "ts_full.toml"), 0);
+}
+
+#[test]
 fn above_exits_nonzero_against_a_100_floor() {
     assert_eq!(unit_coverage_exit("above", "ts_full.toml"), 1);
 }

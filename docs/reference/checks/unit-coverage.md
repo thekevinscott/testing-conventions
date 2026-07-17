@@ -25,6 +25,10 @@ nothing covers every line it touches. [`unit mutation`](./mutation) is the rung 
 
 <!--@include: ../../explanation/coverage.md#enforces-->
 
+## Where the tool runs
+
+<!--@include: ../../explanation/coverage.md#runs-->
+
 ## The changed-line job
 
 On pull requests, the same configured floor is also measured over only the lines the

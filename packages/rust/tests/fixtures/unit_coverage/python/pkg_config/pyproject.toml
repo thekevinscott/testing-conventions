@@ -1,0 +1,3 @@
+# The package root: pytest's own upward search anchors its rootdir here, and the
+# conftest.py beside this file provides the fixture the colocated suite under src/ uses.
+[tool.pytest.ini_options]

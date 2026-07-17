@@ -528,7 +528,17 @@ fn run_vitest_coverage(
             "--coverage.reportsDirectory={}",
             reports.0.display()
         ))
-        .arg(format!("--coverage.include={TS_INCLUDE}"));
+        .arg(format!("--coverage.include={TS_INCLUDE}"))
+        // A consumer config's own `coverage.thresholds` neither decide the gate's exit
+        // nor rewrite the config file: the configured floors are the only floors, and
+        // `thresholds.autoUpdate` never writes during a gate run.
+        .args([
+            "--coverage.thresholds.lines=0",
+            "--coverage.thresholds.branches=0",
+            "--coverage.thresholds.functions=0",
+            "--coverage.thresholds.statements=0",
+            "--coverage.thresholds.autoUpdate=false",
+        ]);
     // Passing any `--coverage.exclude` replaces vitest's own default exclude
     // list rather than extending it, so its defaults are resolved and passed
     // back explicitly, alongside the config-driven exemption paths.

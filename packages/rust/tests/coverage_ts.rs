@@ -2,11 +2,14 @@
 //!
 //! These run REAL vitest over the fixture codebases via the SDK
 //! (`coverage::measure_typescript`) and assert pass/fail. Per the guardrail
-//! the *codebases themselves* are the fixtures: `full` (100% on all four metrics)
-//! clears a 100 floor, `above` (~83% lines / 87% branches) fails 100 but clears a
-//! mid floor, `below` (100% lines but only ~66% branches) fails the mid floor on
-//! branches — the branch floor catching what line coverage misses. Requires Node
-//! with the fixtures' vitest toolchain installed (see the suite's `package.json`).
+//! the *codebases themselves* are the fixtures, in the prescribed consumer package
+//! layout `{package.json, src/**}` scanned at `src/`: `full` (100% on all four
+//! metrics) clears a 100 floor, `above` (~83% lines / 87% branches) fails 100 but
+//! clears a mid floor, `below` (100% lines but only ~66% branches) fails the mid
+//! floor on branches — the branch floor catching what line coverage misses. The
+//! flat, no-manifest shape is the named special case (`exempt_cov`,
+//! `full_with_config`). Requires Node with the fixtures' vitest toolchain installed
+//! (see the suite's `package.json`).
 
 use std::path::PathBuf;
 
@@ -34,7 +37,7 @@ const MID: TypeScriptThresholds = TypeScriptThresholds {
 #[test]
 fn full_passes_a_100_floor() {
     assert_eq!(
-        measure_typescript(&codebase("full"), FULL, &[]).unwrap(),
+        measure_typescript(&codebase("full").join("src"), FULL, &[]).unwrap(),
         Outcome::Pass
     );
 }
@@ -42,7 +45,7 @@ fn full_passes_a_100_floor() {
 #[test]
 fn above_fails_a_100_floor() {
     assert!(matches!(
-        measure_typescript(&codebase("above"), FULL, &[]).unwrap(),
+        measure_typescript(&codebase("above").join("src"), FULL, &[]).unwrap(),
         Outcome::Fail(_)
     ));
 }
@@ -50,7 +53,7 @@ fn above_fails_a_100_floor() {
 #[test]
 fn above_passes_the_mid_floor() {
     assert_eq!(
-        measure_typescript(&codebase("above"), MID, &[]).unwrap(),
+        measure_typescript(&codebase("above").join("src"), MID, &[]).unwrap(),
         Outcome::Pass
     );
 }
@@ -59,7 +62,7 @@ fn above_passes_the_mid_floor() {
 fn below_fails_the_mid_floor_on_branches() {
     // `below` has 100% lines but only ~66% branches; the mid floor's branch
     // threshold (75) is what fails it — the whole point of measuring branches.
-    let outcome = measure_typescript(&codebase("below"), MID, &[]).unwrap();
+    let outcome = measure_typescript(&codebase("below").join("src"), MID, &[]).unwrap();
     assert!(
         matches!(&outcome, Outcome::Fail(message) if message.contains("branches")),
         "got: {outcome:?}"

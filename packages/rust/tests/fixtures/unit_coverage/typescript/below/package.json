@@ -1,0 +1,6 @@
+{
+  "name": "tc-cov-below",
+  "private": true,
+  "version": "1.0.0",
+  "description": "The default coverage fixture shape — the prescribed consumer package layout `{package.json, src/**}`, scanned at `src/`. `src/grade.ts` has 100% lines but only ~66% branches, so it fails the mid floor on branches — the branch floor catching what line coverage misses. The flat, no-manifest shape is the named special case (exempt_cov, full_with_config)."
+}

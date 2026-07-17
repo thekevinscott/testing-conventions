@@ -12,10 +12,9 @@
 //! (`patch_coverage::measure`) and the CLI (`run`). Requires `coverage` + `pytest`
 //! + `git` on PATH.
 //!
-//! Opens at RED per AGENTS.md: the diff-scoped ratio is stubbed (`measure` reports
-//! Pass), so a diff below the floor still comes back clean. The reduction —
-//! covered ÷ total changed-executable (+ branches) vs the floor — follows once CI
-//! witnesses these red.
+//! The default repo is the prescribed consumer package layout — `{pyproject.toml,
+//! src/**}` scanned at `<repo>/src`. The `--base` diff is still computed over the
+//! whole repo; the scan path handed to the SDK/CLI is `src/`.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -93,7 +92,7 @@ fn git(dir: &Path, args: &[&str]) {
 /// exemptions) via the SDK.
 fn measure_base(repo: &TempRepo, base: &str, fail_under: u8) -> Outcome {
     patch_coverage::measure(
-        &repo.0,
+        &repo.0.join("src"),
         base,
         Thresholds {
             fail_under,
@@ -112,7 +111,7 @@ fn run_coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> anyho
         "testing-conventions".into(),
         "unit".into(),
         "coverage".into(),
-        repo.0.clone().into_os_string(),
+        repo.0.join("src").into_os_string(),
         "--language".into(),
         "python".into(),
         "--base".into(),
@@ -124,6 +123,11 @@ fn run_coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> anyho
     }
     run(argv)
 }
+
+/// The package root: anchors pytest's rootdir at `<repo>` so the colocated suite
+/// under `src/` resolves its `from widget import ...` when coverage runs at the scan
+/// path `<repo>/src`.
+const PYPROJECT: &str = "[tool.pytest.ini_options]\n";
 
 /// Baseline: `widget` is fully covered (both branches taken) by `WIDGET_TEST_PY`.
 const WIDGET_PY: &str = r#"def widget(n):
@@ -169,10 +173,12 @@ def test_covered():
     assert covered() == 1
 "#;
 
-/// Writes the fully-covered baseline and returns its commit as the base ref.
+/// Writes the fully-covered baseline in the default package layout —
+/// `{pyproject.toml, src/**}` — and returns its commit as the base ref.
 fn baseline(repo: &TempRepo) -> String {
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
+    repo.write("pyproject.toml", PYPROJECT);
+    repo.write("src/widget.py", WIDGET_PY);
+    repo.write("src/widget_test.py", WIDGET_TEST_PY);
     repo.commit("base");
     repo.head()
 }
@@ -183,8 +189,8 @@ fn a_diff_below_the_floor_fails() {
     // so `--base` fails it — even though the whole tree is still well covered.
     let repo = TempRepo::new("below");
     let base = baseline(&repo);
-    repo.write("widget.py", WIDGET_PY_75);
-    repo.write("widget_test.py", WIDGET_TEST_75);
+    repo.write("src/widget.py", WIDGET_PY_75);
+    repo.write("src/widget_test.py", WIDGET_TEST_75);
     repo.commit("add a covered and an uncovered helper");
 
     assert!(
@@ -200,8 +206,8 @@ fn the_same_diff_clears_a_lower_floor() {
     // changed lines are judged against the number you set, not against 100%.
     let repo = TempRepo::new("clears");
     let base = baseline(&repo);
-    repo.write("widget.py", WIDGET_PY_75);
-    repo.write("widget_test.py", WIDGET_TEST_75);
+    repo.write("src/widget.py", WIDGET_PY_75);
+    repo.write("src/widget_test.py", WIDGET_TEST_75);
     repo.commit("add a covered and an uncovered helper");
 
     assert_eq!(
@@ -218,7 +224,7 @@ fn a_fully_covered_change_passes() {
     let repo = TempRepo::new("covered");
     let base = baseline(&repo);
     repo.write(
-        "widget.py",
+        "src/widget.py",
         r#"def widget(n):
     if n > 0:
         return "positive"
@@ -226,7 +232,7 @@ fn a_fully_covered_change_passes() {
 "#,
     );
     repo.write(
-        "widget_test.py",
+        "src/widget_test.py",
         r#"from widget import widget
 
 
@@ -248,7 +254,7 @@ fn a_tiny_below_floor_diff_is_not_exempted() {
     let repo = TempRepo::new("tiny");
     let base = baseline(&repo);
     repo.write(
-        "widget.py",
+        "src/widget.py",
         &format!("{WIDGET_PY}\n\ndef lonely():\n    return 41\n"),
     );
     repo.commit("add one untested helper");
@@ -264,8 +270,9 @@ fn a_change_touching_no_python_passes() {
     // A diff with no `.py` source has no changed line to measure — vacuously
     // passes (the suite isn't even run), at any floor.
     let repo = TempRepo::new("no-py");
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
+    repo.write("pyproject.toml", PYPROJECT);
+    repo.write("src/widget.py", WIDGET_PY);
+    repo.write("src/widget_test.py", WIDGET_TEST_PY);
     repo.write("README.md", "# project\n");
     repo.commit("base");
     let base = repo.head();
@@ -282,7 +289,7 @@ fn an_unknown_base_ref_is_an_error() {
     let _ = baseline(&repo);
     assert!(
         patch_coverage::measure(
-            &repo.0,
+            &repo.0.join("src"),
             "no-such-ref",
             Thresholds {
                 fail_under: 85,
@@ -304,15 +311,16 @@ fn a_plus_plus_line_keeps_the_uncovered_change_in_scope() {
     // change passed vacuously. The uncovered `return 999` must stay in scope, failing
     // the 100 floor.
     let repo = TempRepo::new("plusplus");
-    repo.write("calc.py", "def calc(n):\n    return n\n");
+    repo.write("pyproject.toml", PYPROJECT);
+    repo.write("src/calc.py", "def calc(n):\n    return n\n");
     repo.write(
-        "calc_test.py",
+        "src/calc_test.py",
         "from calc import calc\n\n\ndef test_calc():\n    assert calc(3) == 3\n",
     );
     repo.commit("base");
     let base = repo.head();
     repo.write(
-        "calc.py",
+        "src/calc.py",
         "def calc(n):\n    return n\n\n\n++ 1\n\n\ndef never_run():\n    return 999\n",
     );
     repo.commit("append a ++ line and an untested helper");
@@ -329,8 +337,8 @@ fn cli_exits_nonzero_on_a_below_floor_diff() {
     // the 75% diff is below it → exit 1.
     let repo = TempRepo::new("cli-red");
     let base = baseline(&repo);
-    repo.write("widget.py", WIDGET_PY_75);
-    repo.write("widget_test.py", WIDGET_TEST_75);
+    repo.write("src/widget.py", WIDGET_PY_75);
+    repo.write("src/widget_test.py", WIDGET_TEST_75);
     repo.commit("add a covered and an uncovered helper");
 
     assert_eq!(run_coverage_base(&repo, &base, None).unwrap(), 1);
@@ -341,7 +349,7 @@ fn cli_exits_zero_when_the_diff_clears_the_floor() {
     let repo = TempRepo::new("cli-clean");
     let base = baseline(&repo);
     repo.write(
-        "widget.py",
+        "src/widget.py",
         r#"def widget(n):
     if n > 0:
         return "positive"
@@ -349,7 +357,7 @@ fn cli_exits_zero_when_the_diff_clears_the_floor() {
 "#,
     );
     repo.write(
-        "widget_test.py",
+        "src/widget_test.py",
         r#"from widget import widget
 
 
@@ -374,8 +382,8 @@ fn cli_a_lower_configured_floor_lets_the_same_diff_pass() {
         "[python.coverage]\nbranch = true\nfail_under = 70\n",
     );
     let base = baseline(&repo);
-    repo.write("widget.py", WIDGET_PY_75);
-    repo.write("widget_test.py", WIDGET_TEST_75);
+    repo.write("src/widget.py", WIDGET_PY_75);
+    repo.write("src/widget_test.py", WIDGET_TEST_75);
     repo.commit("add a covered and an uncovered helper");
 
     assert_eq!(
@@ -395,7 +403,8 @@ fn a_coverage_exemption_lifts_a_below_floor_change() {
          lines = [\"1-3\"]\nreason = \"thin launcher; logic lives in tested modules\"\n",
     );
     let base = baseline(&repo);
-    repo.write("shim.py", "def shim():\n    return 0\n    # noqa\n");
+    // The exemption `path` is scan-path-relative, so `shim.py` addresses `src/shim.py`.
+    repo.write("src/shim.py", "def shim():\n    return 0\n    # noqa\n");
     repo.commit("add an untested launcher");
 
     // Flagged with no config…

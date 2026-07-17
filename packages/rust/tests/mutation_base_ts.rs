@@ -180,7 +180,7 @@ fn base_scopes_the_run_to_the_changed_lines() {
 fn base_within_a_src_scan_path_resolves_upward_imports() {
     // The reported consumer repro: a package laid out `{package.json, src/**}` whose source
     // imports `../package.json`, scanned at `<repo>/src` with `--base` on a diff that touches
-    // source. Stryker's sandbox is rooted at the package root, so the upward import resolves
+    // source. Stryker's run is rooted at the package root, so the upward import resolves
     // in the initial (dry) run; the mutate ranges address the changed lines under the scan
     // path, and the survivors come back scan-path-relative.
     let repo = TempRepo::package("upward");

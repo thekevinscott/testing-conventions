@@ -47,7 +47,10 @@ describe('runStryker', () => {
 
     const survivors = await runStryker();
 
-    expect(ctorOptions[0]).toMatchObject({ testRunner: 'vitest', reporters: [] });
+    // In-place execution is part of the contract: the run mutates the real tree, so the
+    // ts-config preprocessor and every upward or tooling reference resolve through the
+    // project itself.
+    expect(ctorOptions[0]).toMatchObject({ testRunner: 'vitest', reporters: [], inPlace: true });
     // The bundled vitest-runner is passed by resolved path so Stryker loads our copy.
     expect(ctorOptions[0].plugins).toEqual([expect.stringContaining('vitest-runner')]);
     expect(ctorOptions[0]).not.toHaveProperty('mutate');

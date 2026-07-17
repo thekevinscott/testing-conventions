@@ -764,6 +764,18 @@ above the scan path (`import pkg from '../package.json'`) now resolves inside th
 gate measures mutants instead of dying in the initial (dry) test run. No config or API change
 (see **Behavior changes without code changes**).
 
+Runs the TypeScript mutation gate's Stryker **in place** (#460): the bundled adapter sets
+Stryker's `inPlace: true`, so Stryker applies each mutant to the package's real tree — a backup
+lives under `.stryker-tmp` at the package root and the run restores every file when it ends —
+instead of copying the project into a sandbox. The copy-sandbox model activated Stryker's
+ts-config preprocessor on any package with a `tsconfig.json`, and that preprocessor imports
+`typescript` from `@stryker-mutator/core`'s own location — a package the isolated production
+install carries no copy of — so every source-touching TS mutation run died at startup with
+`ERR_MODULE_NOT_FOUND`. In place, the `tsconfig.json` is read where it lies and every upward and
+tooling reference resolves through the package's real tree. Scan-path scoping, the
+colocated-suite judge, exemption paths, and survivor output are unchanged. No config or API
+change (see **Behavior changes without code changes**).
+
 ### Required changes
 
 **Match on `mutation::Measurement` where the mutation measure functions are called** (#459).
@@ -1368,6 +1380,14 @@ than at the scan path. A `{ "inPlace": true }` Stryker config added at the scan 
 around the old sandbox root has no further effect and can be deleted. A scan path that is itself
 the package root, or a tree with no `package.json` at or above it, runs exactly as before.
 
+`unit mutation --language typescript` mutates the package's working tree during the run and
+restores it after: the adapter sets Stryker's `inPlace: true`, the backup lives under
+`.stryker-tmp` at the package root, and the sources hold mutants while the run is live — run it
+locally on a clean working tree. A `{ "inPlace": true }` added to a `stryker.conf.json` to work
+around the 0.0.82 copy-sandbox startup failure (`Cannot find package 'typescript'`) is now the
+tool's own execution model and can be deleted; the adapter sets the option on every run, so the
+config line is inert either way.
+
 ### Verification
 
 ```
@@ -1808,3 +1828,13 @@ testing-conventions unit mutation --language typescript --base origin/main <pack
 Expected: in a package laid out `{package.json, src/**}` whose `src` imports `../package.json`,
 a source-touching branch reports mutants (all caught, or listed survivors) instead of failing
 the initial test run with `Cannot find module '../package.json'`.
+
+```
+testing-conventions unit mutation --language typescript --base origin/main <package>/src
+```
+
+Expected: in a package carrying a `tsconfig.json`, run through the published npm package
+(`npx -y testing-conventions`), a source-touching branch reports mutants (all caught, or listed
+survivors) instead of failing at startup with `Cannot find package 'typescript'`. During the run
+`git status` shows mutated sources and a `.stryker-tmp` backup at the package root; when the run
+ends the tree is restored.

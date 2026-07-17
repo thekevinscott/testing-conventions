@@ -1,8 +1,9 @@
 //! Shared test helper for the mutation suites.
 //!
-//! The engines write into the project dir — Stryker its sandbox, cosmic-ray mutates
-//! files in place — so two runs in the same fixture would collide when cargo runs tests
-//! in parallel. [`Staged`] copies a fixture project into a unique temp dir (for
+//! The engines write into the project dir — Stryker and cosmic-ray both mutate files in
+//! place (Stryker keeps its backup under `.stryker-tmp`) — so two runs in the same
+//! fixture would collide when cargo runs tests in parallel, and the committed fixtures
+//! would hold mutants while any run is live. [`Staged`] copies a fixture project into a unique temp dir (for
 //! TypeScript, with the runner-only `node_modules` symlinked rather than copied) so every
 //! test gets a pristine, isolated project and the committed fixtures are never written to.
 //!
@@ -76,15 +77,18 @@ impl Staged {
     }
 
     /// Stage an upward-import TypeScript fixture (`upward_killed` / `upward_survivors`):
-    /// the standard `{package.json, src/**, tests/**}` package layout whose `src/` imports
-    /// `../package.json`. The staged path is the **package root**; the mutation tests scan
-    /// its `src/` subdirectory.
+    /// the standard `{package.json, tsconfig.json, src/**, tests/**}` package layout whose
+    /// `src/` imports `../package.json`. The package-level `tsconfig.json` is what a real
+    /// consumer TS package carries, and its presence is what activates Stryker's ts-config
+    /// machinery. The staged path is the **package root**; the mutation tests scan its
+    /// `src/` subdirectory.
     pub fn upward(project: &str) -> Self {
         Self::stage(
             "typescript",
             project,
             &[
                 "package.json",
+                "tsconfig.json",
                 "src/index.ts",
                 "src/index.test.ts",
                 "tests/integration/tiers.test.ts",
@@ -205,6 +209,77 @@ impl GitRepo {
 }
 
 impl Drop for GitRepo {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// An isolated install of the **packed** npm package: `npm pack` over `packages/node`, the
+/// tarball installed into a throwaway prefix. The resulting `node_modules` holds the
+/// package's declared dependency closure and nothing from this repo's dev tree — the
+/// topology `npx -y testing-conventions` runs in production, where a devDependency (e.g.
+/// `typescript`) is absent from every resolution path. The repo's own suites run the
+/// adapter from `packages/node`'s dev tree, where pnpm's hoisted devDependencies mask a
+/// missing-declared-dependency bug; resolving the adapter from this install is what
+/// surfaces it. Requires the node package built (`pnpm run build` in `packages/node`) and
+/// registry access for the dependency install. Removed on drop.
+pub struct PublishedInstall(PathBuf);
+
+impl PublishedInstall {
+    pub fn new() -> Self {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let node_package = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../node");
+        let dst = std::env::temp_dir().join(format!(
+            "tc-published-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed),
+        ));
+        std::fs::create_dir_all(&dst).expect("create published install dir");
+        let pack = std::process::Command::new("npm")
+            .args(["pack", "--pack-destination"])
+            .arg(&dst)
+            .current_dir(&node_package)
+            .output()
+            .expect("npm pack should run");
+        assert!(
+            pack.status.success(),
+            "npm pack failed: {}",
+            String::from_utf8_lossy(&pack.stderr)
+        );
+        // `npm pack` prints the tarball filename it wrote as its last stdout line.
+        let stdout = String::from_utf8_lossy(&pack.stdout);
+        let tarball = stdout
+            .lines()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .expect("npm pack should print the tarball name")
+            .trim()
+            .to_string();
+        std::fs::write(dst.join("package.json"), "{ \"private\": true }\n")
+            .expect("write install prefix manifest");
+        let install = std::process::Command::new("npm")
+            .args(["install", "--no-audit", "--no-fund"])
+            .arg(dst.join(&tarball))
+            .current_dir(&dst)
+            .output()
+            .expect("npm install should run");
+        assert!(
+            install.status.success(),
+            "npm install of the packed tarball failed: {}",
+            String::from_utf8_lossy(&install.stderr)
+        );
+        PublishedInstall(dst)
+    }
+
+    /// The installed package's TypeScript mutation adapter — the executable the npm
+    /// launcher hands the binary as `--ts-mutation-adapter` in production.
+    pub fn adapter(&self) -> PathBuf {
+        self.0
+            .join("node_modules/testing-conventions/dist/mutation/main.js")
+    }
+}
+
+impl Drop for PublishedInstall {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }

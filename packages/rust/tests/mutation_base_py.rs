@@ -8,8 +8,13 @@
 //! Python project in a git repo (the codebase is the fixture): a
 //! fully-tested baseline, then a commit that adds an assertion-light function. The diff
 //! scopes the run to the added lines, whose mutants survive — while the unchanged,
-//! well-tested `add` isn't reported. Requires `git` and a `python3` with cosmic-ray + pytest
-//! installed and the source package importable (`PYTHONPATH=packages/python/python`).
+//! well-tested `add` isn't reported.
+//!
+//! The default repo is the prescribed consumer package layout — `{pyproject.toml, src/**}`,
+//! scanned at `<repo>/src` — so the diff-scoped run mutates only `src/` the same way the
+//! whole-tree gate does. The flat, no-manifest shape is the `loose` special case. Requires
+//! `git` and a `python3` with cosmic-ray + pytest installed and the source package importable
+//! (`PYTHONPATH=packages/python/python`).
 
 mod common;
 
@@ -18,7 +23,12 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use common::expect_tested;
-use testing_conventions::mutation::measure_python;
+use testing_conventions::mutation::{measure_python, Measurement};
+
+/// The default package manifest at the repo root — pytest's upward search anchors its rootdir
+/// here, so the colocated suite under `src/` resolves `from calc import ...` against the scan
+/// path handed to the rule as `<repo>/src`.
+const PYPROJECT: &str = "[tool.pytest.ini_options]\n";
 
 /// A baseline whose `add` is fully pinned by its test — no survivors.
 const BASELINE: &str = "def add(a, b):\n    return a + b\n";
@@ -36,7 +46,21 @@ const WITH_SURVIVOR_TEST: &str = "from calc import add, is_positive\n\n\ndef tes
 struct TempRepo(PathBuf);
 
 impl TempRepo {
+    /// The default repo: the package layout (`pyproject.toml` at the repo root, sources under
+    /// `src/`). The scan path handed to the rule is `<repo>/src`.
     fn new(slug: &str) -> Self {
+        let repo = Self::init(slug);
+        repo.write("pyproject.toml", PYPROJECT);
+        repo
+    }
+
+    /// The loose special case: flat scripts at the repo root, no manifest. The scan path is the
+    /// repo root.
+    fn loose(slug: &str) -> Self {
+        Self::init(slug)
+    }
+
+    fn init(slug: &str) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let root = std::env::temp_dir().join(format!(
             "tc-mut-base-py-{}-{}-{}",
@@ -52,7 +76,9 @@ impl TempRepo {
     }
 
     fn write(&self, rel: &str, contents: &str) {
-        std::fs::write(self.0.join(rel), contents).unwrap();
+        let path = self.0.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, contents).unwrap();
     }
 
     fn commit(&self, message: &str) {
@@ -91,7 +117,47 @@ fn git(dir: &Path, args: &[&str]) {
 
 #[test]
 fn base_scopes_the_run_to_the_changed_lines() {
+    // The default package layout — `{pyproject.toml, src/**}`, scanned at `<repo>/src` with
+    // `--base` on a diff that touches source. The changed modules address the sources under the
+    // scan path, and the survivors come back scan-path-relative.
     let repo = TempRepo::new("survivor");
+    repo.write("src/calc.py", BASELINE);
+    repo.write("src/calc_test.py", BASELINE_TEST);
+    repo.commit("baseline: fully-tested add");
+    let base = repo.head();
+    repo.write("src/calc.py", WITH_SURVIVOR);
+    repo.write("src/calc_test.py", WITH_SURVIVOR_TEST);
+    repo.commit("add an assertion-light is_positive");
+
+    let (count, survivors) = expect_tested(
+        measure_python(
+            &repo.0.join("src"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            Some(&base),
+        )
+        .expect("cosmic-ray runs"),
+    );
+    // The added `is_positive` (lines 5-6) is in the diff and assertion-light, so its
+    // mutants survive; `add` (lines 1-2) is unchanged, so it's filtered out.
+    assert!(
+        count >= survivors.len(),
+        "every survivor was judged, so the count covers them"
+    );
+    assert!(
+        !survivors.is_empty(),
+        "the added weak function should leave a survivor on the changed lines"
+    );
+    assert!(
+        survivors.iter().all(|s| s.file == "calc.py" && s.line >= 3),
+        "survivors are scan-path-relative and only on the added lines; got {survivors:?}"
+    );
+}
+
+#[test]
+fn a_loose_tree_base_scopes_the_run_to_the_changed_lines() {
+    // The loose special case: flat scripts at the repo root, no manifest, scanned at the root.
+    let repo = TempRepo::loose("survivor");
     repo.write("calc.py", BASELINE);
     repo.write("calc_test.py", BASELINE_TEST);
     repo.commit("baseline: fully-tested add");
@@ -122,5 +188,35 @@ fn base_scopes_the_run_to_the_changed_lines() {
     assert!(
         survivors.iter().all(|s| s.file == "calc.py" && s.line >= 3),
         "only the added lines should be reported, not the well-tested `add`; got {survivors:?}"
+    );
+}
+
+#[test]
+fn base_with_no_mutatable_changed_files_reports_the_engine_not_run() {
+    // The only change on the diff is to a test file, which is never mutated — so the
+    // diff scopes to nothing, the run is skipped entirely (no cosmic-ray), and the
+    // measurement says so, telling this pass apart from an all-killed run.
+    let repo = TempRepo::new("notests");
+    repo.write("src/calc.py", BASELINE);
+    repo.write("src/calc_test.py", BASELINE_TEST);
+    repo.commit("baseline");
+    let base = repo.head();
+    repo.write(
+        "src/calc_test.py",
+        &format!("{BASELINE_TEST}\n\ndef test_touch():\n    assert add(0, 0) == 0\n"),
+    );
+    repo.commit("tweak only the test file");
+
+    let measurement = measure_python(
+        &repo.0.join("src"),
+        &[],
+        &std::collections::BTreeMap::new(),
+        Some(&base),
+    )
+    .expect("no run needed");
+    assert_eq!(
+        measurement,
+        Measurement::EngineNotRun,
+        "a test-file-only diff has nothing mutatable, so the engine never ran"
     );
 }

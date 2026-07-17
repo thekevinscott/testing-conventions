@@ -1,0 +1,6 @@
+{
+  "name": "tc-cov-above",
+  "private": true,
+  "version": "1.0.0",
+  "description": "The default coverage fixture shape — the prescribed consumer package layout `{package.json, src/**}`, scanned at `src/`. `src/router.ts` sits above a mid floor but below 100 (some branch arms untested), so it clears the mid floor and fails a 100 one. The flat, no-manifest shape is the named special case (exempt_cov, full_with_config)."
+}

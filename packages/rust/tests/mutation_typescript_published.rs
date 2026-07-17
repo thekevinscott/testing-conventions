@@ -3,7 +3,7 @@
 //! ([`common::PublishedInstall`]) — the dependency tree `npx -y testing-conventions` runs
 //! in production — instead of from this repo's dev tree, where hoisted devDependencies
 //! (`typescript` among them) sit on Stryker's resolution path and mask a
-//! missing-declared-dependency bug. The fixture is the package-shaped `upward_survivors`
+//! missing-declared-dependency bug. The fixture is the default package-shaped `survivors`
 //! project carrying a `tsconfig.json` — the file that activates Stryker's ts-config
 //! machinery, whose sandbox-copy path imports `typescript` from `@stryker-mutator/core`'s
 //! own location. The gate must reach a mutant verdict, not die at startup.
@@ -20,7 +20,7 @@ use testing_conventions::mutation::measure_typescript;
 #[test]
 fn a_tsconfig_package_reaches_a_mutant_verdict_through_the_published_adapter() {
     let install = PublishedInstall::new();
-    let package = Staged::upward("upward_survivors");
+    let package = Staged::new("survivors");
     let measurement = measure_typescript(
         &package.path().join("src"),
         &[],

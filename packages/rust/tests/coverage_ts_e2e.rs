@@ -58,7 +58,7 @@ fn unit_coverage_exit(codebase: &str, config: &str) -> i32 {
 
 #[test]
 fn full_exits_zero_against_a_100_floor() {
-    assert_eq!(unit_coverage_exit("full", "ts_full.toml"), 0);
+    assert_eq!(unit_coverage_exit("full/src", "ts_full.toml"), 0);
 }
 
 #[test]
@@ -71,17 +71,17 @@ fn a_src_scan_below_a_package_root_config_exits_zero_against_a_100_floor() {
 
 #[test]
 fn above_exits_nonzero_against_a_100_floor() {
-    assert_eq!(unit_coverage_exit("above", "ts_full.toml"), 1);
+    assert_eq!(unit_coverage_exit("above/src", "ts_full.toml"), 1);
 }
 
 #[test]
 fn above_exits_zero_against_the_mid_floor() {
-    assert_eq!(unit_coverage_exit("above", "ts_mid.toml"), 0);
+    assert_eq!(unit_coverage_exit("above/src", "ts_mid.toml"), 0);
 }
 
 #[test]
 fn below_exits_nonzero_against_the_mid_floor() {
-    assert_eq!(unit_coverage_exit("below", "ts_mid.toml"), 1);
+    assert_eq!(unit_coverage_exit("below/src", "ts_mid.toml"), 1);
 }
 
 #[test]
@@ -101,16 +101,16 @@ fn exempt_cov_exits_zero_with_the_shim_exempted() {
 
 #[test]
 fn full_exits_zero_with_no_config_via_the_default_floor() {
-    assert_eq!(unit_coverage_exit("full", "no-such-config.toml"), 0);
+    assert_eq!(unit_coverage_exit("full/src", "no-such-config.toml"), 0);
 }
 
 #[test]
 fn above_exits_nonzero_with_no_config_via_the_default_floor() {
     // Cleared the old 80/75 default; the strict 100 default fails it.
-    assert_eq!(unit_coverage_exit("above", "no-such-config.toml"), 1);
+    assert_eq!(unit_coverage_exit("above/src", "no-such-config.toml"), 1);
 }
 
 #[test]
 fn below_exits_nonzero_with_no_config_via_the_default_floor() {
-    assert_eq!(unit_coverage_exit("below", "no-such-config.toml"), 1);
+    assert_eq!(unit_coverage_exit("below/src", "no-such-config.toml"), 1);
 }

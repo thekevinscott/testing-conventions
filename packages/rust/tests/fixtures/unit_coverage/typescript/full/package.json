@@ -1,0 +1,6 @@
+{
+  "name": "tc-cov-full",
+  "private": true,
+  "version": "1.0.0",
+  "description": "The default coverage fixture shape — the prescribed consumer package layout `{package.json, src/**}`, scanned at `src/`. `src/widget.ts` is fully tested by its colocated `src/widget.test.ts`, so the run clears a 100 floor. The flat, no-manifest shape is the named special case (exempt_cov, full_with_config)."
+}

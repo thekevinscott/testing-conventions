@@ -10,9 +10,11 @@
 //!
 //! The gate is **on by default and binary** — parity with the Rust arm: an un-exempted
 //! surviving mutant fails the run, and the only way to pass with a survivor present is a
-//! reason-required `mutation` exemption. The fixtures are the standard pair: `killed`
-//! (every mutant caught) and `survivors` (a coverage-passing but assertion-light suite
-//! whose mutants all survive). Each test runs against its own staged copy so the
+//! reason-required `mutation` exemption. The default fixtures are the prescribed consumer
+//! package layout — `{package.json, tsconfig.json, src/**, tests/**}`, scanned at `src/`,
+//! whose source imports `../package.json`: `killed` (every mutant caught) and `survivors` (a
+//! coverage-passing but assertion-light suite whose mutants all survive). The flat, no-manifest
+//! shape is the `loose_*` special case. Each test runs against its own staged copy so the
 //! parallel Stryker runs never collide in a shared project dir.
 
 mod common;
@@ -53,7 +55,7 @@ fn run_without_the_adapter_arg_fails_clean() {
     let project = Staged::new("survivors");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "typescript"])
-        .arg(project.path())
+        .arg(project.path().join("src"))
         .output()
         .expect("the built binary should run");
     let stderr = String::from_utf8_lossy(&out.stderr);
@@ -78,7 +80,7 @@ fn a_broken_adapter_path_fails_clean() {
         .args(["unit", "mutation", "--language", "typescript"])
         .arg("--ts-mutation-adapter")
         .arg("/nonexistent/testing-conventions-adapter.js")
-        .arg(project.path())
+        .arg(project.path().join("src"))
         .output()
         .expect("the built binary should run");
     let stderr = String::from_utf8_lossy(&out.stderr);
@@ -97,13 +99,13 @@ fn a_broken_adapter_path_fails_clean() {
 fn killed_project_passes_and_states_the_tested_count() {
     // Every mutant is caught, so the project clears the gate — and the success line
     // states how many mutants the engine judged, the evidence telling this pass apart
-    // from an engine-skipped one.
-    let project = Staged::new("killed");
+    // from an engine-skipped one. The default package layout is scanned at `src/`.
+    let package = Staged::new("killed");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "typescript"])
         .arg("--ts-mutation-adapter")
         .arg(ts_adapter())
-        .arg(project.path())
+        .arg(package.path().join("src"))
         .output()
         .expect("the built binary should run");
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -168,19 +170,11 @@ fn a_diff_with_no_mutatable_changed_lines_reports_the_engine_not_run() {
 
 #[test]
 fn survivors_fail_the_gate_by_default() {
-    // The gate is on by default and binary: an un-exempted surviving mutant fails the
-    // run, no config required.
-    let project = Staged::new("survivors");
-    assert_eq!(unit_mutation_exit(project.path(), None), 1);
-}
-
-#[test]
-fn a_src_scan_path_with_an_upward_import_fails_on_survivors() {
-    // The standard `{package.json, src/**}` layout whose source imports `../package.json`,
-    // scanned at `src/`: the gate reaches the survivors and lists them scan-path-relative —
-    // the run is rooted at the package root, so the upward import resolves and the run
-    // is judged on mutants, never on module resolution.
-    let package = Staged::upward("upward_survivors");
+    // The gate is on by default and binary: an un-exempted surviving mutant fails the run, no
+    // config required. The default `{package.json, src/**}` layout is scanned at `src/`, the
+    // run rooted at the package root so the upward `../package.json` import resolves, and the
+    // survivors are listed scan-path-relative.
+    let package = Staged::new("survivors");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "typescript"])
         .arg("--ts-mutation-adapter")
@@ -201,11 +195,11 @@ fn a_src_scan_path_with_an_upward_import_fails_on_survivors() {
 }
 
 #[test]
-fn a_src_scan_path_with_an_upward_import_passes_when_all_mutants_are_killed() {
-    // The killed twin clears the gate: the upward import resolves from the package root and every
-    // mutant under the scan path is caught.
-    let package = Staged::upward("upward_killed");
-    assert_eq!(unit_mutation_exit(&package.path().join("src"), None), 0);
+fn a_loose_tree_fails_the_gate_on_survivors() {
+    // The loose special case: flat scripts, no manifest, scanned at the root. The gate still
+    // runs Stryker in place there and fails on the un-exempted survivor.
+    let project = Staged::loose("loose_survivors");
+    assert_eq!(unit_mutation_exit(project.path(), None), 1);
 }
 
 #[test]
@@ -213,9 +207,9 @@ fn an_exempted_survivor_passes_the_gate() {
     // The survivor's file carries a `mutation` exemption, so the gate clears it (an
     // equivalent / deliberately-defensive mutation, lifted with a reason) — the only
     // way to pass with a survivor present.
-    let project = Staged::new("survivors");
+    let package = Staged::new("survivors");
     assert_eq!(
-        unit_mutation_exit(project.path(), Some("mutation_exempt_ts.toml")),
+        unit_mutation_exit(&package.path().join("src"), Some("mutation_exempt_ts.toml")),
         0
     );
 }

@@ -4,6 +4,9 @@
 //! in-process integration tests in `coverage_base.rs`. Requires `coverage` +
 //! `pytest` + `git` on PATH.
 //!
+//! The default repo is the prescribed consumer package layout — `{pyproject.toml,
+//! src/**}` scanned at `<repo>/src`; the `--base` diff is computed over the whole repo.
+//!
 //! Starts red against the stub in `src/patch_coverage.rs` (the diff-scoped ratio
 //! reports Pass) and goes green once the ratio-vs-floor measurement is
 //! implemented.
@@ -78,7 +81,7 @@ fn coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> (i32, Str
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
     cmd.arg("unit")
         .arg("coverage")
-        .arg(&repo.0)
+        .arg(repo.0.join("src"))
         .args(["--language", "python", "--base", base]);
     if let Some(name) = config {
         cmd.arg("--config").arg(repo.0.join(name));
@@ -92,6 +95,10 @@ fn coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> (i32, Str
         String::from_utf8_lossy(&output.stderr).into_owned(),
     )
 }
+
+/// The package root: anchors pytest's rootdir at `<repo>` so the colocated suite
+/// under `src/` resolves its `from widget import ...` when coverage runs at `<repo>/src`.
+const PYPROJECT: &str = "[tool.pytest.ini_options]\n";
 
 const WIDGET_PY: &str = r#"def widget(n):
     if n > 0:
@@ -134,8 +141,9 @@ def test_covered():
 "#;
 
 fn baseline(repo: &TempRepo) -> String {
-    repo.write("widget.py", WIDGET_PY);
-    repo.write("widget_test.py", WIDGET_TEST_PY);
+    repo.write("pyproject.toml", PYPROJECT);
+    repo.write("src/widget.py", WIDGET_PY);
+    repo.write("src/widget_test.py", WIDGET_TEST_PY);
     repo.commit("base");
     repo.head()
 }
@@ -144,8 +152,8 @@ fn baseline(repo: &TempRepo) -> String {
 fn below_floor_diff_exits_nonzero_and_reports_coverage() {
     let repo = TempRepo::new("red");
     let base = baseline(&repo);
-    repo.write("widget.py", WIDGET_PY_75);
-    repo.write("widget_test.py", WIDGET_TEST_75);
+    repo.write("src/widget.py", WIDGET_PY_75);
+    repo.write("src/widget_test.py", WIDGET_TEST_75);
     repo.commit("add a covered and an uncovered helper");
 
     let (code, stderr) = coverage_base(&repo, &base, None);
@@ -164,7 +172,7 @@ fn covered_change_exits_zero() {
     let repo = TempRepo::new("clean");
     let base = baseline(&repo);
     repo.write(
-        "widget.py",
+        "src/widget.py",
         r#"def widget(n):
     if n > 0:
         return "positive"
@@ -172,7 +180,7 @@ fn covered_change_exits_zero() {
 "#,
     );
     repo.write(
-        "widget_test.py",
+        "src/widget_test.py",
         r#"from widget import widget
 
 
@@ -197,8 +205,8 @@ fn a_lower_configured_floor_lets_the_same_diff_pass() {
         "[python.coverage]\nbranch = true\nfail_under = 70\n",
     );
     let base = baseline(&repo);
-    repo.write("widget.py", WIDGET_PY_75);
-    repo.write("widget_test.py", WIDGET_TEST_75);
+    repo.write("src/widget.py", WIDGET_PY_75);
+    repo.write("src/widget_test.py", WIDGET_TEST_75);
     repo.commit("add a covered and an uncovered helper");
 
     let (code, stderr) = coverage_base(&repo, &base, Some("testing-conventions.toml"));
@@ -215,7 +223,7 @@ fn a_tiny_below_floor_diff_still_exits_nonzero() {
     let repo = TempRepo::new("tiny");
     let base = baseline(&repo);
     repo.write(
-        "widget.py",
+        "src/widget.py",
         &format!("{WIDGET_PY}\n\ndef lonely():\n    return 41\n"),
     );
     repo.commit("add one untested helper");
@@ -235,15 +243,16 @@ fn a_plus_plus_line_keeps_the_uncovered_change_in_scope() {
     // scoping, and the below-floor change passes as a false green. With the fix, the
     // uncovered `return 999` stays in scope and the diff fails the default 100 floor.
     let repo = TempRepo::new("plusplus");
-    repo.write("calc.py", "def calc(n):\n    return n\n");
+    repo.write("pyproject.toml", PYPROJECT);
+    repo.write("src/calc.py", "def calc(n):\n    return n\n");
     repo.write(
-        "calc_test.py",
+        "src/calc_test.py",
         "from calc import calc\n\n\ndef test_calc():\n    assert calc(3) == 3\n",
     );
     repo.commit("base");
     let base = repo.head();
     repo.write(
-        "calc.py",
+        "src/calc.py",
         "def calc(n):\n    return n\n\n\n++ 1\n\n\ndef never_run():\n    return 999\n",
     );
     repo.commit("append a ++ line and an untested helper");

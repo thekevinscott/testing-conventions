@@ -11,10 +11,15 @@
 //!
 //! Each test builds a throwaway git repo (the codebases are the fixtures) and
 //! runs REAL vitest over it via the SDK
-//! (`patch_coverage::measure_typescript`) and the CLI (`run`). Requires `git` + a
-//! Node toolchain with vitest installed; the repo symlinks the fixtures'
-//! `node_modules` so `npx vitest` resolves (the same install `unit coverage`'s
-//! TypeScript tests use).
+//! (`patch_coverage::measure_typescript`) and the CLI (`run`). The default repo is
+//! the prescribed consumer package layout — `{package.json, src/**}` scanned at
+//! `<repo>/src` — so the diff-scoped run is scoped to the package the same way the
+//! whole-tree gate is. The scan path `<repo>/src` is the diff root too: git's
+//! `--relative` reports the changed `src/` lines against it, and the sources measured
+//! against them resolve from the same root. The flat, no-manifest shape is covered by
+//! the whole-tree suite. Requires `git` + a Node toolchain with vitest installed; the
+//! repo symlinks the fixtures' `node_modules` so `npx vitest` resolves (the same
+//! install `unit coverage`'s TypeScript tests use).
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -31,10 +36,17 @@ fn fixtures_node_modules() -> PathBuf {
         .join("tests/fixtures/unit_coverage/typescript/node_modules")
 }
 
-/// A throwaway git repo, removed on drop. A test writes a baseline source + its
-/// colocated test, `commit`s it, captures `head()` as the `base`, then mutates and
-/// commits the "after" so `<base>...HEAD` is the change under test. `node_modules`
-/// is symlinked to the fixtures' install so vitest resolves.
+/// A minimal package manifest at the repo root — the marker of the default package
+/// layout. Its presence, not its contents, makes the tree package-shaped; the sources
+/// live under `src/`.
+const PACKAGE_JSON: &str =
+    "{ \"name\": \"tc-cov-base\", \"private\": true, \"version\": \"1.0.0\" }\n";
+
+/// A throwaway git repo, removed on drop. The default layout — a `package.json` at the
+/// repo root with sources under `src/`. A test writes a baseline source + its colocated
+/// test, `commit`s it, captures `head()` as the `base`, then mutates and commits the
+/// "after" so `<base>...HEAD` is the change under test. `node_modules` is symlinked to
+/// the fixtures' install so vitest resolves.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -52,7 +64,14 @@ impl TempRepo {
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
-        TempRepo(root)
+        let repo = TempRepo(root);
+        repo.write("package.json", PACKAGE_JSON);
+        repo
+    }
+
+    /// The scan path handed to the rule: `<repo>/src`, the package's source root.
+    fn src(&self) -> PathBuf {
+        self.0.join("src")
     }
 
     /// Write `contents` to `rel`, creating parent directories.
@@ -114,7 +133,7 @@ fn floors(level: u8) -> TypeScriptThresholds {
 /// exemptions) via the SDK.
 fn measure_base(repo: &TempRepo, base: &str, level: u8) -> Outcome {
     patch_coverage::measure_typescript(
-        &repo.0,
+        &repo.src(),
         base,
         floors(level),
         &[],
@@ -130,7 +149,7 @@ fn run_coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> anyho
         "testing-conventions".into(),
         "unit".into(),
         "coverage".into(),
-        repo.0.clone().into_os_string(),
+        repo.src().into_os_string(),
         "--language".into(),
         "typescript".into(),
         "--base".into(),
@@ -195,10 +214,11 @@ test('covered', () => {
 });
 "#;
 
-/// Writes the fully-covered baseline + its test and returns its commit as the base.
+/// Writes the fully-covered baseline + its test under `src/` and returns its commit as
+/// the base.
 fn baseline(repo: &TempRepo) -> String {
-    repo.write("widget.ts", WIDGET_TS);
-    repo.write("widget.test.ts", WIDGET_TEST_TS);
+    repo.write("src/widget.ts", WIDGET_TS);
+    repo.write("src/widget.test.ts", WIDGET_TEST_TS);
     repo.commit("base");
     repo.head()
 }
@@ -209,8 +229,8 @@ fn ts_a_diff_below_the_floor_fails() {
     // so `--base` fails it — even though the whole tree is still well covered.
     let repo = TempRepo::new("below");
     let base = baseline(&repo);
-    repo.write("widget.ts", WIDGET_TS_75);
-    repo.write("widget.test.ts", WIDGET_TEST_75);
+    repo.write("src/widget.ts", WIDGET_TS_75);
+    repo.write("src/widget.test.ts", WIDGET_TEST_75);
     repo.commit("add a covered and an uncovered helper");
 
     assert!(
@@ -226,8 +246,8 @@ fn ts_the_same_diff_clears_a_lower_floor() {
     // lines are judged against the number you set, not against 100%.
     let repo = TempRepo::new("clears");
     let base = baseline(&repo);
-    repo.write("widget.ts", WIDGET_TS_75);
-    repo.write("widget.test.ts", WIDGET_TEST_75);
+    repo.write("src/widget.ts", WIDGET_TS_75);
+    repo.write("src/widget.test.ts", WIDGET_TEST_75);
     repo.commit("add a covered and an uncovered helper");
 
     assert_eq!(
@@ -244,7 +264,7 @@ fn ts_a_fully_covered_change_passes() {
     let repo = TempRepo::new("covered");
     let base = baseline(&repo);
     repo.write(
-        "widget.ts",
+        "src/widget.ts",
         r#"export function widget(n: number): string {
   if (n > 0) return 'positive';
   return 'neg';
@@ -252,7 +272,7 @@ fn ts_a_fully_covered_change_passes() {
 "#,
     );
     repo.write(
-        "widget.test.ts",
+        "src/widget.test.ts",
         r#"import { expect, test } from 'vitest';
 
 import { widget } from './widget';
@@ -276,7 +296,7 @@ fn ts_a_tiny_below_floor_diff_is_not_exempted() {
     let repo = TempRepo::new("tiny");
     let base = baseline(&repo);
     repo.write(
-        "lonely.ts",
+        "src/lonely.ts",
         "export function lonely(): number {\n  return 41;\n}\n",
     );
     repo.commit("add one untested helper");
@@ -292,8 +312,8 @@ fn ts_a_change_touching_no_typescript_passes() {
     // A diff with no TypeScript source has no changed line to measure — vacuously
     // passes (the suite isn't even run), at any floor.
     let repo = TempRepo::new("no-ts");
-    repo.write("widget.ts", WIDGET_TS);
-    repo.write("widget.test.ts", WIDGET_TEST_TS);
+    repo.write("src/widget.ts", WIDGET_TS);
+    repo.write("src/widget.test.ts", WIDGET_TEST_TS);
     repo.write("README.md", "# project\n");
     repo.commit("base");
     let base = repo.head();
@@ -328,8 +348,8 @@ fn ts_cli_exits_nonzero_on_a_below_floor_diff() {
     // below them → exit 1.
     let repo = TempRepo::new("cli-red");
     let base = baseline(&repo);
-    repo.write("widget.ts", WIDGET_TS_75);
-    repo.write("widget.test.ts", WIDGET_TEST_75);
+    repo.write("src/widget.ts", WIDGET_TS_75);
+    repo.write("src/widget.test.ts", WIDGET_TEST_75);
     repo.commit("add a covered and an uncovered helper");
 
     assert_eq!(run_coverage_base(&repo, &base, None).unwrap(), 1);
@@ -340,7 +360,7 @@ fn ts_cli_exits_zero_when_the_diff_clears_the_floor() {
     let repo = TempRepo::new("cli-clean");
     let base = baseline(&repo);
     repo.write(
-        "widget.ts",
+        "src/widget.ts",
         r#"export function widget(n: number): string {
   if (n > 0) return 'positive';
   return 'neg';
@@ -348,7 +368,7 @@ fn ts_cli_exits_zero_when_the_diff_clears_the_floor() {
 "#,
     );
     repo.write(
-        "widget.test.ts",
+        "src/widget.test.ts",
         r#"import { expect, test } from 'vitest';
 
 import { widget } from './widget';
@@ -376,8 +396,8 @@ fn ts_cli_a_lower_configured_floor_lets_the_same_diff_pass() {
         "[typescript.coverage]\nlines = 40\nbranches = 40\nfunctions = 40\nstatements = 40\n",
     );
     let base = baseline(&repo);
-    repo.write("widget.ts", WIDGET_TS_75);
-    repo.write("widget.test.ts", WIDGET_TEST_75);
+    repo.write("src/widget.ts", WIDGET_TS_75);
+    repo.write("src/widget.test.ts", WIDGET_TEST_75);
     repo.commit("add a covered and an uncovered helper");
 
     assert_eq!(
@@ -396,17 +416,17 @@ fn ts_a_coverage_exemption_lifts_a_below_floor_change() {
         "[[typescript.exempt]]\npath = \"shim.ts\"\nrules = [\"coverage\"]\n\
          lines = [\"1-3\"]\nreason = \"thin launcher; logic lives in tested modules\"\n",
     );
-    repo.write("widget.ts", WIDGET_TS);
-    repo.write("widget.test.ts", WIDGET_TEST_TS);
+    repo.write("src/widget.ts", WIDGET_TS);
+    repo.write("src/widget.test.ts", WIDGET_TEST_TS);
     repo.write(
-        "shim.ts",
+        "src/shim.ts",
         "export function shim(): number {\n  return 0;\n}\n",
     );
     repo.commit("base");
     let base = repo.head();
 
     repo.write(
-        "shim.ts",
+        "src/shim.ts",
         "export function shim(): number {\n  return 1;\n}\n",
     );
     repo.commit("edit the untested launcher");

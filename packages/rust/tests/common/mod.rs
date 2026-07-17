@@ -64,25 +64,14 @@ pub fn ts_adapter() -> PathBuf {
 pub struct Staged(PathBuf);
 
 impl Staged {
-    /// Stage a TypeScript fixture (`killed` / `survivors`), symlinking the runner-only
-    /// `node_modules` (vitest) in — Stryker itself is bundled with and driven by the Node
-    /// adapter, so the project supplies only its own test runner.
-    pub fn new(project: &str) -> Self {
-        Self::stage(
-            "typescript",
-            project,
-            &["index.ts", "index.test.ts", "stryker.conf.json"],
-            true,
-        )
-    }
-
-    /// Stage an upward-import TypeScript fixture (`upward_killed` / `upward_survivors`):
-    /// the standard `{package.json, tsconfig.json, src/**, tests/**}` package layout whose
-    /// `src/` imports `../package.json`. The package-level `tsconfig.json` is what a real
+    /// Stage a TypeScript fixture (`killed` / `survivors`) in the default gate-fixture shape:
+    /// the prescribed consumer package layout `{package.json, tsconfig.json, src/**, tests/**}`,
+    /// whose `src/` imports `../package.json`. The package-level `tsconfig.json` is what a real
     /// consumer TS package carries, and its presence is what activates Stryker's ts-config
-    /// machinery. The staged path is the **package root**; the mutation tests scan its
-    /// `src/` subdirectory.
-    pub fn upward(project: &str) -> Self {
+    /// machinery. The staged path is the **package root**; the mutation tests scan its `src/`
+    /// subdirectory. The runner-only `node_modules` (vitest) is symlinked in — Stryker itself is
+    /// bundled with and driven by the Node adapter, so the project supplies only its test runner.
+    pub fn new(project: &str) -> Self {
         Self::stage(
             "typescript",
             project,
@@ -97,9 +86,40 @@ impl Staged {
         )
     }
 
-    /// Stage a Python fixture (`killed` / `survivors`); cosmic-ray and pytest resolve
+    /// Stage a **loose** TypeScript fixture (`loose_killed` / `loose_survivors`): the flat,
+    /// no-manifest special case — loose scripts (`index.ts`, `index.test.ts`) and a
+    /// `stryker.conf.json`, with sources at the scanned root. The staged path is both package
+    /// root and scan path.
+    pub fn loose(project: &str) -> Self {
+        Self::stage(
+            "typescript",
+            project,
+            &["index.ts", "index.test.ts", "stryker.conf.json"],
+            true,
+        )
+    }
+
+    /// Stage a Python fixture (`killed` / `survivors`) in the default gate-fixture shape:
+    /// `{pyproject.toml, src/**, tests/**}`, scanned at `src/`. cosmic-ray and pytest resolve
     /// from the ambient install, so there's no `node_modules` to link.
     pub fn python(project: &str) -> Self {
+        Self::stage(
+            "python",
+            project,
+            &[
+                "pyproject.toml",
+                "src/calc.py",
+                "src/calc_test.py",
+                "tests/integration/tiers_test.py",
+            ],
+            false,
+        )
+    }
+
+    /// Stage a **loose** Python fixture (`loose_killed` / `loose_survivors`): the flat,
+    /// no-manifest special case — loose scripts (`calc.py`, `calc_test.py`) with sources at the
+    /// scanned root. The staged path is both package root and scan path.
+    pub fn python_loose(project: &str) -> Self {
         Self::stage("python", project, &["calc.py", "calc_test.py"], false)
     }
 

@@ -6,10 +6,12 @@
 //!
 //! The gate is **on by default and binary** — parity with the Rust and TypeScript arms:
 //! an un-exempted surviving mutant fails the run, and the only way to pass with a
-//! survivor present is a reason-required `mutation` exemption. The fixtures are the
-//! standard pair: `killed` (every mutant caught) and `survivors` (a coverage-passing but
-//! assertion-light suite whose mutants all survive). Each test runs against its own
-//! staged copy so the parallel runs never collide in a shared project dir.
+//! survivor present is a reason-required `mutation` exemption. The default fixtures are the
+//! prescribed consumer package layout — `{pyproject.toml, src/**, tests/**}`, scanned at
+//! `src/`: `killed` (every mutant caught) and `survivors` (a coverage-passing but
+//! assertion-light suite whose mutants all survive). The flat, no-manifest shape is the
+//! `loose_*` special case. Each test runs against its own staged copy so the parallel runs
+//! never collide in a shared project dir.
 
 mod common;
 
@@ -41,11 +43,11 @@ fn unit_mutation_exit(project: &Path, config: Option<&str>) -> i32 {
 fn killed_project_passes_and_states_the_tested_count() {
     // Every mutant is caught, so the project clears the gate — and the success line
     // states how many mutants the engine judged, the evidence telling this pass apart
-    // from an engine-skipped one.
-    let project = Staged::python("killed");
+    // from an engine-skipped one. The default package layout is scanned at `src/`.
+    let package = Staged::python("killed");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "python"])
-        .arg(project.path())
+        .arg(package.path().join("src"))
         .output()
         .expect("the built binary should run");
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -108,8 +110,16 @@ fn a_diff_with_no_mutatable_changed_lines_reports_the_engine_not_run() {
 #[test]
 fn survivors_fail_the_gate_by_default() {
     // The gate is on by default and binary: an un-exempted surviving mutant fails the
-    // run, no config required.
-    let project = Staged::python("survivors");
+    // run, no config required. The default package layout is scanned at `src/`.
+    let package = Staged::python("survivors");
+    assert_eq!(unit_mutation_exit(&package.path().join("src"), None), 1);
+}
+
+#[test]
+fn a_loose_tree_fails_the_gate_on_survivors() {
+    // The loose special case: flat scripts, no manifest, scanned at the root. The gate still
+    // runs cosmic-ray in place there and fails on the un-exempted survivor.
+    let project = Staged::python_loose("loose_survivors");
     assert_eq!(unit_mutation_exit(project.path(), None), 1);
 }
 
@@ -118,9 +128,9 @@ fn an_exempted_survivor_passes_the_gate() {
     // The survivor's file carries a `mutation` exemption, so the gate clears it (an
     // equivalent / deliberately-defensive mutation, lifted with a reason) — the only
     // way to pass with a survivor present.
-    let project = Staged::python("survivors");
+    let package = Staged::python("survivors");
     assert_eq!(
-        unit_mutation_exit(project.path(), Some("mutation_exempt_py.toml")),
+        unit_mutation_exit(&package.path().join("src"), Some("mutation_exempt_py.toml")),
         0
     );
 }

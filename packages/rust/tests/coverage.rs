@@ -3,8 +3,9 @@
 //! These run REAL coverage.py over the fixture codebases via the SDK
 //! (`coverage::measure`) and assert pass/fail. Per the guardrail the
 //! *codebases themselves* are the fixtures: `full` (100% branch) clears a 100
-//! floor, `above_85` (~86%) fails 100, `below_85` (~71%) fails 85. Requires
-//! `coverage` + `pytest` on PATH.
+//! floor, `above_85` (~86%) fails 100, `below_85` (~71%) fails 85. Each is the
+//! prescribed consumer package layout — `{pyproject.toml, src/**}` scanned at
+//! `src/`. Requires `coverage` + `pytest` on PATH.
 
 use std::path::PathBuf;
 
@@ -25,10 +26,15 @@ const FLOOR_100: Thresholds = Thresholds {
     branch: true,
 };
 
+// `full`, `above_85`, and `below_85` are the default package layout —
+// `{pyproject.toml, src/**}` scanned at `src/`. The package-root pyproject anchors
+// pytest's rootdir so the colocated `<module>_test.py` resolves its `from <module>
+// import ...` when coverage runs at the scan path.
+
 #[test]
 fn below_85_fails_an_85_floor() {
     assert!(matches!(
-        measure(&codebase("below_85"), FLOOR_85, &[]).unwrap(),
+        measure(&codebase("below_85").join("src"), FLOOR_85, &[]).unwrap(),
         Outcome::Fail(_)
     ));
 }
@@ -36,7 +42,7 @@ fn below_85_fails_an_85_floor() {
 #[test]
 fn above_85_fails_a_100_floor() {
     assert!(matches!(
-        measure(&codebase("above_85"), FLOOR_100, &[]).unwrap(),
+        measure(&codebase("above_85").join("src"), FLOOR_100, &[]).unwrap(),
         Outcome::Fail(_)
     ));
 }
@@ -44,7 +50,7 @@ fn above_85_fails_a_100_floor() {
 #[test]
 fn full_passes_a_100_floor() {
     assert_eq!(
-        measure(&codebase("full"), FLOOR_100, &[]).unwrap(),
+        measure(&codebase("full").join("src"), FLOOR_100, &[]).unwrap(),
         Outcome::Pass
     );
 }

@@ -644,6 +644,10 @@ fn run_unit_coverage(
 /// and no report-only mode — the only loosening is a reasoned, per-file exemption.
 /// All three languages are wired: Rust (cargo-mutants), TypeScript (Stryker), and
 /// Python (cosmic-ray). `--base` scopes the run to the diff.
+///
+/// A pass names its evidence: a run that tested mutants states the conclusive-mutant
+/// count, and a `--base` diff with no mutatable changed lines states the engine never
+/// ran — the vacuous pass stays visible. Both exit 0 (reporting, not gating).
 fn run_unit_mutation(
     root: &Path,
     language: colocated_test::Language,
@@ -656,7 +660,7 @@ fn run_unit_mutation(
     } else {
         config::Config::default()
     };
-    let survivors = match language {
+    let measurement = match language {
         colocated_test::Language::Rust => {
             let rust = config.rust.unwrap_or_default();
             let (exempt, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
@@ -694,8 +698,18 @@ fn run_unit_mutation(
             mutation::measure_python(root, &exempt, &exempt_lines, base)?
         }
     };
+    let (count, survivors) = match measurement {
+        mutation::Measurement::EngineNotRun => {
+            println!("unit mutation: no mutatable changed lines — engine not run");
+            return Ok(0);
+        }
+        mutation::Measurement::Tested { count, survivors } => (count, survivors),
+    };
     if survivors.is_empty() {
-        println!("unit mutation: no surviving mutants — every mutation was caught");
+        println!(
+            "unit mutation: no surviving mutants — every mutation was caught \
+             ({count} mutant(s) tested)"
+        );
         return Ok(0);
     }
 

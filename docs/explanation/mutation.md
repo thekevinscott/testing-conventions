@@ -84,6 +84,23 @@ can't reach"* — and it ports cleanly across languages, where a score does not.
 what makes a binary gate tractable: whole-tree mutation is too slow to gate, so the job runs on
 pull requests only, over the `<base>...HEAD` changed lines.
 
+## A pass names its evidence
+
+The gate has two green outcomes, and they are different facts — so the run reports which one it
+earned. A run that tested mutants states the count:
+
+> `unit mutation: no surviving mutants — every mutation was caught (6 mutant(s) tested)`
+
+so the pass carries its own evidence. A diff-scoped run whose changed lines hold nothing
+mutatable — a docs-only or workflow-only pull request — skips the engine and says so:
+
+> `unit mutation: no mutatable changed lines — engine not run`
+
+Both pass (an empty diff owes no mutation run; this is reporting, not gating), but the log tells
+a validated pass from a vacuous one: a gate that has only ever printed the second line has never
+exercised the engine, the sandbox, or the toolchain path, and the first source-touching pull
+request is where an environment problem would surface.
+
 ## The engines
 
 <!-- #region engines -->

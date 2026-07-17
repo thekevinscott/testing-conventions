@@ -15,19 +15,21 @@
 
 mod common;
 
-use common::Staged;
+use common::{expect_tested, Staged};
 use testing_conventions::mutation::measure_python;
 
 #[test]
 fn killed_reports_no_survivors() {
     let project = Staged::python("killed");
-    let survivors = measure_python(
-        project.path(),
-        &[],
-        &std::collections::BTreeMap::new(),
-        None,
-    )
-    .expect("cosmic-ray runs");
+    let (_, survivors) = expect_tested(
+        measure_python(
+            project.path(),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+        )
+        .expect("cosmic-ray runs"),
+    );
     assert!(
         survivors.is_empty(),
         "every mutant should be caught; got {survivors:?}"
@@ -37,13 +39,15 @@ fn killed_reports_no_survivors() {
 #[test]
 fn survivors_are_reported() {
     let project = Staged::python("survivors");
-    let survivors = measure_python(
-        project.path(),
-        &[],
-        &std::collections::BTreeMap::new(),
-        None,
-    )
-    .expect("cosmic-ray runs");
+    let (_, survivors) = expect_tested(
+        measure_python(
+            project.path(),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+        )
+        .expect("cosmic-ray runs"),
+    );
     assert!(
         !survivors.is_empty(),
         "the assertion-light suite should leave survivors"
@@ -60,13 +64,15 @@ fn a_mutation_exemption_drops_the_survivors() {
     // defensive mutation, waived with a reason via `[[python.exempt]] rules = ["mutation"]`.
     let project = Staged::python("survivors");
     let exempt = vec!["calc.py".to_string()];
-    let survivors = measure_python(
-        project.path(),
-        &exempt,
-        &std::collections::BTreeMap::new(),
-        None,
-    )
-    .expect("cosmic-ray runs");
+    let (_, survivors) = expect_tested(
+        measure_python(
+            project.path(),
+            &exempt,
+            &std::collections::BTreeMap::new(),
+            None,
+        )
+        .expect("cosmic-ray runs"),
+    );
     assert!(
         survivors.is_empty(),
         "the exemption should drop every survivor; got {survivors:?}"

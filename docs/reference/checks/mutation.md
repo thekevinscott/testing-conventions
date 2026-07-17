@@ -40,6 +40,21 @@ suite that can't finish in its budget is untrustworthy as a judge of any mutant,
 baseline that fails is. Each engine scopes the per-mutant timeout to the clean suite's own
 measured runtime, so a legitimately slow suite keeps a proportional budget.
 
+### Reporting
+
+A failing run lists each survivor with its file, line, and mutation. A passing run states which
+fact made it green:
+
+- `unit mutation: no surviving mutants — every mutation was caught (6 mutant(s) tested)` — the
+  engine ran, judged that many mutants conclusively, and the suite (or a reasoned exemption)
+  accounted for every one.
+- `unit mutation: no mutatable changed lines — engine not run` — the diff's changed lines hold
+  nothing mutatable (a docs-only or workflow-only pull request), so the engine was skipped.
+
+Both exit `0`; the distinction is reporting, not gating. It keeps a vacuous pass visible: a check
+that has only ever printed the second line has never run the engine, in any of the three language
+arms.
+
 ## When it runs
 
 Pull requests only, as its own job per language, diff-scoped to the `<base>...HEAD` changed

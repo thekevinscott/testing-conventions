@@ -9,11 +9,14 @@
 //! mutated at all. Requires `git` + a cargo toolchain — the tool provisions cargo-mutants
 //! itself; the run builds the crate from scratch, so it's slow.
 
+mod common;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use testing_conventions::mutation::measure_rust;
+use common::expect_tested;
+use testing_conventions::mutation::{measure_rust, Measurement};
 
 const CARGO_TOML: &str =
     "[package]\nname = \"tc_mut_base\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n";
@@ -135,16 +138,22 @@ fn base_scopes_the_run_to_the_changed_function() {
     repo.write("src/lib.rs", WITH_SURVIVOR);
     repo.commit("add an assertion-light is_positive");
 
-    let survivors = measure_rust(
-        &repo.0,
-        &[],
-        &std::collections::BTreeMap::new(),
-        Some(&base),
-        &[],
-    )
-    .expect("cargo-mutants runs");
+    let (count, survivors) = expect_tested(
+        measure_rust(
+            &repo.0,
+            &[],
+            &std::collections::BTreeMap::new(),
+            Some(&base),
+            &[],
+        )
+        .expect("cargo-mutants runs"),
+    );
     // The added `is_positive` is in the diff and assertion-light, so its mutants
     // survive; `add` is unchanged, so it's out of scope and never mutated.
+    assert!(
+        count >= survivors.len(),
+        "every survivor was judged, so the count covers them"
+    );
     assert!(
         !survivors.is_empty(),
         "the added weak function should leave a survivor on the changed lines"
@@ -171,14 +180,16 @@ fn base_finds_survivors_in_a_subdir_crate() {
     repo.write("crate/src/lib.rs", WITH_SURVIVOR);
     repo.commit("add an assertion-light is_positive");
 
-    let survivors = measure_rust(
-        &repo.0.join("crate"),
-        &[],
-        &std::collections::BTreeMap::new(),
-        Some(&base),
-        &[],
-    )
-    .expect("cargo-mutants runs");
+    let (_, survivors) = expect_tested(
+        measure_rust(
+            &repo.0.join("crate"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            Some(&base),
+            &[],
+        )
+        .expect("cargo-mutants runs"),
+    );
     assert!(
         !survivors.is_empty()
             && survivors
@@ -189,10 +200,10 @@ fn base_finds_survivors_in_a_subdir_crate() {
 }
 
 #[test]
-fn base_with_no_changes_under_the_crate_reports_no_survivors() {
+fn base_with_no_changes_under_the_crate_reports_the_engine_not_run() {
     // A PR that changes nothing under the crate (here, only a top-level note) yields an
-    // empty crate-relative diff — nothing to mutate, so no survivors and, crucially, no
-    // error (cargo-mutants writes no outcomes for a zero-mutant run).
+    // empty crate-relative diff — nothing to mutate, so the engine is skipped and the
+    // measurement says so, telling this pass apart from an all-killed run.
     let repo = TempRepo::bare("subdir-nochange");
     repo.write("crate/Cargo.toml", CARGO_TOML);
     repo.write("crate/src/lib.rs", WITH_SURVIVOR); // a would-be survivor, left unchanged
@@ -202,7 +213,7 @@ fn base_with_no_changes_under_the_crate_reports_no_survivors() {
     repo.write("notes.md", "before\nafter\n"); // only a non-crate file changes
     repo.commit("tweak a top-level note, not the crate");
 
-    let survivors = measure_rust(
+    let measurement = measure_rust(
         &repo.0.join("crate"),
         &[],
         &std::collections::BTreeMap::new(),
@@ -210,8 +221,9 @@ fn base_with_no_changes_under_the_crate_reports_no_survivors() {
         &[],
     )
     .expect("no run needed");
-    assert!(
-        survivors.is_empty(),
-        "nothing under the crate changed, so there are no survivors; got {survivors:?}"
+    assert_eq!(
+        measurement,
+        Measurement::EngineNotRun,
+        "nothing under the crate changed, so the engine never ran"
     );
 }

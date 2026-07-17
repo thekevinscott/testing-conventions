@@ -18,20 +18,22 @@
 
 mod common;
 
-use common::{ts_adapter, Staged};
+use common::{expect_tested, ts_adapter, Staged};
 use testing_conventions::mutation::measure_typescript;
 
 #[test]
 fn killed_reports_no_survivors() {
     let project = Staged::new("killed");
-    let survivors = measure_typescript(
-        project.path(),
-        &[],
-        &std::collections::BTreeMap::new(),
-        None,
-        &ts_adapter(),
-    )
-    .expect("stryker runs");
+    let (_, survivors) = expect_tested(
+        measure_typescript(
+            project.path(),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &ts_adapter(),
+        )
+        .expect("stryker runs"),
+    );
     assert!(
         survivors.is_empty(),
         "every mutant should be caught; got {survivors:?}"
@@ -44,14 +46,16 @@ fn survivors_are_reported() {
     // adapter and finds the assertion-light suite's survivors. The tool drives
     // the engine; the project supplies only its test runner.
     let project = Staged::new("survivors");
-    let survivors = measure_typescript(
-        project.path(),
-        &[],
-        &std::collections::BTreeMap::new(),
-        None,
-        &ts_adapter(),
-    )
-    .expect("stryker runs");
+    let (_, survivors) = expect_tested(
+        measure_typescript(
+            project.path(),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &ts_adapter(),
+        )
+        .expect("stryker runs"),
+    );
     assert!(
         !survivors.is_empty(),
         "the assertion-light suite should leave survivors"
@@ -70,14 +74,16 @@ fn a_src_scan_path_with_an_upward_import_reports_scan_relative_survivors() {
     // the scan path's colocated suite alone (the fixture's `tests/` tier fails loudly if
     // ever run), and reports survivors scan-path-relative.
     let package = Staged::upward("upward_survivors");
-    let survivors = measure_typescript(
-        &package.path().join("src"),
-        &[],
-        &std::collections::BTreeMap::new(),
-        None,
-        &ts_adapter(),
-    )
-    .expect("stryker runs");
+    let (_, survivors) = expect_tested(
+        measure_typescript(
+            &package.path().join("src"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &ts_adapter(),
+        )
+        .expect("stryker runs"),
+    );
     assert!(
         !survivors.is_empty(),
         "the assertion-light suite should leave survivors under the scan path"
@@ -93,14 +99,16 @@ fn a_src_scan_path_with_an_upward_import_passes_when_all_mutants_are_killed() {
     // The killed twin: the same layout clears the gate — the sandbox resolves
     // `../package.json`, and every mutant under the scan path is caught.
     let package = Staged::upward("upward_killed");
-    let survivors = measure_typescript(
-        &package.path().join("src"),
-        &[],
-        &std::collections::BTreeMap::new(),
-        None,
-        &ts_adapter(),
-    )
-    .expect("stryker runs");
+    let (_, survivors) = expect_tested(
+        measure_typescript(
+            &package.path().join("src"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &ts_adapter(),
+        )
+        .expect("stryker runs"),
+    );
     assert!(
         survivors.is_empty(),
         "every mutant should be caught; got {survivors:?}"
@@ -113,14 +121,16 @@ fn a_mutation_exemption_drops_the_survivors() {
     // defensive mutation, waived with a reason via `[[typescript.exempt]] rules = ["mutation"]`.
     let project = Staged::new("survivors");
     let exempt = vec!["index.ts".to_string()];
-    let survivors = measure_typescript(
-        project.path(),
-        &exempt,
-        &std::collections::BTreeMap::new(),
-        None,
-        &ts_adapter(),
-    )
-    .expect("stryker runs");
+    let (_, survivors) = expect_tested(
+        measure_typescript(
+            project.path(),
+            &exempt,
+            &std::collections::BTreeMap::new(),
+            None,
+            &ts_adapter(),
+        )
+        .expect("stryker runs"),
+    );
     assert!(
         survivors.is_empty(),
         "the exemption should drop every survivor; got {survivors:?}"

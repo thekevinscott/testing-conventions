@@ -11,10 +11,13 @@
 //! well-tested `add` isn't reported. Requires `git` and a `python3` with cosmic-ray + pytest
 //! installed and the source package importable (`PYTHONPATH=packages/python/python`).
 
+mod common;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use common::expect_tested;
 use testing_conventions::mutation::measure_python;
 
 /// A baseline whose `add` is fully pinned by its test — no survivors.
@@ -97,15 +100,21 @@ fn base_scopes_the_run_to_the_changed_lines() {
     repo.write("calc_test.py", WITH_SURVIVOR_TEST);
     repo.commit("add an assertion-light is_positive");
 
-    let survivors = measure_python(
-        &repo.0,
-        &[],
-        &std::collections::BTreeMap::new(),
-        Some(&base),
-    )
-    .expect("cosmic-ray runs");
+    let (count, survivors) = expect_tested(
+        measure_python(
+            &repo.0,
+            &[],
+            &std::collections::BTreeMap::new(),
+            Some(&base),
+        )
+        .expect("cosmic-ray runs"),
+    );
     // The added `is_positive` (lines 5-6) is in the diff and assertion-light, so its
     // mutants survive; `add` (lines 1-2) is unchanged, so it's filtered out.
+    assert!(
+        count >= survivors.len(),
+        "every survivor was judged, so the count covers them"
+    );
     assert!(
         !survivors.is_empty(),
         "the added weak function should leave a survivor on the changed lines"

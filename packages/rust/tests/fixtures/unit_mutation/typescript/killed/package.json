@@ -1,0 +1,6 @@
+{
+  "name": "tc-killed",
+  "private": true,
+  "version": "1.2.3",
+  "description": "The default gate-fixture shape: the prescribed consumer package layout — `{package.json, tsconfig.json, src/**, tests/**}`, scanned at `src/` — whose source imports `../package.json` from inside `src/`. Rooting Stryker's sandbox at this package root is what lets that upward import resolve; the gate mutates only `src/` and judges mutants by the colocated suite alone (the `tests/` tier fails loudly if ever run). Every mutant is caught."
+}

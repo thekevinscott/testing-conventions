@@ -3,7 +3,7 @@
 //! install of the packed npm package ([`common::PublishedInstall`]) — the dependency tree
 //! `npx -y testing-conventions` runs in production, where a devDependency of this repo
 //! (`typescript` among them) is absent from every resolution path. The fixture is the
-//! package-shaped `upward_survivors` project carrying a `tsconfig.json`; the run must be
+//! default package-shaped `survivors` project carrying a `tsconfig.json`; the run must be
 //! judged on its mutants — the survivors fail the gate — never on Stryker's own module
 //! resolution at startup.
 //!
@@ -20,7 +20,7 @@ use common::{PublishedInstall, Staged};
 #[test]
 fn a_tsconfig_package_fails_on_its_survivors_through_the_published_adapter() {
     let install = PublishedInstall::new();
-    let package = Staged::upward("upward_survivors");
+    let package = Staged::new("survivors");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "typescript"])
         .arg("--ts-mutation-adapter")

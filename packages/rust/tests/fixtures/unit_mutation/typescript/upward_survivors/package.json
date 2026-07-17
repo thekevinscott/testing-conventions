@@ -1,6 +1,0 @@
-{
-  "name": "tc-upward-survivors",
-  "private": true,
-  "version": "1.2.3",
-  "description": "The `upward_killed` layout — `{package.json, src/**}` with a source importing `../package.json` and the suite tiers under `tests/` — but with an assertion-light colocated suite: it runs the code and pins nothing, so every mutant under `src/` survives. Scanned at `src/`, the gate must reach those survivors (sandbox rooted at this package root) and report them scan-path-relative."
-}

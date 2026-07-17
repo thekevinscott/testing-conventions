@@ -1,13 +1,14 @@
 //! E2E tests for line-scoped mutation exemptions: drive the built CLI binary
-//! end-to-end (no mocks) against the `survivors` / `killed` fixtures and assert the
-//! exit code and message.
+//! end-to-end (no mocks) against the `loose_survivors` / `loose_killed` fixtures and assert
+//! the exit code and message.
 //!
 //! A `[[<lang>.exempt]]` entry with a `lines` list lifts only the surviving mutants on
 //! those lines — not every survivor in the file — with a determinism guard: a listed
 //! line whose mutants were all caught (no survivor) is a hard error, and a survivor on
-//! an *unlisted* line still fails the gate. The fixtures are the standard pair:
-//! `survivors` (assertion-light, every mutant survives) and `killed` (every mutant
-//! caught).
+//! an *unlisted* line still fails the gate. Line-scoped exemption is orthogonal to package
+//! layout, so these run against the flat `loose_*` fixtures whose survivors sit on fixed
+//! lines: `loose_survivors` (assertion-light, every mutant survives) and `loose_killed`
+//! (every mutant caught).
 //!
 //! Red until line-scoped exemptions land: today the `lines` key is rejected by the
 //! config self-guard, so each of these exits with an "unknown field" error rather than
@@ -81,7 +82,7 @@ fn rust_over_exempting_a_caught_line_is_a_hard_error() {
 #[test]
 fn typescript_exempting_both_survivor_lines_passes() {
     // Lines 2 and 6 carry the survivors; lifting both clears the gate.
-    let project = Staged::new("survivors");
+    let project = Staged::loose("loose_survivors");
     let out = run("typescript", project.path(), "lines_mut_ts_ok.toml");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
 }
@@ -89,7 +90,7 @@ fn typescript_exempting_both_survivor_lines_passes() {
 #[test]
 fn typescript_under_listing_still_fails() {
     // Exempting only line 6 leaves line 2's survivor unexplained, so the gate fails.
-    let project = Staged::new("survivors");
+    let project = Staged::loose("loose_survivors");
     let out = run("typescript", project.path(), "lines_mut_ts_under.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
     assert!(
@@ -102,7 +103,7 @@ fn typescript_under_listing_still_fails() {
 #[test]
 fn typescript_over_exempting_a_caught_line_is_a_hard_error() {
     // In the killed project line 2's mutants are all caught, so listing it is rejected.
-    let project = Staged::new("killed");
+    let project = Staged::loose("loose_killed");
     let out = run("typescript", project.path(), "lines_mut_ts_over.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
     assert!(
@@ -115,7 +116,7 @@ fn typescript_over_exempting_a_caught_line_is_a_hard_error() {
 #[test]
 fn python_exempting_both_survivor_lines_passes() {
     // Lines 2 and 6 carry the survivors; lifting both clears the gate.
-    let project = Staged::python("survivors");
+    let project = Staged::python_loose("loose_survivors");
     let out = run("python", project.path(), "lines_mut_py_ok.toml");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
 }
@@ -123,7 +124,7 @@ fn python_exempting_both_survivor_lines_passes() {
 #[test]
 fn python_over_exempting_a_caught_line_is_a_hard_error() {
     // In the killed project line 2's mutants are all caught, so listing it is rejected.
-    let project = Staged::python("killed");
+    let project = Staged::python_loose("loose_killed");
     let out = run("python", project.path(), "lines_mut_py_over.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
     assert!(

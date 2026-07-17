@@ -9,6 +9,11 @@
 //! adds an assertion-light function. The diff scopes the run to the added lines, whose
 //! mutants survive — while the unchanged, well-tested `add` isn't mutated at all.
 //!
+//! The default repo is the prescribed consumer package layout — `{package.json, src/**}`
+//! whose source imports `../package.json`, scanned at `<repo>/src` — so the diff-scoped run
+//! roots Stryker at the package root the same way the whole-tree gate does. The flat,
+//! no-manifest shape is the `loose` special case.
+//!
 //! The project's `node_modules` is symlinked to the fixtures' runner-only toolchain so the
 //! out-of-tree repo resolves vitest without a second install; Stryker is bundled with and
 //! driven by the Node adapter, whose path ([`common::ts_adapter`]) is passed to the
@@ -24,16 +29,31 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use common::{expect_tested, ts_adapter};
 use testing_conventions::mutation::{measure_typescript, Measurement};
 
-/// A baseline whose `add` is fully pinned by its test — no survivors.
-const BASELINE: &str = "export function add(a: number, b: number): number {\n  return a + b;\n}\n";
+/// The default package: `package.json` at the repo root, sources under `src/`, `src/index.ts`
+/// reading the manifest one level above the scan path — the standard layout the gate is
+/// pointed at as `<repo>/src`.
+const PACKAGE_JSON: &str = "{ \"name\": \"tc-base\", \"private\": true, \"version\": \"1.2.3\" }\n";
 
-/// The change under test: a new `isPositive` whose test runs it but asserts nothing,
-/// so every mutant on the added lines survives. `add` is untouched.
-const WITH_SURVIVOR: &str = "export function add(a: number, b: number): number {\n  return a + b;\n}\n\nexport function isPositive(n: number): boolean {\n  return n > 0;\n}\n";
+/// A baseline whose `add` and `VERSION` are fully pinned by their tests — no survivors.
+const BASELINE: &str = "import pkg from '../package.json';\n\nexport const VERSION: string = pkg.version;\n\nexport function add(a: number, b: number): number {\n  return a + b;\n}\n";
 
-const BASELINE_TEST: &str = "import { it, expect } from 'vitest';\nimport { add } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\n";
+/// The change under test: a new `isPositive` whose test runs it but asserts nothing, so
+/// every mutant on the added lines survives. `add` and `VERSION` are untouched.
+const WITH_SURVIVOR: &str = "import pkg from '../package.json';\n\nexport const VERSION: string = pkg.version;\n\nexport function add(a: number, b: number): number {\n  return a + b;\n}\n\nexport function isPositive(n: number): boolean {\n  return n > 0;\n}\n";
 
-const WITH_SURVIVOR_TEST: &str = "import { it, expect } from 'vitest';\nimport { add, isPositive } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\nit('runs isPositive but asserts nothing', () => {\n  isPositive(1);\n});\n";
+const BASELINE_TEST: &str = "import { it, expect } from 'vitest';\nimport { add, VERSION } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\nit('pins the manifest version', () => {\n  expect(VERSION).toBe('1.2.3');\n});\n";
+
+const WITH_SURVIVOR_TEST: &str = "import { it, expect } from 'vitest';\nimport { add, isPositive, VERSION } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\nit('pins the manifest version', () => {\n  expect(VERSION).toBe('1.2.3');\n});\nit('runs isPositive but asserts nothing', () => {\n  expect(typeof isPositive(1)).toBe('boolean');\n});\n";
+
+/// The loose special case: flat scripts at the repo root with a `stryker.conf.json`, no manifest.
+const LOOSE_BASELINE: &str =
+    "export function add(a: number, b: number): number {\n  return a + b;\n}\n";
+
+const LOOSE_WITH_SURVIVOR: &str = "export function add(a: number, b: number): number {\n  return a + b;\n}\n\nexport function isPositive(n: number): boolean {\n  return n > 0;\n}\n";
+
+const LOOSE_BASELINE_TEST: &str = "import { it, expect } from 'vitest';\nimport { add } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\n";
+
+const LOOSE_WITH_SURVIVOR_TEST: &str = "import { it, expect } from 'vitest';\nimport { add, isPositive } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\nit('runs isPositive but asserts nothing', () => {\n  isPositive(1);\n});\n";
 
 const STRYKER_CONF: &str =
     "{ \"testRunner\": \"vitest\", \"reporters\": [\"json\"], \"mutate\": [\"index.ts\"] }\n";
@@ -43,37 +63,23 @@ fn toolchain_node_modules() -> PathBuf {
         .join("tests/fixtures/unit_mutation/typescript/node_modules")
 }
 
-/// The upward-import package: `package.json` at the repo root, sources under `src/`,
-/// `src/index.ts` reading the manifest one level above the scan path — the standard layout
-/// the gate is pointed at as `<repo>/src`.
-const UPWARD_PACKAGE_JSON: &str =
-    "{ \"name\": \"tc-upward-base\", \"private\": true, \"version\": \"1.2.3\" }\n";
-
-const UPWARD_BASELINE: &str = "import pkg from '../package.json';\n\nexport const VERSION: string = pkg.version;\n\nexport function add(a: number, b: number): number {\n  return a + b;\n}\n";
-
-/// The change under test: a new `isPositive` whose test runs it but asserts nothing, so
-/// every mutant on the added lines survives. `add` and `VERSION` are untouched.
-const UPWARD_WITH_SURVIVOR: &str = "import pkg from '../package.json';\n\nexport const VERSION: string = pkg.version;\n\nexport function add(a: number, b: number): number {\n  return a + b;\n}\n\nexport function isPositive(n: number): boolean {\n  return n > 0;\n}\n";
-
-const UPWARD_BASELINE_TEST: &str = "import { it, expect } from 'vitest';\nimport { add, VERSION } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\nit('pins the manifest version', () => {\n  expect(VERSION).toBe('1.2.3');\n});\n";
-
-const UPWARD_WITH_SURVIVOR_TEST: &str = "import { it, expect } from 'vitest';\nimport { add, isPositive, VERSION } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\nit('pins the manifest version', () => {\n  expect(VERSION).toBe('1.2.3');\n});\nit('runs isPositive but asserts nothing', () => {\n  expect(typeof isPositive(1)).toBe('boolean');\n});\n";
-
 struct TempRepo(PathBuf);
 
 impl TempRepo {
+    /// The default repo: the upward-import package (`package.json` at the repo root, sources
+    /// under `src/`, no Stryker config — the diff-scoped run supplies its own mutate ranges).
+    /// The scan path handed to the rule is `<repo>/src`.
     fn new(slug: &str) -> Self {
         let repo = Self::init(slug);
-        repo.write("stryker.conf.json", STRYKER_CONF);
+        repo.write("package.json", PACKAGE_JSON);
         repo
     }
 
-    /// A repo holding the upward-import package: `package.json` at the repo root, sources
-    /// under `src/`, and no Stryker config — the diff-scoped run supplies its own mutate
-    /// ranges. The scan path handed to the rule is `<repo>/src`.
-    fn package(slug: &str) -> Self {
+    /// The loose special case: flat scripts at the repo root with a `stryker.conf.json`, no
+    /// manifest. The scan path is the repo root.
+    fn loose(slug: &str) -> Self {
         let repo = Self::init(slug);
-        repo.write("package.json", UPWARD_PACKAGE_JSON);
+        repo.write("stryker.conf.json", STRYKER_CONF);
         repo
     }
 
@@ -138,13 +144,58 @@ fn git(dir: &Path, args: &[&str]) {
 
 #[test]
 fn base_scopes_the_run_to_the_changed_lines() {
+    // The default package layout — `{package.json, src/**}` whose source imports
+    // `../package.json`, scanned at `<repo>/src` with `--base` on a diff that touches source.
+    // Stryker's run is rooted at the package root, so the upward import resolves in the initial
+    // (dry) run; the mutate ranges address the changed lines under the scan path, and the
+    // survivors come back scan-path-relative.
     let repo = TempRepo::new("survivor");
-    repo.write("index.ts", BASELINE);
-    repo.write("index.test.ts", BASELINE_TEST);
+    repo.write("src/index.ts", BASELINE);
+    repo.write("src/index.test.ts", BASELINE_TEST);
+    repo.commit("baseline: fully-tested add reading ../package.json");
+    let base = repo.head();
+    repo.write("src/index.ts", WITH_SURVIVOR);
+    repo.write("src/index.test.ts", WITH_SURVIVOR_TEST);
+    repo.commit("add an assertion-light isPositive");
+
+    let (count, survivors) = expect_tested(
+        measure_typescript(
+            &repo.0.join("src"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            Some(&base),
+            &ts_adapter(),
+        )
+        .expect("stryker runs"),
+    );
+    // The added `isPositive` (lines 8-10) is in the diff and assertion-light, so its mutants
+    // survive; the unchanged `add` and `VERSION` are out of scope and never mutated.
+    assert!(
+        count >= survivors.len(),
+        "every survivor was judged, so the count covers them"
+    );
+    assert!(
+        !survivors.is_empty(),
+        "the added weak function should leave a survivor on the changed lines"
+    );
+    assert!(
+        survivors
+            .iter()
+            .all(|s| s.file == "index.ts" && s.line >= 8),
+        "survivors are scan-path-relative and only on the added lines; got {survivors:?}"
+    );
+}
+
+#[test]
+fn a_loose_tree_base_scopes_the_run_to_the_changed_lines() {
+    // The loose special case: flat scripts at the repo root, no manifest, scanned at the root.
+    let repo = TempRepo::loose("survivor");
+    repo.write("index.ts", LOOSE_BASELINE);
+    repo.write("index.test.ts", LOOSE_BASELINE_TEST);
     repo.commit("baseline: fully-tested add");
     let base = repo.head();
-    repo.write("index.ts", WITH_SURVIVOR);
-    repo.write("index.test.ts", WITH_SURVIVOR_TEST);
+    repo.write("index.ts", LOOSE_WITH_SURVIVOR);
+    repo.write("index.test.ts", LOOSE_WITH_SURVIVOR_TEST);
     repo.commit("add an assertion-light isPositive");
 
     let (count, survivors) = expect_tested(
@@ -158,8 +209,7 @@ fn base_scopes_the_run_to_the_changed_lines() {
         .expect("stryker runs"),
     );
     // The added `isPositive` (lines 5-7) is in the diff and assertion-light, so its
-    // mutants survive; `add` (lines 1-3) is unchanged, so it's out of scope and never
-    // mutated.
+    // mutants survive; `add` (lines 1-3) is unchanged, so it's out of scope and never mutated.
     assert!(
         count >= survivors.len(),
         "every survivor was judged, so the count covers them"
@@ -177,63 +227,23 @@ fn base_scopes_the_run_to_the_changed_lines() {
 }
 
 #[test]
-fn base_within_a_src_scan_path_resolves_upward_imports() {
-    // The reported consumer repro: a package laid out `{package.json, src/**}` whose source
-    // imports `../package.json`, scanned at `<repo>/src` with `--base` on a diff that touches
-    // source. Stryker's run is rooted at the package root, so the upward import resolves
-    // in the initial (dry) run; the mutate ranges address the changed lines under the scan
-    // path, and the survivors come back scan-path-relative.
-    let repo = TempRepo::package("upward");
-    repo.write("src/index.ts", UPWARD_BASELINE);
-    repo.write("src/index.test.ts", UPWARD_BASELINE_TEST);
-    repo.commit("baseline: fully-tested add reading ../package.json");
-    let base = repo.head();
-    repo.write("src/index.ts", UPWARD_WITH_SURVIVOR);
-    repo.write("src/index.test.ts", UPWARD_WITH_SURVIVOR_TEST);
-    repo.commit("add an assertion-light isPositive");
-
-    let (_, survivors) = expect_tested(
-        measure_typescript(
-            &repo.0.join("src"),
-            &[],
-            &std::collections::BTreeMap::new(),
-            Some(&base),
-            &ts_adapter(),
-        )
-        .expect("stryker runs"),
-    );
-    // The added `isPositive` (lines 8-10) is in the diff and assertion-light, so its mutants
-    // survive; the unchanged `add` and `VERSION` are out of scope and never mutated.
-    assert!(
-        !survivors.is_empty(),
-        "the added weak function should leave a survivor on the changed lines"
-    );
-    assert!(
-        survivors
-            .iter()
-            .all(|s| s.file == "index.ts" && s.line >= 8),
-        "survivors are scan-path-relative and only on the added lines; got {survivors:?}"
-    );
-}
-
-#[test]
 fn base_with_no_mutatable_changed_files_reports_the_engine_not_run() {
     // The only change on the diff is to a test file, which is never mutated — so the
     // diff scopes to nothing, the run is skipped entirely (no Stryker), and the
     // measurement says so, telling this pass apart from an all-killed run.
     let repo = TempRepo::new("notests");
-    repo.write("index.ts", BASELINE);
-    repo.write("index.test.ts", BASELINE_TEST);
+    repo.write("src/index.ts", BASELINE);
+    repo.write("src/index.test.ts", BASELINE_TEST);
     repo.commit("baseline");
     let base = repo.head();
     repo.write(
-        "index.test.ts",
+        "src/index.test.ts",
         &format!("{BASELINE_TEST}// touch the test file only\n"),
     );
     repo.commit("tweak only the test file");
 
     let measurement = measure_typescript(
-        &repo.0,
+        &repo.0.join("src"),
         &[],
         &std::collections::BTreeMap::new(),
         Some(&base),

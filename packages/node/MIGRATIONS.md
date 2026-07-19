@@ -59,10 +59,23 @@ which imports `typescript` from `@stryker-mutator/core`'s own location, a packag
 isolated install does not carry — out of the run. The adapter sets the option on every run; a
 consumer's `{ "inPlace": true }` workaround config is now inert and can be deleted.
 
+Raises the supported toolchain floor to **Node 24 and pnpm 11**. Previously `engines` allowed
+Node `>=20.20.0` and said nothing about the package manager, while CI actually ran Node 24 and
+pnpm 10 — so the declared support surface was wider than anything ever tested. Both are now
+declared as floors (`>=24`, `>=11`), not pinned versions: newer majors are allowed, older ones
+are not. This supersedes the Stryker-driven Node ≥20 floor noted above; 24 satisfies it.
+
 ### Required changes
 
-None to code. Install-time: the bundled Stryker 9 requires **Node ≥20** — a consumer on an older Node
-must upgrade Node to install testing-conventions.
+None to code. Install-time: upgrade your toolchain to **Node ≥24 and pnpm ≥11**. The bundled
+Stryker 9's own Node ≥20 floor is subsumed by this.
+
+```sh
+node --version   # must be >= 24
+pnpm --version   # must be >= 11
+```
+
+If you install via corepack, `corepack use pnpm@latest` picks up a qualifying version.
 
 ### Deprecations removed
 
@@ -70,8 +83,32 @@ None.
 
 ### Behavior changes without code changes
 
-None.
+`pnpm install` now **fails** on an unsupported Node or pnpm rather than warning and installing
+anyway. `engines` alone is only advisory in pnpm — the enforcement comes from `engineStrict: true`,
+now set in `pnpm-workspace.yaml`. That advisory-only default is how the declared floor
+(`>=20.20.0`) and the version actually tested (24) drifted apart.
+
+Two pnpm 11 changes affect this repo's config and will affect yours:
+
+- **The `pnpm` field in `package.json` is no longer read.** Settings moved to
+  `pnpm-workspace.yaml`, which pnpm now expects even in single-package repos. Any `pnpm.*`
+  config you have is being silently ignored under 11 — pnpm prints a `[WARN]` naming the
+  dropped keys.
+- **Unapproved dependency build scripts are a hard error**, not a warning. `esbuild` (via
+  vitest/tsx/vitepress) needs its install script to fetch a platform binary, so it is approved
+  via `allowBuilds` in `pnpm-workspace.yaml`. Without that, `pnpm install` exits 1 with
+  `ERR_PNPM_IGNORED_BUILDS`.
 
 ### Verification
 
-None.
+```sh
+node --version && pnpm --version
+# expected: v24.x or newer, 11.x or newer
+
+pnpm install
+# expected: exits 0, and runs esbuild's postinstall rather than reporting
+#           ERR_PNPM_IGNORED_BUILDS
+
+pnpm test
+# expected: passes
+```

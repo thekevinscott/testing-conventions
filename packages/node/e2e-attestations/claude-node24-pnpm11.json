@@ -1,0 +1,7 @@
+{
+  "command": "pnpm run test:e2e",
+  "ran_at": 1784457388,
+  "exit_code": 0,
+  "commit": "426ed798b5c595b9d91c6f7246506cd5ab234a9f",
+  "branch": "claude/node24-pnpm11"
+}

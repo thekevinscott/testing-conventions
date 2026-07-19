@@ -204,10 +204,10 @@ The doc generator reads this. Single source of truth (the package's own `package
 Composite action for repeated setup (`.github/actions/setup-pnpm/action.yml`):
 
 ```yaml
-- uses: pnpm/action-setup@v4
-  with: { version: 8, run_install: false }
-- uses: actions/setup-node@v4
-  with: { node-version: 20, cache: 'pnpm' }
+- uses: pnpm/action-setup@v5
+  with: { version: ">=11", run_install: false }
+- uses: actions/setup-node@v6
+  with: { node-version: 24, cache: 'pnpm' }
 - run: pnpm install --frozen-lockfile
 ```
 
@@ -221,7 +221,7 @@ on:
 
 **Concurrency** to cancel previous runs on the same ref (already shown above).
 
-**Matrix**: Node 20 is the LTS floor as of 2026. Matrix on Node 20 + 22 if your dep tree spans them. Pure-JS code matrices on Node version, Ubuntu only. Native bindings matrix on OS (Ubuntu, macOS, Windows) for wheel builds; Ubuntu-only for tests.
+**Matrix**: this repo does not matrix on Node version. CI runs a single Node — 24 — everywhere, and `engines` declares floors (`node: >=24`, `pnpm: >=11`) rather than pinned versions or ranges with a ceiling. A floor says "we tested at or above this"; a matrix says "we support each of these", which is a maintenance cost this library doesn't need since its consumers are internal and can move with it. Native bindings still matrix on OS (Ubuntu, macOS, Windows) for wheel builds; Ubuntu-only for tests.
 
 **Coverage uploads via Codecov / Coveralls**: nice-to-have, not gating. A per-package floor (85-90%) enforced in CI is only worth doing if you have a real bug-resistance argument.
 

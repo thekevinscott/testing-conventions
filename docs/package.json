@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=11"
+  },
   "scripts": {
     "dev": "vitepress dev",
     "build": "vitepress build",

@@ -444,7 +444,7 @@ jobs:
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
         with:
-          version: 10.33.0
+          version: ">=11"
       - if: matrix.language == 'typescript'
         uses: actions/setup-node@v6
         with:
@@ -560,7 +560,7 @@ jobs:
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
         with:
-          version: 10.33.0
+          version: ">=11"
       - if: matrix.language == 'typescript'
         uses: actions/setup-node@v6
         with:
@@ -682,7 +682,7 @@ jobs:
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
         with:
-          version: 10.33.0
+          version: ">=11"
       - if: matrix.language == 'typescript'
         uses: actions/setup-node@v6
         with:
@@ -868,7 +868,7 @@ jobs:
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm' }}
         uses: pnpm/action-setup@v5
         with:
-          version: 10.33.0
+          version: ">=11"
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_language == 'typescript' }}
         uses: actions/setup-node@v6
         with:

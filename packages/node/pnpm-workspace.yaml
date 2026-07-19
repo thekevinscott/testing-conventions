@@ -1,0 +1,14 @@
+# pnpm settings live here as of pnpm 11 — the "pnpm" field in package.json is no
+# longer read. See https://pnpm.io/settings
+#
+# esbuild (a vitest/tsx transitive dep) fetches its platform-specific binary in an
+# install script. pnpm refuses to run dependency build scripts unless they are
+# approved here, and as of pnpm 11 an unapproved script fails the install rather
+# than warning.
+allowBuilds:
+  esbuild: true
+
+# Make the engines floors in package.json binding. Without this pnpm only warns on
+# an unsupported Node or pnpm and installs anyway, which is how the declared floor
+# and the version actually tested drifted apart in the first place.
+engineStrict: true

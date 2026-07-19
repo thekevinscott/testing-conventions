@@ -67,6 +67,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Breaking**: raised the `engines` floor to Node `>=24` (was `>=20.20.0`) and added a
+  `pnpm: >=11` floor. Consumers on Node 20 or 22, or on pnpm 10, must upgrade. Both are
+  floors, not pinned versions — newer majors are permitted. The floors are enforced via
+  `engineStrict: true` rather than left advisory. See MIGRATIONS.md.
+- Moved pnpm configuration into `pnpm-workspace.yaml`; pnpm 11 no longer reads the `pnpm`
+  field in `package.json`. `esbuild`'s install script is approved there via `allowBuilds`,
+  which pnpm 11 requires for the install to succeed at all.
+- Bumped `@types/node` to `^24.0.0` to match the Node 24 floor (was `^22.9.0`).
+
 ### Deprecated
 
 ### Removed

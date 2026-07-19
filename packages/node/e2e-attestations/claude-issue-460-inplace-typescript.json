@@ -1,7 +1,0 @@
-{
-  "command": "npm run test:e2e",
-  "ran_at": 1784240561,
-  "exit_code": 0,
-  "commit": "b2a1e415853374cfa38e799fc7d4fc89a416d08e",
-  "branch": "claude/issue-460-inplace-typescript"
-}

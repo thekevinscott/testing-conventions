@@ -27,7 +27,8 @@ use serde::Deserialize;
 /// A surviving mutant — a mutation the unit suite ran but failed to catch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Survivor {
-    /// The mutated file, as cargo-mutants reports it (crate-root-relative, `/`-separated).
+    /// The mutated file, scan-path-relative and `/`-separated — cargo-mutants reports
+    /// workspace-root-relative paths, rebased onto the scan path before gating.
     pub file: String,
     /// The 1-based line the mutation starts on.
     pub line: u32,
@@ -391,10 +392,16 @@ pub fn measure_rust(
     features: &[String],
 ) -> Result<Measurement> {
     let out = MutantsOut::new();
+    // cargo-mutants addresses files relative to the crate's cargo workspace root, so
+    // both the `--in-diff` diff it consumes and the report paths it emits carry the
+    // scan path's workspace-relative prefix whenever the crate is a member of a
+    // workspace rooted above it. A standalone crate is its own workspace root: no prefix.
+    let workspace_root = cargo_workspace_root(root)?;
+    let prefix = canonical_scan_prefix(root, &workspace_root);
     let diff = match base {
         // An empty diff (no changed lines under the crate — a PR that doesn't touch it)
         // means nothing to mutate: the engine is skipped, and the caller reports it.
-        Some(base) => match write_base_diff(root, base, &out)? {
+        Some(base) => match write_base_diff(root, &workspace_root, prefix.as_deref(), base, &out)? {
             None => return Ok(Measurement::EngineNotRun),
             Some(path) => Some(path),
         },
@@ -416,7 +423,7 @@ pub fn measure_rust(
             })
         }
     };
-    let report = parse_mutants_report(&json)?;
+    let report = rebase_report_paths(parse_mutants_report(&json)?, prefix.as_deref());
     let survivors = evaluate_scoped(
         cargo_mutants_survivors(&report),
         &mutated_lines(&report),
@@ -810,19 +817,66 @@ impl Drop for MutantsOut {
     }
 }
 
+/// The directory of the cargo workspace `root` belongs to — the source-tree root
+/// cargo-mutants addresses its diff and report paths from. A standalone crate is its
+/// own workspace root. `cargo locate-project --workspace` is the authoritative lookup:
+/// membership involves member globs and `exclude` lists a manifest walk can't settle.
+fn cargo_workspace_root(root: &Path) -> Result<PathBuf> {
+    let output = Command::new("cargo")
+        .current_dir(root)
+        .args(["locate-project", "--workspace", "--message-format", "plain"])
+        .output()
+        .context("running `cargo locate-project` (is cargo installed?)")?;
+    if !output.status.success() {
+        bail!(
+            "cargo locate-project failed in `{}`: {}",
+            root.display(),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let manifest = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+    manifest
+        .parent()
+        .map(Path::to_path_buf)
+        .with_context(|| format!("no parent dir for the workspace manifest `{}`", manifest.display()))
+}
+
+/// The scan path's prefix relative to the workspace root ([`scan_prefix`]), over
+/// canonicalized paths so a relative CLI scan path resolves against the absolute path
+/// `cargo locate-project` reports. `None` when the scan path *is* the workspace root.
+fn canonical_scan_prefix(root: &Path, workspace_root: &Path) -> Option<String> {
+    let root = root.canonicalize().ok()?;
+    let workspace_root = workspace_root.canonicalize().ok()?;
+    scan_prefix(&root, &workspace_root)
+}
+
 /// Write the `<base>...HEAD` diff cargo-mutants' `--in-diff` scopes to, returning its
 /// path — or `None` when the diff is empty (no changed lines under the crate).
 ///
-/// `--relative` restricts the diff to changes under `root` (the crate dir) and makes
-/// the paths relative to it. cargo-mutants runs *in* the crate dir and matches its
-/// `--in-diff` paths crate-relative, so without `--relative` the diff is repo-relative
-/// and matches nothing whenever the crate is a subdirectory of the git repo (the common
-/// case). Scoping also means a PR that doesn't touch the crate yields an empty diff.
-fn write_base_diff(root: &Path, base: &str, out: &MutantsOut) -> Result<Option<PathBuf>> {
+/// cargo-mutants matches `--in-diff` paths relative to the crate's cargo workspace
+/// root, so the diff is generated there: `--relative` makes the paths workspace-root-
+/// relative, and for a workspace-member crate a pathspec (`prefix`) restricts the diff
+/// to changes under the scan path. A standalone crate is its own workspace root, so
+/// the same invocation runs in the crate dir with no pathspec. Scoping means a PR that
+/// doesn't touch the crate yields an empty diff either way.
+fn write_base_diff(
+    root: &Path,
+    workspace_root: &Path,
+    prefix: Option<&str>,
+    base: &str,
+    out: &MutantsOut,
+) -> Result<Option<PathBuf>> {
     let range = format!("{base}...HEAD");
+    let (dir, args) = match prefix {
+        None => (root, vec!["diff", "--relative", &range]),
+        Some(prefix) => (
+            workspace_root,
+            vec!["diff", "--relative", &range, "--", prefix],
+        ),
+    };
     let output = Command::new("git")
-        .current_dir(root)
-        .args(["diff", "--relative", &range])
+        .current_dir(dir)
+        .args(&args)
         .output()
         .context("running `git diff` for `--base` (is git installed?)")?;
     if !output.status.success() {
@@ -838,6 +892,31 @@ fn write_base_diff(root: &Path, base: &str, out: &MutantsOut) -> Result<Option<P
     let path = out.0.join("base.diff");
     std::fs::write(&path, &output.stdout).context("writing the base diff")?;
     Ok(Some(path))
+}
+
+/// Rebase a cargo-mutants report's workspace-root-relative mutant paths onto the scan
+/// path: strip the scan prefix so survivor reporting and `mutation` exemption matching
+/// address scan-path-relative files, as every other check does. Baseline outcomes carry
+/// no path and pass through; a mutant outside the scan path is outside the gate's scope
+/// and dropped (parity with the TS arm's [`to_scan_relative`]). `None` is the standalone
+/// crate: the report already addresses the scan path.
+fn rebase_report_paths(report: MutantsReport, prefix: Option<&str>) -> MutantsReport {
+    let Some(prefix) = prefix else {
+        return report;
+    };
+    let prefix = format!("{prefix}/");
+    MutantsReport {
+        outcomes: report
+            .outcomes
+            .into_iter()
+            .filter_map(|mut outcome| {
+                if let Scenario::Mutant(mutant) = &mut outcome.scenario {
+                    mutant.file = mutant.file.strip_prefix(&prefix)?.to_string();
+                }
+                Some(outcome)
+            })
+            .collect(),
+    }
 }
 
 /// The cargo-mutants version the Rust arm provisions and pins to. Bumping this points the
@@ -1237,6 +1316,48 @@ mod tests {
         let report = parse_mutants_report(SAMPLE).unwrap();
         let exempt = vec!["src/elsewhere.rs".to_string()];
         assert_eq!(unexplained_survivors(&report, &exempt).len(), 1);
+    }
+
+    #[test]
+    fn rebase_report_paths_strips_the_workspace_prefix() {
+        // A workspace-member crate's report addresses files workspace-root-relative
+        // (`member/src/lib.rs`); gating addresses them scan-path-relative (`src/lib.rs`).
+        let report = parse_mutants_report(SAMPLE).unwrap();
+        let prefixed = MutantsReport {
+            outcomes: report
+                .outcomes
+                .iter()
+                .cloned()
+                .map(|mut outcome| {
+                    if let Scenario::Mutant(mutant) = &mut outcome.scenario {
+                        mutant.file = format!("member/{}", mutant.file);
+                    }
+                    outcome
+                })
+                .collect(),
+        };
+        let rebased = rebase_report_paths(prefixed, Some("member"));
+        let survivors = unexplained_survivors(&rebased, &[]);
+        assert_eq!(survivors.len(), 1);
+        assert_eq!(survivors[0].file, "src/lib.rs");
+        // The baseline outcome carries no path and passes through.
+        assert_eq!(rebased.outcomes.len(), 3);
+    }
+
+    #[test]
+    fn rebase_report_paths_drops_an_out_of_scope_mutant_and_keeps_none_identity() {
+        let report = parse_mutants_report(SAMPLE).unwrap();
+        // `src/lib.rs` / `src/other.rs` don't carry the `member/` prefix: out of scope.
+        let rebased = rebase_report_paths(report.clone(), Some("member"));
+        assert_eq!(
+            rebased.outcomes.len(),
+            1,
+            "only the pathless baseline outcome remains"
+        );
+        // No prefix (a standalone crate): the report passes through untouched.
+        let unchanged = rebase_report_paths(report, None);
+        assert_eq!(unchanged.outcomes.len(), 3);
+        assert_eq!(unexplained_survivors(&unchanged, &[])[0].file, "src/lib.rs");
     }
 
     #[test]

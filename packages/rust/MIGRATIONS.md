@@ -15,6 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
+`unit mutation --language rust` finds mutants in a cargo-workspace member crate (#467).
+cargo-mutants addresses files relative to the crate's cargo workspace root, but the `--base`
+diff was generated scan-path-relative — for a crate that is a member of a workspace rooted
+above it the paths never matched, every mutant was filtered out, and the run passed with
+`0 mutant(s) tested` against any real change. The diff is now generated at the workspace root
+(scoped to the crate) and the engine's report paths are rebased back to scan-path-relative, so
+a workspace-member crate is diff-scoped, gated, and reported exactly as a standalone crate is.
+No API change (see **Behavior changes without code changes**).
+
 Makes `unit mutation`'s vacuous pass visible (#459). A `--base` run whose changed lines hold
 nothing mutatable skips the engine (unchanged) and now reports `unit mutation: no mutatable
 changed lines — engine not run`, distinct from the all-killed success; a run that tested mutants
@@ -1102,6 +1111,14 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`unit mutation --language rust` on a cargo-workspace member crate now tests the mutants on the
+changed lines (#467). A pull request that previously sailed through the mutation gate with
+`0 mutant(s) tested` is now judged for real: an assertion-light change fails until a test kills
+its mutants (or a reasoned `mutation` exemption lifts a genuinely equivalent one). Whole-crate
+runs on a member crate now report survivors — and match `mutation` exemption paths —
+scan-path-relative, the documented contract every other check uses. Standalone crates (their own
+workspace root) are unchanged.
+
 Every passing `unit mutation` run prints a more specific success line (#459). A run that tested
 mutants appends the count — `unit mutation: no surviving mutants — every mutation was caught (6
 mutant(s) tested)` — and a `--base` run whose changed lines hold nothing mutatable prints
@@ -1411,6 +1428,16 @@ tool's own execution model and can be deleted; the adapter sets the option on ev
 config line is inert either way.
 
 ### Verification
+
+```
+# in a cargo workspace, on a branch whose diff touches a member crate's source
+testing-conventions unit mutation --language rust --base origin/main <member-crate>
+```
+
+Expected (#467): the run tests the mutants on the changed lines — a well-tested change passes
+printing `… every mutation was caught (<n> mutant(s) tested)` with a non-zero count, and an
+assertion-light change fails listing survivors by scan-path-relative file (`src/…`, not
+`<member>/src/…`).
 
 ```
 testing-conventions unit mutation --language rust --base HEAD~1 <crate>

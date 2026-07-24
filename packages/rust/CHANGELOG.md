@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`unit mutation --language rust` finds mutants in a cargo-workspace member crate** (#467).
+  cargo-mutants addresses files relative to the crate's cargo workspace root, but the diff fed to
+  its `--in-diff` was scan-path-relative — for a crate that is a member of a workspace rooted
+  above it, the paths never matched, every mutant was filtered out, and a diff-scoped run passed
+  with `0 mutant(s) tested` against any real change (a false green, in the workflow's
+  `Unit mutation — changed lines` job too). The tool now rebases the diff onto the workspace root
+  before the run and rebases the engine's reported paths back afterward, so a workspace-member
+  crate is diff-scoped, gated, and reported exactly as a standalone crate is — survivor paths and
+  `mutation` exemptions stay scan-path-relative, and whole-crate runs on a member crate now report
+  and exempt by those same paths.
+
 - **`unit mutation --language typescript` runs Stryker in place, so a package-level
   `tsconfig.json` reaches a mutant verdict in the production install** (#460). With the sandbox
   rooted at the package root, the package's `tsconfig.json` sat inside the sandboxed project, so

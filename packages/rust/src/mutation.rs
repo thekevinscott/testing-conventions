@@ -401,10 +401,12 @@ pub fn measure_rust(
     let diff = match base {
         // An empty diff (no changed lines under the crate — a PR that doesn't touch it)
         // means nothing to mutate: the engine is skipped, and the caller reports it.
-        Some(base) => match write_base_diff(root, &workspace_root, prefix.as_deref(), base, &out)? {
-            None => return Ok(Measurement::EngineNotRun),
-            Some(path) => Some(path),
-        },
+        Some(base) => {
+            match write_base_diff(root, &workspace_root, prefix.as_deref(), base, &out)? {
+                None => return Ok(Measurement::EngineNotRun),
+                Some(path) => Some(path),
+            }
+        }
         None => None,
     };
     let engine = ensure_cargo_mutants()?;
@@ -835,10 +837,12 @@ fn cargo_workspace_root(root: &Path) -> Result<PathBuf> {
         );
     }
     let manifest = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
-    manifest
-        .parent()
-        .map(Path::to_path_buf)
-        .with_context(|| format!("no parent dir for the workspace manifest `{}`", manifest.display()))
+    manifest.parent().map(Path::to_path_buf).with_context(|| {
+        format!(
+            "no parent dir for the workspace manifest `{}`",
+            manifest.display()
+        )
+    })
 }
 
 /// The scan path's prefix relative to the workspace root ([`scan_prefix`]), over

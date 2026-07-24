@@ -199,6 +199,53 @@ fn base_finds_survivors_in_a_subdir_crate() {
     );
 }
 
+/// A member crate's manifest: no `[workspace]` table, so the crate belongs to the
+/// workspace rooted above it.
+const MEMBER_CARGO_TOML: &str =
+    "[package]\nname = \"tc_mut_member\"\nversion = \"0.0.0\"\nedition = \"2021\"\n";
+
+#[test]
+fn base_finds_survivors_in_a_workspace_member_crate() {
+    // The crate is a member of a cargo workspace rooted at the repo root — a monorepo
+    // consumer's layout. cargo-mutants addresses files relative to the workspace root,
+    // so the `--in-diff` diff must reach the engine workspace-root-relative or every
+    // mutant is filtered out and the run passes vacuously; the survivors it finds are
+    // still reported scan-path-relative.
+    let repo = TempRepo::bare("workspace-member");
+    repo.write(
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"member\"]\nresolver = \"2\"\n",
+    );
+    repo.write("member/Cargo.toml", MEMBER_CARGO_TOML);
+    repo.write("member/src/lib.rs", BASELINE);
+    repo.commit("baseline: fully-tested add in a workspace member");
+    let base = repo.head();
+    repo.write("member/src/lib.rs", WITH_SURVIVOR);
+    repo.commit("add an assertion-light is_positive");
+
+    let (_, survivors) = expect_tested(
+        measure_rust(
+            &repo.0.join("member"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            Some(&base),
+            &[],
+        )
+        .expect("cargo-mutants runs"),
+    );
+    assert!(
+        !survivors.is_empty()
+            && survivors
+                .iter()
+                .all(|s| s.description.contains("is_positive")),
+        "the added weak function in the workspace member should leave a survivor; got {survivors:?}"
+    );
+    assert!(
+        survivors.iter().all(|s| s.file == "src/lib.rs"),
+        "survivor paths are scan-path-relative, not workspace-relative; got {survivors:?}"
+    );
+}
+
 #[test]
 fn base_with_no_changes_under_the_crate_reports_the_engine_not_run() {
     // A PR that changes nothing under the crate (here, only a top-level note) yields an

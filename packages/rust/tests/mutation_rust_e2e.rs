@@ -102,6 +102,54 @@ fn a_diff_without_crate_changes_reports_the_engine_not_run() {
 }
 
 #[test]
+fn base_fails_on_a_survivor_in_a_workspace_member_crate() {
+    // The crate is a member of a cargo workspace rooted at the repo root — a monorepo
+    // consumer's layout. The changed lines add an assertion-light function, so the
+    // diff-scoped gate goes red and names the survivor by its scan-path-relative file:
+    // cargo-mutants addresses files relative to the workspace root, and a run that
+    // never rebases the diff filters every mutant out and passes with `0 mutant(s)
+    // tested` — a false green.
+    let repo = GitRepo::new("rust-workspace-member");
+    repo.write(
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"member\"]\nresolver = \"2\"\n",
+    );
+    repo.write(
+        "member/Cargo.toml",
+        "[package]\nname = \"tc_mut_ws_member\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
+    );
+    repo.write(
+        "member/src/lib.rs",
+        "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test]\n    fn adds() {\n        assert_eq!(add(2, 3), 5);\n        assert_eq!(add(10, 1), 11);\n    }\n}\n",
+    );
+    repo.commit("baseline: fully-tested add in a workspace member");
+    let base = repo.head();
+    repo.write(
+        "member/src/lib.rs",
+        "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n\npub fn is_positive(n: i32) -> bool {\n    n > 0\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test]\n    fn adds() {\n        assert_eq!(add(2, 3), 5);\n        assert_eq!(add(10, 1), 11);\n    }\n    #[test]\n    fn runs_is_positive() {\n        let _ = is_positive(1);\n    }\n}\n",
+    );
+    repo.commit("add an assertion-light is_positive");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "rust"])
+        .args(["--base", &base])
+        .arg(repo.path().join("member"))
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "the added weak function's survivors fail the gate; stdout: {stdout}; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("surviving mutant") && stderr.contains("src/lib.rs"),
+        "the failure names the survivor by its scan-path-relative file; stderr: {stderr}"
+    );
+}
+
+#[test]
 fn survivors_fail_the_gate_by_default() {
     // The gate is on by default and binary: an un-exempted surviving mutant fails the
     // run, no config required.

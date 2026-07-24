@@ -119,7 +119,10 @@ every other check uses.
 
 Each engine runs where its ecosystem expects: cargo-mutants at the crate root, cosmic-ray at the
 scanned path, and Stryker at the **package root** — the nearest directory at or above the scanned
-path holding a `package.json`. All three mutate the tree **in place**: Stryker applies each mutant
+path holding a `package.json`. cargo-mutants addresses files relative to the crate's **cargo
+workspace root**, so the tool rebases the diff it feeds the engine onto that root and rebases the
+engine's reported paths back — a crate that is a member of a larger workspace is diff-scoped,
+gated, and reported exactly as a standalone crate is. All three mutate the tree **in place**: Stryker applies each mutant
 to the package's real files (a backup lives under `.stryker-tmp` for the duration of the run, and
 the run restores every file when it ends), so everything a run touches resolves exactly as it does
 in your editor — a source that reaches above the scanned path (`import pkg from '../package.json'`,

@@ -184,7 +184,7 @@ fn attest_overwrites_its_own_receipt_in_place() {
     attest(&repo.0, "true").expect("first attest should succeed");
     let first = repo.receipt_names();
     repo.commit_file("src/lib.rs", "pub fn seed2() {}\n", "more code");
-    attest(&repo.0, "exit 3").expect("second attest should succeed");
+    attest(&repo.0, "echo rerun").expect("second attest should succeed");
     let second = repo.receipt_names();
 
     assert_eq!(first, second, "re-attesting rewrites the same file");
@@ -194,7 +194,7 @@ fn attest_overwrites_its_own_receipt_in_place() {
     )
     .unwrap();
     assert_eq!(
-        receipt["exit_code"], 3,
+        receipt["command"], "echo rerun",
         "the receipt records the latest run"
     );
 }

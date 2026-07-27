@@ -30,7 +30,9 @@ a first-party item).
 **E2E attestation** — e2e tests aren't run in CI. Run them locally and attest:
 `testing-conventions e2e attest 'cargo test --test e2e'` commits a receipt naming the
 commit they ran against; in CI, `e2e verify` checks that receipt is current (re-run
-`attest` when it goes stale). CI never runs the e2e suite.
+`attest` when it goes stale). A receipt records a run that **passed**: a failing
+suite leaves the receipts as they were and `attest` exits with the suite's own
+code. CI never runs the e2e suite.
 
 ## Gate fixture layout
 

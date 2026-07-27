@@ -1136,7 +1136,10 @@ now fails when the e2e run fails; one that previously chained work behind `attes
 work skipped on a red run, and a bespoke downstream wrapper reading `receipt.exit_code` to revert
 a bad receipt commit can be deleted. On a non-zero command the receipts directory is left exactly
 as it was — the branch's earlier receipt, if any, stays committed and unmodified — and the failure
-is named on stderr. The passing path is byte-for-byte unchanged.
+is named on stderr. A passing run still writes and commits the receipt exactly as before; its
+success line drops the now-always-zero suffix (`e2e receipt recorded for branch <b> at
+e2e-attestations/<slug>.json`, without `(command exited 0)`), so anything parsing that line
+byte-for-byte updates its match.
 
 `unit mutation --language rust` on a crate configured with `[rust] features` now builds the
 crate's test targets with those features (#469). A crate whose integration test names a

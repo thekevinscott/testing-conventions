@@ -103,11 +103,13 @@ Two kinds of files are skipped with no configuration — the only non-explicit e
 ## `[rust] features`
 
 The `[rust]` table takes **`features`**, a list of cargo features the suite-running Rust rules
-enable: `unit coverage` passes it to `cargo llvm-cov` as `--features`, and `unit mutation` forwards
-it to cargo-mutants' build/test runs, so `#[cfg(feature = ...)]` code is compiled, measured, and
-mutated. Cargo features are Rust's build-system concept with no Python/TypeScript analog, so the
-key is deliberately Rust-only — a documented asymmetry under the
-[parity rule](../explanation/#parity-over-cleverness).
+enable: `unit coverage` passes it to `cargo llvm-cov` as `--features`, and `unit mutation` passes it
+to cargo-mutants as `--features`, so `#[cfg(feature = ...)]` code is compiled, measured, and
+mutated. The mutation run enables the features on **every** cargo invocation it makes — the build
+of the crate's test targets as much as the test run itself — so an integration test that names a
+feature-gated item compiles and judges the mutants of the code it covers. Cargo features are Rust's
+build-system concept with no Python/TypeScript analog, so the key is deliberately Rust-only — a
+documented asymmetry under the [parity rule](../explanation/#parity-over-cleverness).
 
 ## `build_command`
 

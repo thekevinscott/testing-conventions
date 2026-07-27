@@ -1,0 +1,13 @@
+# Fixture crate `mut_gated_member`: a workspace member whose `boost` module is behind
+# the `boost` feature and whose **integration** test (`tests/boost.rs`) references it.
+# The test target only compiles when the mutation run enables the feature, so this
+# fixture pins that `[rust] features` reaches cargo's build phase, not just its test
+# phase — a feature that reaches only the test run leaves the unmutated baseline build
+# broken, and cargo-mutants tests nothing.
+[package]
+name = "mut_gated_member"
+version = "0.0.0"
+edition = "2021"
+
+[features]
+boost = []

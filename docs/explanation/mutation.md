@@ -122,7 +122,10 @@ scanned path, and Stryker at the **package root** — the nearest directory at o
 path holding a `package.json`. cargo-mutants addresses files relative to the crate's **cargo
 workspace root**, so the tool rebases the diff it feeds the engine onto that root and rebases the
 engine's reported paths back — a crate that is a member of a larger workspace is diff-scoped,
-gated, and reported exactly as a standalone crate is. All three mutate the tree **in place**: Stryker applies each mutant
+gated, and reported exactly as a standalone crate is. A [`[rust] features`](/reference/config#rust-features)
+list rides on every cargo invocation the run makes, so the crate's test targets are **built** with
+the features too: an integration test that names a feature-gated item compiles, and the unmutated
+baseline the whole run rests on builds. All three mutate the tree **in place**: Stryker applies each mutant
 to the package's real files (a backup lives under `.stryker-tmp` for the duration of the run, and
 the run restores every file when it ends), so everything a run touches resolves exactly as it does
 in your editor — a source that reaches above the scanned path (`import pkg from '../package.json'`,

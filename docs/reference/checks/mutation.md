@@ -74,8 +74,8 @@ surface:
   defensive), with a required `reason` — see
   [the exemption schema](/reference/config#line-scoped-exemptions). The determinism guard rejects
   a listed line whose mutants were all caught.
-- [`[rust] features`](/reference/config#rust-features) — cargo features forwarded to
-  cargo-mutants' build/test runs.
+- [`[rust] features`](/reference/config#rust-features) — cargo features the run enables on every
+  cargo invocation, test-target builds included.
 - [`build_command`](/reference/config#build-command) — a pre-suite build the manifest can't
   express.
 

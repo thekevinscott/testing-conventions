@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`[rust] features` reaches the mutation run's build phase, so a crate whose test targets need a
+  feature has a baseline that builds** (#469). The feature list rode after cargo-mutants' `--`
+  separator, which forwards it to `cargo test` alone — cargo builds a crate's test targets before
+  running them, so any crate whose integration test names a `#[cfg(feature = ...)]` item failed to
+  compile in the unmutated tree, cargo-mutants stopped at `cargo build failed in an unmutated tree,
+  so no mutants were tested`, and `unit mutation --language rust` judged **zero** mutants against a
+  real source change. The list now rides on cargo-mutants' own `--features` option, which applies
+  to every cargo invocation the run makes: the test targets build, the gated module's tests judge
+  its mutants, and the gate enforces. A baseline that still cannot build remains a hard failure
+  naming the engine output, never a `0 mutant(s) tested` pass.
+
 - **`unit mutation --language rust` finds mutants in a cargo-workspace member crate** (#467).
   cargo-mutants addresses files relative to the crate's cargo workspace root, but the diff fed to
   its `--in-diff` was scan-path-relative — for a crate that is a member of a workspace rooted

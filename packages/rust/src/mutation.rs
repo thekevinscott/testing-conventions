@@ -1092,11 +1092,8 @@ fn strip_llvm_cov_env(command: &mut Command) {
     }
 }
 
-/// Run `<engine> mutants --output <out> [--in-diff <diff>] [-- --features <list>]` in `root`,
-/// where `engine` is the provisioned cargo-mutants binary ([`ensure_cargo_mutants`]) invoked
-/// by absolute path. The `[rust] features` list rides after cargo-mutants' `--` separator,
-/// which forwards it to the cargo build/test runs — so `#[cfg(feature = ...)]` code is
-/// compiled and its mutants exercised.
+/// Run the cargo-mutants argv ([`mutants_argv`]) in `root`, where `engine` is the provisioned
+/// cargo-mutants binary ([`ensure_cargo_mutants`]) invoked by absolute path.
 ///
 /// The exit code is classified by [`classify_mutants_exit`] (`0`/`2`/`3` normal, else fatal).
 /// The outer instrumentation env is stripped so a nested run (this rule's own tests under
@@ -1111,18 +1108,37 @@ fn run_cargo_mutants(
     let mut command = Command::new(engine);
     command
         .current_dir(root)
-        .arg("mutants")
-        .arg("--output")
-        .arg(out);
-    if let Some(diff) = in_diff {
-        command.arg("--in-diff").arg(diff);
-    }
-    if !features.is_empty() {
-        command.args(["--", "--features"]).arg(features.join(","));
-    }
+        .args(mutants_argv(out, in_diff, features));
     strip_llvm_cov_env(&mut command);
     let output = command.output().context("running cargo-mutants")?;
     classify_mutants_exit(root, &output)
+}
+
+/// The argv for one cargo-mutants run: `mutants --output <out> [--in-diff <diff>]
+/// [--features <list>]`. Split from execution so the shape is unit-tested without a real
+/// engine run.
+///
+/// The `[rust] features` list rides on cargo-mutants' **own** `--features` option, which it
+/// applies to every cargo invocation the run makes. Cargo builds a crate's test targets
+/// before running them, and a list passed after the `--` separator reaches `cargo test`
+/// alone — so a crate whose test target names a `#[cfg(feature = ...)]` item fails to compile
+/// in the unmutated tree, and the run judges nothing. On the engine's option the targets
+/// build, the gated code is mutated, and the tests covering it judge those mutants.
+fn mutants_argv(out: &Path, in_diff: Option<&Path>, features: &[String]) -> Vec<OsString> {
+    let mut argv = vec![
+        OsString::from("mutants"),
+        OsString::from("--output"),
+        out.as_os_str().to_os_string(),
+    ];
+    if let Some(diff) = in_diff {
+        argv.push(OsString::from("--in-diff"));
+        argv.push(diff.as_os_str().to_os_string());
+    }
+    if !features.is_empty() {
+        argv.push(OsString::from("--features"));
+        argv.push(OsString::from(features.join(",")));
+    }
+    argv
 }
 
 /// Classify a finished cargo-mutants run's exit code as a normal outcome or a fatal error.
@@ -1730,6 +1746,41 @@ mod tests {
                 "/cache/cargo-mutants-27",
             ]
         );
+    }
+
+    #[test]
+    fn mutants_argv_enables_features_on_the_engine_itself() {
+        let argv = |diff, features: &[&str]| -> Vec<String> {
+            mutants_argv(
+                Path::new("/out"),
+                diff,
+                &features.iter().map(|f| f.to_string()).collect::<Vec<_>>(),
+            )
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
+        };
+        // The features land on cargo-mutants' own `--features`, which reaches every cargo
+        // invocation — after a `--` separator they would reach `cargo test` alone, and a test
+        // target needing the feature would break the unmutated baseline build.
+        assert_eq!(
+            argv(None, &["cli", "boost"]),
+            vec!["mutants", "--output", "/out", "--features", "cli,boost"]
+        );
+        assert_eq!(
+            argv(Some(Path::new("/out/base.diff")), &["cli"]),
+            vec![
+                "mutants",
+                "--output",
+                "/out",
+                "--in-diff",
+                "/out/base.diff",
+                "--features",
+                "cli",
+            ]
+        );
+        // No features configured: the engine runs on the crate's default features.
+        assert_eq!(argv(None, &[]), vec!["mutants", "--output", "/out"]);
     }
 
     #[cfg(unix)]

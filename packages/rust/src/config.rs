@@ -100,9 +100,10 @@ pub struct TypeScriptConfig {
 pub struct RustConfig {
     pub coverage: Option<RustCoverage>,
     /// Cargo features the suite-running Rust rules enable: `unit coverage`
-    /// passes them to `cargo llvm-cov` (`--features`) and `unit mutation` forwards
-    /// them to cargo-mutants' build/test runs, so `#[cfg(feature = ...)]` code is
-    /// compiled, measured, and mutated. Cargo features are Rust's build-system
+    /// passes them to `cargo llvm-cov` (`--features`) and `unit mutation` passes them
+    /// to cargo-mutants (`--features`), which enables them on every cargo invocation
+    /// the run makes, so `#[cfg(feature = ...)]` code — and the test targets that name
+    /// it — is built, measured, and mutated. Cargo features are Rust's build-system
     /// concept with no Python/TypeScript analog, so the key is deliberately
     /// Rust-only (a documented asymmetry under the parity rule).
     #[serde(default)]

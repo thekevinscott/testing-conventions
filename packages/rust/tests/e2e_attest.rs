@@ -1,10 +1,11 @@
 //! Integration tests for `e2e attest`.
 //!
 //! `attest` reads HEAD and the checked-out branch, runs the given command, and
-//! commits the branch's receipt under `e2e-attestations/`. Each test builds a
-//! throwaway git repo with one seed commit on a work branch, runs `attest`, and
-//! asserts it recorded the run, wrote the receipt, and committed it on top —
-//! the clean (passing command) and red (failing command) cases.
+//! — when the command passes — commits the branch's receipt under
+//! `e2e-attestations/`. Each test builds a throwaway git repo with one seed
+//! commit on a work branch, runs `attest`, and asserts it recorded the run: the
+//! clean case writes and commits the receipt, and a failing command reports the
+//! failure while leaving the receipts untouched.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -136,21 +137,56 @@ fn attest_runs_the_command() {
 }
 
 #[test]
-fn attest_records_a_failing_run_and_still_commits() {
-    // Force a run, not a pass: a non-zero command still produces a committed
-    // receipt recording the failure.
+fn attest_reports_a_failing_run_and_writes_no_receipt() {
+    // A receipt is a passing run's record, so a failing command produces none:
+    // the caller reads the failure off the returned exit code, and the tree is
+    // exactly as it was.
     let repo = TempRepo::new();
     let code_commit = repo.head();
 
     let att = attest(&repo.0, "exit 3").expect("attest itself should still succeed");
 
-    assert_eq!(att.exit_code, 3, "the command's exit code is recorded");
+    assert_eq!(att.exit_code, 3, "the command's exit code is reported");
     assert_eq!(att.commit, code_commit);
-    assert!(repo.0.join(RECEIPT).is_file());
-    assert_ne!(
+    assert!(
+        !repo.0.join(RECEIPT).exists(),
+        "a failing run leaves no receipt to commit as a passing one"
+    );
+    assert_eq!(
         repo.head(),
         code_commit,
-        "a failing run is still committed (force-run, not force-pass)"
+        "a failing run commits nothing on top"
+    );
+}
+
+#[test]
+fn attest_leaves_the_branchs_earlier_receipt_intact_when_the_command_fails() {
+    // The prune runs with the write, so a failing re-attest neither deletes nor
+    // overwrites the receipt an earlier passing run committed — a failure
+    // costs the branch nothing it had already earned.
+    let repo = TempRepo::new();
+    attest(&repo.0, "true").expect("the passing attest should succeed");
+    let recorded = std::fs::read_to_string(repo.0.join(RECEIPT)).unwrap();
+    let receipt_commit = repo.head();
+
+    attest(&repo.0, "exit 1").expect("attest itself should still succeed");
+
+    assert_eq!(
+        std::fs::read_to_string(repo.0.join(RECEIPT)).unwrap(),
+        recorded,
+        "the failing run leaves the committed receipt as it was"
+    );
+    assert_eq!(repo.head(), receipt_commit, "and adds no commit of its own");
+}
+
+#[test]
+fn attest_runs_the_command_even_when_it_fails() {
+    // Skipping the receipt is not skipping the run: the command still executes.
+    let repo = TempRepo::new();
+    attest(&repo.0, "echo ran > marker; exit 1").expect("attest itself should still succeed");
+    assert!(
+        repo.0.join("marker").is_file(),
+        "attest must run the command whatever its outcome"
     );
 }
 

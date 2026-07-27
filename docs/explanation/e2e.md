@@ -27,8 +27,13 @@ The mechanism is a pair:
   commit it ran against — and commits that file on top. **The command is yours to choose, and the
   choice is the judgment the receipt records**: the full suite, the one suite covering the
   contract this change touches, or a no-op for a change you judge needs no run at all. All are
-  valid receipts. `attest` writes regardless of the command's exit code: the record is the
-  decision and what ran, and the honest result is part of the record.
+  valid receipts.
+
+  **A receipt records a run that passed.** When your command exits non-zero, `attest` names the
+  failure, leaves the receipts exactly as they were, and **exits with the command's own exit
+  code** — so a wrapping `just` recipe, CI step, or agent reads a red e2e run as red (#470). The
+  receipt a branch pushes therefore stands for a run that went green, and reaching one means
+  fixing the failure and attesting again.
 
   The receipt is keyed by the branch name, sanitized to a lowercase, truncated slug so any branch
   name yields a valid, portable filename; the raw branch name is recorded inside the receipt.
@@ -51,8 +56,9 @@ The mechanism is a pair:
      `e2e attest` with the command of your choosing.
 
   It never runs the suite, never inspects the recorded command or exit code, and never compares
-  commit SHAs. Deleting another branch's receipt (the prune above) is not a decision — only an
-  added or updated receipt answers question 2. In a monorepo, `source` names the package —
+  commit SHAs — a committed receipt already means a run that passed, because that is the only
+  kind `attest` writes. Deleting another branch's receipt (the prune above) is not a decision —
+  only an added or updated receipt answers question 2. In a monorepo, `source` names the package —
   `e2e verify packages/widget` behaves exactly like running `e2e verify` with `packages/widget`
   as the current directory (#281) — and `--scope` narrows what counts as code independently of
   where the receipts live (#294), so a commit touching the package's `tests/`, docs, or config —

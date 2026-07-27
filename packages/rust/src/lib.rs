@@ -205,9 +205,9 @@ enum IntegrationRule {
 /// verify in CI that a branch changing the scoped source carries a receipt.
 #[derive(Subcommand, Debug)]
 enum E2eCommand {
-    /// Run the e2e command of your choosing and commit the branch's receipt —
-    /// the command (full suite, targeted subset, or a no-op) is the judgment
-    /// the receipt records.
+    /// Run the e2e command of your choosing and, when it passes, commit the
+    /// branch's receipt — the command (full suite, targeted subset, or a no-op)
+    /// is the judgment the receipt records. Exits with the command's own code.
     Attest {
         /// The e2e command to run (e.g. `pnpm run e2e`), executed via the shell.
         command: String,
@@ -929,18 +929,25 @@ fn run_workflow(path: &Path) -> anyhow::Result<i32> {
     Ok(1)
 }
 
-/// Run `command` as the branch's e2e decision and commit the receipt.
-/// Force-runs: the receipt is written regardless of the command's exit code,
-/// so this exits `0` once the receipt is recorded.
+/// Run `command` as the branch's e2e decision and, when it passes, commit the
+/// receipt. Exits with `command`'s own exit code, so a wrapping recipe, CI step,
+/// or agent reads a failing e2e run as a failure.
 fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
     let repo = std::env::current_dir()?;
     let attestation = e2e::attest(&repo, command)?;
+    if attestation.exit_code != 0 {
+        eprintln!(
+            "e2e command `{command}` exited {}; a receipt records a run that passed — \
+             fix the failure and attest again",
+            attestation.exit_code
+        );
+        return Ok(attestation.exit_code);
+    }
     println!(
-        "e2e receipt recorded for branch {} at {}/{}.json (command exited {})",
+        "e2e receipt recorded for branch {} at {}/{}.json",
         attestation.branch,
         e2e::RECEIPTS_DIR,
         e2e::branch_slug(&attestation.branch),
-        attestation.exit_code
     );
     Ok(0)
 }

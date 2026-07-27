@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`e2e attest` exits with the wrapped command's exit code, and a failing run leaves no committed
+  receipt** (#470). A red e2e run was indistinguishable from a green one at the caller's exit code:
+  `attest` recorded the real `exit_code` in the receipt, then committed it and exited `0`, so a
+  wrapping `just` recipe or CI step saw success and a `command exited 1` receipt could be pushed as
+  if the suite had passed. A receipt now stands for a run that passed: on a non-zero command
+  `attest` names the failure on stderr, leaves the receipts directory untouched (no prune, no
+  write, no commit), and exits with the command's own code. The passing path is unchanged.
+
 - **`[rust] features` reaches the mutation run's build phase, so a crate whose test targets need a
   feature has a baseline that builds** (#469). The feature list rode after cargo-mutants' `--`
   separator, which forwards it to `cargo test` alone — cargo builds a crate's test targets before

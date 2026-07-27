@@ -177,9 +177,12 @@ testing-conventions e2e attest '<the e2e command you choose>'
 ```
 
 The command is the judgment — the full suite, the one suite covering the changed
-contract, or a no-op for a change that needs none. `attest` runs it and commits a
-receipt under `e2e-attestations/`, keyed by branch, recording the command, the exit
-code, and the commit it ran against. In CI, `testing-conventions e2e verify --base
+contract, or a no-op for a change that needs none. `attest` runs it and, when it
+passes, commits a receipt under `e2e-attestations/`, keyed by branch, recording the
+command, the exit code, and the commit it ran against. A command that exits non-zero
+leaves the receipts as they were and makes `attest` exit with that same code, so a
+wrapping recipe or CI step reads a red run as red
+([#470](https://github.com/thekevinscott/testing-conventions/issues/470)). In CI, `testing-conventions e2e verify --base
 <ref>` passes when the branch's diff (`<base>...HEAD`, the same diff-relative model
 coverage and mutation use) leaves the scoped source untouched, or carries a receipt.
 One receipt covers the branch: later pushes stay green, and because both checks read

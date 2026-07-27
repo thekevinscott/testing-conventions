@@ -67,4 +67,6 @@ For mocking a streaming external service (LLM client, network stream), build a f
 **E2E attestation** — e2e tests aren't run in CI. Run them locally and attest:
 `testing-conventions e2e attest 'pytest tests/e2e'` commits a receipt naming the
 commit they ran against; in CI, `e2e verify` checks it's current (re-run `attest`
-when it goes stale). CI never runs the e2e suite.
+when it goes stale). A receipt records a run that **passed**: a failing suite
+leaves the receipts as they were and `attest` exits with the suite's own code.
+CI never runs the e2e suite.

@@ -15,6 +15,17 @@ Each entry has five sections, in order:
 
 ### Summary
 
+`e2e attest` propagates the wrapped command's exit code, and a failing run leaves no committed
+receipt (#470). `attest` recorded the command's real `exit_code` in the receipt, then committed it
+and exited `0` regardless — so a red e2e run was indistinguishable from a green one at the caller's
+exit code, and a `command exited 1` receipt could be pushed as if the suite had passed. A receipt
+now stands for a run that passed: a non-zero command leaves the receipts directory untouched (no
+prune, no write, no commit) and `attest` exits with that same code. Breaking for a caller that
+relied on `attest` exiting `0` after a red run, and for a workflow that treated the receipt as a
+record of what ran rather than of a pass (see **Behavior changes without code changes**). The Rust
+API is unchanged: `e2e::attest` still returns `Ok(Attestation)`, whose `exit_code` says which path
+ran.
+
 `[rust] features` reaches the mutation run's build phase (#469). The feature list rode after
 cargo-mutants' `--` separator, which forwards it to `cargo test` alone — and cargo builds a
 crate's test targets before running them, so a crate whose integration test names a
@@ -1120,6 +1131,16 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`e2e attest '<cmd>'` exits with `<cmd>`'s exit code (#470). A recipe or CI step wrapping `attest`
+now fails when the e2e run fails; one that previously chained work behind `attest &&` sees that
+work skipped on a red run, and a bespoke downstream wrapper reading `receipt.exit_code` to revert
+a bad receipt commit can be deleted. On a non-zero command the receipts directory is left exactly
+as it was — the branch's earlier receipt, if any, stays committed and unmodified — and the failure
+is named on stderr. A passing run still writes and commits the receipt exactly as before; its
+success line drops the now-always-zero suffix (`e2e receipt recorded for branch <b> at
+e2e-attestations/<slug>.json`, without `(command exited 0)`), so anything parsing that line
+byte-for-byte updates its match.
+
 `unit mutation --language rust` on a crate configured with `[rust] features` now builds the
 crate's test targets with those features (#469). A crate whose integration test names a
 feature-gated item previously stopped at the unmutated baseline build and judged nothing; its
@@ -1496,6 +1517,14 @@ Expected: `attest` commits one `e2e-attestations/<branch-slug>.json` naming the 
 `verify` passes. Push a scoped source change on a second branch without attesting and `verify
 --base origin/main` fails there, naming `e2e attest` as the fix; rebasing the attested branch
 onto a moved `main` leaves its `verify` green.
+
+```
+testing-conventions e2e attest 'exit 1'; echo "attest exited $?"
+git status --porcelain e2e-attestations/
+```
+
+Expected (#470): `attest exited 1`, stderr names the failing command and its code, and
+`git status` prints nothing — the failing run wrote and committed no receipt.
 
 ```
 testing-conventions integration lint --language python <package>/src

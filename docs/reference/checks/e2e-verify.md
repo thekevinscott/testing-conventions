@@ -55,8 +55,9 @@ It runs your command with output streamed through, then writes and commits
 `e2e-attestations/<branch>.json` — the command, a timestamp, the exit code, and the commit it ran
 against. **The command is yours to choose, and the choice is the judgment the receipt records**:
 the full suite, the one suite covering the contract this change touches, or a no-op for a change
-you judge needs no run at all. `attest` writes regardless of exit code — the honest result is
-part of the record. The receipt is keyed by the branch name as a sanitized slug
+you judge needs no run at all. A receipt records a run that **passed**: a command exiting non-zero
+leaves the receipts as they were and makes `attest` exit with that same code, so a wrapping recipe
+or CI step reads a red run as red (#470). The receipt is keyed by the branch name as a sanitized slug
 (`testing-conventions e2e slug` prints it), so parallel pull requests write distinct files, and
 `attest` prunes the receipts other branches left behind.
 

@@ -79,13 +79,15 @@ pub(crate) fn current_branch(repo: &Path) -> Result<String> {
     )
 }
 
-/// Run `command` in `repo`, write the branch's receipt to
+/// Run `command` in `repo` and, when it passes, write the branch's receipt to
 /// `repo`/[`RECEIPTS_DIR`]`/<branch_slug>.json`, prune the receipts other
 /// branches left behind (and the retired single-file attestation), and commit.
-/// Returns the attestation.
+/// Returns the attestation either way.
 ///
-/// Writes regardless of the command's exit code — the record is the decision
-/// and what ran, and the honest result is part of the record.
+/// A receipt records a run that **passed**, so a non-zero `command` leaves the
+/// receipts directory exactly as it was — the branch's earlier receipt, if any,
+/// stays committed and unmodified. The returned [`Attestation::exit_code`]
+/// carries the failure for the caller to propagate.
 pub fn attest(repo: &Path, command: &str) -> Result<Attestation> {
     let commit = git_capture(repo, &["rev-parse", "HEAD"])
         .context("resolving HEAD — `e2e attest` must run inside a git repo with a commit")?;
@@ -112,6 +114,13 @@ pub fn attest(repo: &Path, command: &str) -> Result<Attestation> {
         commit,
         branch: branch.clone(),
     };
+
+    // The prune below deletes the branch's own receipt before rewriting it, so
+    // a failing run has to skip the whole block: writing nothing would leave a
+    // branch that had attested worse off than before it re-ran.
+    if exit_code != 0 {
+        return Ok(attestation);
+    }
 
     // Prune sibling receipts — dead weight once their branches merge, since
     // `verify` reads only the current branch's diff. Write-once files make the

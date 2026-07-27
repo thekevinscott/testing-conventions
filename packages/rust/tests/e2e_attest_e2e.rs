@@ -1,6 +1,7 @@
 //! E2E tests for `e2e attest`: drive the built CLI binary in a
-//! throwaway git repo (no mocks) and assert it force-runs the command, exits
-//! `0`, and commits the branch's receipt.
+//! throwaway git repo (no mocks) and assert it runs the command, commits the
+//! branch's receipt on a pass, and propagates the command's own exit code —
+//! so a wrapping `just` recipe or CI step reads a failing run as a failure.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -64,15 +65,25 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// Run the built binary's `e2e attest <command>` with the cwd set to `repo`.
-fn attest_exit(repo: &Path, command: &str) -> i32 {
-    Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+/// Run the built binary's `e2e attest <command>` with the cwd set to `repo`,
+/// returning its exit code and stderr.
+fn attest_run(repo: &Path, command: &str) -> (i32, String) {
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["e2e", "attest", command])
         .current_dir(repo)
-        .status()
-        .expect("the built binary should run")
-        .code()
-        .expect("the process should exit with a code")
+        .output()
+        .expect("the built binary should run");
+    (
+        out.status
+            .code()
+            .expect("the process should exit with a code"),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+/// The exit code of `e2e attest <command>` run with the cwd set to `repo`.
+fn attest_exit(repo: &Path, command: &str) -> i32 {
+    attest_run(repo, command).0
 }
 
 /// Configure `repo` to require signed commits, but point signing at a program
@@ -97,11 +108,7 @@ fn attest_exits_zero_and_commits_the_receipt() {
     let repo = TempRepo::new();
     let code_commit = repo.head();
 
-    assert_eq!(
-        attest_exit(&repo.0, "true"),
-        0,
-        "attest force-runs and exits 0"
-    );
+    assert_eq!(attest_exit(&repo.0, "true"), 0, "a passing command exits 0");
     assert!(
         repo.0.join(RECEIPT).is_file(),
         "attest should write the branch's receipt"
@@ -114,12 +121,24 @@ fn attest_exits_zero_and_commits_the_receipt() {
 }
 
 #[test]
-fn attest_exits_zero_even_when_the_command_fails() {
-    // Force-run, not force-pass: a failing e2e command still records + commits,
-    // so attest itself exits 0.
+fn attest_propagates_the_commands_exit_code_and_commits_nothing() {
+    // The failure a caller must see: a red e2e run exits red, and leaves no
+    // committed receipt to push as a passing one.
     let repo = TempRepo::new();
-    assert_eq!(attest_exit(&repo.0, "exit 1"), 0);
-    assert!(repo.0.join(RECEIPT).is_file());
+    let code_commit = repo.head();
+
+    let (code, stderr) = attest_run(&repo.0, "exit 3");
+
+    assert_eq!(code, 3, "attest exits with the wrapped command's code");
+    assert!(
+        !repo.0.join(RECEIPT).exists(),
+        "a failing run writes no receipt"
+    );
+    assert_eq!(repo.head(), code_commit, "and commits nothing");
+    assert!(
+        stderr.contains("exited 3"),
+        "the failure names the command's exit code: {stderr}"
+    );
 }
 
 #[test]

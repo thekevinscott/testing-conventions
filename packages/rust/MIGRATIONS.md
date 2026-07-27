@@ -15,6 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
+`[rust] features` reaches the mutation run's build phase (#469). The feature list rode after
+cargo-mutants' `--` separator, which forwards it to `cargo test` alone — and cargo builds a
+crate's test targets before running them, so a crate whose integration test names a
+`#[cfg(feature = ...)]` item failed to compile in the unmutated tree, cargo-mutants stopped at
+`cargo build failed in an unmutated tree, so no mutants were tested`, and the run judged zero
+mutants against a real source change. The list now rides on cargo-mutants' own `--features`
+option, which applies to every cargo invocation the run makes. No API or config change (see
+**Behavior changes without code changes**).
+
 `unit mutation --language rust` finds mutants in a cargo-workspace member crate (#467).
 cargo-mutants addresses files relative to the crate's cargo workspace root, but the `--base`
 diff was generated scan-path-relative — for a crate that is a member of a workspace rooted
@@ -1111,6 +1120,13 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`unit mutation --language rust` on a crate configured with `[rust] features` now builds the
+crate's test targets with those features (#469). A crate whose integration test names a
+feature-gated item previously stopped at the unmutated baseline build and judged nothing; its
+mutants are now tested for real, so an assertion-light change fails until a test kills them (or
+a reasoned `mutation` exemption lifts a genuinely equivalent one). A baseline that still cannot
+build remains a hard failure naming the engine's output — the run never reports it as a pass.
+
 `unit mutation --language rust` on a cargo-workspace member crate now tests the mutants on the
 changed lines (#467). A pull request that previously sailed through the mutation gate with
 `0 mutant(s) tested` is now judged for real: an assertion-light change fails until a test kills
@@ -1428,6 +1444,17 @@ tool's own execution model and can be deleted; the adapter sets the option on ev
 config line is inert either way.
 
 ### Verification
+
+```
+# a crate whose `tests/` target names a `#[cfg(feature = "…")]` item, with that
+# feature listed under `[rust] features` in testing-conventions.toml
+testing-conventions unit mutation --language rust --config testing-conventions.toml <crate>
+```
+
+Expected (#469): the run builds the test targets with the feature and states a non-zero count —
+`… every mutation was caught (<n> mutant(s) tested)` — where it previously stopped at
+`cargo build failed in an unmutated tree, so no mutants were tested`. Drop the feature from the
+config and the run fails, naming the baseline build.
 
 ```
 # in a cargo workspace, on a branch whose diff touches a member crate's source

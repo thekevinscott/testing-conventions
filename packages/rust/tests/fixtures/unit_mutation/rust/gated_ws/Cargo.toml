@@ -1,0 +1,6 @@
+# The workspace root above the `member` fixture crate — a virtual manifest, so the
+# member's cargo workspace root sits one directory above the scanned crate, the
+# monorepo layout a consuming package has.
+[workspace]
+members = ["member"]
+resolver = "2"

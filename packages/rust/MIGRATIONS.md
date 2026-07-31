@@ -15,6 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
+`e2e attest` no longer prunes other branches' receipts (#473). Deleting them paired a delete with
+this branch's add, and git's rename detection reads that pair as a rename whenever the two receipts
+look alike — which they do, because `command` is usually byte-identical across a repo's branches
+and is the longest field. Two branches cut from one parent then renamed the same source file to two
+different names, so merging the second raised `CONFLICT (rename/rename)` on a file neither author
+touched by hand — unresolvable for anyone stacking branches or working parallel slices of an epic.
+`attest` now only ever adds. No API change: `e2e::attest` still returns `Ok(Attestation)` and
+`verify` is untouched (see **Behavior changes without code changes**).
+
 `e2e attest` propagates the wrapped command's exit code, and a failing run leaves no committed
 receipt (#470). `attest` recorded the command's real `exit_code` in the receipt, then committed it
 and exited `0` regardless — so a red e2e run was indistinguishable from a green one at the caller's
@@ -1131,6 +1140,14 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`e2e attest` leaves every other branch's receipt where it is (#473). A commit that previously
+showed one add and N deletes now shows one add. Two consequences: sibling and stacked branches
+merge cleanly, where the second one in used to hit `CONFLICT (rename/rename)` on a receipt neither
+author edited; and receipts from merged or abandoned branches accumulate under
+`e2e-attestations/`, since nothing removes them any more. Delete them in a routine sweep if the
+directory bothers you — `verify` never reads them, so removing them is cosmetic and nothing breaks
+if you never do. `verify`'s behavior is unchanged in both directions.
+
 `e2e attest '<cmd>'` exits with `<cmd>`'s exit code (#470). A recipe or CI step wrapping `attest`
 now fails when the e2e run fails; one that previously chained work behind `attest &&` sees that
 work skipped on a red run, and a bespoke downstream wrapper reading `receipt.exit_code` to revert
@@ -1465,6 +1482,16 @@ tool's own execution model and can be deleted; the adapter sets the option on ev
 config line is inert either way.
 
 ### Verification
+
+```
+# on a repo whose e2e-attestations/ already holds another branch's receipt
+testing-conventions e2e attest 'true'
+git show --stat HEAD
+```
+
+Expected (#473): the commit lists exactly one changed file — this branch's own receipt, added —
+and `e2e-attestations/` still holds the other branch's file. Previously the same commit deleted
+every receipt but this branch's.
 
 ```
 # a crate whose `tests/` target names a `#[cfg(feature = "…")]` item, with that

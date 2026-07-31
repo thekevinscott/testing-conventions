@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`e2e attest` no longer deletes the receipts other branches left behind** (#473). The prune
+  paired a delete with this branch's add, and git's rename detection reads that pair as a rename
+  whenever the two receipts look alike — which they do, because `command` is usually
+  byte-identical across a repo's branches and is the longest field. Two branches cut from one
+  parent therefore renamed the *same* source file to two different names, and merging the second
+  produced `CONFLICT (rename/rename)` on a file nobody had edited: unresolvable for anyone
+  stacking branches or working parallel slices of an epic. `attest` now only ever adds. Receipts
+  from merged or abandoned branches accumulate, which is inert — `verify` asks only whether *this*
+  branch's diff adds or updates a receipt, and already excludes the receipts directory from the
+  scope it measures.
+
 - **`e2e attest` exits with the wrapped command's exit code, and a failing run leaves no committed
   receipt** (#470). A red e2e run was indistinguishable from a green one at the caller's exit code:
   `attest` recorded the real `exit_code` in the receipt, then committed it and exited `0`, so a

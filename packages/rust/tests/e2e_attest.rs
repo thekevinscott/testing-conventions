@@ -256,6 +256,36 @@ fn attest_honors_repo_commit_signing() {
 }
 
 #[test]
+fn attest_leaves_another_branchs_receipt_in_place() {
+    // Deleting a sibling's receipt pairs the delete with this branch's add, and
+    // git's rename detection turns that pair into a rename whenever the two
+    // receipts look alike — which they do, because the `command` field is
+    // usually byte-identical across a repo's branches. Two branches off one
+    // parent then rename the same source and the merge conflicts.
+    let repo = TempRepo::new();
+    let foreign = repo.0.join(RECEIPTS_DIR).join("some-other-branch.json");
+    std::fs::create_dir_all(foreign.parent().unwrap()).unwrap();
+    std::fs::write(&foreign, "{}\n").unwrap();
+    git(&repo.0, &["add", "-A"]);
+    git(
+        &repo.0,
+        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "foreign receipt"],
+    );
+
+    attest(&repo.0, "true").expect("attest should succeed");
+
+    assert!(
+        foreign.is_file(),
+        "another branch's receipt must survive; deleting it is what makes \
+         sibling branches conflict"
+    );
+    assert!(
+        repo.0.join(RECEIPT).is_file(),
+        "this branch's receipt should still be written"
+    );
+}
+
+#[test]
 fn receipts_dir_is_the_public_location() {
     // The committed path is the public contract scripts rely on.
     assert_eq!(RECEIPTS_DIR, "e2e-attestations");

@@ -272,7 +272,14 @@ fn attest_leaves_another_branchs_receipt_in_place() {
     git(&repo.0, &["add", "-A"]);
     git(
         &repo.0,
-        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "foreign receipt"],
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "-m",
+            "foreign receipt",
+        ],
     );
 
     attest(&repo.0, "true").expect("attest should succeed");

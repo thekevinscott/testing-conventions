@@ -147,10 +147,14 @@ fn attest_commits_only_an_add_and_keeps_another_branchs_receipt() {
     // branch's add is what git's rename detection turns into a rename, and two
     // branches off one parent renaming the same source is an unresolvable
     // rename/rename conflict. A pure add has nothing to pair with.
+    // Both deletes `attest` used to make are seeded: a sibling branch's receipt
+    // and the retired single-file attestation.
     let repo = TempRepo::new();
     let foreign = repo.0.join("e2e-attestations/some-other-branch.json");
     std::fs::create_dir_all(foreign.parent().unwrap()).unwrap();
     std::fs::write(&foreign, "{}\n").unwrap();
+    let legacy = repo.0.join("e2e-attestation.json");
+    std::fs::write(&legacy, "{}\n").unwrap();
     git(&repo.0, &["add", "-A"]);
     git(
         &repo.0,
@@ -169,6 +173,10 @@ fn attest_commits_only_an_add_and_keeps_another_branchs_receipt() {
     assert!(
         foreign.is_file(),
         "another branch's receipt must survive the attest"
+    );
+    assert!(
+        legacy.is_file(),
+        "the retired single-file attestation must survive too"
     );
     let out = Command::new("git")
         .args(["show", "--name-status", "--format=", "HEAD"])

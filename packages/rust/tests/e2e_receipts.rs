@@ -1,8 +1,8 @@
 //! Integration tests for the branch-keyed e2e receipt contract.
 //!
 //! `attest` writes one receipt per branch under `e2e-attestations/` — keyed by a
-//! sanitized lowercase slug of the branch name — and
-//! prunes the receipts other branches left behind. `verify` asks two content
+//! sanitized lowercase slug of the branch name — and leaves every other
+//! branch's receipt where it is. `verify` asks two content
 //! questions of the branch's diff: an untouched scoped source owes nothing, and a
 //! changed one is answered by a receipt added or updated in that same diff. No
 //! commit SHAs are compared, so one receipt covers the branch.
@@ -111,7 +111,7 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-// --- attest: one branch-keyed receipt, pruned siblings ---
+// --- attest: one branch-keyed receipt, siblings untouched ---
 
 #[test]
 fn attest_writes_a_branch_keyed_receipt_and_no_single_file() {
@@ -200,7 +200,10 @@ fn attest_overwrites_its_own_receipt_in_place() {
 }
 
 #[test]
-fn attest_prunes_receipts_other_branches_left_behind() {
+fn attest_keeps_receipts_other_branches_left_behind() {
+    // Add-only. A delete paired with this branch's add is what git's rename
+    // detection turns into a rename, and two branches off one parent renaming
+    // the same source is an unresolvable rename/rename conflict.
     let repo = TempRepo::new();
     repo.commit_receipt("merged-branch-0123abcd45");
     repo.branch("feature/two");
@@ -209,11 +212,10 @@ fn attest_prunes_receipts_other_branches_left_behind() {
 
     let names = repo.receipt_names();
     assert_eq!(
-        names.len(),
-        1,
-        "stale sibling receipts are pruned: {names:?}"
+        names,
+        vec!["feature-two.json", "merged-branch-0123abcd45.json"],
+        "the branch's receipt joins the ones already there: {names:?}"
     );
-    assert_eq!(names[0], "feature-two.json");
 }
 
 #[test]
@@ -316,7 +318,7 @@ fn verify_base_ignores_a_receipt_inherited_from_the_merge_base() {
 
 #[test]
 fn verify_base_does_not_count_a_receipt_deletion() {
-    // Pruning a merged branch's receipt is hygiene, not a decision.
+    // Sweeping a merged branch's receipt by hand is hygiene, not a decision.
     let repo = TempRepo::new();
     repo.commit_receipt("merged-branch-abcd012345");
     git(&repo.0, &["branch", "-f", "base"]);

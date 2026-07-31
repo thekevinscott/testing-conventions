@@ -161,9 +161,9 @@ fn attest_reports_a_failing_run_and_writes_no_receipt() {
 
 #[test]
 fn attest_leaves_the_branchs_earlier_receipt_intact_when_the_command_fails() {
-    // The prune runs with the write, so a failing re-attest neither deletes nor
-    // overwrites the receipt an earlier passing run committed — a failure
-    // costs the branch nothing it had already earned.
+    // A failing re-attest returns before the write, so it does not overwrite the
+    // receipt an earlier passing run committed — a failure costs the branch
+    // nothing it had already earned.
     let repo = TempRepo::new();
     attest(&repo.0, "true").expect("the passing attest should succeed");
     let recorded = std::fs::read_to_string(repo.0.join(RECEIPT)).unwrap();
@@ -191,9 +191,12 @@ fn attest_runs_the_command_even_when_it_fails() {
 }
 
 #[test]
-fn attest_collects_the_retired_single_file_attestation() {
-    // The migration is one attest away: a committed legacy `e2e-attestation.json`
-    // is removed in the same receipt commit.
+fn attest_leaves_the_retired_single_file_attestation_alone() {
+    // Collecting it deleted a file in the same commit that adds this branch's
+    // receipt — the same delete/add pairing rename detection turns into a
+    // rename, so two branches upgrading in parallel renamed the legacy file to
+    // two names and conflicted. It is inert where it sits: never read as a
+    // receipt, never counted as scoped source. Sweeping it is the repo's call.
     let repo = TempRepo::new();
     std::fs::write(repo.0.join("e2e-attestation.json"), "{}\n").unwrap();
     git(&repo.0, &["add", "e2e-attestation.json"]);
@@ -202,8 +205,8 @@ fn attest_collects_the_retired_single_file_attestation() {
     attest(&repo.0, "true").expect("attest should succeed");
 
     assert!(
-        !repo.0.join("e2e-attestation.json").exists(),
-        "the legacy single file is collected by attest"
+        repo.0.join("e2e-attestation.json").is_file(),
+        "the legacy single file survives; deleting it is what pairs into a rename"
     );
     assert!(repo.0.join(RECEIPT).is_file());
     let status = Command::new("git")

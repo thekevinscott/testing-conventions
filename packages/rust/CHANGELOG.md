@@ -16,7 +16,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   stacking branches or working parallel slices of an epic. `attest` now only ever adds. Receipts
   from merged or abandoned branches accumulate, which is inert — `verify` asks only whether *this*
   branch's diff adds or updates a receipt, and already excludes the receipts directory from the
-  scope it measures.
+  scope it measures. The same reasoning retires `attest`'s collection of the pre-receipt
+  `e2e-attestation.json`: that `git rm` was a delete in the same commit as the receipt add, so two
+  branches upgrading in parallel each renamed the legacy file to their own receipt name and
+  conflicted. It, too, is inert where it sits — never read as a receipt, never counted as scoped
+  source — so a repo that still carries one deletes it whenever it likes.
 
 - **`e2e attest` exits with the wrapped command's exit code, and a failing run leaves no committed
   receipt** (#470). A red e2e run was indistinguishable from a green one at the caller's exit code:
@@ -117,8 +121,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **E2E attestation is one branch-keyed decision per branch, not a SHA-fresh stamp per push.**
   `e2e attest '<cmd>'` now writes `e2e-attestations/<branch-slug>.json` — keyed by the
   branch so parallel pull requests write distinct files and never merge-conflict — recording the
-  command, timestamp, exit code, commit, and branch; it prunes the receipts other branches left
-  behind. The command is unrestricted and *is* the judgment being recorded: the full suite, a
+  command, timestamp, exit code, commit, and branch. The command is unrestricted and *is* the
+  judgment being recorded: the full suite, a
   subset, or a no-op are all valid receipts. `e2e verify --base <ref>` asks two content questions
   of `<base>...HEAD`: a branch that left the scoped source untouched passes with no receipt owed,
   and a branch that changed it passes when its diff adds or updates a receipt. It no longer
@@ -127,8 +131,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   The filename derivation is public: **`e2e slug [branch]`** prints the standardized slug
   (default: the checked-out branch), and `e2e::branch_slug` exposes it in the crate API;
   `Attestation` gains a `branch` field recording the raw name. `attest` requires a checked-out
-  branch (a detached `HEAD` is an error naming the fix) and collects a committed legacy
-  `e2e-attestation.json` in the same receipt commit.
+  branch (a detached `HEAD` is an error naming the fix). A committed legacy
+  `e2e-attestation.json` is left where it is — nothing reads it, so delete it whenever convenient.
   **Breaking:** the single `e2e-attestation.json` is replaced by the `e2e-attestations/`
   directory (`e2e::ATTESTATION_PATH` by `e2e::RECEIPTS_DIR`), `Verification::Stale` is gone,
   and the exact-match freshness contract is retired. See `MIGRATIONS.md`.

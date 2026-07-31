@@ -21,8 +21,10 @@ look alike — which they do, because `command` is usually byte-identical across
 and is the longest field. Two branches cut from one parent then renamed the same source file to two
 different names, so merging the second raised `CONFLICT (rename/rename)` on a file neither author
 touched by hand — unresolvable for anyone stacking branches or working parallel slices of an epic.
-`attest` now only ever adds. No API change: `e2e::attest` still returns `Ok(Attestation)` and
-`verify` is untouched (see **Behavior changes without code changes**).
+`attest` now only ever adds — including the pre-receipt `e2e-attestation.json`, whose collection
+was the same delete-beside-an-add and is therefore retired too. No API change: `e2e::attest` still
+returns `Ok(Attestation)` and `verify` is untouched (see **Behavior changes without code
+changes**).
 
 `e2e attest` propagates the wrapped command's exit code, and a failing run leaves no committed
 receipt (#470). `attest` recorded the command's real `exit_code` in the receipt, then committed it
@@ -98,7 +100,7 @@ breaks loudly, before any job runs (see **Required changes**).
 Retires the exact-match e2e freshness contract in favor of **one branch-keyed decision per
 branch**. `e2e attest '<cmd>'` writes `e2e-attestations/<branch-slug>.json` — parallel
 pull requests write distinct files, so attestation merge conflicts are structurally gone — and
-prunes the receipts other branches left behind. The command is unrestricted and is itself the
+leaves every other branch's receipt where it is. The command is unrestricted and is itself the
 judgment being recorded: the full suite, a targeted subset, or a no-op are all valid receipts.
 `e2e verify --base <ref>` asks two content questions of `<base>...HEAD`: did the branch change
 the scoped source (no → pass, nothing owed), and does its diff add or update a receipt (yes →
@@ -1148,6 +1150,15 @@ author edited; and receipts from merged or abandoned branches accumulate under
 directory bothers you — `verify` never reads them, so removing them is cosmetic and nothing breaks
 if you never do. `verify`'s behavior is unchanged in both directions.
 
+**A repo still carrying the pre-receipt `e2e-attestation.json` keeps it.** `attest` no longer
+collects it: that `git rm` rode in the same commit as the receipt add, which is the pairing this
+fix exists to remove. Nothing reads the file and nothing counts it as scoped source, so it costs
+only a stale file. Remove it once, by hand, whenever convenient:
+
+```
+git rm e2e-attestation.json && git commit -m 'drop the retired e2e attestation'
+```
+
 `e2e attest '<cmd>'` exits with `<cmd>`'s exit code (#470). A recipe or CI step wrapping `attest`
 now fails when the e2e run fails; one that previously chained work behind `attest &&` sees that
 work skipped on a red run, and a bespoke downstream wrapper reading `receipt.exit_code` to revert
@@ -1491,7 +1502,7 @@ git show --stat HEAD
 
 Expected (#473): the commit lists exactly one changed file — this branch's own receipt, added —
 and `e2e-attestations/` still holds the other branch's file. Previously the same commit deleted
-every receipt but this branch's.
+every receipt but this branch's, plus any `e2e-attestation.json`.
 
 ```
 # a crate whose `tests/` target names a `#[cfg(feature = "…")]` item, with that

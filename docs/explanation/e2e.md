@@ -57,8 +57,9 @@ The mechanism is a pair:
 
   It never runs the suite, never inspects the recorded command or exit code, and never compares
   commit SHAs — a committed receipt already means a run that passed, because that is the only
-  kind `attest` writes. Deleting another branch's receipt (the prune above) is not a decision —
-  only an added or updated receipt answers question 2. In a monorepo, `source` names the package —
+  kind `attest` writes. Only an added or updated receipt answers question 2, so receipts left by
+  other branches are inert — which is why `attest` leaves them alone rather than deleting them.
+  In a monorepo, `source` names the package —
   `e2e verify packages/widget` behaves exactly like running `e2e verify` with `packages/widget`
   as the current directory (#281) — and `--scope` narrows what counts as code independently of
   where the receipts live (#294), so a commit touching the package's `tests/`, docs, or config —

@@ -17,11 +17,12 @@ Each entry has five sections, in order:
 
 Retires the exact-match e2e freshness contract in favor of one branch-keyed decision per branch
 (shipped through this package's bundled CLI; full notes in `packages/rust/MIGRATIONS.md`).
-`e2e attest '<cmd>'` writes `e2e-attestations/<branch-slug>.json` and prunes receipts other
-branches left behind; `e2e verify --base <ref>` passes a branch whose diff leaves the scoped
+`e2e attest '<cmd>'` writes `e2e-attestations/<branch-slug>.json`, leaving every other branch's
+receipt where it is; `e2e verify --base <ref>` passes a branch whose diff leaves the scoped
 source untouched or carries a receipt, comparing no commit SHAs. A branch open across the upgrade
 that changed scoped source runs `e2e attest '<cmd>'` once; the retired `e2e-attestation.json` is
-collected by that same attest. `attest` must run on a checked-out branch. The new
+left where it sits, unread, and can be deleted by hand whenever convenient. `attest` must run on a
+checked-out branch. The new
 `e2e slug [branch]` subcommand prints the standardized receipt slug, so scripts can locate a
 branch's receipt at `e2e-attestations/$(npx testing-conventions e2e slug).json`.
 

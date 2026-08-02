@@ -58,8 +58,16 @@ the full suite, the one suite covering the contract this change touches, or a no
 you judge needs no run at all. A receipt records a run that **passed**: a command exiting non-zero
 leaves the receipts as they were and makes `attest` exit with that same code, so a wrapping recipe
 or CI step reads a red run as red (#470). The receipt is keyed by the branch name as a sanitized slug
-(`testing-conventions e2e slug` prints it), so parallel pull requests write distinct files, and
-`attest` prunes the receipts other branches left behind.
+(`testing-conventions e2e slug` prints it), so parallel pull requests write distinct files.
+
+`attest` only ever **adds**; it never removes the receipts other branches left behind. Deleting
+them would pair the delete with this branch's add, and git reads that pair as a *rename* whenever
+the two receipts look alike — which they do, since `command` is usually byte-identical across a
+repo's branches and is the longest field. Two branches off one parent would then rename the same
+file to two names: an unresolvable rename/rename conflict for anyone stacking branches or working
+parallel slices. A pure add has nothing to pair with, so the property holds whatever a receipt
+contains. Receipts other branches left behind are inert — `verify` asks only whether *this*
+branch's diff touches a receipt, and excludes `e2e-attestations/` from the scope it measures.
 
 ## When it runs
 

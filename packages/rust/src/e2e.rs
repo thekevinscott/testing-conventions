@@ -80,9 +80,12 @@ pub(crate) fn current_branch(repo: &Path) -> Result<String> {
 }
 
 /// Run `command` in `repo` and, when it passes, write the branch's receipt to
-/// `repo`/[`RECEIPTS_DIR`]`/<branch_slug>.json`, prune the receipts other
-/// branches left behind (and the retired single-file attestation), and commit.
-/// Returns the attestation either way.
+/// `repo`/[`RECEIPTS_DIR`]`/<branch_slug>.json` and commit it. Returns the
+/// attestation either way.
+///
+/// The commit only ever **adds**: every other branch's receipt, and any retired
+/// single-file attestation, is left exactly where it is. See the write site for
+/// why a paired delete is unsafe.
 ///
 /// A receipt records a run that **passed**, so a non-zero `command` leaves the
 /// receipts directory exactly as it was — the branch's earlier receipt, if any,
@@ -115,38 +118,35 @@ pub fn attest(repo: &Path, command: &str) -> Result<Attestation> {
         branch: branch.clone(),
     };
 
-    // The prune below deletes the branch's own receipt before rewriting it, so
-    // a failing run has to skip the whole block: writing nothing would leave a
-    // branch that had attested worse off than before it re-ran.
+    // A failing run writes nothing: a receipt records a suite that passed, and
+    // overwriting an earlier one with a failure would leave a branch that had
+    // attested worse off than before it re-ran.
     if exit_code != 0 {
         return Ok(attestation);
     }
 
-    // Prune sibling receipts — dead weight once their branches merge, since
-    // `verify` reads only the current branch's diff. Write-once files make the
-    // deletions merge-clean (delete/delete or delete/absent, never a conflict).
+    // Only ever add. Deleting other branches' receipts pairs the delete with
+    // this branch's add, and git's rename detection reads that pair as a rename
+    // whenever the two receipts look alike — which they do, since `command` is
+    // usually byte-identical across a repo's branches and is the longest field.
+    // Two branches off one parent then rename the same source, which is an
+    // unresolvable rename/rename conflict for anyone stacking or working
+    // parallel slices. A pure add has no delete to pair with, so the property
+    // holds regardless of what a receipt contains.
+    //
+    // The same reasoning retires collecting LEGACY_ATTESTATION: that `git rm`
+    // was a delete beside this add too.
+    //
+    // Stale files are inert, not harmful: `verify` asks only whether the
+    // branch's own diff touches any receipt, and excludes both RECEIPTS_DIR and
+    // LEGACY_ATTESTATION from the scope it measures.
     let dir = repo.join(RECEIPTS_DIR);
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-    for entry in std::fs::read_dir(&dir).with_context(|| format!("reading {}", dir.display()))? {
-        let path = entry?.path();
-        if path.extension().is_some_and(|e| e == "json") {
-            std::fs::remove_file(&path).with_context(|| format!("pruning {}", path.display()))?;
-        }
-    }
     let path = dir.join(format!("{}.json", branch_slug(&branch)));
     let json = serde_json::to_string_pretty(&attestation).context("serializing the receipt")?;
     std::fs::write(&path, format!("{json}\n"))
         .with_context(|| format!("writing {}", path.display()))?;
     git_run(repo, &["add", "-A", "--", RECEIPTS_DIR])?;
-
-    // The retired single-file attestation is dead weight too; collect it here
-    // so the migration is one attest away.
-    if pathspec_matches_tracked(repo, LEGACY_ATTESTATION)? {
-        git_run(
-            repo,
-            &["rm", "-q", "--ignore-unmatch", "--", LEGACY_ATTESTATION],
-        )?;
-    }
 
     let message = format!("e2e attestation for {branch}");
     // A plain commit that inherits the repo's signing policy: a repo requiring
@@ -214,8 +214,7 @@ pub fn verify_since(repo: &Path, scope: &Path, base: Option<&str>) -> Result<Ver
 ///    subtrees compiled out of the package). Receipts and the retired
 ///    single-file attestation are never scoped source.
 /// 2. Otherwise the branch passes when its diff **adds or updates** a receipt
-///    under `repo`'s receipts directory. A deletion (the prune) is not a
-///    decision.
+///    under `repo`'s receipts directory. A deletion is not a decision.
 ///
 /// Without `base` there is no branch diff to read, so presence is the check: a
 /// committed receipt at `repo` passes.
@@ -262,7 +261,8 @@ pub fn verify_extra_scoped(
     }
 
     // Question 2 — does the branch's diff add or update a receipt? The
-    // diff-filter drops deletions, so the prune never counts as a decision.
+    // diff-filter drops deletions, so sweeping a stale receipt by hand never
+    // counts as a decision.
     let out = git_capture(
         repo,
         &[

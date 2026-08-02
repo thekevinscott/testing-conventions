@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`e2e attest` no longer deletes the receipts other branches left behind** (#473; shipped
+  through this package's bundled CLI, full notes in `packages/rust/CHANGELOG.md`). The prune paired
+  a delete with this branch's add, and git's rename detection reads that pair as a rename whenever
+  the two receipts look alike — which they do, since `command` is usually byte-identical across a
+  repo's branches. Two branches cut from one parent therefore renamed the same file to two names,
+  and merging the second produced `CONFLICT (rename/rename)` on a file nobody had edited. `attest`
+  now only ever adds; receipts from merged branches accumulate, which is inert because `verify`
+  never reads them.
+
 - **The mutation adapter runs Stryker in place** (`inPlace: true`; #460, the gate-level behavior
   change is recorded in `packages/rust/CHANGELOG.md`). Stryker applies each mutant to the
   package's real tree — a backup lives under `.stryker-tmp` and the run restores every file when
@@ -35,7 +44,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   untouched owes nothing, one that changed it passes when its diff adds or updates a receipt, and
   later pushes, rebases, and squash merges never disturb a receipt. The new **`e2e slug [branch]`**
   subcommand prints the standardized receipt slug. **Breaking:** the single `e2e-attestation.json`
-  is retired; `attest` collects a committed one automatically. See `MIGRATIONS.md`.
+  is retired; a committed one is left where it sits, unread, for the repo to delete when
+  convenient. See `MIGRATIONS.md`.
 
 ### Added
 

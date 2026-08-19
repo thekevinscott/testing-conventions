@@ -60,6 +60,9 @@ outputs:
   ts_package_manager:
     description: 'The TypeScript package manager at `package_root`: its packageManager field, else pnpm/npm by lockfile, else pnpm.'
     value: ${{ steps.scan.outputs.ts_package_manager }}
+  ts_pnpm_version:
+    description: 'The `version` for `pnpm/action-setup`: empty when `package_root` pins pnpm via packageManager (the action reads the field), else the `>=11` floor.'
+    value: ${{ steps.scan.outputs.ts_pnpm_version }}
   python_env:
     description: 'The Python environment model at `package_root`: uv when pyproject.toml declares a [project] table, else pip.'
     value: ${{ steps.scan.outputs.python_env }}

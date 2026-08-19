@@ -41,6 +41,27 @@ def test_package_manager_from_field_empty_is_none():
     assert detect._package_manager_from_field("") is None
 
 
+def test_pnpm_version_pin_defers_to_a_packagemanager_pin():
+    # An empty version is falsy to `pnpm/action-setup`, which then reads the
+    # `packageManager` field itself. Passing anything else makes it throw
+    # "Multiple versions of pnpm specified" unless the strings match exactly (#475).
+    assert detect._pnpm_version_pin("pnpm@10.33.0") == ""
+
+
+def test_pnpm_version_pin_defers_even_when_the_pin_already_satisfies_the_floor():
+    assert detect._pnpm_version_pin("pnpm@11.11.0") == ""
+
+
+def test_pnpm_version_pin_falls_back_to_the_floor_with_no_field():
+    assert detect._pnpm_version_pin("") == detect.PNPM_FLOOR
+
+
+def test_pnpm_version_pin_falls_back_to_the_floor_for_another_manager():
+    # `action-setup` only conflicts on a pnpm pin; an npm consumer skips the step
+    # entirely, so the floor is the honest answer rather than an empty string.
+    assert detect._pnpm_version_pin("npm@10.0.0") == detect.PNPM_FLOOR
+
+
 def test_build_command_language_prefers_primary():
     assert detect.build_command_language("python", ["python", "typescript"]) == "python"
 

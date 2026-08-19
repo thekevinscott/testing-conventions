@@ -69,12 +69,23 @@ wrong directory entirely), not a file living in the wrong place relative to `sou
 | `unit lint` | colocated unit test files | `source` | Recursive scan of `source`; `<package root>/tests/` is explicitly excluded |
 | `unit coverage` / `unit mutation` | source + colocated unit tests | `source` (scanned); package root (installed/run) | Recursive scan of `source` for subjects; toolchain provisioning and the suite run happen at the package root |
 | `integration lint` | integration and e2e suite files | package root | **Fixed paths only** — `<package root>/tests/integration/` and `<package root>/tests/e2e/` (plural **`tests`**; Rust: the crate root's `tests/`). Never a recursive scan of `source`, and not configurable |
-| Package manager | `packageManager` field, else lockfile | package root | Read from the manifest at the package root |
+| Package manager | `packageManager` field, else lockfile | package root | Read from the manifest at the package root; a `packageManager` pin also fixes the pnpm *version* the workflow installs |
 | Python environment | a `pyproject.toml` `[project]` table | package root | Read from the manifest at the package root |
 | Native toolchain | a Rust-compiling build declaration (maturin backend, napi config, `Cargo.toml`) | package root | Read from the manifest at the package root |
 | `packaging` | the built distribution | package root | Derives the build from the manifest and scans what it writes — `dist/` (Python/TypeScript) or `target/package/` (Rust), all at the package root |
 | `e2e verify` | committed receipts | package root | **Fixed path** — `<package root>/e2e-attestations/`. Never a recursive scan |
 | Config file | `testing-conventions.toml` | package root, falling back to repo root | Fixed filename, discovered upward from `source` |
+
+### The pnpm version
+
+When the package root's `package.json` pins `packageManager` (`pnpm@10.33.0`), that pin decides
+which pnpm the workflow installs — the version is derived, like the manager name, and never
+overridden. Without the field, the workflow installs `>=11`.
+
+The pin has to win outright rather than be checked against a floor: `pnpm/action-setup` refuses to
+run at all when it is given a `version` *and* finds a `packageManager` field that is not
+string-equal to it, so a floor and a pin cannot coexist — the job fails before installing anything,
+whatever versions are involved.
 
 A package whose suites live at `test/integration/` (singular) rather than `tests/integration/`
 (plural) sits outside every fixed path above — `integration lint` finds nothing there and stays

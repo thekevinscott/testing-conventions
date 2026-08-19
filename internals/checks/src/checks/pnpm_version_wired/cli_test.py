@@ -25,6 +25,25 @@ def test_setup_versions_finds_nothing_without_a_pnpm_step():
     assert setup_versions("      - uses: actions/checkout@v6\n") == []
 
 
+def test_setup_versions_reads_a_step_whose_uses_follows_its_if_line():
+    # The real steps open with `- if:` and carry `uses:` a line later, so the step chunk — not
+    # the `uses:` line — is what has to be searched.
+    text = (
+        "      - if: matrix.language == 'typescript'\n"
+        "        uses: pnpm/action-setup@v5\n"
+        "        with:\n"
+        "          version: ${{ " + DERIVED + " }}\n"
+    )
+    assert setup_versions(text) == ["${{ " + DERIVED + " }}"]
+
+
+def test_setup_versions_ignores_a_version_declared_before_any_step():
+    # The workflow declares its own `version:` input far above the jobs. Lines preceding the
+    # first step belong to no step, so they must not be read as one step's pin.
+    text = "on:\n  workflow_call:\n    inputs:\n      version:\n        type: string\n"
+    assert setup_versions(text) == []
+
+
 def test_echoes_on_a_wired_workflow(tmp_path, capsys):
     workflow = tmp_path / "wf.yml"
     workflow.write_text(WIRED_STEP)

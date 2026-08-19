@@ -28,26 +28,34 @@ PNPM_SETUP = "pnpm/action-setup"
 DERIVED = "needs.detect.outputs.ts_pnpm_version"
 
 
-def setup_versions(text: str) -> list[str]:
-    """The `version:` value of every `pnpm/action-setup` step in `text`, in file order.
+def pnpm_steps(text: str) -> list[list[str]]:
+    """Every step chunk in `text` that uses `pnpm/action-setup` — a line opening a list item
+    (`- `) through the line before the next one.
 
-    A step's `with:` block follows its `uses:` line within a few lines; the scan stops at the
-    next list item or `uses:` so a step that sets no version contributes nothing rather than
-    borrowing the next step's.
+    Chunking on the step boundary, rather than scanning a fixed number of lines ahead, is what
+    keeps a step that sets no version from borrowing the next step's: the two land in different
+    chunks whatever the gap between them. The real steps open with `- if:` and carry their
+    `uses:` a line later, so the chunk — not the `uses:` line — is the unit to search. Lines
+    before the first step belong to no chunk and are dropped, which puts the workflow's own
+    `version:` input declaration out of scope.
     """
-    versions = []
-    lines = text.splitlines()
-    for index, line in enumerate(lines):
-        if PNPM_SETUP not in line:
-            continue
-        for follower in lines[index + 1 : index + 6]:
-            stripped = follower.strip()
-            if stripped.startswith("version:"):
-                versions.append(stripped.removeprefix("version:").strip())
-                break
-            if stripped.startswith("- ") or stripped.startswith("uses:"):
-                break
-    return versions
+    chunks: list[list[str]] = []
+    for line in text.splitlines():
+        if line.lstrip().startswith("- "):
+            chunks.append([])
+        if chunks:
+            chunks[-1].append(line)
+    return [chunk for chunk in chunks if any(PNPM_SETUP in line for line in chunk)]
+
+
+def setup_versions(text: str) -> list[str]:
+    """The `version:` value of every `pnpm/action-setup` step in `text`, in file order."""
+    return [
+        stripped.removeprefix("version:").strip()
+        for chunk in pnpm_steps(text)
+        for stripped in (line.strip() for line in chunk)
+        if stripped.startswith("version:")
+    ]
 
 
 @click.command()

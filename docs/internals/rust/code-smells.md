@@ -34,6 +34,7 @@
 - **Trait imports in `use` for no obvious reason.** Often intentional — trait must be in scope for methods. Not a smell.
 - **`type` aliases used like a renamed module.** Sometimes valid; sometimes obscuring.
 - **`#[allow(dead_code)]` without explanation.** What's the dead code, and why?
+- **A path derived from an `ancestors()` walk handed to `Command::current_dir`.** `Path::ancestors` ends at `""` for a relative input, and `""` silently behaves like the cwd for `join`/`is_file` — so a walk looking for a manifest can legitimately return an empty path. `current_dir("")` then fails with ENOENT, which reads as "the binary is missing" rather than "the directory is". Normalise empty to `.` at the spawn site, and check the directory exists before spawning so the two failures stay distinguishable. Ask: does any test cover a **relative** input path? Absolute temp dirs in every test are how this class of bug ships.
 
 ### When `unsafe` IS legitimate
 - FFI bindings to C libraries (PyO3, napi-rs, native libraries)

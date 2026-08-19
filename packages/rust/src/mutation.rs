@@ -581,6 +581,21 @@ fn to_scan_relative(mutants: Vec<NormalizedMutant>, prefix: Option<&str>) -> Vec
 /// Results are written to a temp file the adapter names via `--out` (so Stryker's own
 /// stdout logging can't corrupt them), then read back. `node` and the project's own test
 /// runner must be available; a non-zero adapter exit surfaces its captured output.
+/// The working directory for an adapter run rooted at `package_root`.
+///
+/// [`crate::tiers::package_root`] walks `scan_root.ancestors()`, which ends at `""`
+/// for a **relative** scan path like `src` — and `Path::new("").join("package.json")`
+/// resolves against the cwd, so the walk stops there and hands back an empty path.
+/// That is the right answer for the callers that join onto it, but
+/// `Command::current_dir("")` fails with ENOENT. Normalise it to `.`.
+fn adapter_cwd(package_root: &Path) -> &Path {
+    if package_root.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        package_root
+    }
+}
+
 fn run_ts_adapter(
     package_root: &Path,
     adapter: &Path,
@@ -591,9 +606,19 @@ fn run_ts_adapter(
     std::fs::create_dir_all(&out.0).context("creating the mutation adapter output dir")?;
     let results = out.0.join("results.json");
 
+    // Checked up front so a missing working directory cannot masquerade as a
+    // missing interpreter in the ENOENT below.
+    let cwd = adapter_cwd(package_root);
+    if !cwd.is_dir() {
+        bail!(
+            "the TypeScript mutation adapter's package root `{}` is not a directory",
+            cwd.display()
+        );
+    }
+
     let mut command = Command::new("node");
     command
-        .current_dir(package_root)
+        .current_dir(cwd)
         .arg(adapter)
         .arg("--out")
         .arg(&results);
@@ -609,7 +634,7 @@ fn run_ts_adapter(
     if !output.status.success() {
         bail!(
             "the TypeScript mutation adapter failed in `{}`:\n{}{}",
-            package_root.display(),
+            cwd.display(),
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr),
         );
@@ -1378,6 +1403,17 @@ mod tests {
         let unchanged = rebase_report_paths(report, None);
         assert_eq!(unchanged.outcomes.len(), 3);
         assert_eq!(unexplained_survivors(&unchanged, &[])[0].file, "src/lib.rs");
+    }
+
+    #[test]
+    fn adapter_cwd_normalises_the_empty_package_root_to_the_current_dir() {
+        // `tiers::package_root` yields `""` for a relative scan path such as `src`,
+        // and `Command::current_dir("")` fails with ENOENT — which the adapter's
+        // error context mislabelled as a missing `node`. Every TypeScript consumer
+        // of the mutation gate hit this, since the reusable workflow scans `src`.
+        assert_eq!(adapter_cwd(Path::new("")), Path::new("."));
+        assert_eq!(adapter_cwd(Path::new("pkg")), Path::new("pkg"));
+        assert_eq!(adapter_cwd(Path::new("/repo/pkg")), Path::new("/repo/pkg"));
     }
 
     #[test]

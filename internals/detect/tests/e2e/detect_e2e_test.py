@@ -269,6 +269,34 @@ def test_e2e_ts_package_manager_defaults_to_pnpm(run_detect):
     assert out["ts_package_manager"] == "pnpm"
 
 
+def test_e2e_ts_pnpm_version_is_empty_when_packagemanager_pins_pnpm(run_detect):
+    # `pnpm/action-setup` throws "Multiple versions of pnpm specified" whenever its
+    # `version` input is set and the consumer's `packageManager` is not string-equal
+    # to it — which no real pin ever is. Emit nothing and let the action read the
+    # field (#475).
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": '{"packageManager": "pnpm@10.33.0"}',
+            "packages/ts/src/index.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["ts_pnpm_version"] == ""
+
+
+def test_e2e_ts_pnpm_version_is_the_floor_with_no_packagemanager_field(run_detect):
+    # Nothing to defer to, and `action-setup` errors when neither is present.
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": "{}",
+            "packages/ts/pnpm-lock.yaml": "",
+            "packages/ts/src/index.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["ts_pnpm_version"] == ">=11"
+
+
 def test_e2e_ts_package_manager_pnpm_lockfile_with_no_field(run_detect):
     out = run_detect(
         scan_path="packages/ts/src",

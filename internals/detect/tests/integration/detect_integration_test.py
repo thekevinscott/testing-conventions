@@ -26,6 +26,7 @@ def fs():
         "attestation": False,
         "package_root": Path("/repo"),
         "ts_package_manager": "pnpm",
+        "ts_pnpm_version": ">=11",
         "python_env": "pip",
         "provision_rust": "false",
         "config": "testing-conventions.toml",
@@ -50,6 +51,7 @@ def fs():
             patch.object(detect, "has_attestation", has_attestation), \
             patch.object(detect, "derive_package_root", lambda scan_root, repo_root: state["package_root"]), \
             patch.object(detect, "ts_package_manager", lambda root: state["ts_package_manager"]), \
+            patch.object(detect, "ts_pnpm_version", lambda root: state["ts_pnpm_version"]), \
             patch.object(detect, "python_env", lambda root: state["python_env"]), \
             patch.object(detect, "provision_rust", lambda root: state["provision_rust"]), \
             patch.object(detect, "derive_config", lambda package_root_rel, config_input: state["config"]), \
@@ -168,6 +170,14 @@ def test_monorepo_outputs_wired_from_the_package_root(fs):
     assert out["ts_package_manager"] == "npm"
     assert out["python_env"] == "uv"
     assert out["provision_rust"] == "true"
+
+
+def test_ts_pnpm_version_is_emitted_from_the_package_root(fs):
+    # The version `pnpm/action-setup` receives: empty when the consumer pins
+    # `packageManager` (the action reads the field), the floor otherwise (#475).
+    fs["ts_pnpm_version"] = ""
+    out = detect.compute_outputs("", scan_root="/repo/src", repo_root="/repo")
+    assert out["ts_pnpm_version"] == ""
 
 
 def test_package_root_relative_is_dot_when_it_is_the_repo_root(fs):

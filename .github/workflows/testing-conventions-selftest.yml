@@ -30,6 +30,14 @@ name: Testing Conventions (self-test)
 #   packaging-red    drives the published `packaging` command on a committed wheel
 #                    that ships a `*_test.py` and asserts a non-zero exit.
 #
+# pnpm version (#475) — a consumer's `packageManager` pin decides which pnpm the workflow
+# installs, because `pnpm/action-setup` refuses to run when its `version` input and a
+# `packageManager` field disagree by a single character:
+#   pnpm-version-wired  asserts every `pnpm/action-setup` step reads
+#                       `needs.detect.outputs.ts_pnpm_version` rather than a literal. Static
+#                       only — this repo pins floors via `engines` and has no `packageManager`
+#                       field, so no dogfooded package walks the conflicting path.
+#
 # packaging-package-root (#280) — dist/ discovery moves from the checkout root to the derived
 # package root, so a per-package `uses:` call finds its own `dist/` with no build/upload step:
 #   packaging-package-root-wired  asserts the packaging job reads `needs.detect.outputs.package_root`
@@ -1036,6 +1044,26 @@ jobs:
   # standalone package root (its own `package.json`) with a committed `dist/` — proving the
   # packaging job now finds a per-package `dist/` with no `packaging_artifact` upload, the
   # configuration this epic exists to remove.
+
+  pnpm-version-wired:
+    name: The reusable workflow takes its pnpm version from detect, never a literal
+    # The static half of #475: every `pnpm/action-setup` step must read
+    # `needs.detect.outputs.ts_pnpm_version`. A literal there throws
+    # `Multiple versions of pnpm specified` for any consumer that pins `packageManager`,
+    # killing coverage, mutation and packaging before they install anything.
+    #
+    # This has to be a static check rather than a fixture run: the repo pins its floors through
+    # `engines` and carries no `packageManager` field anywhere, so no dogfooded package walks
+    # the conflicting path, and a runtime selftest would need a fixture whose only purpose is
+    # to hold a pin. The derivation itself is covered by detect's own unit/e2e suites.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: testing-conventions.yml's pnpm steps must reference ts_pnpm_version
+        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
+        # group's subcommand, from the repo root so the check's default workflow path resolves.
+        run: uv run --project internals/checks tc-checks pnpm-version-wired
 
   packaging-package-root-wired:
     name: The reusable workflow's packaging job is wired to the derived package_root

@@ -110,6 +110,10 @@ def test_packaging_package_root_wired_is_registered():
     assert "packaging-package-root-wired" in main.commands
 
 
+def test_pnpm_version_wired_is_registered():
+    assert "pnpm-version-wired" in main.commands
+
+
 def test_packaging_red_is_registered():
     assert "packaging-red" in main.commands
 

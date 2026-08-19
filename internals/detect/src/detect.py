@@ -159,11 +159,30 @@ def derive_package_root(scan_root: Path, repo_root: Path) -> Path:
     return repo_root
 
 
+# The pnpm floor this repo supports, handed to `pnpm/action-setup` only when the consumer's
+# manifest names no version of its own (#465, #475).
+PNPM_FLOOR = ">=11"
+
+
 def _package_manager_from_field(value: str) -> Optional[str]:
     """The manager name from a `package.json` `packageManager` value like `pnpm@8.6.0`, or
     `None` when the field is empty.
     """
     return value.partition("@")[0] if value else None
+
+
+def _pnpm_version_pin(declared: str) -> str:
+    """The `version` input `pnpm/action-setup` should receive, given a `package.json`
+    `packageManager` value: the empty string when it pins pnpm, else [`PNPM_FLOOR`].
+
+    The action refuses to run whenever `version` is set and `packageManager` is not
+    *string-equal* to it, and no real pin ever equals a range like `>=11` — so a floor and a
+    pin cannot coexist, whatever versions are involved. Passing nothing is what lets the
+    action read the field itself, which is the only way a consumer's pin can be honoured
+    (#475). A non-pnpm pin never reaches the action (the setup step is skipped for it), so the
+    floor is the honest answer there rather than an empty string.
+    """
+    return "" if _package_manager_from_field(declared) == "pnpm" else PNPM_FLOOR
 
 
 def ts_package_manager(package_root: Path) -> str:
@@ -180,6 +199,14 @@ def ts_package_manager(package_root: Path) -> str:
     if has_lockfile(package_root, "package-lock.json"):
         return "npm"
     return "pnpm"
+
+
+def ts_pnpm_version(package_root: Path) -> str:
+    """The pnpm version the reusable workflow should install for `package_root` (#475): empty
+    when its `package.json` pins pnpm through `packageManager` — deferring to that pin, which is
+    the only way `pnpm/action-setup` accepts one — else [`PNPM_FLOOR`].
+    """
+    return _pnpm_version_pin(read_package_json(package_root).get("packageManager", ""))
 
 
 def python_env(package_root: Path) -> str:
@@ -566,6 +593,9 @@ def compute_outputs(
         "e2e_attestation": "true" if has_attestation(package_root) else "false",
         "package_root": str(package_root_rel),
         "ts_package_manager": ts_package_manager(package_root),
+        # #475: the `version` `pnpm/action-setup` gets — empty when the consumer pins
+        # `packageManager`, since the action throws on any non-string-equal pairing of the two.
+        "ts_pnpm_version": ts_pnpm_version(package_root),
         "python_env": python_env(package_root),
         "provision_rust": provision_rust(package_root),
         # #410: the workspace-aware Rust build cache location — the workspace root's `target/`

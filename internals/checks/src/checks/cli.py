@@ -34,6 +34,7 @@ from checks.packaging_build_wired.cli import cli as packaging_build_wired
 from checks.packaging_package_root_red.cli import cli as packaging_package_root_red
 from checks.packaging_package_root_wired.cli import cli as packaging_package_root_wired
 from checks.packaging_red.cli import cli as packaging_red
+from checks.pnpm_version_wired.cli import cli as pnpm_version_wired
 from checks.python_mutation_clean.cli import cli as python_mutation_clean
 from checks.red_path_hermetic_wired.cli import cli as red_path_hermetic_wired
 from checks.rolling_release_wired.cli import cli as rolling_release_wired
@@ -79,6 +80,7 @@ main.add_command(packaging_build_wired, name="packaging-build-wired")
 main.add_command(packaging_package_root_red, name="packaging-package-root-red")
 main.add_command(packaging_package_root_wired, name="packaging-package-root-wired")
 main.add_command(packaging_red, name="packaging-red")
+main.add_command(pnpm_version_wired, name="pnpm-version-wired")
 main.add_command(python_mutation_clean, name="python-mutation-clean")
 main.add_command(red_path_hermetic_wired, name="red-path-hermetic-wired")
 main.add_command(rolling_release_wired, name="rolling-release-wired")

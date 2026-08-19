@@ -69,6 +69,7 @@ jobs:
           ATT: ${{ steps.detect.outputs.e2e_attestation }}
           PKGROOT: ${{ steps.detect.outputs.package_root }}
           TSPM: ${{ steps.detect.outputs.ts_package_manager }}
+          TSPNPM: ${{ steps.detect.outputs.ts_pnpm_version }}
           PYENV: ${{ steps.detect.outputs.python_env }}
           PROVRUST: ${{ steps.detect.outputs.provision_rust }}
           CARGOTARGETDIR: ${{ steps.detect.outputs.cargo_target_dir }}
@@ -78,7 +79,7 @@ jobs:
           TSADAPTER: ${{ steps.detect.outputs.ts_mutation_adapter_args }}
         run: |
           set -euo pipefail
-          echo "integration_lint_languages=$LINT colocated_test_languages=$COLOC packaging_dist=$PKG e2e_attestation=$ATT package_root=$PKGROOT ts_package_manager=$TSPM python_env=$PYENV provision_rust=$PROVRUST cargo_target_dir=$CARGOTARGETDIR config=$CONFIG build_command=$BUILDCMD cli_command=$CLICMD ts_mutation_adapter_args=$TSADAPTER"
+          echo "integration_lint_languages=$LINT colocated_test_languages=$COLOC packaging_dist=$PKG e2e_attestation=$ATT package_root=$PKGROOT ts_package_manager=$TSPM ts_pnpm_version=$TSPNPM python_env=$PYENV provision_rust=$PROVRUST cargo_target_dir=$CARGOTARGETDIR config=$CONFIG build_command=$BUILDCMD cli_command=$CLICMD ts_mutation_adapter_args=$TSADAPTER"
           [ "$LINT" = '["rust"]' ]  || { echo "::error::expected rust auto-detected, got $LINT"; exit 1; }
           [ "$COLOC" = '["rust"]' ] || { echo "::error::expected rust in the colocated-test matrix (#274), got $COLOC"; exit 1; }
           [ "$PKG" = "true" ]      || { echo "::error::expected packaging_dist=true, got $PKG"; exit 1; }
@@ -90,6 +91,8 @@ jobs:
           # repo-root default.
           [ "$PKGROOT" = "detect-fixture" ] || { echo "::error::expected package_root=detect-fixture, got $PKGROOT"; exit 1; }
           [ "$TSPM" = "pnpm" ]     || { echo "::error::expected ts_package_manager=pnpm (default), got $TSPM"; exit 1; }
+          # #475: no package.json at all, so nothing pins `packageManager` and the floor stands.
+          [ "$TSPNPM" = ">=11" ]   || { echo "::error::expected ts_pnpm_version=>=11 (no packageManager pin), got $TSPNPM"; exit 1; }
           [ "$PYENV" = "pip" ]     || { echo "::error::expected python_env=pip (default), got $PYENV"; exit 1; }
           [ "$PROVRUST" = "true" ] || { echo "::error::expected provision_rust=true (Cargo.toml present), got $PROVRUST"; exit 1; }
           # #410: detect-fixture's own Cargo.toml has no ancestor [workspace] table, so it's not

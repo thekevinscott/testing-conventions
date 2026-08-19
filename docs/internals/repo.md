@@ -22,9 +22,9 @@ Public-API surface for the purpose of these files: every exported value/type, ev
 
 ## Monorepo package-root derivation
 
-`detect.py` derives six outputs a suite-executing job needs to install, build, run, and
-configure at the right directory (#277, #289): `package_root`, `ts_package_manager`, `python_env`,
-`provision_rust`, `config`, `build_command`. A `working_directory` input was considered and
+`detect.py` derives seven outputs a suite-executing job needs to install, build, run, and
+configure at the right directory (#277, #289, #475): `package_root`, `ts_package_manager`,
+`ts_pnpm_version`, `python_env`, `provision_rust`, `config`, `build_command`. A `working_directory` input was considered and
 rejected — it would
 add a second, consumer-facing coordinate system against the documented rule that `source` is the
 only scoping mechanism (docs/monorepo.md). Everything else is derived from `source` and the
@@ -37,6 +37,13 @@ package's own manifest instead.
   every current consumer is untouched.
 - **`ts_package_manager`** (`ts_package_manager`): `package.json`'s `packageManager` field name,
   else `pnpm`/`npm` by lockfile presence, else `pnpm` (today's hardcoded default).
+- **`ts_pnpm_version`** (`ts_pnpm_version`): the `version` input the reusable workflow hands
+  `pnpm/action-setup` — empty when `packageManager` pins pnpm, else the `>=11` floor. `action-setup`
+  throws `Multiple versions of pnpm specified` whenever `version` is set and `packageManager` is not
+  string-equal to it, which no real pin ever is, so a consumer's pin can only be honoured by passing
+  nothing and letting the action read the field itself (#475). This repo pins floors through
+  `engines` and carries no `packageManager` field, so the conflicting path is invisible to
+  dogfooding — the selftest fixture covers it instead.
 - **`python_env`** (`python_env`): `uv` when `package_root`'s `pyproject.toml` parses with a
   `[project]` table (an installable project with its own dependencies), else `pip` — no
   `pyproject.toml`, one with only tool config, or one that fails to parse. detect never crashes

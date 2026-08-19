@@ -4,14 +4,28 @@ The `cli` command is driven through its `.callback` (the undecorated function), 
 `click.testing` collaborator is imported. Only the unit under test is imported — the raise path
 is asserted against the propagated exception's `.message` rather than importing `CheckFailed`.
 """
-from checks.pnpm_version_wired.cli import DERIVED, REUSABLE_WORKFLOW, cli, setup_versions
+from checks.pnpm_version_wired.cli import (
+    DERIVED,
+    FALLBACK,
+    REUSABLE_WORKFLOW,
+    cli,
+    setup_versions,
+)
 
-WIRED_STEP = "      - uses: pnpm/action-setup@v5\n        with:\n          version: ${{ " + DERIVED + " }}\n"
-LITERAL_STEP = '      - uses: pnpm/action-setup@v5\n        with:\n          version: ">=11"\n'
+def step(version: str) -> str:
+    return f"      - uses: pnpm/action-setup@v5\n        with:\n          version: {version}\n"
+
+
+GUARDED = "${{ " + DERIVED + " " + FALLBACK + " }}"
+WIRED_STEP = step(GUARDED)
+LITERAL_STEP = step('">=11"')
+# Reads detect but resolves to empty against a detect that predates the output — the shape that
+# blocked the first #475 release.
+UNGUARDED_STEP = step("${{ " + DERIVED + " }}")
 
 
 def test_setup_versions_reads_each_steps_version_in_order():
-    assert setup_versions(LITERAL_STEP + WIRED_STEP) == ['">=11"', "${{ " + DERIVED + " }}"]
+    assert setup_versions(LITERAL_STEP + WIRED_STEP) == ['">=11"', GUARDED]
 
 
 def test_setup_versions_ignores_a_version_belonging_to_a_later_step():
@@ -32,9 +46,9 @@ def test_setup_versions_reads_a_step_whose_uses_follows_its_if_line():
         "      - if: matrix.language == 'typescript'\n"
         "        uses: pnpm/action-setup@v5\n"
         "        with:\n"
-        "          version: ${{ " + DERIVED + " }}\n"
+        f"          version: {GUARDED}\n"
     )
-    assert setup_versions(text) == ["${{ " + DERIVED + " }}"]
+    assert setup_versions(text) == [GUARDED]
 
 
 def test_setup_versions_ignores_a_version_declared_before_any_step():
@@ -79,3 +93,23 @@ def test_declares_the_workflow_argument_defaulting_to_the_reusable_workflow():
     (argument,) = cli.params
     assert argument.name == "workflow"
     assert argument.default == REUSABLE_WORKFLOW
+
+
+def test_raises_on_a_derived_version_with_no_stale_detect_fallback(tmp_path):
+    # The regression that blocked the first #475 release: the published detect at release time
+    # predates the output, so an unguarded reference resolves to an empty `version`.
+    workflow = tmp_path / "wf.yml"
+    workflow.write_text(UNGUARDED_STEP)
+    try:
+        cli.callback(workflow=str(workflow))
+    except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
+        assert "No pnpm version is specified" in error.message
+    else:
+        raise AssertionError("a derived version with no fallback must raise")
+
+
+def test_echoes_the_fallback_in_the_success_line(tmp_path, capsys):
+    workflow = tmp_path / "wf.yml"
+    workflow.write_text(WIRED_STEP)
+    cli.callback(workflow=str(workflow))
+    assert "stale-detect fallback" in capsys.readouterr().out

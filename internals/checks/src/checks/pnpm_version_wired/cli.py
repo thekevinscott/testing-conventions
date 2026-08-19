@@ -2,7 +2,8 @@
 
 Backs the `tc-checks pnpm-version-wired` subcommand: every `pnpm/action-setup` step in the
 reusable workflow (`.github/workflows/testing-conventions.yml`) must take its `version:` from
-`needs.detect.outputs.ts_pnpm_version`, never a literal.
+`needs.detect.outputs.ts_pnpm_version`, never a literal, and must carry a `||` fallback for a
+detect that predates that output.
 
 A literal there breaks every consumer that pins `packageManager`. `action-setup` throws
 `Multiple versions of pnpm specified` whenever `version` is set and the field is not
@@ -10,6 +11,12 @@ A literal there breaks every consumer that pins `packageManager`. `action-setup`
 installing anything. This repo pins its floors through `engines` and carries no
 `packageManager` field, so dogfooding never walks that path and cannot catch the regression at
 runtime. This check stands in for it.
+
+The fallback is the other half. `@v0` is rolling, so a release is gated on running this
+workflow against the *published* detect, which for one release does not emit a new output yet
+and hands back an empty string. An unguarded `version:` then resolves to empty against a
+manifest with no pin, and the action errors `No pnpm version is specified` — which is how the
+first attempt at #475 blocked its own promotion.
 
 A standalone, colocated-tested check rather than inline `run: |` bash, for the reason
 [`checks.packaging_package_root_wired`] gives: inline workflow bash is untested prose and
@@ -26,6 +33,9 @@ from checks.utils.check_failed import CheckFailed
 
 PNPM_SETUP = "pnpm/action-setup"
 DERIVED = "needs.detect.outputs.ts_pnpm_version"
+# The floor a step falls back to when detect emits nothing for the output — i.e. a published
+# detect from before it existed. Matched as a substring, so the literal has to appear.
+FALLBACK = "|| '>=11'"
 
 
 def pnpm_steps(text: str) -> list[list[str]]:
@@ -75,4 +85,15 @@ def cli(workflow: str) -> None:
             f"({', '.join(literals)}) instead of `{DERIVED}` — that conflicts with any consumer "
             "`packageManager` pin and fails the job before it installs anything (#475)"
         )
-    click.echo(f"all {len(versions)} pnpm/action-setup steps take their version from detect")
+    unguarded = [version for version in versions if FALLBACK not in version]
+    if unguarded:
+        raise CheckFailed(
+            f"{len(unguarded)} `{PNPM_SETUP}` step(s) read `{DERIVED}` with no `{FALLBACK}` "
+            f"fallback ({', '.join(unguarded)}) — a published detect that predates the output "
+            "hands back an empty string, and an empty `version` errors 'No pnpm version is "
+            "specified' against a manifest with no pin, blocking the release (#475)"
+        )
+    click.echo(
+        f"all {len(versions)} pnpm/action-setup steps take their version from detect, with a "
+        "stale-detect fallback"
+    )

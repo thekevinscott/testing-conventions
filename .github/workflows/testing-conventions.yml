@@ -229,9 +229,11 @@ jobs:
       # manifest rather than a second, consumer-facing scoping input.
       package_root: ${{ steps.scan_hermetic.outputs.package_root || steps.scan_published.outputs.package_root }}
       ts_package_manager: ${{ steps.scan_hermetic.outputs.ts_package_manager || steps.scan_published.outputs.ts_package_manager }}
-      # #475: the pnpm version handed to `pnpm/action-setup` — empty when the consumer's
-      # package.json pins `packageManager`, since the action throws on any pairing of a
-      # `version` input with a non-string-equal pin. Its own pin is the only one it accepts.
+      # #475: the pnpm version handed to `pnpm/action-setup` — the consumer's own
+      # `packageManager` pin echoed back when it names pnpm, since the action throws on any
+      # pairing of a `version` input with a non-string-equal pin, else the `>=11` floor. Never
+      # empty from a detect that has this output, so the steps below read empty as "detect
+      # predates it" and fall back, the way `mutation_languages` does.
       ts_pnpm_version: ${{ steps.scan_hermetic.outputs.ts_pnpm_version || steps.scan_published.outputs.ts_pnpm_version }}
       python_env: ${{ steps.scan_hermetic.outputs.python_env || steps.scan_published.outputs.python_env }}
       provision_rust: ${{ steps.scan_hermetic.outputs.provision_rust || steps.scan_published.outputs.provision_rust }}
@@ -448,7 +450,7 @@ jobs:
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
         with:
-          version: ${{ needs.detect.outputs.ts_pnpm_version }}
+          version: ${{ needs.detect.outputs.ts_pnpm_version || '>=11' }}
       - if: matrix.language == 'typescript'
         uses: actions/setup-node@v6
         with:
@@ -564,7 +566,7 @@ jobs:
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
         with:
-          version: ${{ needs.detect.outputs.ts_pnpm_version }}
+          version: ${{ needs.detect.outputs.ts_pnpm_version || '>=11' }}
       - if: matrix.language == 'typescript'
         uses: actions/setup-node@v6
         with:
@@ -686,7 +688,7 @@ jobs:
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
         with:
-          version: ${{ needs.detect.outputs.ts_pnpm_version }}
+          version: ${{ needs.detect.outputs.ts_pnpm_version || '>=11' }}
       - if: matrix.language == 'typescript'
         uses: actions/setup-node@v6
         with:
@@ -872,7 +874,7 @@ jobs:
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm' }}
         uses: pnpm/action-setup@v5
         with:
-          version: ${{ needs.detect.outputs.ts_pnpm_version }}
+          version: ${{ needs.detect.outputs.ts_pnpm_version || '>=11' }}
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_language == 'typescript' }}
         uses: actions/setup-node@v6
         with:

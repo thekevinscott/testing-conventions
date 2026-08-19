@@ -173,11 +173,11 @@ def test_monorepo_outputs_wired_from_the_package_root(fs):
 
 
 def test_ts_pnpm_version_is_emitted_from_the_package_root(fs):
-    # The version `pnpm/action-setup` receives: empty when the consumer pins
-    # `packageManager` (the action reads the field), the floor otherwise (#475).
-    fs["ts_pnpm_version"] = ""
+    # The version `pnpm/action-setup` receives: the consumer's own `packageManager` pin echoed
+    # back when it names pnpm, the floor otherwise (#475).
+    fs["ts_pnpm_version"] = "10.33.0"
     out = detect.compute_outputs("", scan_root="/repo/src", repo_root="/repo")
-    assert out["ts_pnpm_version"] == ""
+    assert out["ts_pnpm_version"] == "10.33.0"
 
 
 def test_package_root_relative_is_dot_when_it_is_the_repo_root(fs):

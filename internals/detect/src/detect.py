@@ -173,16 +173,28 @@ def _package_manager_from_field(value: str) -> Optional[str]:
 
 def _pnpm_version_pin(declared: str) -> str:
     """The `version` input `pnpm/action-setup` should receive, given a `package.json`
-    `packageManager` value: the empty string when it pins pnpm, else [`PNPM_FLOOR`].
+    `packageManager` value: the consumer's own pinned version when it pins pnpm, else
+    [`PNPM_FLOOR`].
 
     The action refuses to run whenever `version` is set and `packageManager` is not
     *string-equal* to it, and no real pin ever equals a range like `>=11` — so a floor and a
-    pin cannot coexist, whatever versions are involved. Passing nothing is what lets the
-    action read the field itself, which is the only way a consumer's pin can be honoured
-    (#475). A non-pnpm pin never reaches the action (the setup step is skipped for it), so the
-    floor is the honest answer there rather than an empty string.
+    pin cannot coexist, whatever versions are involved (#475). Echoing the pin back satisfies
+    that equality exactly, and installs precisely what deferring would: the action resolves an
+    explicit `version` to `pnpm@<version>` and a deferred one to the raw field, which are the
+    same string once the `pnpm@` prefix is stripped — build metadata (`+sha512...`) included,
+    since neither path parses the remainder.
+
+    Echoing rather than returning empty is what keeps the output unambiguous. An empty value
+    would mean either "defer to the pin" or "this detect predates the output", and the reusable
+    workflow cannot tell those apart — it fed `pnpm/action-setup` an empty `version` against a
+    manifest with no pin and got `No pnpm version is specified`. A non-empty value always means
+    what it says, which lets the workflow read empty as "stale detect" and fall back.
+
+    A non-pnpm pin never reaches the action (the setup step is skipped for it), so the floor is
+    the honest answer there rather than that manager's version.
     """
-    return "" if _package_manager_from_field(declared) == "pnpm" else PNPM_FLOOR
+    name, _, version = declared.partition("@")
+    return version if name == "pnpm" else PNPM_FLOOR
 
 
 def ts_package_manager(package_root: Path) -> str:
@@ -202,9 +214,12 @@ def ts_package_manager(package_root: Path) -> str:
 
 
 def ts_pnpm_version(package_root: Path) -> str:
-    """The pnpm version the reusable workflow should install for `package_root` (#475): empty
-    when its `package.json` pins pnpm through `packageManager` — deferring to that pin, which is
-    the only way `pnpm/action-setup` accepts one — else [`PNPM_FLOOR`].
+    """The pnpm version the reusable workflow should install for `package_root` (#475): the
+    version its `package.json` pins through `packageManager` when that names pnpm — the only
+    value `pnpm/action-setup` accepts alongside such a pin — else [`PNPM_FLOOR`].
+
+    Never empty, so the reusable workflow can read empty as "this detect predates the output"
+    and fall back to the floor.
     """
     return _pnpm_version_pin(read_package_json(package_root).get("packageManager", ""))
 

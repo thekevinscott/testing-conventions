@@ -15,6 +15,13 @@ Each entry has five sections, in order:
 
 ### Summary
 
+The TypeScript mutation gate runs from a relative scan path (#478). The adapter took its working
+directory from `tiers::package_root`, which returns an empty path when the scan path is relative —
+`Path::ancestors` ends at `""`, and `""` resolves against the cwd for the manifest probe, so the
+walk stopped there. `Command::current_dir("")` fails with `ENOENT`, surfaced as ``is `node`
+installed?``. The reusable workflow passes `SCAN_PATH: src`, so every TypeScript consumer of the
+gate hit it. No API or config change (see **Behavior changes without code changes**).
+
 `e2e attest` no longer prunes other branches' receipts (#473). Deleting them paired a delete with
 this branch's add, and git's rename detection reads that pair as a rename whenever the two receipts
 look alike — which they do, because `command` is usually byte-identical across a repo's branches
@@ -1142,6 +1149,15 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`unit mutation --language typescript` with a **relative** scan path now runs instead of erroring.
+A consumer that saw ``error: running the TypeScript mutation adapter (is `node` installed?): No
+such file or directory (os error 2)`` gets a real measurement — which means a gate that was
+uniformly red on an infrastructure error now passes or reports genuine survivors, and a repo that
+never had a green mutation run should expect its first real survivor list. An absolute scan path
+behaved correctly before and is unchanged. A missing working directory is now its own error
+(``the TypeScript mutation adapter's package root `<path>` is not a directory``), so it no longer
+reads as a missing `node`.
+
 `e2e attest` leaves every other branch's receipt where it is (#473). A commit that previously
 showed one add and N deletes now shows one add. Two consequences: sibling and stacked branches
 merge cleanly, where the second one in used to hit `CONFLICT (rename/rename)` on a receipt neither
@@ -1493,6 +1509,12 @@ tool's own execution model and can be deleted; the adapter sets the option on ev
 config line is inert either way.
 
 ### Verification
+
+```
+# from the package root, with a RELATIVE scan path - the case that used to fail
+testing-conventions unit mutation --language typescript src
+# expected: a survivor list, or a clean pass - never "is `node` installed?"
+```
 
 ```
 # on a repo whose e2e-attestations/ already holds another branch's receipt

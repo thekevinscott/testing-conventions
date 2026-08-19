@@ -41,15 +41,27 @@ def test_package_manager_from_field_empty_is_none():
     assert detect._package_manager_from_field("") is None
 
 
-def test_pnpm_version_pin_defers_to_a_packagemanager_pin():
-    # An empty version is falsy to `pnpm/action-setup`, which then reads the
-    # `packageManager` field itself. Passing anything else makes it throw
-    # "Multiple versions of pnpm specified" unless the strings match exactly (#475).
-    assert detect._pnpm_version_pin("pnpm@10.33.0") == ""
+def test_pnpm_version_pin_echoes_a_packagemanager_pin():
+    # The action throws unless `version` is string-equal to the pin, so echoing it back is the
+    # only non-empty value it accepts — and it installs exactly what deferring would.
+    assert detect._pnpm_version_pin("pnpm@10.33.0") == "10.33.0"
 
 
-def test_pnpm_version_pin_defers_even_when_the_pin_already_satisfies_the_floor():
-    assert detect._pnpm_version_pin("pnpm@11.11.0") == ""
+def test_pnpm_version_pin_echoes_a_pin_that_already_satisfies_the_floor():
+    assert detect._pnpm_version_pin("pnpm@11.11.0") == "11.11.0"
+
+
+def test_pnpm_version_pin_keeps_build_metadata_in_an_echoed_pin():
+    # Corepack pins carry a `+sha512...` suffix. It has to survive intact: the equality check is
+    # against the raw remainder, and the deferred path installs that same raw string.
+    pin = "11.11.0+sha512.abc123"
+    assert detect._pnpm_version_pin(f"pnpm@{pin}") == pin
+
+
+def test_pnpm_version_pin_is_never_empty_for_a_pnpm_pin():
+    # Empty is reserved for "this detect predates the output" — the reusable workflow falls back
+    # on it, so a real answer must never look like one.
+    assert detect._pnpm_version_pin("pnpm@10.33.0") != ""
 
 
 def test_pnpm_version_pin_falls_back_to_the_floor_with_no_field():

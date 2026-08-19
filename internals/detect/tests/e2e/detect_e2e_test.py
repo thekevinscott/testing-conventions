@@ -269,11 +269,11 @@ def test_e2e_ts_package_manager_defaults_to_pnpm(run_detect):
     assert out["ts_package_manager"] == "pnpm"
 
 
-def test_e2e_ts_pnpm_version_is_empty_when_packagemanager_pins_pnpm(run_detect):
+def test_e2e_ts_pnpm_version_echoes_a_packagemanager_pnpm_pin(run_detect):
     # `pnpm/action-setup` throws "Multiple versions of pnpm specified" whenever its
     # `version` input is set and the consumer's `packageManager` is not string-equal
-    # to it — which no real pin ever is. Emit nothing and let the action read the
-    # field (#475).
+    # to it — which no range ever is. Echo the pin back: it satisfies that equality and
+    # installs exactly what deferring would (#475).
     out = run_detect(
         scan_path="packages/ts/src",
         root_files={
@@ -281,7 +281,21 @@ def test_e2e_ts_pnpm_version_is_empty_when_packagemanager_pins_pnpm(run_detect):
             "packages/ts/src/index.ts": "export const x = 1;\n",
         },
     )
-    assert out["ts_pnpm_version"] == ""
+    assert out["ts_pnpm_version"] == "10.33.0"
+
+
+def test_e2e_ts_pnpm_version_is_never_empty_for_a_pnpm_pin(run_detect):
+    # Empty is the reusable workflow's signal for "this detect predates the output", on which
+    # it falls back to the floor. A real answer must never be mistaken for that.
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": '{"packageManager": "pnpm@10.33.0+sha512.abc123"}',
+            "packages/ts/src/index.ts": "export const x = 1;\n",
+        },
+    )
+    # Build metadata survives: the equality is against the raw remainder of the field.
+    assert out["ts_pnpm_version"] == "10.33.0+sha512.abc123"
 
 
 def test_e2e_ts_pnpm_version_is_the_floor_with_no_packagemanager_field(run_detect):

@@ -38,10 +38,13 @@ package's own manifest instead.
 - **`ts_package_manager`** (`ts_package_manager`): `package.json`'s `packageManager` field name,
   else `pnpm`/`npm` by lockfile presence, else `pnpm` (today's hardcoded default).
 - **`ts_pnpm_version`** (`ts_pnpm_version`): the `version` input the reusable workflow hands
-  `pnpm/action-setup` — empty when `packageManager` pins pnpm, else the `>=11` floor. `action-setup`
-  throws `Multiple versions of pnpm specified` whenever `version` is set and `packageManager` is not
-  string-equal to it, which no real pin ever is, so a consumer's pin can only be honoured by passing
-  nothing and letting the action read the field itself (#475). This repo pins floors through
+  `pnpm/action-setup` — `packageManager`'s own pin when it names pnpm, else the `>=11` floor.
+  `action-setup` throws `Multiple versions of pnpm specified` whenever `version` is set and
+  `packageManager` is not string-equal to it, which no range ever is, so echoing the pin back is the
+  only non-empty value it accepts; it resolves to `pnpm@<pin>`, exactly what passing nothing would
+  install (#475). Never empty, which is what lets the workflow read empty as "this detect predates
+  the output" and fall back to the floor — a rolling `@v0` gates each release on the *published*
+  detect, so every new output spends one release absent. This repo pins floors through
   `engines` and carries no `packageManager` field, so the conflicting path is invisible to
   dogfooding — the selftest fixture covers it instead.
 - **`python_env`** (`python_env`): `uv` when `package_root`'s `pyproject.toml` parses with a

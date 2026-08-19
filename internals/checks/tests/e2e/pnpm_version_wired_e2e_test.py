@@ -12,8 +12,9 @@ from click.testing import CliRunner
 from checks.pnpm_version_wired.cli import cli
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-WIRED = "      - uses: pnpm/action-setup@v5\n        with:\n          version: ${{ needs.detect.outputs.ts_pnpm_version }}\n"
+WIRED = "      - uses: pnpm/action-setup@v5\n        with:\n          version: ${{ needs.detect.outputs.ts_pnpm_version || '>=11' }}\n"
 LITERAL = '      - uses: pnpm/action-setup@v5\n        with:\n          version: ">=11"\n'
+UNGUARDED = "      - uses: pnpm/action-setup@v5\n        with:\n          version: ${{ needs.detect.outputs.ts_pnpm_version }}\n"
 
 
 def test_passes_on_a_wired_fixture(tmp_path):
@@ -22,6 +23,16 @@ def test_passes_on_a_wired_fixture(tmp_path):
     result = CliRunner().invoke(cli, [str(good)])
     assert result.exit_code == 0
     assert "take their version from detect" in result.output
+
+
+def test_fails_on_an_unguarded_fixture(tmp_path):
+    # Reads detect but has no fallback, so a published detect predating the output leaves
+    # `version` empty — the shape that blocked the first #475 release.
+    bad = tmp_path / "wf.yml"
+    bad.write_text(UNGUARDED)
+    result = CliRunner().invoke(cli, [str(bad)])
+    assert result.exit_code == 1
+    assert "::error::" in result.output
 
 
 def test_fails_on_a_literal_fixture(tmp_path):

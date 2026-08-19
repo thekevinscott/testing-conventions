@@ -85,7 +85,8 @@ overridden. Without the field, the workflow installs `>=11`.
 The pin has to win outright rather than be checked against a floor: `pnpm/action-setup` refuses to
 run at all when it is given a `version` *and* finds a `packageManager` field that is not
 string-equal to it, so a floor and a pin cannot coexist — the job fails before installing anything,
-whatever versions are involved.
+whatever versions are involved. The workflow satisfies that equality by handing the action the pin
+itself, which installs the same `pnpm@<pin>` that passing nothing would, build metadata included.
 
 A package whose suites live at `test/integration/` (singular) rather than `tests/integration/`
 (plural) sits outside every fixed path above — `integration lint` finds nothing there and stays

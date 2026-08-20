@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The TypeScript mutation gate runs from a relative scan path** (#478). `tiers::package_root`
+  walks `scan_root.ancestors()`, which ends at `""` for a relative path such as `src` —
+  `Path::new("").join("package.json")` resolves against the cwd, so the walk stopped there and
+  returned an empty path. The adapter then spawned with `Command::current_dir("")`, which fails
+  with `ENOENT`, and the error context reported it as ``running the TypeScript mutation adapter
+  (is `node` installed?)``. Node was installed; the working directory was not. The reusable
+  workflow passes `SCAN_PATH: src`, so **every** TypeScript consumer of the gate hit this — the
+  same run with an absolute scan path worked, which made it read as an environment problem.
+  The empty path is now normalised to `.` at the spawn site, and the directory is checked before
+  spawning so a missing cwd and a missing interpreter no longer produce the same message. Fixed
+  at the spawn site rather than in `tiers::package_root`, whose other callers join onto or walk
+  the result, where `""` behaves correctly.
+
 - **`e2e attest` no longer deletes the receipts other branches left behind** (#473). The prune
   paired a delete with this branch's add, and git's rename detection reads that pair as a rename
   whenever the two receipts look alike — which they do, because `command` is usually

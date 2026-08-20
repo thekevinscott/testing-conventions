@@ -71,6 +71,36 @@ fn run_without_the_adapter_arg_fails_clean() {
 }
 
 #[test]
+fn a_relative_scan_path_runs_from_the_package_root() {
+    // `tiers::package_root` walks `scan_root.ancestors()`, which ends at `""` for a
+    // **relative** scan path such as `src` — `Path::new("").join("package.json")` resolves
+    // against the cwd, so the walk stops there and returns an empty path. The adapter then
+    // ran with `Command::current_dir("")`, which fails with ENOENT and was reported as
+    // "is `node` installed?". The reusable workflow passes `SCAN_PATH: src`, so every
+    // TypeScript consumer of the mutation gate hit this. Every other test here passes an
+    // absolute staged path, which is why it shipped.
+    let project = Staged::new("killed");
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .current_dir(project.path())
+        .args(["unit", "mutation", "--language", "typescript"])
+        .arg("--ts-mutation-adapter")
+        .arg(ts_adapter())
+        .arg("src")
+        .output()
+        .expect("the built binary should run");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("is `node` installed?"),
+        "a missing working directory must not masquerade as a missing interpreter; got: {stderr}"
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "a relative scan path should clear the gate exactly as the absolute path does; stderr: {stderr}"
+    );
+}
+
+#[test]
 fn a_broken_adapter_path_fails_clean() {
     // The argument points at a Node entry that doesn't exist (node can't find the module):
     // the run must fail (exit 1) with the adapter's captured output surfaced, not hang or

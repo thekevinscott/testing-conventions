@@ -92,10 +92,11 @@ pub struct MutantInfo {
     pub name: String,
 }
 
-/// A source span; only the start line is read.
+/// A source span; the start and end lines are read.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Span {
     pub start: LineCol,
+    pub end: LineCol,
 }
 
 /// A line/column position; only the line is read.
@@ -107,6 +108,12 @@ pub struct LineCol {
 /// Parse a cargo-mutants `outcomes.json` export.
 pub fn parse_mutants_report(json: &str) -> Result<MutantsReport> {
     serde_json::from_str(json).context("parsing cargo-mutants outcomes.json")
+}
+
+/// Parse a `cargo mutants --list --json` export: the crate's discoverable mutants, each
+/// with its workspace-root-relative file and span.
+fn parse_mutants_list(json: &str) -> Result<Vec<MutantInfo>> {
+    serde_json::from_str(json).context("parsing the cargo-mutants mutant list")
 }
 
 /// The surviving mutants not lifted by a `mutation` exemption — the rule's findings.
@@ -377,7 +384,8 @@ fn describe_normalized(mutant: &NormalizedMutant) -> String {
 
 /// Run cargo-mutants over the crate at `root` and return the [`Measurement`]: the
 /// un-exempted survivors plus the conclusive-mutant count, or
-/// [`Measurement::EngineNotRun`] for a `base` diff with no changed lines under the crate.
+/// [`Measurement::EngineNotRun`] for a `base` diff that changes no lines — or no Rust
+/// source — under the crate.
 ///
 /// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested (via
 /// cargo-mutants' `--in-diff`); without it, the whole crate. `exempt` is the file-level
@@ -398,31 +406,52 @@ pub fn measure_rust(
     // workspace rooted above it. A standalone crate is its own workspace root: no prefix.
     let workspace_root = cargo_workspace_root(root)?;
     let prefix = canonical_scan_prefix(root, &workspace_root);
+    let mut base_diff = None;
     let diff = match base {
         // An empty diff (no changed lines under the crate — a PR that doesn't touch it)
         // means nothing to mutate: the engine is skipped, and the caller reports it.
         Some(base) => {
             match write_base_diff(root, &workspace_root, prefix.as_deref(), base, &out)? {
                 None => return Ok(Measurement::EngineNotRun),
-                Some(path) => Some(path),
+                Some(path) => {
+                    let parsed =
+                        parse_base_diff(&std::fs::read_to_string(&path).with_context(|| {
+                            format!("reading the written base diff `{}`", path.display())
+                        })?);
+                    // A diff that touches the crate but changes no Rust source (a README
+                    // edit) holds nothing the engine could judge: skip it up front, the
+                    // same pre-filter the TypeScript and Python arms apply.
+                    if !parsed.files.iter().any(|file| file.ends_with(".rs")) {
+                        return Ok(Measurement::EngineNotRun);
+                    }
+                    base_diff = Some(parsed);
+                    Some(path)
+                }
             }
         }
         None => None,
     };
     let engine = ensure_cargo_mutants()?;
-    run_cargo_mutants(&engine, root, &out.0, diff.as_deref(), features)?;
+    let run = run_cargo_mutants(&engine, root, &out.0, diff.as_deref(), features)?;
     let outcomes = out.0.join("mutants.out").join("outcomes.json");
     // cargo-mutants writes no `outcomes.json` when a run produces no mutants (e.g. an
     // `--in-diff` that matches none of the crate's lines). `run_cargo_mutants` already
     // bailed on a fatal exit, so a missing report here is an engine run that judged
-    // zero mutants.
+    // zero mutants — legitimate only if none of the crate's mutants sits on the diff's
+    // inserted lines, which [`zero_mutant_verdict`] proves against the engine's own
+    // mutant list before the zero is allowed to stand.
     let json = match std::fs::read_to_string(&outcomes) {
         Ok(json) => json,
         Err(_) => {
+            if let Some(diff) = &base_diff {
+                let listed =
+                    list_cargo_mutants(&engine, root, features, |command| command.output())?;
+                zero_mutant_verdict(&listed, diff, &run)?;
+            }
             return Ok(Measurement::Tested {
                 count: 0,
                 survivors: Vec::new(),
-            })
+            });
         }
     };
     let report = rebase_report_paths(parse_mutants_report(&json)?, prefix.as_deref());
@@ -923,6 +952,77 @@ fn write_base_diff(
     Ok(Some(path))
 }
 
+/// The tool's own reading of a base diff: the changed files (new-side paths, `b/`
+/// convention stripped) and the inserted line numbers per file, in new-file numbering.
+/// Paths stay on the diff's own basis — workspace-root-relative, the same basis
+/// cargo-mutants addresses mutants on.
+struct BaseDiff {
+    files: Vec<String>,
+    inserted: BTreeMap<String, BTreeSet<u32>>,
+}
+
+/// Parse a unified diff into a [`BaseDiff`]. Each hunk body is consumed by the counts
+/// its `@@` header declares, so a content line that begins with `+++` or `---` never
+/// reads as a file header. A deleted file (`+++ /dev/null`) has no lines in `HEAD`, so
+/// it carries neither a changed file nor inserted lines.
+fn parse_base_diff(diff: &str) -> BaseDiff {
+    let mut files = Vec::new();
+    let mut inserted: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
+    let mut current: Option<String> = None;
+    let mut lines = diff.lines();
+    while let Some(line) = lines.next() {
+        if let Some(path) = line.strip_prefix("+++ ") {
+            current = (path != "/dev/null").then(|| {
+                let path = path.strip_prefix("b/").unwrap_or(path).to_string();
+                files.push(path.clone());
+                path
+            });
+        } else if let Some(header) = line.strip_prefix("@@ ") {
+            let Some((new_start, old_count, new_count)) = parse_hunk_header(header) else {
+                continue;
+            };
+            let mut new_line = new_start;
+            let (mut old_left, mut new_left) = (old_count, new_count);
+            while old_left > 0 || new_left > 0 {
+                let Some(line) = lines.next() else { break };
+                if line.starts_with('\\') {
+                    // "\ No newline at end of file" annotates the previous line and
+                    // counts against neither side.
+                } else if line.starts_with('+') {
+                    if let Some(file) = &current {
+                        inserted.entry(file.clone()).or_default().insert(new_line);
+                    }
+                    new_line += 1;
+                    new_left = new_left.saturating_sub(1);
+                } else if line.starts_with('-') {
+                    old_left = old_left.saturating_sub(1);
+                } else {
+                    new_line += 1;
+                    old_left = old_left.saturating_sub(1);
+                    new_left = new_left.saturating_sub(1);
+                }
+            }
+        }
+    }
+    BaseDiff { files, inserted }
+}
+
+/// The `(new_start, old_count, new_count)` of a hunk header's `-a[,b] +c[,d]` part.
+fn parse_hunk_header(header: &str) -> Option<(u32, u32, u32)> {
+    let mut parts = header.split(' ');
+    let (_, old_count) = parse_range(parts.next()?.strip_prefix('-')?)?;
+    let (new_start, new_count) = parse_range(parts.next()?.strip_prefix('+')?)?;
+    Some((new_start, old_count, new_count))
+}
+
+/// A hunk range `start[,count]`; the count defaults to 1.
+fn parse_range(range: &str) -> Option<(u32, u32)> {
+    match range.split_once(',') {
+        Some((start, count)) => Some((start.parse().ok()?, count.parse().ok()?)),
+        None => Some((range.parse().ok()?, 1)),
+    }
+}
+
 /// Rebase a cargo-mutants report's workspace-root-relative mutant paths onto the scan
 /// path: strip the scan prefix so survivor reporting and `mutation` exemption matching
 /// address scan-path-relative files, as every other check does. Baseline outcomes carry
@@ -1118,7 +1218,8 @@ fn strip_llvm_cov_env(command: &mut Command) {
 }
 
 /// Run the cargo-mutants argv ([`mutants_argv`]) in `root`, where `engine` is the provisioned
-/// cargo-mutants binary ([`ensure_cargo_mutants`]) invoked by absolute path.
+/// cargo-mutants binary ([`ensure_cargo_mutants`]) invoked by absolute path, and return the
+/// engine's [`Output`] for the caller's diagnostics.
 ///
 /// The exit code is classified by [`classify_mutants_exit`] (`0`/`2`/`3` normal, else fatal).
 /// The outer instrumentation env is stripped so a nested run (this rule's own tests under
@@ -1129,14 +1230,96 @@ fn run_cargo_mutants(
     out: &Path,
     in_diff: Option<&Path>,
     features: &[String],
-) -> Result<()> {
+) -> Result<Output> {
     let mut command = Command::new(engine);
     command
         .current_dir(root)
         .args(mutants_argv(out, in_diff, features));
     strip_llvm_cov_env(&mut command);
     let output = command.output().context("running cargo-mutants")?;
-    classify_mutants_exit(root, &output)
+    classify_mutants_exit(root, &output)?;
+    Ok(output)
+}
+
+/// Decide whether an engine run that judged zero mutants is legitimate: `listed` is the
+/// crate's full mutant list and `diff` the tool's own reading of the very diff the engine
+/// filtered by. A listed mutant whose span touches an inserted line proves the filter
+/// dropped real mutants — a fatal error naming the sites and the engine's output — while
+/// no overlap confirms an honest zero. The inserted lines are a subset of the engine's
+/// affected-lines rule (insertions plus deletion-adjacent lines), so a legitimate zero
+/// never trips this.
+fn zero_mutant_verdict(listed: &[MutantInfo], diff: &BaseDiff, run: &Output) -> Result<()> {
+    let dropped: Vec<&MutantInfo> = listed
+        .iter()
+        .filter(|mutant| {
+            diff.inserted.get(&mutant.file).is_some_and(|lines| {
+                lines
+                    .range(mutant.span.start.line..=mutant.span.end.line)
+                    .next()
+                    .is_some()
+            })
+        })
+        .collect();
+    if dropped.is_empty() {
+        return Ok(());
+    }
+    let sites: Vec<String> = dropped
+        .iter()
+        .map(|mutant| {
+            format!(
+                "  {}:{}: {}",
+                mutant.file, mutant.span.start.line, mutant.name
+            )
+        })
+        .collect();
+    bail!(
+        "cargo-mutants tested no mutants, but {} of the crate's {} mutant site(s) sit on the diff's inserted lines — the changed-line filter dropped real mutants:\n{}\nengine output:\n{}{}",
+        dropped.len(),
+        listed.len(),
+        sites.join("\n"),
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr),
+    )
+}
+
+/// The argv for one cargo-mutants mutant listing: `mutants --list --json
+/// [--features <list>]`, mirroring the run's own feature selection so both see the same
+/// mutant set.
+fn list_argv(features: &[String]) -> Vec<OsString> {
+    let mut argv = vec![
+        OsString::from("mutants"),
+        OsString::from("--list"),
+        OsString::from("--json"),
+    ];
+    if !features.is_empty() {
+        argv.push(OsString::from("--features"));
+        argv.push(OsString::from(features.join(",")));
+    }
+    argv
+}
+
+/// List the crate's discoverable mutants via `cargo mutants --list --json`, executing the
+/// built command with `run`. `run` is injected so a test drives the success and failure
+/// branches with a fake (no real engine).
+fn list_cargo_mutants(
+    engine: &Path,
+    root: &Path,
+    features: &[String],
+    run: impl FnOnce(&mut Command) -> std::io::Result<Output>,
+) -> Result<Vec<MutantInfo>> {
+    let mut command = Command::new(engine);
+    command.current_dir(root).args(list_argv(features));
+    strip_llvm_cov_env(&mut command);
+    let output = run(&mut command).context("listing the crate's mutants with cargo-mutants")?;
+    if !output.status.success() {
+        bail!(
+            "cargo-mutants --list failed in `{}`:\n{}{}",
+            root.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+    parse_mutants_list(&String::from_utf8_lossy(&output.stdout))
 }
 
 /// The argv for one cargo-mutants run: `mutants --output <out> [--in-diff <diff>]
@@ -1819,6 +2002,121 @@ mod tests {
         assert_eq!(argv(None, &[]), vec!["mutants", "--output", "/out"]);
     }
 
+    #[test]
+    fn list_argv_mirrors_the_run_feature_selection() {
+        let argv = |features: &[&str]| -> Vec<String> {
+            list_argv(&features.iter().map(|f| f.to_string()).collect::<Vec<_>>())
+                .iter()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect()
+        };
+        assert_eq!(argv(&[]), vec!["mutants", "--list", "--json"]);
+        assert_eq!(
+            argv(&["cli", "boost"]),
+            vec!["mutants", "--list", "--json", "--features", "cli,boost"]
+        );
+    }
+
+    #[test]
+    fn parse_base_diff_maps_inserted_lines_per_hunk() {
+        let diff = "\
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,4 +1,5 @@
+ fn a() {}
++fn b() {}
+ fn c() {}
+-fn d() {}
++fn e() {}
+ fn f() {}
+@@ -10,2 +11,4 @@
+ tail
++one
++two
+ more
+";
+        let parsed = parse_base_diff(diff);
+        assert_eq!(parsed.files, vec!["src/lib.rs"]);
+        assert_eq!(
+            parsed.inserted.get("src/lib.rs"),
+            Some(&BTreeSet::from([2, 4, 12, 13]))
+        );
+    }
+
+    #[test]
+    fn parse_base_diff_leaves_a_deletion_only_file_without_inserted_lines() {
+        let diff = "\
+--- a/src/gone.rs
++++ b/src/gone.rs
+@@ -5,2 +4,0 @@
+-x
+-y
+";
+        let parsed = parse_base_diff(diff);
+        assert_eq!(parsed.files, vec!["src/gone.rs"]);
+        assert!(parsed.inserted.is_empty());
+    }
+
+    #[test]
+    fn parse_base_diff_skips_a_deleted_file() {
+        // A deleted file has no lines in HEAD: `+++ /dev/null` carries neither a changed
+        // file nor inserted lines.
+        let diff = "\
+--- a/src/dead.rs
++++ /dev/null
+@@ -1,2 +0,0 @@
+-a
+-b
+";
+        let parsed = parse_base_diff(diff);
+        assert!(parsed.files.is_empty());
+        assert!(parsed.inserted.is_empty());
+    }
+
+    #[test]
+    fn parse_base_diff_consumes_hunk_bodies_by_count_so_content_never_reads_as_a_header() {
+        // The inserted content line begins with `+++`; consuming the hunk by its declared
+        // counts keeps it a body line, not a second file header.
+        let diff = "\
++++ b/notes.txt
+@@ -1,1 +1,2 @@
+ keep
+++++ not a header
+";
+        let parsed = parse_base_diff(diff);
+        assert_eq!(parsed.files, vec!["notes.txt"]);
+        assert_eq!(parsed.inserted.get("notes.txt"), Some(&BTreeSet::from([2])));
+    }
+
+    #[test]
+    fn parse_base_diff_defaults_an_elided_hunk_count_to_one() {
+        let diff = "\
++++ b/one.txt
+@@ -1 +1 @@
+-old
++new
+";
+        let parsed = parse_base_diff(diff);
+        assert_eq!(parsed.inserted.get("one.txt"), Some(&BTreeSet::from([1])));
+    }
+
+    #[test]
+    fn parse_base_diff_skips_no_newline_annotations_mid_hunk() {
+        // "\ No newline at end of file" annotates the line before it and counts against
+        // neither side of the hunk.
+        let diff = "\
++++ b/n.txt
+@@ -1 +1 @@
+-old
+\\ No newline at end of file
++new
+\\ No newline at end of file
+";
+        let parsed = parse_base_diff(diff);
+        assert_eq!(parsed.inserted.get("n.txt"), Some(&BTreeSet::from([1])));
+    }
+
     #[cfg(unix)]
     fn fake_output(code: i32, stderr: &str) -> Output {
         use std::os::unix::process::ExitStatusExt;
@@ -1876,6 +2174,137 @@ mod tests {
             err.to_string().contains("is cargo installed?"),
             "got: {err}"
         );
+    }
+
+    #[cfg(unix)]
+    fn fake_stdout(code: i32, stdout: &str) -> Output {
+        use std::os::unix::process::ExitStatusExt;
+        Output {
+            status: std::process::ExitStatus::from_raw(code << 8),
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: Vec::new(),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_cargo_mutants_parses_the_listing_from_a_clean_run() {
+        let json = r#"[{"file": "src/lib.rs", "name": "replace add -> 0",
+            "span": {"start": {"line": 3, "column": 1}, "end": {"line": 5, "column": 2}}}]"#;
+        let listed = list_cargo_mutants(
+            Path::new("/cache/bin/cargo-mutants"),
+            Path::new("/crate"),
+            &["cli".to_string()],
+            |command| {
+                let argv: Vec<String> = command
+                    .get_args()
+                    .map(|arg| arg.to_string_lossy().into_owned())
+                    .collect();
+                assert_eq!(
+                    argv,
+                    vec!["mutants", "--list", "--json", "--features", "cli"]
+                );
+                assert_eq!(command.get_current_dir(), Some(Path::new("/crate")));
+                Ok(fake_stdout(0, json))
+            },
+        )
+        .unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].file, "src/lib.rs");
+        assert_eq!(listed[0].span.start.line, 3);
+        assert_eq!(listed[0].span.end.line, 5);
+        assert_eq!(listed[0].name, "replace add -> 0");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_cargo_mutants_reports_a_nonzero_exit_with_the_engine_output() {
+        let err = list_cargo_mutants(
+            Path::new("/cache/bin/cargo-mutants"),
+            Path::new("/crate"),
+            &[],
+            |_| Ok(fake_output(1, "error: no such option")),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("cargo-mutants --list failed")
+                && err.to_string().contains("no such option"),
+            "got: {err}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_cargo_mutants_propagates_a_spawn_failure() {
+        let err = list_cargo_mutants(
+            Path::new("/cache/bin/cargo-mutants"),
+            Path::new("/crate"),
+            &[],
+            |_| {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "no engine",
+                ))
+            },
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("listing the crate's mutants with cargo-mutants"),
+            "got: {err}"
+        );
+    }
+
+    #[cfg(unix)]
+    fn listed_mutant(file: &str, start: u32, end: u32, name: &str) -> MutantInfo {
+        MutantInfo {
+            file: file.to_string(),
+            span: Span {
+                start: LineCol { line: start },
+                end: LineCol { line: end },
+            },
+            name: name.to_string(),
+        }
+    }
+
+    #[cfg(unix)]
+    fn diff_with_inserted(file: &str, lines: &[u32]) -> BaseDiff {
+        BaseDiff {
+            files: vec![file.to_string()],
+            inserted: BTreeMap::from([(file.to_string(), lines.iter().copied().collect())]),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn zero_mutant_verdict_accepts_a_zero_with_no_mutant_on_the_inserted_lines() {
+        let run = fake_output(0, "");
+        // No mutants listed at all.
+        zero_mutant_verdict(&[], &diff_with_inserted("src/lib.rs", &[5]), &run).unwrap();
+        // Inserted lines sit just outside the span on either side.
+        let listed = [listed_mutant("src/lib.rs", 5, 8, "replace add -> 0")];
+        zero_mutant_verdict(&listed, &diff_with_inserted("src/lib.rs", &[4, 9]), &run).unwrap();
+        // A mutant in a different file never matches.
+        zero_mutant_verdict(&listed, &diff_with_inserted("src/other.rs", &[6]), &run).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn zero_mutant_verdict_is_fatal_on_a_mutant_at_either_span_boundary() {
+        let listed = [listed_mutant("src/lib.rs", 5, 8, "replace add -> 0")];
+        let run = fake_stdout(0, "0 mutants tested");
+        for line in [5, 8] {
+            let err =
+                zero_mutant_verdict(&listed, &diff_with_inserted("src/lib.rs", &[line]), &run)
+                    .unwrap_err();
+            let message = err.to_string();
+            assert!(
+                message.contains("1 of the crate's 1 mutant site(s)")
+                    && message.contains("src/lib.rs:5: replace add -> 0")
+                    && message.contains("0 mutants tested"),
+                "got: {message}"
+            );
+        }
     }
 
     #[cfg(unix)]

@@ -645,9 +645,11 @@ fn run_unit_coverage(
 /// All three languages are wired: Rust (cargo-mutants), TypeScript (Stryker), and
 /// Python (cosmic-ray). `--base` scopes the run to the diff.
 ///
-/// A pass names its evidence: a run that tested mutants states the conclusive-mutant
-/// count, and a `--base` diff with no mutatable changed lines states the engine never
-/// ran — the vacuous pass stays visible. Both exit 0 (reporting, not gating).
+/// A pass names its evidence: a run that tested mutants states the non-zero
+/// conclusive-mutant count, a run the engine finished without producing a mutant to
+/// judge states that, and a `--base` diff with no mutatable changed lines states the
+/// engine never ran — the vacuous pass stays visible. All three exit 0 (reporting,
+/// not gating).
 fn run_unit_mutation(
     root: &Path,
     language: colocated_test::Language,
@@ -706,10 +708,14 @@ fn run_unit_mutation(
         mutation::Measurement::Tested { count, survivors } => (count, survivors),
     };
     if survivors.is_empty() {
-        println!(
-            "unit mutation: no surviving mutants — every mutation was caught \
-             ({count} mutant(s) tested)"
-        );
+        if count == 0 {
+            println!("unit mutation: the engine found no mutants to test");
+        } else {
+            println!(
+                "unit mutation: no surviving mutants — every mutation was caught \
+                 ({count} mutant(s) tested)"
+            );
+        }
         return Ok(0);
     }
 

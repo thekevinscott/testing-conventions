@@ -15,6 +15,17 @@ Each entry has five sections, in order:
 
 ### Summary
 
+`unit mutation` says when a run judged zero mutants, and the Rust arm proves the zero (#481). A
+cargo-mutants `--in-diff` run that produces no mutants exits 0 without writing `outcomes.json`;
+the gate mapped that to the all-caught success line with `0 mutant(s) tested`, so an engine-side
+filter that dropped real mutants read as a pass. A zero-mutant run now prints its own line
+(`unit mutation: the engine found no mutants to test`, all three language arms), a `--base` diff
+with no Rust source under the crate skips the engine up front (`engine not run`, the same
+pre-filter the TypeScript and Python arms apply), and a Rust run that reports no mutants is
+cross-checked against `cargo mutants --list`: a listed mutant on the diff's inserted lines is a
+hard failure naming the dropped sites. No API or config change (see **Behavior changes without
+code changes**).
+
 The TypeScript mutation gate runs from a relative scan path (#478). The adapter took its working
 directory from `tiers::package_root`, which returns an empty path when the scan path is relative —
 `Path::ancestors` ends at `""`, and `""` resolves against the cwd for the manifest probe, so the
@@ -1148,6 +1159,15 @@ The `--lang` flag and its implicit `python` default are gone — a clean break, 
 a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
+
+A `unit mutation` run that judges zero mutants prints `unit mutation: the engine found no mutants
+to test` instead of the all-caught line, in all three language arms — the all-caught line now
+always carries a non-zero count (#481). Exit codes are unchanged for a legitimate zero; anything
+parsing the success lines byte-for-byte updates its match. Two Rust-arm changes ride along: a
+`--base` diff that touches the crate without touching Rust source reports `unit mutation: no
+mutatable changed lines — engine not run`, and a run whose `--in-diff` filter matched nothing
+while `cargo mutants --list` finds mutants on the diff's inserted lines is now a hard failure
+naming both counts and the dropped sites — previously that state passed green.
 
 `unit mutation --language typescript` with a **relative** scan path now runs instead of erroring.
 A consumer that saw ``error: running the TypeScript mutation adapter (is `node` installed?): No

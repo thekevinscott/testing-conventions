@@ -13,7 +13,7 @@ mod common;
 use std::path::PathBuf;
 use std::process::Command;
 
-use common::{tested_count, GitRepo, ENGINE_NOT_RUN};
+use common::{tested_count, GitRepo, ENGINE_NOT_RUN, NOTHING_TESTED};
 
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unit_mutation")
@@ -98,6 +98,99 @@ fn a_diff_without_crate_changes_reports_the_engine_not_run() {
     assert!(
         !stdout.contains("every mutation was caught"),
         "an engine-skipped pass never claims mutants were caught; got: {stdout}"
+    );
+}
+
+#[test]
+fn a_source_change_without_mutant_sites_reports_nothing_tested() {
+    // The diff touches Rust source, but only a const's value — no function body — so
+    // the engine runs and produces no mutants to judge. The pass states exactly that,
+    // never the all-caught line: a zero-mutant run claiming "every mutation was caught"
+    // reads the same as a filter that silently dropped real mutants. The const sits
+    // after the test module so the changed line borders no mutatable function.
+    let repo = GitRepo::new("rust-no-sites");
+    repo.write(
+        "crate/Cargo.toml",
+        "[package]\nname = \"tc_mut_no_sites\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n",
+    );
+    let lib = |answer: &str| {
+        format!(
+            "pub fn add(a: i32, b: i32) -> i32 {{\n    a + b\n}}\n\n#[cfg(test)]\nmod tests {{\n    use super::*;\n    #[test]\n    fn adds() {{\n        assert_eq!(add(2, 3), 5);\n        assert_eq!(add(10, 1), 11);\n    }}\n}}\n\npub const ANSWER: i32 = {answer};\n"
+        )
+    };
+    repo.write("crate/src/lib.rs", &lib("41"));
+    repo.commit("baseline: fully-tested add and a const");
+    let base = repo.head();
+    repo.write("crate/src/lib.rs", &lib("42"));
+    repo.commit("correct the const, touch no function");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "rust"])
+        .args(["--base", &base])
+        .arg(repo.path().join("crate"))
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "a change with no mutant sites passes; stdout: {stdout}; stderr: {stderr}"
+    );
+    assert!(
+        stdout.contains(NOTHING_TESTED),
+        "the zero-mutant run says the engine found nothing to test; got: {stdout}"
+    );
+    assert!(
+        !stdout.contains("every mutation was caught"),
+        "a run that judged no mutants never claims mutants were caught; got: {stdout}"
+    );
+}
+
+#[test]
+fn base_states_a_nonzero_count_for_a_caught_change_in_a_workspace_member_crate() {
+    // The crate is a workspace member and the change adds a fully-tested function, so
+    // every mutant on the changed lines is caught — and the success line proves the
+    // engine tested the member's mutants by stating a non-zero count. A rebase
+    // regression that filtered every mutant out would report a zero-mutant run instead
+    // of this counted pass.
+    let repo = GitRepo::new("rust-member-caught");
+    repo.write(
+        "Cargo.toml",
+        "[workspace]\nmembers = [\"member\"]\nresolver = \"2\"\n",
+    );
+    repo.write(
+        "member/Cargo.toml",
+        "[package]\nname = \"tc_mut_member_caught\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
+    );
+    repo.write(
+        "member/src/lib.rs",
+        "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test]\n    fn adds() {\n        assert_eq!(add(2, 3), 5);\n        assert_eq!(add(10, 1), 11);\n    }\n}\n",
+    );
+    repo.commit("baseline: fully-tested add in a workspace member");
+    let base = repo.head();
+    repo.write(
+        "member/src/lib.rs",
+        "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n\npub fn total(a: i32, b: i32) -> i32 {\n    a + b\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test]\n    fn adds() {\n        assert_eq!(add(2, 3), 5);\n        assert_eq!(add(10, 1), 11);\n    }\n    #[test]\n    fn totals() {\n        assert_eq!(total(2, 3), 5);\n        assert_eq!(total(10, 1), 11);\n    }\n}\n",
+    );
+    repo.commit("add a fully-tested total");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "rust"])
+        .args(["--base", &base])
+        .arg(repo.path().join("member"))
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "every mutant on the changed lines is caught; stdout: {stdout}; stderr: {stderr}"
+    );
+    assert!(
+        tested_count(&stdout) > 0,
+        "the engine tested the member's mutants, so the count is non-zero; got: {stdout}"
     );
 }
 

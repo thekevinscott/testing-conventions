@@ -247,6 +247,35 @@ fn base_finds_survivors_in_a_workspace_member_crate() {
 }
 
 #[test]
+fn base_with_only_non_source_crate_changes_reports_the_engine_not_run() {
+    // The diff touches the crate, but no Rust source: a README edit holds nothing the
+    // engine could judge, so the run is skipped up front and the measurement says so —
+    // the same pre-filter the TypeScript and Python arms apply — rather than handing
+    // the engine a diff it will filter down to nothing.
+    let repo = TempRepo::new("readme-only");
+    repo.write("src/lib.rs", WITH_SURVIVOR); // a would-be survivor, left unchanged
+    repo.write("README.md", "before\n");
+    repo.commit("baseline");
+    let base = repo.head();
+    repo.write("README.md", "before\nafter\n");
+    repo.commit("edit the crate README, not its source");
+
+    let measurement = measure_rust(
+        &repo.0,
+        &[],
+        &std::collections::BTreeMap::new(),
+        Some(&base),
+        &[],
+    )
+    .expect("no run needed");
+    assert_eq!(
+        measurement,
+        Measurement::EngineNotRun,
+        "no Rust source changed, so the engine never ran"
+    );
+}
+
+#[test]
 fn base_with_no_changes_under_the_crate_reports_the_engine_not_run() {
     // A PR that changes nothing under the crate (here, only a top-level note) yields an
     // empty crate-relative diff — nothing to mutate, so the engine is skipped and the

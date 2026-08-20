@@ -274,6 +274,18 @@ Unlike `internals/checks`, it is **not** dogfooded through the shipped reusable 
 
 `.github/actions/detect/action.yml` is unaffected by the move — it is a thin composite-action manifest, not Python, and it is the file every consumer's `uses: …/actions/detect@v0` reference resolves against. Its `run:` step now points at `$GITHUB_ACTION_PATH/../../../internals/detect/src/detect.py`: GitHub Actions checks out the *whole* repo at the pinned ref to resolve a composite action (not just the action's own subdirectory), so a relative path climbing back out to the repo root and down into `internals/` resolves identically whether the action is used locally (`./.github/actions/detect`) or externally (`owner/repo/.github/actions/detect@ref`). The `uses:` contract itself never changes, so this is not a breaking change for any consumer and needs no `MIGRATIONS.md` entry.
 
+### The scan's invocation is an external contract (willfire)
+
+The fleet gate names a consumer PR's checks before the run: pr-monitor compares the checks that reported against the set the commit's own logic schedules, and the reusable workflow's per-language matrices (`fromJSON(needs.detect.outputs.*)`) make that set a function of the scan's outputs. To compute them, [willfire#19](https://github.com/thekevinscott/willfire/issues/19) **executes the scan itself**: it fetches this repo at the SHA `@v0` resolves to and runs the script the way the composite action's `run:` step does, against a checkout of the consumer's PR head. One implementation, two call sites — the prediction and the run stay in agreement because both execute the same code against the same commit.
+
+The invocation therefore has an external caller, and its shape is a **stable contract**:
+
+- **Interpreter.** Stdlib-only `python3` (3.11+, for `tomllib`), invoked directly — `python3 internals/detect/src/detect.py` — with the working directory at the consumer checkout root.
+- **Inputs.** The five env vars the action manifest binds — `LANGUAGES`, `SCAN_PATH`, `CONFIG`, `CALLER_REPOSITORY`, `VERSION` — carrying the caller's `with:` literals; their meanings live in `action.yml` and the module docstring. For an external caller `CALLER_REPOSITORY` is the consumer's repo, so the scan takes the published path — the same branch the consumer's own run takes.
+- **Outputs.** Lines appended to the file named by `GITHUB_OUTPUT`: `name=value` for a single-line value, the runner's heredoc form (`name<<DELIM`) for a multi-line one. The stdout summary line is for humans, outside the contract.
+
+A change to any of these — the script's path, the interpreter floor, an env name or meaning, the output encoding — breaks the external evaluator. Make it deliberately, and update willfire's recipe in the same motion.
+
 With epic #321 complete, every #302 wiring/assertion and failure-path check lives in `internals/checks` as a `tc-checks <check>` subcommand; the flat `.github/scripts/<check>/` dirs are gone, and each self-test job invokes `uv run --project internals/checks tc-checks <check>` after `astral-sh/setup-uv`. The full inventory, by original sub-issue:
 
 - **Wiring assertions (#323):** `mutation-wired`, `isolation-wired`, `coverage-rust-wired`, `colocated-rust-wired`, `diff-scoped-wired`, `e2e-verify-wired`, `e2e-verify-checks-out-pr-head` (block-scoped to the `e2e-verify` job, replacing the old `awk` range), `e2e-verify-scope-wired`, `rolling-release-wired` (two selftest steps folded into one command over two file arguments).

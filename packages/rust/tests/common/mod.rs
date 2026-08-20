@@ -33,6 +33,11 @@ pub fn expect_tested(measurement: Measurement) -> (usize, Vec<Survivor>) {
 /// mutatable — the engine-skipped pass, distinct from the all-killed success.
 pub const ENGINE_NOT_RUN: &str = "unit mutation: no mutatable changed lines — engine not run";
 
+/// The line a run prints when the engine ran but produced no mutants to judge — the
+/// zero-count pass, distinct from both the counted all-caught success and the
+/// engine-skipped pass.
+pub const NOTHING_TESTED: &str = "unit mutation: the engine found no mutants to test";
+
 /// The `<n>` from a passing run's counted success line — `unit mutation: no surviving
 /// mutants — every mutation was caught (<n> mutant(s) tested)`. Panics (failing the
 /// calling test) when stdout carries no such line or the line deviates from that exact

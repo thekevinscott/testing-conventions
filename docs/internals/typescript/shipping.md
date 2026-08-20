@@ -290,11 +290,23 @@ if (!triple) {
 }
 const pkg = `@my-org/${triple}`;
 const binary = require.resolve(
-  `${pkg}/bin/my-tool${platform === 'win32' ? '.exe' : ''}`,
+  `${pkg}/my-tool${platform === 'win32' ? '.exe' : ''}`,
 );
 const result = spawnSync(binary, process.argv.slice(2), { stdio: 'inherit' });
 process.exit(result.status ?? 1);
 ```
+
+**The engine owns the per-triple build.** Declaring `bundled-cli` hands the cross-compile to
+putitoutthere: it stamps the crate version (`write-crate-version`) before `cargo build`, stages the
+binary **flat at the platform-package root** (`@my-org/<triple>/my-tool`), and pins the
+`optionalDependencies` at publish. Two consequences for the consumer package:
+
+- The build script builds only the JS wrapper. The release workflow runs it on every npm row, so it
+  keeps a `TARGET` guard and exits without staging on a per-triple row — a second stager writing
+  into `build/<triple>/` ships the binary twice, and the copy it builds is compiled from the
+  on-disk, unstamped `Cargo.toml`.
+- The launcher resolves the root layout. With [bin-shim](https://github.com/thekevinscott/bin-shim)
+  that is `binaryDir: ''` (the default resolves `<pkg>/bin/`).
 
 `putitoutthere.toml` for the polyglot release:
 

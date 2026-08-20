@@ -36,6 +36,7 @@ describe('bin', () => {
       expect.objectContaining({
         scope: 'testing-conventions',
         binaryName: 'testing-conventions',
+        binaryDir: '',
       }),
     );
     expect(exit).toHaveBeenCalledWith(3);

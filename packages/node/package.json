@@ -31,7 +31,7 @@
     "pnpm": ">=11"
   },
   "dependencies": {
-    "bin-shim": "^0.1.1",
+    "bin-shim": "^0.2.1",
     "@stryker-mutator/core": "^9.6.0",
     "@stryker-mutator/vitest-runner": "^9.6.0"
   },
@@ -42,13 +42,6 @@
     "vitest": {
       "optional": true
     }
-  },
-  "optionalDependencies": {
-    "@testing-conventions/x86_64-unknown-linux-gnu": "0.0.1",
-    "@testing-conventions/aarch64-unknown-linux-gnu": "0.0.1",
-    "@testing-conventions/x86_64-apple-darwin": "0.0.1",
-    "@testing-conventions/aarch64-apple-darwin": "0.0.1",
-    "@testing-conventions/x86_64-pc-windows-msvc": "0.0.1"
   },
   "devDependencies": {
     "@stryker-mutator/api": "^9.6.0",

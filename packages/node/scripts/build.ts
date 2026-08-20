@@ -1,55 +1,32 @@
-// Dual-mode build:
-//   TARGET unset / "main" / "noarch" -> tsc (the publishable JS shim).
-//   TARGET = <rust-triple>           -> cargo cross-compile + stage at
-//                                       build/<triple>/bin/testing-conventions{,.exe}.
-//
-// Invoked by the putitoutthere reusable workflow at release time. Per-triple
-// rows run on native runners (x86_64-linux on ubuntu-latest, aarch64-linux on
-// ubuntu-24.04-arm, darwin on macos-latest, windows on windows-2025-vs2026 —
-// GHA is retiring the windows-latest -> windows-2022 alias on 2026-06-15)
-// per the engine's defaultRunsOn, so cross-linker setup is not required —
-// `rustup target add` is enough to make the triple known to cargo.
+// Builds the publishable JS shim (tsc). Invoked by the putitoutthere reusable
+// workflow on every npm row, including per-triple ones — there TARGET names a
+// rust triple and the engine's bundled-cli build owns the cross-compile and
+// staging (version-stamped, flat at the platform-package root), so this script
+// exits without building.
 //
 // Run via tsx (see the `build` script in package.json).
 
 import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
-import { chmodSync, copyFileSync, mkdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const nodePkg = resolve(here, '..');
-const rustCrate = resolve(nodePkg, '..', 'rust');
 
 const target = process.env.TARGET ?? '';
 
-if (target === '' || target === 'main' || target === 'noarch') {
-  // Use the locally-installed tsc, regardless of which package manager
-  // (`npm` at release-time, `pnpm` at PR-time) populated node_modules.
-  run('npx', ['--no-install', 'tsc', '-b', '--clean', 'tsconfig.json'], { cwd: nodePkg });
-  run('npx', ['--no-install', 'tsc', '-p', 'tsconfig.json'], { cwd: nodePkg });
+if (target !== '' && target !== 'main' && target !== 'noarch') {
+  console.log(`nothing to build for ${target}: the engine stages the binary`);
   process.exit(0);
 }
 
-const ext = target.includes('windows') ? '.exe' : '';
-const bin = `testing-conventions${ext}`;
-
-run('rustup', ['target', 'add', target], { cwd: rustCrate });
-run('cargo', ['build', '--release', '--target', target, '--bin', 'testing-conventions'], { cwd: rustCrate });
-
-const src = join(rustCrate, 'target', target, 'release', bin);
-const dstDir = join(nodePkg, 'build', target, 'bin');
-const dst = join(dstDir, bin);
-mkdirSync(dstDir, { recursive: true });
-copyFileSync(src, dst);
-// copyFileSync drops the exec bit (dst gets 0666 & ~umask = 0644); restore it
-// so the published npm tarball + GitHub Actions artifact roundtrip both keep
-// the binary executable. Windows ignores mode bits.
-chmodSync(dst, 0o755);
-console.log(`staged: ${src} -> ${dst}`);
+// Use the locally-installed tsc, regardless of which package manager
+// (`npm` at release-time, `pnpm` at PR-time) populated node_modules.
+run('npx', ['--no-install', 'tsc', '-b', '--clean', 'tsconfig.json'], { cwd: nodePkg });
+run('npx', ['--no-install', 'tsc', '-p', 'tsconfig.json'], { cwd: nodePkg });
 
 function run(cmd: string, args: string[], opts: SpawnSyncOptions = {}): void {
-  // shell: true so Windows resolves `.cmd` shims (npx.cmd, rustup.exe, etc.)
+  // shell: true so Windows resolves `.cmd` shims (npx.cmd, tsc.cmd, etc.)
   // without each call hard-coding extensions. Args are static — no injection.
   const res = spawnSync(cmd, args, { stdio: 'inherit', shell: true, ...opts });
   if (res.status !== 0) {

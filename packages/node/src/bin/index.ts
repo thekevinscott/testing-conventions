@@ -18,6 +18,8 @@ main({
   from: import.meta.url,
   argv,
   platformPackage: '@{scope}/{triple}',
+  // putitoutthere's bundled-cli build stages the binary at the platform-package root.
+  binaryDir: '',
   triples: {
     'linux-x64': 'x86_64-unknown-linux-gnu',
     'linux-arm64': 'aarch64-unknown-linux-gnu',

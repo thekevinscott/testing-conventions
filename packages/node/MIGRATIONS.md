@@ -15,6 +15,13 @@ Each entry has five sections, in order:
 
 ### Summary
 
+The engine's bundled-cli build is the sole stager of the npm platform binaries (#485): each
+platform package ships one binary, version-stamped, at the package root, and the launcher resolves
+it there (`binaryDir: ''`). Consumer-facing behavior is unchanged apart from `--version` now
+reporting the released version; no consumer code changes. Verification:
+`npx testing-conventions@<new> --version` prints `<new>`, and
+`tar -tzf` on a platform package tarball lists the binary once, at `package/testing-conventions`.
+
 Retires the exact-match e2e freshness contract in favor of one branch-keyed decision per branch
 (shipped through this package's bundled CLI; full notes in `packages/rust/MIGRATIONS.md`).
 `e2e attest '<cmd>'` writes `e2e-attestations/<branch-slug>.json`, leaving every other branch's

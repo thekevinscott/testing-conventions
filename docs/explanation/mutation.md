@@ -86,20 +86,29 @@ pull requests only, over the `<base>...HEAD` changed lines.
 
 ## A pass names its evidence
 
-The gate has two green outcomes, and they are different facts — so the run reports which one it
-earned. A run that tested mutants states the count:
+The gate has three green outcomes, and they are different facts — so the run reports which one
+it earned. A run that tested mutants states the count:
 
 > `unit mutation: no surviving mutants — every mutation was caught (6 mutant(s) tested)`
 
-so the pass carries its own evidence. A diff-scoped run whose changed lines hold nothing
-mutatable — a docs-only or workflow-only pull request — skips the engine and says so:
+so the pass carries its own evidence, and the count is always at least one. A diff-scoped run
+whose changed source lines hold no mutant site — a signature move, a `const` value, a tests-only
+edit — runs the engine, finds nothing to judge, and says so:
+
+> `unit mutation: the engine found no mutants to test`
+
+And a run whose changed lines hold no source files at all — a docs-only or workflow-only pull
+request — skips the engine:
 
 > `unit mutation: no mutatable changed lines — engine not run`
 
-Both pass (an empty diff owes no mutation run; this is reporting, not gating), but the log tells
-a validated pass from a vacuous one: a gate that has only ever printed the second line has never
-exercised the engine, the sandbox, or the toolchain path, and the first source-touching pull
-request is where an environment problem would surface.
+All three pass (an empty diff owes no mutation run; this is reporting, not gating), but the log
+tells a validated pass from a vacuous one: a gate that has only ever printed the last two lines
+has never killed a mutant, and the first behavior-touching pull request is where an environment
+problem would surface. In Rust the zero-mutant line is additionally held to proof: cargo-mutants
+applies the changed-line filter itself, so the tool cross-checks a zero-mutant report against
+the crate's own mutant list, and a filter that dropped real mutants on changed lines is a hard
+error, not a pass.
 
 ## The engines
 

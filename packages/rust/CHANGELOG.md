@@ -7,6 +7,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A mutation run that judges zero mutants says so, and the Rust arm proves it** (#481).
+  cargo-mutants exits `0` without writing `outcomes.json` when its `--in-diff` filter matches
+  nothing, and the tool read that as `Tested { count: 0 }` — printing `every mutation was caught
+  (0 mutant(s) tested)`, the same success line as a real pass. That one mapping is how every
+  engine no-op, legitimate or broken, became a green gate (the third recurrence of this shape
+  after #467 and #469). Three changes close the class. A run that judges zero mutants now prints
+  its own line — `unit mutation: the engine found no mutants to test` — in every language arm,
+  and the all-caught line always carries a non-zero count. A `--base` diff carrying no Rust
+  source under the crate skips the engine up front and reports `engine not run`, the pre-filter
+  the TypeScript and Python arms already apply. And when cargo-mutants does run and reports no
+  mutants, the tool holds the report to proof: it lists the crate's mutants and checks that none
+  sits on an inserted line of the diff it fed the engine — a filter that matched nothing while
+  mutants exist on the changed lines is a hard failure naming both counts, never a pass.
+
 - **The TypeScript mutation gate runs from a relative scan path** (#478). `tiers::package_root`
   walks `scan_root.ancestors()`, which ends at `""` for a relative path such as `src` —
   `Path::new("").join("package.json")` resolves against the cwd, so the walk stopped there and

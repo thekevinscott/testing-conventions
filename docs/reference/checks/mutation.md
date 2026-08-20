@@ -46,14 +46,26 @@ A failing run lists each survivor with its file, line, and mutation. A passing r
 fact made it green:
 
 - `unit mutation: no surviving mutants — every mutation was caught (6 mutant(s) tested)` — the
-  engine ran, judged that many mutants conclusively, and the suite (or a reasoned exemption)
-  accounted for every one.
+  engine ran, judged that many mutants conclusively (always at least one), and the suite (or a
+  reasoned exemption) accounted for every one.
+- `unit mutation: the engine found no mutants to test` — the changed lines hold source, but no
+  mutant sites (a signature move, a `const` value, a tests-only edit): the engine ran and had
+  nothing to judge.
 - `unit mutation: no mutatable changed lines — engine not run` — the diff's changed lines hold
-  nothing mutatable (a docs-only or workflow-only pull request), so the engine was skipped.
+  no source files for the language (a docs-only or workflow-only pull request), so the engine
+  was skipped.
 
-Both exit `0`; the distinction is reporting, not gating. It keeps a vacuous pass visible: a check
-that has only ever printed the second line has never run the engine, in any of the three language
-arms.
+All three exit `0`; the distinction is reporting, not gating. Each line names its own evidence,
+so the log tells a validated pass from a vacuous one — the all-caught line always carries a
+non-zero count.
+
+The Rust arm holds the zero-mutant outcome to proof. cargo-mutants applies the changed-line
+filter itself, so when it reports no mutants the tool lists the crate's mutants
+(`cargo mutants --list`) and checks that none sits on a changed line of the diff it fed the
+engine; a filter that matched nothing while mutants exist on those lines is a hard error naming
+both counts, never a pass. The cross-check is Rust-only by construction: the TypeScript and
+Python arms compute the changed-line scope tool-side and hand their engines explicit ranges, so
+there is no engine-side filter to verify.
 
 ## When it runs
 

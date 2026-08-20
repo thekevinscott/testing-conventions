@@ -106,8 +106,8 @@ jobs:
         run: |
           pkg=@testing-conventions/x86_64-unknown-linux-gnu
           target=packages/node/node_modules/$pkg
-          mkdir -p "$target/bin"
+          mkdir -p "$target"
           printf '{"name":"%s","version":"0.0.1"}\n' "$pkg" > "$target/package.json"
-          install -m 755 packages/rust/target/release/testing-conventions "$target/bin/testing-conventions"
+          install -m 755 packages/rust/target/release/testing-conventions "$target/testing-conventions"
       - name: Smoke (--version via node wrapper -> rust binary)
         run: node packages/node/dist/bin/index.js --version

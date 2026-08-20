@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The platform packages ship one binary — the version-stamped one** (#485). The engine's
+  bundled-cli build owns the cross-compile: it stamps the crate version before `cargo build` and
+  stages the binary flat at the platform-package root, and `scripts/build.ts` now builds only the
+  JS shim (on a per-triple row it exits without staging). Previously both stagers wrote into
+  `build/<triple>/`, so every platform package carried the binary twice and the launcher resolved
+  the copy compiled from the unbumped on-disk `Cargo.toml` — `--version` answered with a stale
+  number. The launcher passes `binaryDir: ''` (bin-shim `^0.2.1`) to resolve the root layout, and
+  the committed `optionalDependencies` pins are gone — the engine pins them at publish.
+
 - **`e2e attest` no longer deletes the receipts other branches left behind** (#473; shipped
   through this package's bundled CLI, full notes in `packages/rust/CHANGELOG.md`). The prune paired
   a delete with this branch's add, and git's rename detection reads that pair as a rename whenever

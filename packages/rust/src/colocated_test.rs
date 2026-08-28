@@ -89,6 +89,28 @@ impl Language {
         }
     }
 
+    /// `true` when `source` (the contents of the file at `path`) declares behavior a
+    /// unit test can exercise, so the file is a subject of the colocated-test rules.
+    ///
+    /// Two shapes carry no behavior. A file that holds no code — empty or comment-only,
+    /// e.g. a bare `__init__.py` — has no logic ([`Self::has_code`]). A TypeScript
+    /// type-only module erases to zero runtime JavaScript, exactly like a `.d.ts` file
+    /// ([`crate::ts::is_type_only_module`]). Neither needs a colocated test, and neither
+    /// needs an exemption to say so.
+    ///
+    /// Presence and the commit-scoped co-change check both decide subjecthood here, so
+    /// they cannot disagree about what has behavior — a type-only module that presence
+    /// skips is not a co-change subject either.
+    pub(crate) fn is_subject(self, source: &str, path: &Path) -> bool {
+        if !self.has_code(source) {
+            return false;
+        }
+        match self {
+            Language::TypeScript => !crate::ts::is_type_only_module(source, path),
+            Language::Python | Language::Rust => true,
+        }
+    }
+
     /// The colocated test `source` is expected to have.
     pub(crate) fn expected_test_path(self, source: &Path) -> PathBuf {
         match self {
@@ -145,17 +167,12 @@ pub fn missing_unit_tests(
         if present.contains(language.expected_test_path(source).as_path()) {
             continue;
         }
-        // No colocated test. An empty/comment-only file is not a subject; read
-        // only now — for the handful of files that lack a twin — to find out.
+        // No colocated test. A file with no behavior — empty/comment-only, or a
+        // type-only TypeScript module — is not a subject; read only now, for the
+        // handful of files that lack a twin, to find out.
         let contents = std::fs::read_to_string(source)
             .with_context(|| format!("reading source file `{}`", source.display()))?;
-        if !language.has_code(&contents) {
-            continue;
-        }
-        // A type-only TypeScript module (only `type` / `interface` / `import type` /
-        // `export type`) erases to zero runtime JavaScript, so it has no behavior to test —
-        // a non-subject like a `.d.ts` file, needing no colocated test or exemption.
-        if language == Language::TypeScript && crate::ts::is_type_only_module(&contents, source) {
+        if !language.is_subject(&contents, source) {
             continue;
         }
         let relative = source
@@ -505,6 +522,38 @@ mod tests {
         assert!(Language::TypeScript.has_code("const s = '// not a comment';\n"));
         // A lone division slash is code, not a comment.
         assert!(Language::TypeScript.has_code("const r = a / b;\n"));
+    }
+
+    #[test]
+    fn typescript_subject_skips_type_only_modules() {
+        // The shared predicate presence and co-change both read: a module whose top
+        // level is exclusively type declarations has no behavior to test.
+        let ts = Path::new("aliases.ts");
+        assert!(!Language::TypeScript.is_subject("export type Alias = string;\n", ts));
+        assert!(!Language::TypeScript.is_subject("export interface Shape { kind: string }\n", ts));
+        assert!(!Language::TypeScript.is_subject("import type { A } from './a';\n", ts));
+    }
+
+    #[test]
+    fn typescript_subject_keeps_anything_with_runtime_behavior() {
+        let ts = Path::new("widget.ts");
+        assert!(Language::TypeScript.is_subject("export const x = 1;\n", ts));
+        // One runtime declaration alongside the types makes the module a subject again.
+        assert!(Language::TypeScript
+            .is_subject("export type Alias = string;\nexport const x = 1;\n", ts));
+        // Empty and comment-only files are non-subjects before the type check runs.
+        assert!(!Language::TypeScript.is_subject("", ts));
+        assert!(!Language::TypeScript.is_subject("// nothing here\n", ts));
+    }
+
+    #[test]
+    fn python_subject_is_decided_by_code_alone() {
+        // Python has no type-only module shape — a `TypedDict` or alias emits runtime
+        // code — so the predicate reduces to `has_code` there.
+        let py = Path::new("widget.py");
+        assert!(Language::Python.is_subject("x = 1\n", py));
+        assert!(Language::Python.is_subject("Alias = str\n", py));
+        assert!(!Language::Python.is_subject("# just a comment\n", py));
     }
 
     #[test]

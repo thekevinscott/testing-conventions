@@ -30,10 +30,11 @@ use crate::colocated_test::Language;
 /// test did not also change — the stale-test risks — sorted for deterministic
 /// output.
 ///
-/// A source file is a subject when it was **modified** (and still holds code), or
-/// **deleted** while it *had* a colocated test in the base tree (the test now at
-/// risk of being orphaned); an **added** file is not (new code is the coverage
-/// floor's concern), nor is a deleted barrel that never had a sibling test.
+/// A source file is a subject when it was **modified** and still declares behavior
+/// ([`Language::is_subject`], the predicate the presence rule reads), or **deleted**
+/// while it *had* a colocated test in the base tree (the test now at risk of being
+/// orphaned); an **added** file is not (new code is the coverage floor's concern),
+/// nor is a deleted barrel that never had a sibling test.
 /// A subject whose `repo`-relative path is in `exempt` is a deliberate omission and
 /// is skipped. Everything else must have its colocated test (`foo.py` →
 /// `foo_test.py`, per `language`) somewhere in the same diff.
@@ -80,11 +81,14 @@ pub fn stale_sources(
         // the coverage floor's concern, not this rule's.
         let is_subject = match status {
             Status::Modified => {
-                // An empty / comment-only file holds no logic, so editing it needs
-                // no test co-change — consistent with the colocated-test rule.
+                // The file's own contents decide, through the predicate presence reads:
+                // an empty / comment-only file and a type-only TypeScript module hold no
+                // behavior, so editing one cannot leave a test stale. Deciding on the
+                // diff's shape alone would flag a module for having no colocated test —
+                // the fact presence uses to skip it.
                 let contents = std::fs::read_to_string(repo.join(path))
                     .with_context(|| format!("reading changed source `{rel}`"))?;
-                language.has_code(&contents)
+                language.is_subject(&contents, path)
             }
             // A deletion is a subject only if the source *had* a colocated test in
             // the base tree — the test now at risk of being orphaned. A source that
@@ -108,7 +112,7 @@ pub fn stale_sources(
 
 /// The diff status of a changed file, narrowed to what the rule acts on.
 enum Status {
-    /// `M` — content changed; a subject if it still holds code.
+    /// `M` — content changed; a subject if the file still declares behavior.
     Modified,
     /// `D` — removed; a subject only if the source had a colocated test in base
     /// (its test should go too), never for a barrel that never had one.

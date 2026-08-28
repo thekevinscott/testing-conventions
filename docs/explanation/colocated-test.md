@@ -58,6 +58,11 @@ requests the check also runs **commit-scoped** over the `<base>...HEAD` diff (Py
 - an **added** source is not a subject — brand-new code is the [coverage floor](./coverage)'s
   concern.
 
+Co-change reads the same subject definition presence does, from the file's own contents: an
+empty or comment-only file and a TypeScript type-only module carry no behavior, so editing one
+is not a stale-test risk and needs no exemption. A module gains subject status on both halves of
+the rule together, the moment it adds a runtime declaration.
+
 Changing a test on its own is always fine. Rust units are inline in the same file, so a sibling
 test can't go stale and the co-change check doesn't apply. A `co-change`
 [exemption](/guide/configure#exempt-a-file) lifts the check for a file, independently of the

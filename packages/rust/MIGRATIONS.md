@@ -15,6 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
+A failed mutation-adapter spawn names every path it used, and the Python arm stops reporting a
+missing working directory as a missing `python3` (#493). `Command::output()` returns the same
+`ENOENT` for a program that is off `PATH` and for a working directory that does not exist, and
+both spawn sites wrapped it with a context string asserting the first — the ambiguity #478 was,
+which #479 closed for the TypeScript arm only. Both arms now share the checked-working-directory
+helper, and the spawn message states the interpreter, the entry point, and the directory instead
+of a diagnosis. No API or config change; the error strings change (see **Behavior changes without
+code changes**).
+
 `unit mutation` says when a run judged zero mutants, and the Rust arm proves the zero (#481). A
 cargo-mutants `--in-diff` run that produces no mutants exits 0 without writing `outcomes.json`;
 the gate mapped that to the all-caught success line with `0 mutant(s) tested`, so an engine-side
@@ -1160,6 +1169,15 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+A mutation-adapter spawn that fails reports a different message (#493). Where it read
+``running the TypeScript mutation adapter (is `node` installed?)`` it now reads ``spawning `node
+<entry>` in `<dir>` (is `node` on PATH?)``, and the Python arm's equivalent likewise — the
+underlying OS error still follows in the chain. Anything grepping the job log for ``is `node`
+installed?`` or ``is `python3` installed?`` matches the new text on ``on PATH?`` instead. A
+`--language python` run whose scan path does not exist now fails with ``the Python mutation
+adapter's working directory `<path>` is not a directory`` before any spawn, where it previously
+claimed `python3` was not installed; the exit code is 1 either way.
+
 A `unit mutation` run that judges zero mutants prints `unit mutation: the engine found no mutants
 to test` instead of the all-caught line, in all three language arms — the all-caught line now
 always carries a non-zero count (#481). Exit codes are unchanged for a legitimate zero; anything
@@ -1175,8 +1193,8 @@ such file or directory (os error 2)`` gets a real measurement — which means a 
 uniformly red on an infrastructure error now passes or reports genuine survivors, and a repo that
 never had a green mutation run should expect its first real survivor list. An absolute scan path
 behaved correctly before and is unchanged. A missing working directory is now its own error
-(``the TypeScript mutation adapter's package root `<path>` is not a directory``), so it no longer
-reads as a missing `node`.
+(``the TypeScript mutation adapter's working directory `<path>` is not a directory``), so it no
+longer reads as a missing `node`.
 
 `e2e attest` leaves every other branch's receipt where it is (#473). A commit that previously
 showed one add and N deletes now shows one add. Two consequences: sibling and stacked branches
@@ -1535,6 +1553,16 @@ config line is inert either way.
 testing-conventions unit mutation --language typescript src
 # expected: a survivor list, or a clean pass - never "is `node` installed?"
 ```
+
+```
+# a scan path that is not there, on the Python arm
+testing-conventions unit mutation --language python ./no-such-dir
+```
+
+Expected (#493): ``error: the Python mutation adapter's working directory `./no-such-dir` is not
+a directory``, exit 1 — where it previously answered ``running the Python mutation adapter (is
+`python3` installed?): No such file or directory (os error 2)`` on a machine with `python3`
+installed.
 
 ```
 # on a repo whose e2e-attestations/ already holds another branch's receipt

@@ -80,6 +80,44 @@ command after toolchain and dependency setup and before the suite; the static ch
 so they run no build. TypeScript and Rust need no key — an npm `prepare` / `postinstall` script and
 Cargo's `build.rs` build their compiled modules during dependency install.
 
+## A publish reaches every runner within five minutes
+
+`version` is empty by default, so each job resolves `testing-conventions` from npm's `latest` tag.
+The packument that resolution reads is served by `registry.npmjs.org` with `cache-control: public,
+max-age=300`, so a version becomes visible at a given CDN edge over the five minutes after it is
+published. A run starting inside that window resolves the version before it and reports whatever
+that build concludes.
+
+The window is the registry's, and it closes on its own. Three things that look like levers over it
+are not:
+
+- **`npx --prefer-online`** asks for behavior the run already has. npm resolves a bare-name spec
+  with `preferOnline` set — `libnpmexec`'s `getManifest` — so every `npx testing-conventions` is
+  already revalidating.
+- **Clearing the npm cache** operates on a store that is already empty. GitHub-hosted runners are
+  ephemeral, and this workflow's `setup-node` steps request no `cache:`, so a job's `~/.npm` starts
+  cold and holds nothing that could be stale.
+- **A `Cache-Control: no-cache` request header** is ignored by the CDN, which answers repeated
+  requests carrying it from the edge with a climbing `age`.
+
+So the two remedies are to wait, or to name the version:
+
+```yaml
+with:
+  version: '0.0.92'
+```
+
+A pin resolves an exact version instead of a tag, which turns the race loud. While an edge still
+lacks that version, the job stops with the cause on screen:
+
+```
+npm error notarget No matching version found for testing-conventions@0.0.92.
+```
+
+Set it to unblock work waiting on a specific release, and clear it once `latest` has caught up: an
+empty `version` is the intended steady state, and it is what keeps a consumer on the rolling
+release described next.
+
 ## Versioning: `@v0` is a moving tag
 
 `@v0` is a **moving major tag**, not a frozen release. It always points at the latest released

@@ -15,6 +15,20 @@ Each entry has five sections, in order:
 
 ### Summary
 
+`co-change` reads what a modification changed (#503). The modify arm asked only whether the file at
+HEAD `is_subject`, so a source that carries behavior and shows as `M` in the diff was held to its
+colocated test whatever the edit did: rewording a `#` comment, deleting a `/* … */` block, or
+dropping a blank line demanded a test change for behavior that had not moved, and the way past the
+gate was an exemption for an edit that risked nothing. A modification is now a subject when the file
+at the merge base of `<base>` and HEAD differs from the file at HEAD once comments and formatting
+whitespace are normalized away — Python compares the parser's token stream, where a comment and a
+blank line never appear, and TypeScript compares its parsed program re-emitted with comments
+disabled, so both languages reach the rule through their own parser. The normalization is narrow: a
+docstring, a string literal, a template literal, and the block structure Python indentation carries
+are code, a comment edit riding along with a code change is a code change, and content that fails to
+parse on either side counts as changed. The delete arm, which pairs against the base tree, is
+untouched. No API or config change (see **Behavior changes without code changes**).
+
 `co-change` reads the same subject definition presence does (#490). #429 taught presence that a
 type-only TypeScript module erases to zero runtime JavaScript and is not a `colocated-test`
 subject; the commit-scoped arm was not on that issue's acceptance list and kept deciding on
@@ -1178,6 +1192,18 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`unit colocated-test --base` no longer flags a **comment-only or whitespace-only** modification
+(#503). A source whose merge-base and HEAD forms hold the same code passes with no colocated test in
+the diff, so a comment sweep, a formatting pass, and a blank-line change stop raising `source
+changed without its colocated test` — and a `co-change` exemption written solely to let such an edit
+through can be deleted. Both languages are covered: Python compares tokens, TypeScript compares the
+re-emitted module. Everything else stands. An edit inside a string, a docstring, or a template
+literal is a subject; so is a Python indentation change that moves a statement between blocks; so is
+a comment edit that arrives with a code change; and content that fails to parse on either side is
+still held to its test. The base side is the merge base of `<base>` and HEAD, matching the
+`<base>...HEAD` diff the rule walks, so a commit that landed on the base branch meanwhile reads as
+nobody's edit here.
+
 `unit colocated-test --base --language typescript` no longer flags a modified **type-only** module
 (#490). A module whose top level is exclusively `type` / `interface` / `import type` /
 `export type` is not a `co-change` subject, matching the presence rule since #429. A repo that
@@ -1566,6 +1592,16 @@ tool's own execution model and can be deleted; the adapter sets the option on ev
 config line is inert either way.
 
 ### Verification
+
+```
+# a branch whose diff only rewords a comment in a source file
+testing-conventions unit colocated-test --language python --base main src
+```
+
+Expected (#503): exit 0. Previously `source changed without its colocated test: <module>.py`, with
+no exemption in play. Change a returned value in the same file and re-run: it is a subject again and
+the run fails until its colocated test is in the diff. The TypeScript arm answers the same way for a
+`//` or `/* … */` edit, and for a blank-line or trailing-whitespace sweep in either language.
 
 ```
 # a branch whose diff edits a type-only module (only type/interface/import type)

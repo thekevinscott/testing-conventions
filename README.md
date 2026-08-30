@@ -12,7 +12,7 @@ Every rule is a CLI command that fails CI on a violation.
 **Unit**
 
 - [`unit colocated-test`](https://thekevinscott.github.io/testing-conventions/explanation/colocated-test) — every source file has a colocated, matching-named unit test (Python, TypeScript, Rust); with `--base`, a source changed in the diff must also change its colocated test (co-change; Python, TypeScript; [#33](https://github.com/thekevinscott/testing-conventions/issues/33)).
-- [`unit one-function-per-file`](https://thekevinscott.github.io/testing-conventions/explanation/one-function-per-file) — a file holds at most one module-scope function whose body runs longer than the configured `max_lines` (Python, TypeScript, Rust; default `1`, so a one-line function is trivial and shares freely, [#488](https://github.com/thekevinscott/testing-conventions/issues/488)).
+- [`unit one-function-per-file`](https://thekevinscott.github.io/testing-conventions/explanation/one-function-per-file) — a file holds at most one module-scope function whose body runs longer than the configured `max_lines` (Python and TypeScript by default, Rust on opt-in; default `1`, so a one-line function is trivial and shares freely, [#488](https://github.com/thekevinscott/testing-conventions/issues/488)).
 - [`unit coverage`](https://thekevinscott.github.io/testing-conventions/explanation/coverage) — enforce a coverage floor on the unit suite (Python, TypeScript, Rust); with `--base`, the same floor is measured over the changed lines of a `<base>...HEAD` diff instead of the whole tree ([#162](https://github.com/thekevinscott/testing-conventions/issues/162)).
 - [`unit lint`](https://thekevinscott.github.io/testing-conventions/explanation/isolation) — a unit test mocks every collaborator: no out-of-module calls or imports (Rust); no un-mocked first-party or external collaborators (Python, TypeScript); typed mocks (TypeScript).
 - [`unit mutation`](https://thekevinscott.github.io/testing-conventions/explanation/mutation) — every line a change touches is *verified*, not just executed: mutation testing breaks the code and requires a test to fail. The gate is binary and diff-scoped — no unexplained surviving mutant on the diff — not a score percentage (Python, TypeScript, Rust; wired into the reusable workflow as a diff-scoped, PR-only job, [#204](https://github.com/thekevinscott/testing-conventions/issues/204)).
@@ -84,7 +84,9 @@ blank lines, comments, and a Python docstring are excluded, as is the signature.
 **Checked:** deterministic, AST-based. `unit one-function-per-file --language <lang>`
 flags every function past the first that exceeds the threshold. `max_lines` is set per
 language; a file whose functions genuinely belong together takes a
-`one-function-per-file` exemption with a reason.
+`one-function-per-file` exemption with a reason. Python and TypeScript are checked with
+no configuration; Rust opts in by naming a threshold, because a Rust file is a module and
+grouping functions in one is idiomatic rather than a lapse.
 
 #### Isolation
 

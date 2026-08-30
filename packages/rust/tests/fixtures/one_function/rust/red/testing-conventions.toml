@@ -1,0 +1,4 @@
+# Rust is off until a `[rust].one_function_per_file` table opts in, so the red
+# fixture needs one to be judged at all.
+[rust]
+one_function_per_file = { max_lines = 1 }

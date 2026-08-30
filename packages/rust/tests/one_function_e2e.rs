@@ -49,6 +49,11 @@ fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr should be UTF-8")
 }
 
+/// The stdout of an `Output`, as a string.
+fn stdout(output: &Output) -> String {
+    String::from_utf8(output.stdout.clone()).expect("stdout should be UTF-8")
+}
+
 // Python
 
 #[test]
@@ -213,13 +218,35 @@ fn typescript_waived_exits_zero() {
 // Rust
 
 #[test]
-fn rust_red_exits_nonzero() {
-    assert_eq!(code(&run("rust", "rust/red")), 1);
+fn rust_is_off_until_a_config_opts_in() {
+    let output = run("rust", "rust/red");
+    assert_eq!(code(&output), 0);
+    assert!(
+        stdout(&output).contains("one-function-per-file: not enabled for rust"),
+        "an unconfigured Rust run must say so, got: {}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn rust_red_exits_nonzero_once_a_config_opts_in() {
+    assert_eq!(
+        code(&run_with_config(
+            "rust",
+            "rust/red",
+            "rust/red/testing-conventions.toml"
+        )),
+        1
+    );
 }
 
 #[test]
 fn rust_red_names_the_extra_function() {
-    let reported = stderr(&run("rust", "rust/red"));
+    let reported = stderr(&run_with_config(
+        "rust",
+        "rust/red",
+        "rust/red/testing-conventions.toml",
+    ));
     assert!(
         reported.contains("two_functions.rs:6: one-function-per-file"),
         "the second `fn` item carries the rule id: {reported}"
@@ -238,8 +265,8 @@ fn rust_clean_exits_zero() {
 }
 
 #[test]
-fn rust_raised_fails_at_the_default_threshold() {
-    assert_eq!(code(&run("rust", "rust/raised")), 1);
+fn rust_raised_is_unjudged_without_a_config() {
+    assert_eq!(code(&run("rust", "rust/raised")), 0);
 }
 
 #[test]

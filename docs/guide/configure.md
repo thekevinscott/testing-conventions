@@ -33,7 +33,8 @@ the rest keep their default. (A typo'd key is still rejected; only *missing* key
 
 ## Raise the one-function-per-file threshold
 
-`unit one-function-per-file` allows one module-scope function per file whose body runs longer than
+`unit one-function-per-file` runs for Python and TypeScript with no configuration; Rust opts in by
+naming a threshold. It allows one module-scope function per file whose body runs longer than
 `max_lines`, and the default is `1`. A codebase whose natural grain is longer functions moves the
 line under the language's table:
 

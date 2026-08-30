@@ -70,7 +70,10 @@ loosen it. Its only tuning is a line-scoped `mutation` exemption (below); see
 ## `one_function_per_file`
 
 Each language table takes **`one_function_per_file`**, whose one key sets the threshold the
-[`unit one-function-per-file`](../explanation/one-function-per-file) rule counts against:
+[`unit one-function-per-file`](../explanation/one-function-per-file) rule counts against. Python and
+TypeScript apply the rule with no table present; **Rust applies it only when the table is there**,
+because a Rust file is a module and grouping functions in one is idiomatic — see
+[Rust is off until you opt in](../explanation/one-function-per-file#rust-is-off-until-you-opt-in):
 
 | Key | Meaning | Default |
 | --- | --- | --- |

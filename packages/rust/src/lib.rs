@@ -767,16 +767,30 @@ fn run_unit_mutation(
 /// are found, `0` otherwise.
 ///
 /// The threshold and the waivers both come from the config at `config_path`: a
-/// missing file means the default one-line threshold with nothing waived.
+/// missing file means the language's default threshold with nothing waived. Rust has
+/// no default threshold, so an unconfigured Rust run reports that and exits `0` —
+/// see [`config::Config::one_function_threshold`] for why.
 fn run_unit_one_function(
     root: &Path,
     language: colocated_test::Language,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
-    let max_lines = if config_path.exists() {
-        config::load_config(config_path)?.one_function_max_lines(language)
+    let threshold = if config_path.exists() {
+        config::load_config(config_path)?.one_function_threshold(language)
     } else {
-        config::OneFunctionPerFile::default().max_lines
+        config::Config::default().one_function_threshold(language)
+    };
+    let Some(max_lines) = threshold else {
+        let key = match language {
+            colocated_test::Language::Python => "python",
+            colocated_test::Language::TypeScript => "typescript",
+            colocated_test::Language::Rust => "rust",
+        };
+        println!(
+            "unit one-function-per-file: not enabled for {key} — \
+             set `[{key}].one_function_per_file` to opt in"
+        );
+        return Ok(0);
     };
     let raw = one_function::find_violations(root, language, max_lines)?;
     let select: ExemptSelect = match language {

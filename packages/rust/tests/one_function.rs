@@ -155,8 +155,19 @@ fn typescript_raised_still_flags_a_function_over_its_configured_threshold() {
 // Rust
 
 #[test]
-fn rust_red_exits_nonzero() {
-    assert_eq!(exit("rust", "rust/red"), 1);
+fn rust_is_off_until_a_config_opts_in() {
+    // The red fixture holds two substantial functions. Python and TypeScript fail on it
+    // zero-config; Rust reports nothing, because a Rust file is a module and grouping
+    // free functions in one is the language's own unit of organization.
+    assert_eq!(exit("rust", "rust/red"), 0);
+}
+
+#[test]
+fn rust_red_exits_nonzero_once_a_config_opts_in() {
+    assert_eq!(
+        exit_with_config("rust", "rust/red", "rust/red/testing-conventions.toml"),
+        1
+    );
 }
 
 #[test]
@@ -165,8 +176,9 @@ fn rust_clean_exits_zero() {
 }
 
 #[test]
-fn rust_raised_fails_at_the_default_threshold() {
-    assert_eq!(exit("rust", "rust/raised"), 1);
+fn rust_raised_is_unjudged_without_a_config() {
+    // Same asymmetry: no `[rust]` table, so there is no threshold to be over.
+    assert_eq!(exit("rust", "rust/raised"), 0);
 }
 
 #[test]

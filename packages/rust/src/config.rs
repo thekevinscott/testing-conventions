@@ -538,21 +538,41 @@ impl Config {
     }
 
     /// The `one-function-per-file` threshold for `language` — the longest body a
-    /// function may have and still share a file. An absent table means the default.
-    pub fn one_function_max_lines(&self, language: crate::colocated_test::Language) -> u32 {
-        let table = match language {
-            crate::colocated_test::Language::Python => {
-                self.python.as_ref().and_then(|c| c.one_function_per_file)
-            }
-            crate::colocated_test::Language::TypeScript => self
-                .typescript
+    /// function may have and still share a file — or `None` when the rule does not
+    /// apply to that language.
+    ///
+    /// Python and TypeScript default to [`OneFunctionPerFile::default`]; **Rust is off
+    /// until a `[rust].one_function_per_file` table opts in**. This is the deliberate
+    /// asymmetry the cross-language parity rule requires be named: in Python and
+    /// TypeScript a file is a bag of definitions, so "one subject per file" is a choice
+    /// the author makes and the rule can hold them to. In Rust a file *is* a module —
+    /// the language's own unit of organization — and grouping free functions and their
+    /// `impl` blocks inside one is how Rust is written, not a lapse. Enforcing the rule
+    /// there by default would flag idiomatic code as a violation. The capability is
+    /// identical in all three languages, so a Rust tree that does want the rule gets it
+    /// by naming a threshold; only the default differs.
+    pub fn one_function_threshold(&self, language: crate::colocated_test::Language) -> Option<u32> {
+        match language {
+            crate::colocated_test::Language::Python => Some(
+                self.python
+                    .as_ref()
+                    .and_then(|c| c.one_function_per_file)
+                    .unwrap_or_default()
+                    .max_lines,
+            ),
+            crate::colocated_test::Language::TypeScript => Some(
+                self.typescript
+                    .as_ref()
+                    .and_then(|c| c.one_function_per_file)
+                    .unwrap_or_default()
+                    .max_lines,
+            ),
+            crate::colocated_test::Language::Rust => self
+                .rust
                 .as_ref()
-                .and_then(|c| c.one_function_per_file),
-            crate::colocated_test::Language::Rust => {
-                self.rust.as_ref().and_then(|c| c.one_function_per_file)
-            }
-        };
-        table.unwrap_or_default().max_lines
+                .and_then(|c| c.one_function_per_file)
+                .map(|table| table.max_lines),
+        }
     }
 
     /// The `[[rust.exempt]]` list (empty when the table is absent). The named

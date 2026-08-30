@@ -322,10 +322,28 @@ fn an_unknown_nested_key_error_points_at_migrations() {
 fn one_function_per_file_thresholds_are_per_language_and_default_to_one() {
     let config = load_config(fixture("one_function_per_file.toml"))
         .expect("a one_function_per_file table should load");
-    assert_eq!(config.one_function_max_lines(Language::Python), 5);
-    assert_eq!(config.one_function_max_lines(Language::TypeScript), 20);
-    // No `[rust]` table at all: the language falls back to the default threshold.
-    assert_eq!(config.one_function_max_lines(Language::Rust), 1);
+    assert_eq!(config.one_function_threshold(Language::Python), Some(5));
+    assert_eq!(
+        config.one_function_threshold(Language::TypeScript),
+        Some(20)
+    );
+    // No `[rust]` table at all: Rust is off, not defaulted — the documented asymmetry.
+    assert_eq!(config.one_function_threshold(Language::Rust), None);
+}
+
+#[test]
+fn python_and_typescript_default_to_one_line_without_a_table() {
+    let config = Config::default();
+    assert_eq!(config.one_function_threshold(Language::Python), Some(1));
+    assert_eq!(config.one_function_threshold(Language::TypeScript), Some(1));
+    assert_eq!(config.one_function_threshold(Language::Rust), None);
+}
+
+#[test]
+fn a_rust_table_opts_the_language_in() {
+    let config = load_config(fixture("one_function_per_file_rust.toml"))
+        .expect("a rust one_function_per_file table should load");
+    assert_eq!(config.one_function_threshold(Language::Rust), Some(8));
 }
 
 #[test]

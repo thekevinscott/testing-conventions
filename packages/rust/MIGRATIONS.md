@@ -36,7 +36,8 @@ parse on either side counts as changed. The delete arm, which pairs against the 
 untouched. No API or config change (see **Behavior changes without code changes**).
 
 `unit one-function-per-file` is a new rule: a file holds at most one module-scope function whose
-body runs longer than `[<language>].one_function_per_file.max_lines`, default `1` (#488). Purely
+body runs longer than `[<language>].one_function_per_file.max_lines`, default `1` for Python and
+TypeScript and **off for Rust** until a `[rust]` table opts in (#488). Purely
 additive — a new subcommand, a new config table, and a new `one-function-per-file` exemption rule
 id. No existing command, key, or default changes, and nothing runs the new rule unless it is
 invoked.

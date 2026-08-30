@@ -73,6 +73,30 @@ handler defined inside another function, and a Rust `fn` declared inside a funct
 part of their enclosing function's body, counted in its length rather than as functions of their
 own.
 
+## Rust is off until you opt in
+
+The rule runs for Python and TypeScript with no configuration. **For Rust it is off until a
+`[rust].one_function_per_file` table names a threshold**, and an unconfigured Rust run says so:
+
+```
+unit one-function-per-file: not enabled for rust — set `[rust].one_function_per_file` to opt in
+```
+
+This is a deliberate asymmetry, and the reason is the languages differ in what a file *is*. In
+Python and TypeScript a file is a bag of definitions with no meaning of its own, so "one subject per
+file" is a choice the author makes and the rule can hold them to. In Rust a file **is** a module —
+the language's own unit of organization — and grouping a type, its `impl` blocks, and the free
+functions that operate on it inside one module is how Rust is written, not a lapse. Enforcing the
+rule there by default would flag idiomatic code.
+
+The capability is the same in all three languages: a Rust tree that wants the rule names a
+threshold and gets exactly what Python and TypeScript get. Only the default differs.
+
+```toml
+[rust]
+one_function_per_file = { max_lines = 8 }
+```
+
 Unit tests are never subjects. The scan reads the same source tree
 [colocated-test](./colocated-test) does, so Python and TypeScript test files, Rust's inline
 `#[cfg(test)]` modules, and the suite directories beside the package are all outside it — a test

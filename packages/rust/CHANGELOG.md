@@ -29,6 +29,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   belong to their owner and are never counted on their own, and the scan reads the same source
   tree the `colocated-test` presence rule does, so no test file is a subject.
 
+  Python and TypeScript are checked with no configuration; Rust is off until a
+  `[rust].one_function_per_file` table opts in, because a Rust file *is* a module and grouping a
+  type, its `impl` blocks, and the free functions around it inside one is how Rust is written — an
+  unconfigured Rust run reports `not enabled for rust` and exits 0. The capability is identical in
+  all three languages; only the default differs.
+
   The threshold is `[<language>].one_function_per_file = { max_lines = N }`, a partial-override
   table like `coverage`. The default is `1`: a one-line function is an expression with a name,
   carries no branch to test in isolation, and shares a file freely; anything longer earns its own

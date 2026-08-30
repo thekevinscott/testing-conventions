@@ -15,6 +15,15 @@ Each entry has five sections, in order:
 
 ### Summary
 
+`co-change` reads the same subject definition presence does (#490). #429 taught presence that a
+type-only TypeScript module erases to zero runtime JavaScript and is not a `colocated-test`
+subject; the commit-scoped arm was not on that issue's acceptance list and kept deciding on
+`has_code` alone, so editing a type-only module raised `source changed without its colocated
+test` — because the module has no colocated test to co-change with, which is the fact presence
+uses to skip it. Neither half could be satisfied without an exemption. Both now call one
+predicate, `Language::is_subject`. No API or config change (see **Behavior changes without code
+changes**).
+
 A failed mutation-adapter spawn names every path it used, and the Python arm stops reporting a
 missing working directory as a missing `python3` (#493). `Command::output()` returns the same
 `ENOENT` for a program that is off `PATH` and for a working directory that does not exist, and
@@ -1169,6 +1178,16 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+`unit colocated-test --base --language typescript` no longer flags a modified **type-only** module
+(#490). A module whose top level is exclusively `type` / `interface` / `import type` /
+`export type` is not a `co-change` subject, matching the presence rule since #429. A repo that
+carries a `co-change` exemption solely for such a module can delete that entry — and must, because
+an exempt path that no longer needs the waiver is not itself an error, but the rule's own
+`colocated-test` half already stopped needing one at #429, so the pair reads as dead config.
+Everything else is unchanged: a runtime module edited without its colocated test still fails, a
+module that mixes types with any runtime declaration is still a subject, and the delete arm is
+untouched.
+
 A mutation-adapter spawn that fails reports a different message (#493). Where it read
 ``running the TypeScript mutation adapter (is `node` installed?)`` it now reads ``spawning `node
 <entry>` in `<dir>` (is `node` on PATH?)``, and the Python arm's equivalent likewise — the
@@ -1547,6 +1566,15 @@ tool's own execution model and can be deleted; the adapter sets the option on ev
 config line is inert either way.
 
 ### Verification
+
+```
+# a branch whose diff edits a type-only module (only type/interface/import type)
+testing-conventions unit colocated-test --language typescript --base main src
+```
+
+Expected (#490): exit 0. Previously `source changed without its colocated test: <module>.ts`, with
+no exemption in play. Add a runtime `export const` to the same module and re-run: it is a subject
+again and the run fails until its colocated test is in the diff.
 
 ```
 # from the package root, with a RELATIVE scan path - the case that used to fail

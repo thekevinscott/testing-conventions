@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`co-change` skips type-only TypeScript modules, as presence already does** (#490). #429 taught
+  the `colocated-test` presence rule that a module whose top level is exclusively `type` /
+  `interface` / `import type` / `export type` erases to zero runtime JavaScript and is not a
+  subject. The commit-scoped `co-change` arm that `--base` adds never learned it: its modify arm
+  asked only `Language::has_code`, which is `true` for `export type Alias = string;`. So editing a
+  type-only module raised `source changed without its colocated test` *because* the module has no
+  colocated test to co-change with — the exact fact presence uses to skip it, and a contradiction
+  no consumer could satisfy (Vitest rejects a test file holding only type assertions with `No test
+  suite found in file …`, so the sole escape was the exemption #429 set out to delete). Both rules
+  now decide subjecthood through one predicate, `Language::is_subject`, so they cannot drift about
+  what has behavior. Scope is the modify arm: the delete arm already pairs against the base tree
+  and was correct, and a runtime module edited without its colocated test still fails.
+
 - **A failed mutation-adapter spawn names every path it used, and the Python arm no longer
   reports a missing working directory as a missing `python3`** (#493). `Command::output()`
   returns the same `ENOENT` whether the program is off `PATH` or the working directory does not

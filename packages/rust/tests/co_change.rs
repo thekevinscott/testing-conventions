@@ -491,6 +491,85 @@ fn typescript_deleting_a_barrel_without_a_test_is_clean() {
     assert!(stale(&repo, &base, Language::TypeScript).is_empty());
 }
 
+const TS_WIDGET: &str = "export const widget = () => 1;\n";
+const TS_WIDGET_TEST: &str =
+    "import { widget } from './widget';\nit('works', () => expect(widget()).toBe(1));\n";
+
+#[test]
+fn typescript_modified_type_only_module_is_not_a_subject() {
+    // A type-only module erases to zero runtime JavaScript, so presence skips it as a
+    // non-subject. Co-change reads the same predicate: editing one is not a stale-test
+    // risk, and there is no colocated test it could ever co-change with.
+    let repo = TempRepo::new("ts-type-only");
+    repo.write("widget.ts", TS_WIDGET);
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.write("aliases.ts", "export type Alias = string;\n");
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write(
+        "aliases.ts",
+        "export type Alias = string;\nexport type Alias2 = number;\n",
+    );
+    repo.commit("extend the type-only module");
+
+    assert!(stale(&repo, &base, Language::TypeScript).is_empty());
+}
+
+#[test]
+fn typescript_modified_module_mixing_types_and_runtime_is_a_subject() {
+    // The skip is for modules that are *exclusively* types. One runtime declaration
+    // alongside them is behavior, so the module stays a co-change subject.
+    let repo = TempRepo::new("ts-mixed");
+    repo.write("mixed.ts", "export type Alias = string;\n");
+    repo.write(
+        "mixed.test.ts",
+        "it('nothing yet', () => expect(1).toBe(1));\n",
+    );
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write(
+        "mixed.ts",
+        "export type Alias = string;\nexport const build = () => 1;\n",
+    );
+    repo.commit("add a runtime export");
+
+    assert_eq!(stale(&repo, &base, Language::TypeScript), vec!["mixed.ts"]);
+}
+
+#[test]
+fn typescript_modified_runtime_module_without_a_colocated_test_is_still_stale() {
+    // Skipping type-only modules must not silence the rule for a runtime module that
+    // has no colocated test — the change it exists to catch.
+    let repo = TempRepo::new("ts-loose");
+    repo.write("loose.ts", "export const loose = () => 1;\n");
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("loose.ts", "export const loose = () => 2;\n");
+    repo.commit("edit the untested runtime module");
+
+    assert_eq!(stale(&repo, &base, Language::TypeScript), vec!["loose.ts"]);
+}
+
+#[test]
+fn typescript_deleting_a_type_only_module_is_clean() {
+    // The delete arm already pairs against the base tree, so a type-only module with
+    // no sibling test deletes cleanly. Pinned so the modify-arm fix can't disturb it.
+    let repo = TempRepo::new("ts-del-type-only");
+    repo.write("widget.ts", TS_WIDGET);
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.write("aliases.ts", "export type Alias = string;\n");
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.remove("aliases.ts");
+    repo.commit("delete the type-only module");
+
+    assert!(stale(&repo, &base, Language::TypeScript).is_empty());
+}
+
 #[test]
 fn an_unknown_base_ref_is_an_error() {
     // A base that can't be resolved must surface, never silently pass as "clean".

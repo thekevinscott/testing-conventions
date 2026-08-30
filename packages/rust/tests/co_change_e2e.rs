@@ -206,6 +206,65 @@ fn a_co_change_exemption_lifts_the_stale_source() {
     );
 }
 
+const TS_WIDGET: &str = "export const widget = () => 1;\n";
+const TS_WIDGET_TEST: &str =
+    "import { widget } from './widget';\nit('works', () => expect(widget()).toBe(1));\n";
+
+#[test]
+fn modified_type_only_module_exits_zero() {
+    // A type-only module has no runtime behavior and so no colocated test to
+    // co-change with — editing one passes both halves of the rule, unexempted.
+    let repo = TempRepo::new("ts-type-only");
+    repo.write("widget.ts", TS_WIDGET);
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.write("aliases.ts", "export type Alias = string;\n");
+    repo.commit("base");
+    let base = repo.head();
+    repo.write(
+        "aliases.ts",
+        "export type Alias = string;\nexport type Alias2 = number;\n",
+    );
+    repo.commit("extend the type-only module");
+
+    let (code, stderr) = co_change(&repo, "typescript", &base, None);
+    assert_eq!(
+        code, 0,
+        "a type-only module is not a co-change subject; stderr: {stderr}"
+    );
+}
+
+#[test]
+fn the_type_only_skip_does_not_silence_a_runtime_change() {
+    // Both files move in one commit: the type-only module is skipped, and the runtime
+    // module that left its colocated test behind is still named and still fails.
+    let repo = TempRepo::new("ts-type-only-red");
+    repo.write("widget.ts", TS_WIDGET);
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.write("aliases.ts", "export type Alias = string;\n");
+    repo.commit("base");
+    let base = repo.head();
+    repo.write(
+        "aliases.ts",
+        "export type Alias = string;\nexport type Alias2 = number;\n",
+    );
+    repo.write("widget.ts", "export const widget = () => 2;\n");
+    repo.commit("edit the types and the runtime source");
+
+    let (code, stderr) = co_change(&repo, "typescript", &base, None);
+    assert_eq!(
+        code, 1,
+        "a runtime edit without its test still fails; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("widget.ts"),
+        "stderr should name the runtime source; got: {stderr}"
+    );
+    assert!(
+        !stderr.contains("aliases.ts"),
+        "stderr should not name the type-only module; got: {stderr}"
+    );
+}
+
 #[test]
 fn rust_is_rejected() {
     // Rust units are inline `#[cfg(test)]` — no sibling test to go stale.

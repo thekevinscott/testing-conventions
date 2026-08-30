@@ -216,6 +216,64 @@ didn't reach them; #379 closes that by staging them off the same `hermetic-cli` 
 `uses:`-called jobs download — each `needs: [build-cli]` and runs `./hermetic-cli/testing-conventions`,
 validating this branch's binary, not npm-latest.
 
+## Release credentials: the publish path is OIDC-only
+
+Every registry the release touches authenticates through GitHub OIDC. `release.yml` passes one
+input and grants `id-token: write`; that permission is the entire credential surface. The publish
+job mints a short-lived token per run — `rust-lang/crates-io-auth-action` for crates.io, npm's own
+OIDC exchange for npm — and the PyPI upload runs in the caller's job against a PyPI trusted
+publisher.
+
+The long-lived tokens the `secrets:` block used to carry (`CARGO_REGISTRY_TOKEN`, `NPM_TOKEN`) were
+bootstrap credentials, and bootstrapping is a one-time act. Trusted Publishing on both registries
+binds to an **already-published** name, so the very first release of a new crate or package takes a
+classic token and every release after it takes OIDC. `testing-conventions` cleared that bar long
+ago: the crate has 88 versions on crates.io, and the npm package and each of its five
+`@testing-conventions/*` platform packages have 90-odd, the bootstrap stub among them. putitoutthere
+reads a forwarded secret as an *instruction* — its OIDC exchanges are gated on the caller's token
+being empty, so passing one selects the classic-token path. The handover runs in either order:
+registering the trusted publisher and dropping the secret are independent steps.
+
+**A long-lived token is a mutable external input, which is the shape "CI hermeticity" exists to
+forbid.** A registry token expires or is revoked on a wall-clock schedule that no commit records.
+When it lapses, the release goes red on a commit that changed nothing about publishing, the failure
+looks like whatever the registry says at that moment, and there is no commit to blame — the same
+"green (or red) gate that tested the wrong thing" the hermeticity invariant rules out for required
+checks. A per-run OIDC token lives exactly as long as the job that minted it.
+
+### The worked case: the 08-20 → 08-30 release outage (#489)
+
+Every push to `main` between 2026-08-20 and 2026-08-30 had a failed `Release` run, so nothing
+published past `0.0.91`. The npm platform-build failures were fixed first; the last blocker was the
+publish job's crates handler, and its cause resisted diagnosis for a specific, instructive reason:
+
+- putitoutthere runs `cargo publish --allow-dirty --verbose` with `CARGO_TERM_VERBOSE=true` and, on
+  failure, emits the captured stderr as a **single** structured log line. For this crate that stderr
+  is ~312 KB (the verbose rustc invocation for each of ~180 dependencies dominates it).
+- The runner writes that line only partly — 132 KB on one run, 152 KB on the next, each ending
+  mid-`rustc` invocation with the JSON object unterminated. The cut is a partial write, not a fixed
+  cap, so the length varies per run.
+- Both cuts land around 44% of the stderr, at `oxc_regular_expression` — mid-verify-build. Reading
+  the log alone, the run looks like it died compiling a dependency.
+
+It did not. Reproducing the same command locally puts the full verify build at ~33s of a ~312 KB
+stderr, ending in `Finished` and `Uploading`; the failed publish steps ran 45s and 50s, which covers
+the index refresh, the packaging of 399 files, the download of 153 crates, and that whole build. So
+cargo reached the upload, crates.io rejected it, and the rejection sits in the ~55% of stderr that
+never reached the log. `0.0.89` is absent from crates.io, which rules out an upload that landed and
+a post-upload step that failed.
+
+Two facts stand out about what the registry rejected: the failure is deterministic (every run that
+reached the publish job over ten days — 08-20, and twice on 08-30 — failed the same way, so not a
+transient or a rate limit), and the crates lane was the one lane still
+authenticating with a long-lived token — the npm lane, already OIDC-only, published `0.0.92` cleanly
+from the same commit on a manual dispatch. Dropping the bootstrap tokens replaces the one input that
+can go bad between commits, and it is the step both this file's shipping guides and putitoutthere's
+own setup instructions already name as the end state.
+
+The observability half is upstream: the truncated error line is
+[putitoutthere#651](https://github.com/thekevinscott/putitoutthere/issues/651).
+
 ## Rolling release: how `@v0` advances
 
 `@v0` is a **moving major tag**: consumers pin `…/testing-conventions.yml@v0` and `…/actions/detect@v0`, and the tag is force-moved forward on each release so every consumer tracks `main`. We own all consumers and fix forward — this is rolling release, the opposite of a semver pin.

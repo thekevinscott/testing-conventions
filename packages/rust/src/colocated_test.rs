@@ -17,6 +17,8 @@ use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
+use rustpython_parser::lexer::lex;
+use rustpython_parser::{ast, Mode, Parse, Tok};
 use syn::visit::{self, Visit};
 
 /// A language whose colocated unit-test convention can be checked.
@@ -108,6 +110,25 @@ impl Language {
         match self {
             Language::TypeScript => !crate::ts::is_type_only_module(source, path),
             Language::Python | Language::Rust => true,
+        }
+    }
+
+    /// `true` when `base` and `head` — the file at `path` before and after an edit — hold
+    /// the same code once comments and formatting whitespace are normalized away.
+    ///
+    /// The commit-scoped co-change check reads this to tell an edit the compiler sees from
+    /// one it doesn't: rewording a comment, adding a blank line, and stripping trailing
+    /// whitespace leave the two sides equal, while a docstring, a string literal, a
+    /// template literal, and Python block structure are code. Content that fails to parse
+    /// on either side is **not** equal, so an unreadable file is held to its colocated test
+    /// rather than skipped.
+    pub(crate) fn same_code(self, base: &str, head: &str, path: &Path) -> bool {
+        match self {
+            Language::Python => python_same_code(base, head),
+            Language::TypeScript => crate::ts::same_code(base, head, path),
+            // Unreachable for Rust (co-change rejects `--language rust`, and nothing is
+            // tracked here); the conservative answer keeps any caller that arrives flagged.
+            Language::Rust => false,
         }
     }
 
@@ -354,6 +375,31 @@ fn python_has_code(source: &str) -> bool {
     })
 }
 
+/// `true` when Python `base` and `head` tokenize identically — the comparison
+/// [`Language::same_code`] makes for Python.
+///
+/// `Tok::Comment` and `Tok::NonLogicalNewline` exist only under the parser's `full-lexer`
+/// feature, which this crate leaves off, so a comment and a blank line never reach a token
+/// and need no filtering here. `Indent` / `Dedent` do, which is why moving a statement into
+/// the block above it is a code change.
+fn python_same_code(base: &str, head: &str) -> bool {
+    match (python_tokens(base), python_tokens(head)) {
+        (Some(base), Some(head)) => base == head,
+        _ => false,
+    }
+}
+
+/// The token stream of Python `source`, or `None` when `source` is not a valid module.
+fn python_tokens(source: &str) -> Option<Vec<Tok>> {
+    let tokens: Vec<Tok> = lex(source, Mode::Module)
+        .map(|token| token.ok().map(|(tok, _)| tok))
+        .collect::<Option<_>>()?;
+    // The lexer accepts token sequences the grammar rejects (`def f() return 1` lexes
+    // cleanly), so the parse decides validity while the tokens carry the comparison.
+    ast::Suite::parse(source, "<source>").ok()?;
+    Some(tokens)
+}
+
 /// `true` when TypeScript `source` holds anything beyond whitespace and comments
 /// (`//` line, `/* … */` block). Any other character — including the start of a
 /// string literal — counts as code.
@@ -554,6 +600,93 @@ mod tests {
         assert!(Language::Python.is_subject("x = 1\n", py));
         assert!(Language::Python.is_subject("Alias = str\n", py));
         assert!(!Language::Python.is_subject("# just a comment\n", py));
+    }
+
+    const PY_WIDGET: &str = "def widget():\n    return 1\n";
+
+    #[test]
+    fn python_same_code_ignores_comments_and_formatting() {
+        let py = Path::new("widget.py");
+        // A comment reworded, and a comment removed outright.
+        assert!(Language::Python.same_code(
+            "# widget helpers\ndef widget():\n    return 1\n",
+            "# widget utilities\ndef widget():\n    return 1\n",
+            py
+        ));
+        assert!(Language::Python.same_code(
+            "# widget helpers\ndef widget():\n    return 1\n",
+            PY_WIDGET,
+            py
+        ));
+        // A blank line, and trailing whitespace.
+        assert!(Language::Python.same_code(PY_WIDGET, "def widget():\n\n    return 1\n", py));
+        assert!(Language::Python.same_code("def widget():   \n    return 1   \n", PY_WIDGET, py));
+    }
+
+    #[test]
+    fn python_same_code_sees_every_edit_the_interpreter_sees() {
+        let py = Path::new("widget.py");
+        assert!(!Language::Python.same_code(PY_WIDGET, "def widget():\n    return 2\n", py));
+        // A docstring is a string expression, not a comment.
+        assert!(!Language::Python.same_code(
+            "\"\"\"Widget helpers.\"\"\"\ndef widget():\n    return 1\n",
+            "\"\"\"Widget utilities.\"\"\"\ndef widget():\n    return 1\n",
+            py
+        ));
+        assert!(!Language::Python.same_code(
+            "def widget():\n    return \"one\"\n",
+            "def widget():\n    return \"two\"\n",
+            py
+        ));
+        // Indentation that moves a statement into the block above it.
+        assert!(!Language::Python.same_code(
+            "def widget(flag):\n    if flag:\n        count = 1\n    return count\n",
+            "def widget(flag):\n    if flag:\n        count = 1\n        return count\n",
+            py
+        ));
+    }
+
+    #[test]
+    fn python_same_code_holds_unparseable_content_apart() {
+        let py = Path::new("widget.py");
+        // An unterminated `(` stops the lexer…
+        assert!(!Language::Python.same_code(
+            "def widget(:\n    return 1\n",
+            "# note\ndef widget(:\n    return 1\n",
+            py
+        ));
+        // …while this lexes cleanly and only the grammar rejects it, on either side.
+        assert!(!Language::Python.same_code(
+            "def widget() return 1\n",
+            "# note\ndef widget() return 1\n",
+            py
+        ));
+        assert!(!Language::Python.same_code(PY_WIDGET, "def widget() return 1\n", py));
+        assert!(!Language::Python.same_code("def widget() return 1\n", PY_WIDGET, py));
+    }
+
+    #[test]
+    fn typescript_same_code_reads_the_emitted_module() {
+        // The TypeScript arm answers through the parser, so a comment reword is equal and
+        // a value change is not.
+        let ts = Path::new("widget.ts");
+        assert!(Language::TypeScript.same_code(
+            "// widget factory\nexport const widget = () => 1;\n",
+            "export const widget = () => 1;\n",
+            ts
+        ));
+        assert!(!Language::TypeScript.same_code(
+            "export const widget = () => 1;\n",
+            "export const widget = () => 2;\n",
+            ts
+        ));
+    }
+
+    #[test]
+    fn rust_same_code_never_answers_equal() {
+        // Co-change rejects `--language rust`, so nothing reaches this arm; the
+        // conservative answer keeps any caller that arrives flagged.
+        assert!(!Language::Rust.same_code("fn f() {}\n", "fn f() {}\n", Path::new("lib.rs")));
     }
 
     #[test]

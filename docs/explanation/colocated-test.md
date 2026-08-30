@@ -83,9 +83,9 @@ colocated test still pins the behavior the file has, and the edit passes on its 
 
 The normalization is deliberately narrow, and everything outside it stays a subject:
 
-- **Python** compares the parser's token stream, skipping comment tokens and the newlines that
-  carry no structure. A docstring is a string expression, so editing one is a code change, and
-  indentation carries block structure, so re-indenting is a code change.
+- **Python** compares the parser's token stream, where a comment and a blank line never appear.
+  A docstring is a string expression, so editing one is a code change, and indentation carries
+  block structure, so moving a statement into the block above it is a code change.
 - **TypeScript** compares the parsed program with comments removed. Text inside a string or a
   template literal is code, so editing it is a code change.
 - A comment edit that travels with a code change is a code change: the code half makes the file a

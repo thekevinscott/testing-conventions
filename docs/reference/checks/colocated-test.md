@@ -40,9 +40,10 @@ A modification is a subject when it changes code the compiler sees. The file at 
 the file at `HEAD` are parsed and compared with comments and formatting whitespace normalized away,
 so a `#` / `//` / `/* … */` comment edit, a blank-line change, and a trailing-whitespace change
 compare equal and pass on their own — the colocated test still pins the behavior the file has. Text
-inside a string literal, a Python docstring, and a TypeScript template literal is code, as is
-Python indentation, so an edit there is a subject; so is a comment edit that travels with a code
-change. Content that fails to parse on either side counts as changed and is held to its test.
+inside a string literal, a Python docstring, and a TypeScript template literal is code, as is the
+block structure Python indentation carries, so an edit there is a subject; so is a comment edit
+that travels with a code change. Content that fails to parse on either side counts as changed and
+is held to its test.
 
 Changing a test on its own always passes. Rust units are inline in the same file, so a sibling
 test can't go stale and co-change doesn't apply to Rust — a deliberate asymmetry.

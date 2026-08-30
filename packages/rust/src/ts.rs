@@ -23,6 +23,7 @@ use oxc::ast::ast::{
 use oxc::ast_visit::{walk, Visit};
 use oxc::parser::Parser;
 use oxc::span::{SourceType, Span};
+use oxc_codegen::{Codegen, CodegenOptions, CommentOptions};
 
 use crate::lint::Violation;
 
@@ -545,6 +546,43 @@ fn is_type_only_statement(statement: &Statement) -> bool {
     }
 }
 
+/// `true` when `base` and `head` — the module at `path` before and after an edit — compile to
+/// the same JavaScript, the comparison the commit-scoped co-change rule makes for TypeScript.
+///
+/// Both sides are re-emitted from their parse with comments disabled, so `//` and `/* … */`
+/// text, blank lines, and indentation drop out while string and template-literal contents and
+/// type annotations survive. A side that fails to parse is **not** equal: co-change then holds
+/// the file to its colocated test rather than skip a module it couldn't read.
+pub fn same_code(base: &str, head: &str, path: &Path) -> bool {
+    match (
+        emit_without_comments(base, path),
+        emit_without_comments(head, path),
+    ) {
+        (Some(base), Some(head)) => base == head,
+        _ => false,
+    }
+}
+
+/// `source` re-emitted from its parse with every comment dropped, or `None` when oxc cannot
+/// type the path or the module does not parse.
+fn emit_without_comments(source: &str, path: &Path) -> Option<String> {
+    let allocator = Allocator::default();
+    let source_type = SourceType::from_path(path).ok()?;
+    let ret = Parser::new(&allocator, source, source_type).parse();
+    if ret.panicked || !ret.diagnostics.is_empty() {
+        return None;
+    }
+    Some(
+        Codegen::new()
+            .with_options(CodegenOptions {
+                comments: CommentOptions::disabled(),
+                ..CodegenOptions::default()
+            })
+            .build(&ret.program)
+            .code,
+    )
+}
+
 /// Recursively collect every TypeScript test file under `dir` into `out`.
 fn collect_ts_test_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries =
@@ -671,6 +709,82 @@ mod tests {
         assert!(!type_only("// just a comment\n"));
         // A parse failure is conservatively not type-only — the module stays a subject.
         assert!(!type_only("export type T = ;;;\nconst {{{ = \n"));
+    }
+
+    /// Whether `base` and `head` (a module named `foo.ts`) compile to the same JavaScript.
+    fn same(base: &str, head: &str) -> bool {
+        same_code(base, head, Path::new("foo.ts"))
+    }
+
+    #[test]
+    fn same_code_drops_comments_and_formatting() {
+        assert!(same(
+            "// widget factory\nexport const widget = () => 1;\n",
+            "// widget builder\nexport const widget = () => 1;\n"
+        ));
+        assert!(same(
+            "/* widget factory\n   used by the CLI */\nexport const widget = () => 1;\n",
+            "export const widget = () => 1;\n"
+        ));
+        assert!(same(
+            "/** A widget. */\nexport const widget = () => 1;\n",
+            "export const widget = () => 1;\n"
+        ));
+        assert!(same(
+            "export const widget = () => 1;\n",
+            "\n\nexport const widget = () => 1;\n\n"
+        ));
+        assert!(same(
+            "export function widget() { return 1; }\n",
+            "export function widget() {\n        return 1;\n}\n"
+        ));
+    }
+
+    #[test]
+    fn same_code_keeps_everything_the_module_emits() {
+        assert!(!same(
+            "export const widget = () => 1;\n",
+            "export const widget = () => 2;\n"
+        ));
+        // Text inside a string and inside a template literal is a value the module produces.
+        assert!(!same(
+            "export const widget = () => 'one';\n",
+            "export const widget = () => 'two';\n"
+        ));
+        assert!(!same(
+            "export const widget = () => `one`;\n",
+            "export const widget = () => `two`;\n"
+        ));
+        // A type annotation is part of the module the emitter writes back.
+        assert!(!same(
+            "export const widget = (n: number): number => n;\n",
+            "export const widget = (n: string): string => n;\n"
+        ));
+        // A comment riding along with a code change is still a code change.
+        assert!(!same(
+            "// widget factory\nexport const widget = () => 1;\n",
+            "// widget builder\nexport const widget = () => 2;\n"
+        ));
+    }
+
+    #[test]
+    fn same_code_holds_apart_what_it_cannot_read() {
+        // A module that fails to parse, on either side.
+        assert!(!same(
+            "export const widget = (() => 1;\n",
+            "// still broken\nexport const widget = (() => 1;\n"
+        ));
+        assert!(!same(
+            "export const widget = () => 1;\n",
+            "export const widget = (() => 1;\n"
+        ));
+        assert!(!same(
+            "export const widget = (() => 1;\n",
+            "export const widget = () => 1;\n"
+        ));
+        // A path oxc cannot type carries no module to compare.
+        let source = "export const widget = () => 1;\n";
+        assert!(!same_code(source, source, Path::new("widget.txt")));
     }
 
     #[test]

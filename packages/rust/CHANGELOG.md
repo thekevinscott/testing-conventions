@@ -15,12 +15,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   both sides, so the colocated test was already current, and the only way past the gate was an
   exemption for an edit that risked nothing. A modification is now a subject when the file at the
   merge base and the file at HEAD differ once comments and formatting whitespace are normalized
-  away — Python through the parser's token stream (comment tokens and non-logical newlines
-  skipped), TypeScript through its parsed program with comments removed, so both languages reach
+  away — Python through the parser's token stream, where a comment and a blank line never appear,
+  TypeScript through its parsed program re-emitted with comments disabled, so both languages reach
   the rule through their own parser. The normalization is narrow: a docstring, a string literal, a
-  template literal, and Python indentation are code, a comment edit riding along with a code change
-  is a code change, and content that fails to parse on either side counts as changed. The delete
-  arm, which pairs against the base tree, is unchanged.
+  template literal, and the block structure Python indentation carries are code, a comment edit
+  riding along with a code change is a code change, and content that fails to parse on either side
+  counts as changed. The base side is the merge base of `<base>` and HEAD, matching the
+  `<base>...HEAD` diff the rule walks, so a commit that landed on the base branch meanwhile reads
+  as nobody's edit. The delete arm, which pairs against the base tree, is unchanged.
 
 - **`co-change` skips type-only TypeScript modules, as presence already does** (#490). #429 taught
   the `colocated-test` presence rule that a module whose top level is exclusively `type` /

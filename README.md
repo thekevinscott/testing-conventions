@@ -96,7 +96,7 @@ coverage floor's job, so this targets edits and removals.
 - **TypeScript:** a modified or deleted `foo.ts` requires `foo.test.ts` in the same diff.
 - **Rust:** not applicable. Units are an inline `#[cfg(test)]` module in the same file, so the test moves with the source.
 
-A modification counts when it changes code the compiler sees: the merge-base and `HEAD` forms of the file are parsed and compared with comments and formatting whitespace normalized away, so a comment-only or whitespace-only edit passes on its own, while a string, docstring, template-literal, or indentation change is a code change.
+A modification counts when it changes code the compiler sees: the merge-base and `HEAD` forms of the file are parsed and compared with comments and formatting whitespace normalized away, so a comment-only or whitespace-only edit passes on its own, while a string, docstring, template-literal, or Python block-structure change is a code change.
 
 **Checked:** commit-scoped and deterministic. `unit colocated-test --base <ref>` diffs `<ref>...HEAD` and flags any changed source whose colocated test didn't change — an opt-in, additive scope of the colocated-test command (tree-wide presence still runs). Added files and exempt sources are excused.
 

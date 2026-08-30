@@ -1,9 +1,14 @@
 # Changelog
 
-All notable changes to this package are documented here.
+> **Frozen archive.** New entries are fragments under [`changelog.d/`](changelog.d/) — one file
+> per change, so two PRs touching this package add two different paths instead of colliding at
+> the top of this one. This file holds the entries written before that convention: read it for
+> history, never append to it. See `docs/internals/repo.md`, "CHANGELOG + MIGRATIONS".
+
+Changes up to the freeze, newest first.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## Unreleased at the freeze
 
 ### Added
 

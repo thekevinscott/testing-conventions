@@ -1,0 +1,4 @@
+[[rust.exempt]]
+path = "pair.rs"
+rules = ["one-function-per-file"]
+reason = "the codec's two halves are one unit; splitting them hides the inverse pair"

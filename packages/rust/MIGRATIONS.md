@@ -35,6 +35,12 @@ are code, a comment edit riding along with a code change is a code change, and c
 parse on either side counts as changed. The delete arm, which pairs against the base tree, is
 untouched. No API or config change (see **Behavior changes without code changes**).
 
+`unit one-function-per-file` is a new rule: a file holds at most one module-scope function whose
+body runs longer than `[<language>].one_function_per_file.max_lines`, default `1` (#488). Purely
+additive — a new subcommand, a new config table, and a new `one-function-per-file` exemption rule
+id. No existing command, key, or default changes, and nothing runs the new rule unless it is
+invoked.
+
 `co-change` reads the same subject definition presence does (#490). #429 taught presence that a
 type-only TypeScript module erases to zero runtime JavaScript and is not a `colocated-test`
 subject; the commit-scoped arm was not on that issue's acceptance list and kept deciding on
@@ -1627,6 +1633,16 @@ Expected (#503): exit 0. Previously `source changed without its colocated test: 
 no exemption in play. Change a returned value in the same file and re-run: it is a subject again and
 the run fails until its colocated test is in the diff. The TypeScript arm answers the same way for a
 `//` or `/* … */` edit, and for a blank-line or trailing-whitespace sweep in either language.
+
+```
+# a file with two functions whose bodies each run longer than one line
+testing-conventions unit one-function-per-file --language python src
+```
+
+Expected (#488): exit 1, with `src/<file>.py:<line>: one-function-per-file — …` naming every
+function past the first. Raise the bar in `testing-conventions.toml`
+(`[python] one_function_per_file = { max_lines = 20 }`) and re-run: a file whose functions all fit
+under 20 lines passes.
 
 ```
 # a branch whose diff edits a type-only module (only type/interface/import type)

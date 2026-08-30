@@ -1,0 +1,4 @@
+[[python.exempt]]
+path = "pair.py"
+rules = ["one-function-per-file"]
+reason = "the codec's two halves are one unit; splitting them hides the inverse pair"

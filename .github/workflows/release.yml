@@ -44,21 +44,13 @@ jobs:
       # Empty on push events (normal change detection); set via
       # workflow_dispatch to force a specific package/version set.
       release_packages: ${{ inputs.release_packages }}
-    secrets:
-      # First publish of a brand-new crate has no Trusted Publishing path
-      # on crates.io (TP binds to an already-published crate). Forward a
-      # long-lived API token; the reusable workflow skips the OIDC
-      # exchange when this secret is set. Once 0.0.1 is on crates.io,
-      # register a Trusted Publisher and unset this.
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      # Same story for npm: Trusted Publishing binds to an
-      # already-published package, so the first publish needs a
-      # long-lived automation token. The reusable workflow exports this
-      # as NODE_AUTH_TOKEN for the npm CLI when set, and skips the OIDC
-      # exchange. Without it, scoped-package PUTs return 404 (npm uses
-      # 404 instead of 401 for unauthenticated writes). Drop once
-      # Trusted Publishers are registered on all npm package names.
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    # No `secrets:` block: every registry authenticates through OIDC, and
+    # `id-token: write` above is the whole credential surface. The reusable
+    # workflow gates its crates.io and npm OIDC exchanges on the caller's
+    # token being empty, so forwarding a secret here is what selects the
+    # classic long-lived-token path instead. Both names are past their
+    # bootstrap publish, which is the one release Trusted Publishing cannot
+    # serve. See docs/internals/repo.md, "Release credentials".
 
   # PyPI upload runs in the caller's workflow context. Required because
   # PyPI Trusted Publishers can't validate OIDC tokens minted from a

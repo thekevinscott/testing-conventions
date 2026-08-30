@@ -1,0 +1,7 @@
+# Each language sets its own one-function-per-file threshold; a language with no
+# table keeps the default of one line.
+[python]
+one_function_per_file = { max_lines = 5 }
+
+[typescript.one_function_per_file]
+max_lines = 20

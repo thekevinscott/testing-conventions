@@ -10,6 +10,7 @@
 
 use std::path::PathBuf;
 
+use testing_conventions::colocated_test::Language;
 use testing_conventions::config::{
     load_config, Config, PythonConfig, PythonCoverage, Rule, RustConfig, RustCoverage,
     TypeScriptConfig, TypeScriptCoverage,
@@ -30,6 +31,7 @@ fn expected_valid() -> Config {
                 branch: true,
                 fail_under: 100,
             }),
+            one_function_per_file: None,
             exempt: vec![],
             build_command: None,
             reason: String::new(),
@@ -41,6 +43,7 @@ fn expected_valid() -> Config {
                 functions: 100,
                 statements: 100,
             }),
+            one_function_per_file: None,
             exempt: vec![],
             build_command: None,
             reason: String::new(),
@@ -53,6 +56,7 @@ fn expected_valid() -> Config {
                 branch: None,
             }),
             features: vec![],
+            one_function_per_file: None,
             exempt: vec![],
             build_command: None,
             reason: String::new(),
@@ -312,4 +316,25 @@ fn an_unknown_nested_key_error_points_at_migrations() {
         chain.contains("MIGRATIONS.md"),
         "the nested unknown-key error must point at MIGRATIONS.md, got: {chain}"
     );
+}
+
+#[test]
+fn one_function_per_file_thresholds_are_per_language_and_default_to_one() {
+    let config = load_config(fixture("one_function_per_file.toml"))
+        .expect("a one_function_per_file table should load");
+    assert_eq!(config.one_function_max_lines(Language::Python), 5);
+    assert_eq!(config.one_function_max_lines(Language::TypeScript), 20);
+    // No `[rust]` table at all: the language falls back to the default threshold.
+    assert_eq!(config.one_function_max_lines(Language::Rust), 1);
+}
+
+#[test]
+fn one_function_per_file_is_a_waivable_rule_id() {
+    assert_eq!(
+        Rule::from_id("one-function-per-file"),
+        Some(Rule::OneFunctionPerFile)
+    );
+    assert_eq!(Rule::OneFunctionPerFile.id(), "one-function-per-file");
+    // Whole-file, like every other lint: a `lines` list may not scope it.
+    assert!(!Rule::OneFunctionPerFile.is_line_scopable());
 }

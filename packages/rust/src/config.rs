@@ -36,6 +36,8 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct PythonConfig {
     pub coverage: Option<PythonCoverage>,
+    /// The `one-function-per-file` threshold; see [`OneFunctionPerFile`].
+    pub one_function_per_file: Option<OneFunctionPerFile>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
     /// The build declaration: a shell
@@ -81,6 +83,8 @@ pub struct E2eConfig {
 #[serde(deny_unknown_fields)]
 pub struct TypeScriptConfig {
     pub coverage: Option<TypeScriptCoverage>,
+    /// The `one-function-per-file` threshold; see [`OneFunctionPerFile`].
+    pub one_function_per_file: Option<OneFunctionPerFile>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
     /// The build declaration; see [`PythonConfig::build_command`]. For TypeScript it's
@@ -99,6 +103,8 @@ pub struct TypeScriptConfig {
 #[serde(deny_unknown_fields)]
 pub struct RustConfig {
     pub coverage: Option<RustCoverage>,
+    /// The `one-function-per-file` threshold; see [`OneFunctionPerFile`].
+    pub one_function_per_file: Option<OneFunctionPerFile>,
     /// Cargo features the suite-running Rust rules enable: `unit coverage`
     /// passes them to `cargo llvm-cov` (`--features`) and `unit mutation` passes them
     /// to cargo-mutants (`--features`), which enables them on every cargo invocation
@@ -209,6 +215,27 @@ impl Default for RustCoverage {
     }
 }
 
+/// `[<language>].one_function_per_file`. A **partial override** — `#[serde(default)]`
+/// fills a missing field from [`OneFunctionPerFile::default`], and `deny_unknown_fields`
+/// still rejects a typo'd key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct OneFunctionPerFile {
+    /// The longest body a module-scope function may have and still **share** a file.
+    /// A function longer than this must be the file's only such function.
+    pub max_lines: u32,
+}
+
+/// The default threshold used when the table is absent: `max_lines = 1`. A one-line
+/// function is an expression with a name — it carries no branch to test in isolation,
+/// so it shares a file freely, and anything longer earns its own module. A config
+/// table raises the line for a tree whose natural grain is longer functions.
+impl Default for OneFunctionPerFile {
+    fn default() -> Self {
+        Self { max_lines: 1 }
+    }
+}
+
 /// A rule a file can be exempted from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -247,6 +274,9 @@ pub enum Rule {
     UnknownTier,
     /// `unit mutation` — a surviving mutant the unit suite didn't catch ([`crate::mutation`]).
     Mutation,
+    /// `unit one-function-per-file` — a module-scope function sharing its file with
+    /// another over the threshold ([`crate::one_function`]).
+    OneFunctionPerFile,
 }
 
 impl Rule {
@@ -278,6 +308,7 @@ impl Rule {
             Rule::NoFirstPartyMock => "no-first-party-mock",
             Rule::UnknownTier => "unknown-tier",
             Rule::Mutation => "mutation",
+            Rule::OneFunctionPerFile => "one-function-per-file",
         }
     }
 
@@ -300,6 +331,7 @@ impl Rule {
             Rule::NoFirstPartyMock,
             Rule::UnknownTier,
             Rule::Mutation,
+            Rule::OneFunctionPerFile,
         ]
         .into_iter()
         .find(|rule| rule.id() == id)
@@ -503,6 +535,24 @@ impl Config {
             }
             crate::colocated_test::Language::Rust => self.rust_exemptions(),
         }
+    }
+
+    /// The `one-function-per-file` threshold for `language` — the longest body a
+    /// function may have and still share a file. An absent table means the default.
+    pub fn one_function_max_lines(&self, language: crate::colocated_test::Language) -> u32 {
+        let table = match language {
+            crate::colocated_test::Language::Python => {
+                self.python.as_ref().and_then(|c| c.one_function_per_file)
+            }
+            crate::colocated_test::Language::TypeScript => self
+                .typescript
+                .as_ref()
+                .and_then(|c| c.one_function_per_file),
+            crate::colocated_test::Language::Rust => {
+                self.rust.as_ref().and_then(|c| c.one_function_per_file)
+            }
+        };
+        table.unwrap_or_default().max_lines
     }
 
     /// The `[[rust.exempt]]` list (empty when the table is absent). The named

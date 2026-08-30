@@ -71,3 +71,27 @@ presence exemption.
 Co-change and [changed-line coverage](./coverage#the-changed-line-floor) are complementary:
 co-change enforces that the source and its *test* move together; the coverage floor enforces that
 the changed *lines* are exercised. One can pass while the other fails.
+
+### A modification is a change the compiler sees
+
+What makes a modification a subject is the edit itself, not the file's appearance in the diff. The
+source at the merge base and the source at `HEAD` are both parsed, with comments and formatting
+whitespace normalized away, and the file is a subject when those two forms differ. A comment-only
+edit — rewording a `#` note, a `//` line, or a `/* … */` block, or removing one outright — and a
+whitespace-only edit — a blank line, trailing spaces — compile to the same program, so the
+colocated test still pins the behavior the file has, and the edit passes on its own.
+
+The normalization is deliberately narrow, and everything outside it stays a subject:
+
+- **Python** compares the parser's token stream, skipping comment tokens and the newlines that
+  carry no structure. A docstring is a string expression, so editing one is a code change, and
+  indentation carries block structure, so re-indenting is a code change.
+- **TypeScript** compares the parsed program with comments removed. Text inside a string or a
+  template literal is code, so editing it is a code change.
+- A comment edit that travels with a code change is a code change: the code half makes the file a
+  subject.
+- Content that fails to parse on either side counts as changed, so an unparseable file is held to
+  its colocated test.
+
+Both languages reach the same rule through their own parser, so the two arms agree on what an edit
+means — the parity the standard holds every rule to.

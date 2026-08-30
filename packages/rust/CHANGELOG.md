@@ -7,6 +7,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`co-change` reads what a modification changed, so a comment-only or whitespace-only edit is
+  not a subject** (#503). The modify arm asked only whether the file at HEAD `is_subject` — a file
+  that carries behavior and appears as `M` in the diff was held to its colocated test, whatever the
+  edit did. Rewording a `#` comment, deleting a `/* … */` block, or dropping a blank line therefore
+  demanded a test change to pin behavior that had not moved: the compiler sees the same program on
+  both sides, so the colocated test was already current, and the only way past the gate was an
+  exemption for an edit that risked nothing. A modification is now a subject when the file at the
+  merge base and the file at HEAD differ once comments and formatting whitespace are normalized
+  away — Python through the parser's token stream (comment tokens and non-logical newlines
+  skipped), TypeScript through its parsed program with comments removed, so both languages reach
+  the rule through their own parser. The normalization is narrow: a docstring, a string literal, a
+  template literal, and Python indentation are code, a comment edit riding along with a code change
+  is a code change, and content that fails to parse on either side counts as changed. The delete
+  arm, which pairs against the base tree, is unchanged.
+
 - **`co-change` skips type-only TypeScript modules, as presence already does** (#490). #429 taught
   the `colocated-test` presence rule that a module whose top level is exclusively `type` /
   `interface` / `import type` / `export type` erases to zero runtime JavaScript and is not a

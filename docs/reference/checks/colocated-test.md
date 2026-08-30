@@ -36,6 +36,14 @@ TypeScript):
 - an **added** source is not a subject — brand-new code is the
   [changed-line coverage floor](./unit-coverage#the-changed-line-job)'s concern.
 
+A modification is a subject when it changes code the compiler sees. The file at the merge base and
+the file at `HEAD` are parsed and compared with comments and formatting whitespace normalized away,
+so a `#` / `//` / `/* … */` comment edit, a blank-line change, and a trailing-whitespace change
+compare equal and pass on their own — the colocated test still pins the behavior the file has. Text
+inside a string literal, a Python docstring, and a TypeScript template literal is code, as is
+Python indentation, so an edit there is a subject; so is a comment edit that travels with a code
+change. Content that fails to parse on either side counts as changed and is held to its test.
+
 Changing a test on its own always passes. Rust units are inline in the same file, so a sibling
 test can't go stale and co-change doesn't apply to Rust — a deliberate asymmetry.
 
@@ -60,7 +68,8 @@ The check takes no keys of its own. Its exemption rules, each a
 | `colocated-test` | the presence requirement for one file (a launcher shim, a re-export barrel) |
 | `co-change` | the co-change requirement for one file, independently of presence |
 
-Both are whole-file rules. Empty and comment-only files are never subjects, with no
+Both are whole-file rules. Empty and comment-only files are never subjects, and a comment-only or
+whitespace-only edit is never a co-change subject — the files themselves decide both, with no
 configuration.
 
 ## Learn more

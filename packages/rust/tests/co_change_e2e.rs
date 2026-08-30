@@ -266,6 +266,93 @@ fn the_type_only_skip_does_not_silence_a_runtime_change() {
 }
 
 #[test]
+fn python_comment_only_edit_exits_zero() {
+    // A `#` comment reword leaves the interpreter the same program, so the colocated
+    // test still pins current behavior and the run passes unexempted.
+    let repo = TempRepo::new("py-comment-only");
+    repo.write(
+        "widget.py",
+        "# widget helpers\ndef widget():\n    return 1\n",
+    );
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+    repo.write(
+        "widget.py",
+        "# widget utilities\ndef widget():\n    return 1\n",
+    );
+    repo.commit("reword the comment");
+
+    let (code, stderr) = co_change(&repo, "python", &base, None);
+    assert_eq!(
+        code, 0,
+        "a comment-only edit is not a co-change subject; stderr: {stderr}"
+    );
+}
+
+#[test]
+fn typescript_comment_only_edit_exits_zero() {
+    let repo = TempRepo::new("ts-comment-only");
+    repo.write(
+        "widget.ts",
+        "// widget factory\nexport const widget = () => 1;\n",
+    );
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.commit("base");
+    let base = repo.head();
+    repo.write(
+        "widget.ts",
+        "// widget builder\nexport const widget = () => 1;\n",
+    );
+    repo.commit("reword the comment");
+
+    let (code, stderr) = co_change(&repo, "typescript", &base, None);
+    assert_eq!(
+        code, 0,
+        "a comment-only edit is not a co-change subject; stderr: {stderr}"
+    );
+}
+
+#[test]
+fn the_comment_only_skip_does_not_silence_a_code_change() {
+    // Two files move in one commit: the comment reword is skipped, and the source whose
+    // code changed without its test is still named and still fails.
+    let repo = TempRepo::new("py-comment-only-red");
+    repo.write(
+        "widget.py",
+        "# widget helpers\ndef widget():\n    return 1\n",
+    );
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.write("gadget.py", "def gadget():\n    return 1\n");
+    repo.write(
+        "gadget_test.py",
+        "from gadget import gadget\n\n\ndef test_gadget():\n    assert gadget() == 1\n",
+    );
+    repo.commit("base");
+    let base = repo.head();
+    repo.write(
+        "widget.py",
+        "# widget utilities\ndef widget():\n    return 1\n",
+    );
+    repo.write("gadget.py", "def gadget():\n    return 2\n");
+    repo.commit("reword one comment, change one value");
+
+    let (code, stderr) = co_change(&repo, "python", &base, None);
+    assert_eq!(
+        code, 1,
+        "a code edit without its test still fails; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("gadget.py"),
+        "stderr should name the changed source; got: {stderr}"
+    );
+    assert!(
+        !stderr.contains("widget.py"),
+        "stderr should not name the comment-only edit; got: {stderr}"
+    );
+}
+
+#[test]
 fn rust_is_rejected() {
     // Rust units are inline `#[cfg(test)]` — no sibling test to go stale.
     let repo = TempRepo::new("rust");

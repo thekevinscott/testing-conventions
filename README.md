@@ -86,7 +86,7 @@ vi.mock('./service', async () => {
 
 #### Co-change
 
-**Rule:** when a source file changes, its colocated unit test changes with it.
+**Rule:** when a source file changes the code the compiler sees, its colocated unit test changes with it.
 
 **Why:** an edit or removal that leaves the colocated test untouched lets the test
 go stale; the test should move with the code it pins. Adding new code is the
@@ -95,6 +95,8 @@ coverage floor's job, so this targets edits and removals.
 - **Python:** a modified or deleted `foo.py` requires `foo_test.py` in the same diff.
 - **TypeScript:** a modified or deleted `foo.ts` requires `foo.test.ts` in the same diff.
 - **Rust:** not applicable. Units are an inline `#[cfg(test)]` module in the same file, so the test moves with the source.
+
+A modification counts when it changes code the compiler sees: the merge-base and `HEAD` forms of the file are parsed and compared with comments and formatting whitespace normalized away, so a comment-only or whitespace-only edit passes on its own, while a string, docstring, template-literal, or indentation change is a code change.
 
 **Checked:** commit-scoped and deterministic. `unit colocated-test --base <ref>` diffs `<ref>...HEAD` and flags any changed source whose colocated test didn't change — an opt-in, additive scope of the colocated-test command (tree-wide presence still runs). Added files and exempt sources are excused.
 

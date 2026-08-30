@@ -34,7 +34,9 @@ def _ops(changed=(), added=(), messages=""):
 def _run(base="base", head="head", **kwargs):
     ops = _ops(**kwargs)
     seen = ops.pop("seen")
-    return run(base, head, **ops), seen
+    # Keyword SHAs on purpose: they sit before `run`'s keyword-only marker, so a call that
+    # names them proves the injected reads stay keyword-only and the SHAs do not.
+    return run(base_sha=base, head_sha=head, **ops), seen
 
 
 def test_a_skip_line_bypasses_the_gate(capsys):

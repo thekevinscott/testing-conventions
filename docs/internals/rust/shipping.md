@@ -70,7 +70,7 @@ The full three-artifact shape (Rust crate + npm wrapper + PyPI wheel) and the wr
 | `check.yml` | `cargo check` | every push/PR |
 | `docs.yml` | `cargo doc` build (catches broken intra-doc links) | push to main |
 | `release.yml` | `uses: thekevinscott/putitoutthere/.github/workflows/release.yml@v0` | push to main |
-| `changelog-check.yml` | CHANGELOG.md + MIGRATIONS.md touched (or `skip-changelog:` trailer) | every PR |
+| `changelog-check.yml` | a `changelog.d/` + `migrations.d/` fragment per changed package (or a `skip-changelog:` line) | every PR |
 
 ```yaml
 - uses: actions/checkout@v6

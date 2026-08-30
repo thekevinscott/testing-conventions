@@ -31,6 +31,22 @@ everything an ecosystem standardizes is still derived, for every language it sta
 
 Every PR starts with **documentation, written alongside the red tests** — both come before the implementation. Update the public-facing docs (the `docs/` site and `README.md`) when the change is user-visible; when a change has **no public-facing surface** (an internal refactor, a private command, tooling), document it in the internal docs (`docs/internals/`) instead. There is always a docs update in every PR — public or internal. (A docs-only PR is just that update, with no red tests — see below.)
 
+## Changelog and migrations are fragments
+
+A PR that changes public API under `packages/<pkg>/` adds **one new file** to each of that
+package's fragment directories: `packages/<pkg>/changelog.d/YYYY-MM-DD-<slug>.md` and
+`packages/<pkg>/migrations.d/YYYY-MM-DD-<slug>.md`. The gate (`changelog.yml`, running
+`tc-checks changelog-gate`) requires both per changed package; a `skip-changelog: <reason>` line
+on any commit bypasses it for a genuinely internal refactor.
+
+The package-root `CHANGELOG.md` and `MIGRATIONS.md` are a **frozen archive** of the entries
+written before this convention. Never append to them — a shared file every PR edits at the same
+anchor is what made concurrent PRs conflict by construction, which is the whole reason fragments
+exist. Direction of travel is one way: an entry becomes a fragment, never the reverse.
+
+`docs/internals/repo.md` ("CHANGELOG + MIGRATIONS") carries the naming rules and the required
+sections of each fragment kind.
+
 ## Cross-language parity
 
 Strive for parity across the supported languages (Python, TypeScript, Rust). The bar is **least parity** — a rule or feature is offered only to the level the *least-capable* language can support. No language-only features (e.g. a Rust- or TypeScript-only rule): if a capability can't be met in one language, scope the feature down to the common denominator, or hold it until parity is reachable, rather than shipping it for some languages and not others. Any deliberate, unavoidable asymmetry must be called out explicitly in the rule's docs and reasoning.
@@ -112,7 +128,7 @@ correct change in this PR.
 internal tools, so a breaking change here is a known, accepted cost: the dependent projects get
 refactored to match. Never water down or postpone the right change to preserve compatibility.
 (This is about willingness to break and to act now — not a licence to skip the work: breaking
-changes are still documented in `CHANGELOG.md` / `MIGRATIONS.md`, and "now" still means the
+changes are still documented in a changelog and a migration fragment, and "now" still means the
 needed change, not speculative future-proofing per **Out of scope** below.)
 
 ## Exemptions

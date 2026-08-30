@@ -15,7 +15,7 @@ Each entry has five sections, in order:
 4. **Behavior changes without code changes** — same API, different runtime behavior.
 5. **Verification** — commands that confirm the upgrade worked, with expected output.
 
-## Unreleased
+## Unreleased at the freeze
 
 ### Summary
 

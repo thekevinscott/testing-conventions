@@ -129,3 +129,17 @@ The workflow *file* is pinned at `@v0`; the `testing-conventions` **binary** it 
 fresh from npm each run (the latest published version), and `@v0` only advances once that binary is
 published — so the workflow and the binary it calls always match. To freeze the binary, set the
 `version` input; the workflow file still tracks `@v0`.
+
+### Which version ran
+
+Every check names its own version on stderr before doing anything else, so each job's log opens
+with the build that ran:
+
+```
+testing-conventions 0.0.92
+```
+
+The line comes from the binary itself rather than a separate lookup, so it is the version that
+produced the result below it — including on a run that fails, and on one that fails to parse its
+arguments at all. Read it whenever a gate's behavior surprises you: it tells you in one line
+whether `latest` handed this job the release you expected.

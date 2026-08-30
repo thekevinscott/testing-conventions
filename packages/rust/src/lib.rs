@@ -255,6 +255,13 @@ where
     I: IntoIterator<Item = T>,
     T: Into<std::ffi::OsString> + Clone,
 {
+    // CI resolves this binary from npm's unpinned `latest`, so the run itself is the
+    // only place that can name which build it got. Written before parsing, so a run
+    // that dies on an unrecognized flag — a stale binary meeting a newer workflow —
+    // still names the version that refused it, and to stderr, because `e2e slug`'s
+    // stdout is read by command substitution. `CARGO_PKG_VERSION` is clap's `version`
+    // source too, so the banner and `--version` cannot disagree.
+    eprintln!("testing-conventions {}", env!("CARGO_PKG_VERSION"));
     let cli = Cli::try_parse_from(args)?;
     match cli.command {
         // The config-driven `check` umbrella isn't wired yet; the scaffold

@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- **Every run names the version that ran** (#498). CI resolves this binary from npm's unpinned
+  `latest`, and nothing in a job's log recorded which build it got — so a run that failed because
+  it had resolved yesterday's version was indistinguishable from one that failed on its merits.
+  The gap turned a 90-second registry race into a manual investigation: 0.0.92 published at
+  `2026-08-30T11:28:20Z`, runs starting at `11:29:25Z` still resolved the version before it, and
+  establishing that took reproducing the pin locally because the failing job never said what it
+  ran. Every invocation now writes `testing-conventions <version>` to stderr. It is written before
+  argument parsing, so a run that dies on an unrecognized flag — a stale binary meeting a newer
+  workflow, the failure this most needs to explain — still names the version that refused it. The
+  line shares `CARGO_PKG_VERSION` with clap's `--version`, so the two cannot disagree, and it goes
+  to stderr so `e2e slug`'s stdout stays consumable by command substitution.
+
 ### Fixed
 
 - **`co-change` reads what a modification changed, so a comment-only or whitespace-only edit is

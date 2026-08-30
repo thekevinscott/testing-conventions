@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from typing import Optional
 
 ROOT = "packages"
 
@@ -77,7 +78,7 @@ def code_touched(changed: Iterable[str], pkg: str) -> bool:
     )
 
 
-def fragment(path: str) -> tuple[str, str, str] | None:
+def fragment(path: str) -> Optional[tuple[str, str, str]]:
     """`(package dir, kind, filename)` when `path` is a fragment, else `None`."""
     match = _FRAGMENT.fullmatch(path)
     return (match.group(1), match.group(2), match.group(3)) if match is not None else None

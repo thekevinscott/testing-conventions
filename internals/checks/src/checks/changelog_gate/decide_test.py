@@ -59,6 +59,20 @@ def test_changed_packages_ignores_a_bare_file_directly_under_packages():
     assert changed_packages(["packages/README.md"]) == []
 
 
+def test_changed_packages_ignores_the_packages_directory_itself():
+    # No package segment at all: the path must have a segment *under* `packages/`.
+    assert changed_packages(["packages"]) == []
+
+
+def test_changed_packages_takes_a_file_sitting_at_a_package_root():
+    assert changed_packages(["packages/rust/Cargo.toml"]) == ["packages/rust"]
+
+
+def test_changed_packages_ignores_a_root_that_sorts_after_packages():
+    # The first segment is compared for equality, not order.
+    assert changed_packages(["tools/rust/lib.rs"]) == []
+
+
 def test_code_touched_is_true_for_package_source():
     assert code_touched(["packages/rust/src/lib.rs"], "packages/rust") is True
 

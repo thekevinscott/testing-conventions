@@ -90,7 +90,7 @@ fn a_relative_scan_path_runs_from_the_package_root() {
         .expect("the built binary should run");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        !stderr.contains("is `node` installed?"),
+        !stderr.contains("is `node` on PATH?"),
         "a missing working directory must not masquerade as a missing interpreter; got: {stderr}"
     );
     assert_eq!(

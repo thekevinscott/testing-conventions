@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A failed mutation-adapter spawn names every path it used, and the Python arm no longer
+  reports a missing working directory as a missing `python3`** (#493). `Command::output()`
+  returns the same `ENOENT` whether the program is off `PATH` or the working directory does not
+  exist — it never returns one for a bad argument path — and both spawn sites wrapped that error
+  with a context string committing to the first cause. #478 was that ambiguity in the TypeScript
+  arm; #479 closed it there with a working-directory pre-check and left the Python arm standing,
+  where ``testing-conventions unit mutation --language python ./no-such-dir`` still answered
+  ``running the Python mutation adapter (is `python3` installed?)``. Both arms now share the
+  checked-working-directory helper, so neither can spawn into a directory that isn't there, and
+  a spawn failure states what it ran — ``spawning `<interpreter> <entry>` in `<dir>` (is
+  `<interpreter>` on PATH?)`` — rather than asserting a cause. The old message named no path at
+  all, which is what made #478 read as a broken CI image for a week.
+
 - **A mutation run that judges zero mutants says so, and the Rust arm proves it** (#481).
   cargo-mutants exits `0` without writing `outcomes.json` when its `--in-diff` filter matches
   nothing, and the tool read that as `Tested { count: 0 }` — printing `every mutation was caught

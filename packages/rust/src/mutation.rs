@@ -598,6 +598,44 @@ fn to_scan_relative(mutants: Vec<NormalizedMutant>, prefix: Option<&str>) -> Vec
         .collect()
 }
 
+/// The checked working directory for an adapter run rooted at `root`, for the named
+/// `engine` ("TypeScript" / "Python").
+///
+/// [`crate::tiers::package_root`] walks `scan_root.ancestors()`, which ends at `""`
+/// for a **relative** scan path like `src` — and `Path::new("").join("package.json")`
+/// resolves against the cwd, so the walk stops there and hands back an empty path.
+/// That is the right answer for the callers that join onto it, but
+/// `Command::current_dir("")` fails with ENOENT. Normalise it to `.`.
+///
+/// The directory is then checked, because `Command::output()` reports a missing working
+/// directory and a missing interpreter as the same ENOENT (#478/#493) — so without the
+/// check a directory that isn't there reads as an interpreter that isn't installed.
+fn adapter_cwd<'a>(root: &'a Path, engine: &str) -> Result<&'a Path> {
+    let cwd = if root.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        root
+    };
+    if !cwd.is_dir() {
+        bail!(
+            "the {engine} mutation adapter's working directory `{}` is not a directory",
+            cwd.display()
+        );
+    }
+    Ok(cwd)
+}
+
+/// The context a failed adapter spawn carries. `Command::output()` surfaces the bare OS
+/// error, whose ENOENT names nothing at all — so the message names every path the spawn
+/// used: the interpreter, the entry point it was handed, and the directory it ran in
+/// (#493). Naming none of them is what made #478 read as a missing `node`.
+fn spawn_context(interpreter: &str, entry: &str, cwd: &Path) -> String {
+    format!(
+        "spawning `{interpreter} {entry}` in `{}` (is `{interpreter}` on PATH?)",
+        cwd.display()
+    )
+}
+
 /// Run the bundled TS mutation `adapter` at `package_root` and return the
 /// normalized-results JSON it writes. The adapter (a Node entry shipped with the npm
 /// package) drives Stryker via its Node API and emits a [`NormalizedMutant`] array — so
@@ -610,21 +648,6 @@ fn to_scan_relative(mutants: Vec<NormalizedMutant>, prefix: Option<&str>) -> Vec
 /// Results are written to a temp file the adapter names via `--out` (so Stryker's own
 /// stdout logging can't corrupt them), then read back. `node` and the project's own test
 /// runner must be available; a non-zero adapter exit surfaces its captured output.
-/// The working directory for an adapter run rooted at `package_root`.
-///
-/// [`crate::tiers::package_root`] walks `scan_root.ancestors()`, which ends at `""`
-/// for a **relative** scan path like `src` — and `Path::new("").join("package.json")`
-/// resolves against the cwd, so the walk stops there and hands back an empty path.
-/// That is the right answer for the callers that join onto it, but
-/// `Command::current_dir("")` fails with ENOENT. Normalise it to `.`.
-fn adapter_cwd(package_root: &Path) -> &Path {
-    if package_root.as_os_str().is_empty() {
-        Path::new(".")
-    } else {
-        package_root
-    }
-}
-
 fn run_ts_adapter(
     package_root: &Path,
     adapter: &Path,
@@ -635,15 +658,7 @@ fn run_ts_adapter(
     std::fs::create_dir_all(&out.0).context("creating the mutation adapter output dir")?;
     let results = out.0.join("results.json");
 
-    // Checked up front so a missing working directory cannot masquerade as a
-    // missing interpreter in the ENOENT below.
-    let cwd = adapter_cwd(package_root);
-    if !cwd.is_dir() {
-        bail!(
-            "the TypeScript mutation adapter's package root `{}` is not a directory",
-            cwd.display()
-        );
-    }
+    let cwd = adapter_cwd(package_root, "TypeScript")?;
 
     let mut command = Command::new("node");
     command
@@ -659,7 +674,7 @@ fn run_ts_adapter(
     }
     let output = command
         .output()
-        .context("running the TypeScript mutation adapter (is `node` installed?)")?;
+        .with_context(|| spawn_context("node", &adapter.display().to_string(), cwd))?;
     if !output.status.success() {
         bail!(
             "the TypeScript mutation adapter failed in `{}`:\n{}{}",
@@ -813,9 +828,12 @@ fn run_py_adapter(root: &Path, modules: &[String]) -> Result<String> {
     std::fs::create_dir_all(&out.0).context("creating the mutation adapter output dir")?;
     let results = out.0.join("results.json");
 
+    let cwd = adapter_cwd(root, "Python")?;
+
+    const ENTRY: &str = "-m testing_conventions.mutation.main";
     let mut command = Command::new("python3");
     command
-        .current_dir(root)
+        .current_dir(cwd)
         .args(["-m", "testing_conventions.mutation.main", "--out"])
         .arg(&results)
         .env("PYTHONDONTWRITEBYTECODE", "1");
@@ -824,11 +842,11 @@ fn run_py_adapter(root: &Path, modules: &[String]) -> Result<String> {
     }
     let output = command
         .output()
-        .context("running the Python mutation adapter (is `python3` installed?)")?;
+        .with_context(|| spawn_context("python3", ENTRY, cwd))?;
     if !output.status.success() {
         bail!(
             "the Python mutation adapter failed in `{}`:\n{}{}",
-            root.display(),
+            cwd.display(),
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr),
         );
@@ -1594,9 +1612,38 @@ mod tests {
         // and `Command::current_dir("")` fails with ENOENT — which the adapter's
         // error context mislabelled as a missing `node`. Every TypeScript consumer
         // of the mutation gate hit this, since the reusable workflow scans `src`.
-        assert_eq!(adapter_cwd(Path::new("")), Path::new("."));
-        assert_eq!(adapter_cwd(Path::new("pkg")), Path::new("pkg"));
-        assert_eq!(adapter_cwd(Path::new("/repo/pkg")), Path::new("/repo/pkg"));
+        // Cargo runs a unit test from the crate root, so `.` and `src` are both real.
+        assert_eq!(
+            adapter_cwd(Path::new(""), "TypeScript").unwrap(),
+            Path::new(".")
+        );
+        assert_eq!(
+            adapter_cwd(Path::new("src"), "TypeScript").unwrap(),
+            Path::new("src")
+        );
+    }
+
+    #[test]
+    fn adapter_cwd_rejects_a_directory_that_is_not_there() {
+        // The check is the point: `Command::output()` reports a missing working directory
+        // with the same ENOENT as a missing interpreter, so an unchecked spawn tells a
+        // consumer whose scan path is wrong that the interpreter is missing instead.
+        let err = adapter_cwd(Path::new("no/such/dir"), "Python")
+            .expect_err("a directory that is not there is an error");
+        assert_eq!(
+            err.to_string(),
+            "the Python mutation adapter's working directory `no/such/dir` is not a directory"
+        );
+    }
+
+    #[test]
+    fn spawn_context_names_the_interpreter_the_entry_and_the_working_directory() {
+        // Every path the spawn used, so an ENOENT is diagnosable from the message alone.
+        // The #478 message named none of them, and cost hours to a wrong first guess.
+        assert_eq!(
+            spawn_context("node", "/pkg/dist/mutation/main.js", Path::new("/pkg")),
+            "spawning `node /pkg/dist/mutation/main.js` in `/pkg` (is `node` on PATH?)"
+        );
     }
 
     #[test]

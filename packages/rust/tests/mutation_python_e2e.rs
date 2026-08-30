@@ -108,6 +108,34 @@ fn a_diff_with_no_mutatable_changed_lines_reports_the_engine_not_run() {
 }
 
 #[test]
+fn a_scan_path_that_is_not_there_names_the_directory_not_the_interpreter() {
+    // `run_py_adapter` spawned with `current_dir(root)` unchecked, and
+    // `Command::output()` reports a missing working directory with the same ENOENT as a
+    // missing interpreter — so a scan path that isn't there read as ``is `python3`
+    // installed?``. That is the #478 mislabel, which was closed for the TypeScript arm
+    // and left standing here. The failure must name the directory it could not enter.
+    // No adapter is spawned, so this holds with no cosmic-ray in the environment.
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "python", "no/such/dir"])
+        .output()
+        .expect("the built binary should run");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "a scan path that is not there fails the run; stderr: {stderr}"
+    );
+    assert!(
+        !stderr.contains("is `python3` installed?"),
+        "a missing working directory must not masquerade as a missing interpreter; got: {stderr}"
+    );
+    assert!(
+        stderr.contains("no/such/dir"),
+        "the error names the directory it could not enter; got: {stderr}"
+    );
+}
+
+#[test]
 fn survivors_fail_the_gate_by_default() {
     // The gate is on by default and binary: an un-exempted surviving mutant fails the
     // run, no config required. The default package layout is scanned at `src/`.

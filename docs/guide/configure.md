@@ -31,6 +31,26 @@ the rest keep their default. (A typo'd key is still rejected; only *missing* key
 [Reference — coverage keys](../reference/config#coverage) for every key and default, and
 [Why a 100% floor](../explanation/coverage) before you lower one.
 
+## Raise the one-function-per-file threshold
+
+`unit one-function-per-file` runs for Python and TypeScript with no configuration; Rust opts in by
+naming a threshold. It allows one module-scope function per file whose body runs longer than
+`max_lines`, and the default is `1`. A codebase whose natural grain is longer functions moves the
+line under the language's table:
+
+```toml
+[python]
+one_function_per_file = { max_lines = 5 }
+
+[typescript]
+one_function_per_file = { max_lines = 20 }
+```
+
+A function at or under the threshold is trivial and shares a file freely. Raising the number moves
+where "trivial" ends; the one-per-file ceiling above it holds at every setting. See
+[One function per file](../explanation/one-function-per-file) for what counts as a function and as
+a line.
+
 ## Exempt a file
 
 Some files genuinely shouldn't be tested — a launcher shim, a re-export barrel, generated code. A
@@ -66,8 +86,9 @@ reason = "pure re-export barrel; no logic of its own"
 
 - `path` is relative to the scanned `source`, and must point to a file that exists — a stale entry
   is a hard error, so the list can't silently rot.
-- `rules` names the checks the entry lifts (`colocated-test`, a mutation or lint rule). For
-  `coverage` / `mutation`, see the line-scoped form below — those are never whole-file.
+- `rules` names the checks the entry lifts (`colocated-test`, `one-function-per-file`, a
+  mutation or lint rule). For `coverage` / `mutation`, see the line-scoped form below —
+  those are never whole-file.
 - `reason` is required; a reason-less entry is rejected when the config loads.
 
 Because every exemption lives in this one file, names its rules, and carries a reason, the whole

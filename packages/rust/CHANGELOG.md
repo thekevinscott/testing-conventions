@@ -19,6 +19,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   line shares `CARGO_PKG_VERSION` with clap's `--version`, so the two cannot disagree, and it goes
   to stderr so `e2e slug`'s stdout stays consumable by command substitution.
 
+- **`unit one-function-per-file`: a file holds at most one substantial module-scope function**
+  (#488). Colocation pairs a file with a test, so the pairing is worth what the file is coherent:
+  a file holding ten functions still has one colocated test, and a coverage or mutation result
+  reported against it says nothing about which function produced it. The new rule caps a file at
+  one module-scope function whose body runs longer than a threshold — Python `def` / `async def`,
+  TypeScript top-level `function` declarations and `const` / `let` / `var` bound to an arrow or
+  function expression, Rust file-top-level `fn` items. Methods, nested functions, and callbacks
+  belong to their owner and are never counted on their own, and the scan reads the same source
+  tree the `colocated-test` presence rule does, so no test file is a subject.
+
+  Python and TypeScript are checked with no configuration; Rust is off until a
+  `[rust].one_function_per_file` table opts in, because a Rust file *is* a module and grouping a
+  type, its `impl` blocks, and the free functions around it inside one is how Rust is written — an
+  unconfigured Rust run reports `not enabled for rust` and exits 0. The capability is identical in
+  all three languages; only the default differs.
+
+  The threshold is `[<language>].one_function_per_file = { max_lines = N }`, a partial-override
+  table like `coverage`. The default is `1`: a one-line function is an expression with a name,
+  carries no branch to test in isolation, and shares a file freely; anything longer earns its own
+  module. A tree adopting the rule can start higher and walk it down. A function's length counts
+  the code lines in its body — blank lines, comments, and a Python docstring are excluded, as is
+  the signature. A file whose functions genuinely belong together takes a reason-required
+  `one-function-per-file` exemption.
+
 ### Fixed
 
 - **`co-change` reads what a modification changed, so a comment-only or whitespace-only edit is

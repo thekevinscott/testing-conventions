@@ -61,6 +61,8 @@ its own page under [Reference — Checks](/reference/checks/); the pages below c
 
 - [Colocated tests](./colocated-test) — every source file has a colocated, matching-named unit
   test, and a changed source changes its test with it.
+- [One function per file](./one-function-per-file) — a file holds at most one module-scope
+  function longer than the threshold you set.
 - [Coverage](./coverage) — the unit suite clears a 100% floor, whole-tree and on the changed lines
   of a pull request.
 - [Mutation](./mutation) — every changed line is *verified*, not just executed: break the code, and

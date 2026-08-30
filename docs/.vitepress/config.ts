@@ -80,6 +80,7 @@ export default defineConfig({
           items: [
             { text: 'The testing model', link: '/explanation/' },
             { text: 'Colocated tests', link: '/explanation/colocated-test' },
+            { text: 'One function per file', link: '/explanation/one-function-per-file' },
             { text: 'Coverage', link: '/explanation/coverage' },
             { text: 'Mutation', link: '/explanation/mutation' },
             { text: 'Isolation', link: '/explanation/isolation' },

@@ -36,6 +36,8 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct PythonConfig {
     pub coverage: Option<PythonCoverage>,
+    /// The `one-function-per-file` threshold; see [`OneFunctionPerFile`].
+    pub one_function_per_file: Option<OneFunctionPerFile>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
     /// The build declaration: a shell
@@ -81,6 +83,8 @@ pub struct E2eConfig {
 #[serde(deny_unknown_fields)]
 pub struct TypeScriptConfig {
     pub coverage: Option<TypeScriptCoverage>,
+    /// The `one-function-per-file` threshold; see [`OneFunctionPerFile`].
+    pub one_function_per_file: Option<OneFunctionPerFile>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
     /// The build declaration; see [`PythonConfig::build_command`]. For TypeScript it's
@@ -99,6 +103,8 @@ pub struct TypeScriptConfig {
 #[serde(deny_unknown_fields)]
 pub struct RustConfig {
     pub coverage: Option<RustCoverage>,
+    /// The `one-function-per-file` threshold; see [`OneFunctionPerFile`].
+    pub one_function_per_file: Option<OneFunctionPerFile>,
     /// Cargo features the suite-running Rust rules enable: `unit coverage`
     /// passes them to `cargo llvm-cov` (`--features`) and `unit mutation` passes them
     /// to cargo-mutants (`--features`), which enables them on every cargo invocation
@@ -209,6 +215,27 @@ impl Default for RustCoverage {
     }
 }
 
+/// `[<language>].one_function_per_file`. A **partial override** — `#[serde(default)]`
+/// fills a missing field from [`OneFunctionPerFile::default`], and `deny_unknown_fields`
+/// still rejects a typo'd key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct OneFunctionPerFile {
+    /// The longest body a module-scope function may have and still **share** a file.
+    /// A function longer than this must be the file's only such function.
+    pub max_lines: u32,
+}
+
+/// The default threshold used when the table is absent: `max_lines = 1`. A one-line
+/// function is an expression with a name — it carries no branch to test in isolation,
+/// so it shares a file freely, and anything longer earns its own module. A config
+/// table raises the line for a tree whose natural grain is longer functions.
+impl Default for OneFunctionPerFile {
+    fn default() -> Self {
+        Self { max_lines: 1 }
+    }
+}
+
 /// A rule a file can be exempted from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -247,6 +274,9 @@ pub enum Rule {
     UnknownTier,
     /// `unit mutation` — a surviving mutant the unit suite didn't catch ([`crate::mutation`]).
     Mutation,
+    /// `unit one-function-per-file` — a module-scope function sharing its file with
+    /// another over the threshold ([`crate::one_function`]).
+    OneFunctionPerFile,
 }
 
 impl Rule {
@@ -278,6 +308,7 @@ impl Rule {
             Rule::NoFirstPartyMock => "no-first-party-mock",
             Rule::UnknownTier => "unknown-tier",
             Rule::Mutation => "mutation",
+            Rule::OneFunctionPerFile => "one-function-per-file",
         }
     }
 
@@ -300,6 +331,7 @@ impl Rule {
             Rule::NoFirstPartyMock,
             Rule::UnknownTier,
             Rule::Mutation,
+            Rule::OneFunctionPerFile,
         ]
         .into_iter()
         .find(|rule| rule.id() == id)
@@ -502,6 +534,44 @@ impl Config {
                 self.typescript.as_ref().map_or(&[], |c| &c.exempt)
             }
             crate::colocated_test::Language::Rust => self.rust_exemptions(),
+        }
+    }
+
+    /// The `one-function-per-file` threshold for `language` — the longest body a
+    /// function may have and still share a file — or `None` when the rule does not
+    /// apply to that language.
+    ///
+    /// Python and TypeScript default to [`OneFunctionPerFile::default`]; **Rust is off
+    /// until a `[rust].one_function_per_file` table opts in**. This is the deliberate
+    /// asymmetry the cross-language parity rule requires be named: in Python and
+    /// TypeScript a file is a bag of definitions, so "one subject per file" is a choice
+    /// the author makes and the rule can hold them to. In Rust a file *is* a module —
+    /// the language's own unit of organization — and grouping free functions and their
+    /// `impl` blocks inside one is how Rust is written, not a lapse. Enforcing the rule
+    /// there by default would flag idiomatic code as a violation. The capability is
+    /// identical in all three languages, so a Rust tree that does want the rule gets it
+    /// by naming a threshold; only the default differs.
+    pub fn one_function_threshold(&self, language: crate::colocated_test::Language) -> Option<u32> {
+        match language {
+            crate::colocated_test::Language::Python => Some(
+                self.python
+                    .as_ref()
+                    .and_then(|c| c.one_function_per_file)
+                    .unwrap_or_default()
+                    .max_lines,
+            ),
+            crate::colocated_test::Language::TypeScript => Some(
+                self.typescript
+                    .as_ref()
+                    .and_then(|c| c.one_function_per_file)
+                    .unwrap_or_default()
+                    .max_lines,
+            ),
+            crate::colocated_test::Language::Rust => self
+                .rust
+                .as_ref()
+                .and_then(|c| c.one_function_per_file)
+                .map(|table| table.max_lines),
         }
     }
 

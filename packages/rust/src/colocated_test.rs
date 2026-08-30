@@ -211,7 +211,7 @@ pub fn missing_unit_tests(
 }
 
 /// Recursively collect every file `language` tracks under `dir` into `out`.
-fn collect_files(dir: &Path, language: Language, out: &mut Vec<PathBuf>) -> Result<()> {
+pub(crate) fn collect_files(dir: &Path, language: Language, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
     for entry in entries {

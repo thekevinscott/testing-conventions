@@ -7,6 +7,7 @@ pub mod e2e;
 pub mod isolation;
 pub mod lint;
 pub mod mutation;
+pub mod one_function;
 pub mod packaging;
 pub mod patch_coverage;
 pub mod tiers;
@@ -124,6 +125,22 @@ enum UnitRule {
         /// `exempt` list. Optional: if the file — or its `[<language>].coverage`
         /// table — is absent, the language's sane default floor is used and
         /// nothing is exempt.
+        #[arg(long, default_value = "testing-conventions.toml")]
+        config: PathBuf,
+    },
+    /// Check that no source file holds more than one module-scope function whose body
+    /// runs longer than the configured threshold. Trivial functions — at or under the
+    /// threshold — share a file freely.
+    OneFunctionPerFile {
+        /// Directory to scan recursively.
+        path: PathBuf,
+        /// Language convention to enforce (required).
+        #[arg(long, value_enum)]
+        language: colocated_test::Language,
+        /// testing-conventions config file providing the `max_lines` threshold and the
+        /// `exempt` list. Optional: if the file — or its
+        /// `[<language>].one_function_per_file` table — is absent, the default threshold
+        /// of one line applies and nothing is exempt.
         #[arg(long, default_value = "testing-conventions.toml")]
         config: PathBuf,
     },
@@ -281,6 +298,11 @@ where
                 base,
                 config,
             } => run_unit_coverage(&path, language, base.as_deref(), &config),
+            UnitRule::OneFunctionPerFile {
+                path,
+                language,
+                config,
+            } => run_unit_one_function(&path, language, &config),
             UnitRule::Lint {
                 path,
                 language,
@@ -737,6 +759,66 @@ fn run_unit_mutation(
             survivor.file, survivor.line, survivor.description
         );
     }
+    Ok(1)
+}
+
+/// Run the one-function-per-file rule over `root` for `language`, printing each
+/// violation to stderr as `path:line: rule — message` and returning `1` when any
+/// are found, `0` otherwise.
+///
+/// The threshold and the waivers both come from the config at `config_path`: a
+/// missing file means the language's default threshold with nothing waived. Rust has
+/// no default threshold, so an unconfigured Rust run reports that and exits `0` —
+/// see [`config::Config::one_function_threshold`] for why.
+fn run_unit_one_function(
+    root: &Path,
+    language: colocated_test::Language,
+    config_path: &Path,
+) -> anyhow::Result<i32> {
+    let threshold = if config_path.exists() {
+        config::load_config(config_path)?.one_function_threshold(language)
+    } else {
+        config::Config::default().one_function_threshold(language)
+    };
+    let Some(max_lines) = threshold else {
+        let key = match language {
+            colocated_test::Language::Python => "python",
+            colocated_test::Language::TypeScript => "typescript",
+            colocated_test::Language::Rust => "rust",
+        };
+        println!(
+            "unit one-function-per-file: not enabled for {key} — \
+             set `[{key}].one_function_per_file` to opt in"
+        );
+        return Ok(0);
+    };
+    let raw = one_function::find_violations(root, language, max_lines)?;
+    let select: ExemptSelect = match language {
+        colocated_test::Language::Python => |c| c.exemptions(colocated_test::Language::Python),
+        colocated_test::Language::TypeScript => {
+            |c| c.exemptions(colocated_test::Language::TypeScript)
+        }
+        colocated_test::Language::Rust => |c| c.rust_exemptions(),
+    };
+    let violations = apply_waivers(raw, root, config_path, select)?;
+    if violations.is_empty() {
+        return Ok(0);
+    }
+    for v in &violations {
+        eprintln!(
+            "{}:{}: {} — {}",
+            v.file.display(),
+            v.line,
+            v.rule,
+            v.message
+        );
+    }
+    eprintln!(
+        "error: {} function(s) sharing a file with another function over the \
+         {max_lines}-line threshold (move each to its own module, or add an \
+         `exempt` entry with a reason)",
+        violations.len()
+    );
     Ok(1)
 }
 

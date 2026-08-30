@@ -1,0 +1,2 @@
+[typescript]
+one_function_per_file = { max_lines = 5 }

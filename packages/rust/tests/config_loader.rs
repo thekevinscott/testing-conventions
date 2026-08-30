@@ -10,6 +10,7 @@
 
 use std::path::PathBuf;
 
+use testing_conventions::colocated_test::Language;
 use testing_conventions::config::{
     load_config, Config, PythonConfig, PythonCoverage, Rule, RustConfig, RustCoverage,
     TypeScriptConfig, TypeScriptCoverage,
@@ -30,6 +31,7 @@ fn expected_valid() -> Config {
                 branch: true,
                 fail_under: 100,
             }),
+            one_function_per_file: None,
             exempt: vec![],
             build_command: None,
             reason: String::new(),
@@ -41,6 +43,7 @@ fn expected_valid() -> Config {
                 functions: 100,
                 statements: 100,
             }),
+            one_function_per_file: None,
             exempt: vec![],
             build_command: None,
             reason: String::new(),
@@ -53,6 +56,7 @@ fn expected_valid() -> Config {
                 branch: None,
             }),
             features: vec![],
+            one_function_per_file: None,
             exempt: vec![],
             build_command: None,
             reason: String::new(),
@@ -312,4 +316,43 @@ fn an_unknown_nested_key_error_points_at_migrations() {
         chain.contains("MIGRATIONS.md"),
         "the nested unknown-key error must point at MIGRATIONS.md, got: {chain}"
     );
+}
+
+#[test]
+fn one_function_per_file_thresholds_are_per_language_and_default_to_one() {
+    let config = load_config(fixture("one_function_per_file.toml"))
+        .expect("a one_function_per_file table should load");
+    assert_eq!(config.one_function_threshold(Language::Python), Some(5));
+    assert_eq!(
+        config.one_function_threshold(Language::TypeScript),
+        Some(20)
+    );
+    // No `[rust]` table at all: Rust is off, not defaulted — the documented asymmetry.
+    assert_eq!(config.one_function_threshold(Language::Rust), None);
+}
+
+#[test]
+fn python_and_typescript_default_to_one_line_without_a_table() {
+    let config = Config::default();
+    assert_eq!(config.one_function_threshold(Language::Python), Some(1));
+    assert_eq!(config.one_function_threshold(Language::TypeScript), Some(1));
+    assert_eq!(config.one_function_threshold(Language::Rust), None);
+}
+
+#[test]
+fn a_rust_table_opts_the_language_in() {
+    let config = load_config(fixture("one_function_per_file_rust.toml"))
+        .expect("a rust one_function_per_file table should load");
+    assert_eq!(config.one_function_threshold(Language::Rust), Some(8));
+}
+
+#[test]
+fn one_function_per_file_is_a_waivable_rule_id() {
+    assert_eq!(
+        Rule::from_id("one-function-per-file"),
+        Some(Rule::OneFunctionPerFile)
+    );
+    assert_eq!(Rule::OneFunctionPerFile.id(), "one-function-per-file");
+    // Whole-file, like every other lint: a `lines` list may not scope it.
+    assert!(!Rule::OneFunctionPerFile.is_line_scopable());
 }

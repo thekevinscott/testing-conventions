@@ -1,0 +1,3 @@
+# Rust opting into `one-function-per-file`, which is off for the language by default.
+[rust]
+one_function_per_file = { max_lines = 8 }

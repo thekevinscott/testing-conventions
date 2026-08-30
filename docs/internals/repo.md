@@ -344,6 +344,18 @@ The invocation therefore has an external caller, and its shape is a **stable con
 
 A change to any of these — the script's path, the interpreter floor, an env name or meaning, the output encoding — breaks the external evaluator. Make it deliberately, and update willfire's recipe in the same motion.
 
+### Our own PRs need the same resolution, granted explicitly (#502)
+
+The paragraph above is the *consumer* path, where willfire resolves the matrix by executing the scan at the SHA `@v0` names. `dogfood.yml` calls the reusable workflow directly, so the same matrices are unresolvable on this repo's own PRs — and pr-monitor executes nothing unless told to. `.github/workflows/pr-monitor.yml` grants it:
+
+```yaml
+execute: thekevinscott/testing-conventions:detect
+```
+
+The grant names the repo the workflow *file* lives in — for a reusable workflow, the callee — and the job that computes the matrix. Without it the gate fails closed on `Unresolvable check names`, which is the correct behavior rather than a defect: a predicted set missing a leg cannot be compared against the observed one, because a missing name is indistinguishable from a leg that was never predicted. The granted job's steps run for real at the predicted commit, so the grant is a statement of trust in that job's code; `detect` is our own stdlib-only scan, and dogfood already runs it on every PR.
+
+The action is pinned to a commit rather than the floating `v1`. `v1` advancing — willfire `0.1.2` to `0.1.11`, which moved prediction from whole workflows to individual check names — turned this gate red across the repo with no commit here to blame. That is precisely the failure **CI hermeticity: a required check depends only on the commit under test** exists to prevent, landing in the one workflow whose job is policing the others. Pinned, a version bump is a reviewable commit that runs the full surface before it lands.
+
 With epic #321 complete, every #302 wiring/assertion and failure-path check lives in `internals/checks` as a `tc-checks <check>` subcommand; the flat `.github/scripts/<check>/` dirs are gone, and each self-test job invokes `uv run --project internals/checks tc-checks <check>` after `astral-sh/setup-uv`. The full inventory, by original sub-issue:
 
 - **Wiring assertions (#323):** `mutation-wired`, `isolation-wired`, `coverage-rust-wired`, `colocated-rust-wired`, `diff-scoped-wired`, `e2e-verify-wired`, `e2e-verify-checks-out-pr-head` (block-scoped to the `e2e-verify` job, replacing the old `awk` range), `e2e-verify-scope-wired`, `rolling-release-wired` (two selftest steps folded into one command over two file arguments).

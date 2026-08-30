@@ -86,6 +86,23 @@ fn run(repo: &Path, args: &[&str]) -> (i32, String) {
     (out.status.code().expect("an exit code"), text)
 }
 
+/// Run the built binary with `args` in `repo`, returning (exit code, stdout).
+/// `e2e slug` is read by command substitution — scripts locate a receipt at
+/// `e2e-attestations/$(testing-conventions e2e slug).json` — so its contract is
+/// stdout alone, and asserting it merged with stderr would pin diagnostics the
+/// substitution never sees.
+fn run_stdout(repo: &Path, args: &[&str]) -> (i32, String) {
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .expect("the built binary should run");
+    (
+        out.status.code().expect("an exit code"),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
+}
+
 #[test]
 fn attest_writes_the_branch_receipt_and_exits_zero() {
     let repo = TempRepo::new();
@@ -149,7 +166,7 @@ fn slug_prints_the_standardized_name_for_an_argument() {
     // The filename derivation is public: scripts locate a branch's receipt at
     // `e2e-attestations/$(testing-conventions e2e slug <branch>).json`.
     let repo = TempRepo::new();
-    let (code, text) = run(&repo.0, &["e2e", "slug", "Feature/One"]);
+    let (code, text) = run_stdout(&repo.0, &["e2e", "slug", "Feature/One"]);
     assert_eq!(code, 0);
     assert_eq!(text.trim(), "feature-one");
 }
@@ -158,7 +175,7 @@ fn slug_prints_the_standardized_name_for_an_argument() {
 fn slug_defaults_to_the_checked_out_branch() {
     let repo = TempRepo::new();
     repo.branch("feature/two");
-    let (code, text) = run(&repo.0, &["e2e", "slug"]);
+    let (code, text) = run_stdout(&repo.0, &["e2e", "slug"]);
     assert_eq!(code, 0);
     assert_eq!(text.trim(), "feature-two");
 }

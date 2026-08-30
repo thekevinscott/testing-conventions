@@ -15,6 +15,12 @@ Each entry has five sections, in order:
 
 ### Summary
 
+Every run names the version that ran (#498). CI resolves this binary from npm's unpinned `latest`,
+so a job's log could not answer which build it got — and a run that failed because it resolved the
+version published a minute earlier looked exactly like one that failed on its merits. Every
+invocation now writes `testing-conventions <version>` to stderr before parsing its arguments. No
+API or config change; one line is added to stderr (see **Behavior changes without code changes**).
+
 `co-change` reads what a modification changed (#503). The modify arm asked only whether the file at
 HEAD `is_subject`, so a source that carries behavior and shows as `M` in the diff was held to its
 colocated test whatever the edit did: rewording a `#` comment, deleting a `/* … */` block, or
@@ -1192,6 +1198,14 @@ a deprecation cycle (pre-1.0, so no prior warning was shipped).
 
 ### Behavior changes without code changes
 
+Every command writes one extra line to stderr (#498): `testing-conventions <version>`, ahead of the
+command's own output, on success and on failure alike. Exit codes and stdout are untouched. A caller
+that merges stdout and stderr and matches the result *exactly* now sees that line — read the streams
+apart, or match a substring. `e2e slug` is the case that matters in practice, and it is unaffected
+as documented: its slug is on stdout, so `e2e-attestations/$(testing-conventions e2e slug).json`
+still expands to the receipt path. To recover a bare invocation's output, redirect stderr
+(`testing-conventions e2e slug 2>/dev/null`).
+
 `unit colocated-test --base` no longer flags a **comment-only or whitespace-only** modification
 (#503). A source whose merge-base and HEAD forms hold the same code passes with no colocated test in
 the diff, so a comment sweep, a formatting pass, and a blank-line change stop raising `source
@@ -1592,6 +1606,17 @@ tool's own execution model and can be deleted; the adapter sets the option on ev
 config line is inert either way.
 
 ### Verification
+
+```
+# any command, on stderr, matching --version
+testing-conventions unit lint --language rust src 2>&1 >/dev/null | head -1
+testing-conventions --version
+```
+
+Expected (#498): both print `testing-conventions <version>`, the same version. A run that cannot
+parse its arguments prints it too — `testing-conventions unit no-such-rule` names the version
+before the clap error. `testing-conventions e2e slug main` still writes the bare slug and nothing
+else to stdout.
 
 ```
 # a branch whose diff only rewords a comment in a source file

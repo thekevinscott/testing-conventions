@@ -24,6 +24,10 @@ toml = "0.8"
 rustpython-parser = "0.4.0"
 rustpython-ast = { version = "0.4.0", features = ["visitor"] }
 oxc = { version = "0.136.0", features = ["ast_visit"] }
+# The umbrella crate's `codegen` feature forces `oxc_codegen/sourcemap`, whose
+# `oxc_sourcemap` needs a newer rustc than this crate builds on; co-change compares emitted
+# code and no source map, so the codegen crate comes in directly with that feature off.
+oxc_codegen = { version = "0.136.0", default-features = false }
 syn = { version = "2", features = ["full", "visit"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }

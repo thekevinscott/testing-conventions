@@ -5,6 +5,10 @@
 //! `foo.py`) or **deleted** in a commit range, its colocated test — the
 //! pairing, `foo.py` → `foo_test.py`, `foo.ts` → `foo.test.ts` — must also be in
 //! that diff. This catches edits and removals that leave the test silently stale.
+//! A modification counts when it changes the code the compiler sees: the file at the
+//! merge base and the file at HEAD are compared with comments and formatting
+//! whitespace normalized away ([`Language::same_code`]), so a comment reword or a
+//! whitespace sweep leaves the test current and passes.
 //! *Added* source files are not subjects: brand-new code is the coverage floor's
 //! job, not this one. A **deletion** is a subject only if the source *had* a
 //! colocated test in the base tree — a package barrel (`__init__.py`, `index.ts`)
@@ -30,8 +34,9 @@ use crate::colocated_test::Language;
 /// test did not also change — the stale-test risks — sorted for deterministic
 /// output.
 ///
-/// A source file is a subject when it was **modified** and still declares behavior
-/// ([`Language::is_subject`], the predicate the presence rule reads), or **deleted**
+/// A source file is a subject when it was **modified** into a different program while
+/// still declaring behavior ([`Language::is_subject`], the predicate the presence rule
+/// reads, and [`Language::same_code`], which reads what the edit changed), or **deleted**
 /// while it *had* a colocated test in the base tree (the test now at risk of being
 /// orphaned); an **added** file is not (new code is the coverage floor's concern),
 /// nor is a deleted barrel that never had a sibling test.
@@ -48,6 +53,7 @@ pub fn stale_sources(
     exempt: &BTreeSet<String>,
 ) -> Result<Vec<PathBuf>> {
     let entries = changed_entries(repo, base)?;
+    let fork_point = merge_base(repo, base)?;
     // Every changed path, so a subject's expected test is a set lookup rather
     // than a second walk of the diff.
     let changed: BTreeSet<&str> = entries.iter().map(|(_, path)| path.as_str()).collect();
@@ -88,7 +94,11 @@ pub fn stale_sources(
                 // the fact presence uses to skip it.
                 let contents = std::fs::read_to_string(repo.join(path))
                     .with_context(|| format!("reading changed source `{rel}`"))?;
+                // What the edit did decides the rest: a comment reword or a whitespace
+                // sweep leaves the compiler the same program, so the colocated test still
+                // pins the behavior the file has.
                 language.is_subject(&contents, path)
+                    && !language.same_code(&blob_at(repo, &fork_point, rel)?, &contents, path)
             }
             // A deletion is a subject only if the source *had* a colocated test in
             // the base tree — the test now at risk of being orphaned. A source that
@@ -153,6 +163,50 @@ fn test_exists_in_base(repo: &Path, base: &str, rel: &str) -> Result<bool> {
     Ok(output.status.success())
 }
 
+/// The commit `<base>...HEAD` diffs from — the merge base of `base` and HEAD.
+///
+/// The modify arm compares a subject against its contents *here*, not at `base`'s tip: the
+/// tip carries commits this branch never saw, so a file the branch only commented would read
+/// as a code change. [`changed_entries`] already resolved the three-dot range, which needs the
+/// same merge base, so a failure here names a repo whose history moved underfoot.
+fn merge_base(repo: &Path, base: &str) -> Result<String> {
+    let output = Command::new("git")
+        .current_dir(repo)
+        .args(["merge-base", base, "HEAD"])
+        .output()
+        .with_context(|| format!("running `git merge-base` in `{}`", repo.display()))?;
+    if !output.status.success() {
+        bail!(
+            "`git merge-base {base} HEAD` failed in `{}`: {}",
+            repo.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// The contents of `rel` (a `repo`-relative path) at `commit`.
+///
+/// `git show <commit>:./<rel>` resolves the path relative to `repo` — the diff's `--relative`
+/// root — matching the paths [`changed_entries`] returns. The diff named `rel` as modified, so
+/// a blob that fails to read is a real error, never a file to skip quietly.
+fn blob_at(repo: &Path, commit: &str, rel: &str) -> Result<String> {
+    let spec = format!("{commit}:./{rel}");
+    let output = Command::new("git")
+        .current_dir(repo)
+        .args(["show", &spec])
+        .output()
+        .with_context(|| format!("running `git show {spec}` in `{}`", repo.display()))?;
+    if !output.status.success() {
+        bail!(
+            "reading `{rel}` at `{commit}` in `{}`: {}",
+            repo.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
 /// The status + `repo`-relative path of every file changed in `<base>...HEAD`,
 /// via `git diff --name-status`.
 ///
@@ -203,4 +257,117 @@ fn changed_entries(repo: &Path, base: &str) -> Result<Vec<(Status, String)>> {
         }
     }
     Ok(entries)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use super::*;
+
+    /// A throwaway git repo, removed on drop.
+    struct TempRepo(PathBuf);
+
+    impl TempRepo {
+        fn new(slug: &str) -> Self {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let root = std::env::temp_dir().join(format!(
+                "tc-co-change-git-{}-{}-{}",
+                slug,
+                std::process::id(),
+                COUNTER.fetch_add(1, Ordering::Relaxed),
+            ));
+            std::fs::create_dir_all(&root).unwrap();
+            let repo = TempRepo(root);
+            repo.git(&["init", "-q"]);
+            repo.git(&["config", "user.email", "test@example.com"]);
+            repo.git(&["config", "user.name", "Test"]);
+            repo
+        }
+
+        fn git(&self, args: &[&str]) {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(&self.0)
+                .status()
+                .expect("git should run");
+            assert!(status.success(), "git {args:?} failed");
+        }
+
+        /// Write `contents` to `rel` and commit it, advancing HEAD.
+        fn commit(&self, rel: &str, contents: &str) {
+            std::fs::write(self.0.join(rel), contents).unwrap();
+            self.git(&["add", "-A"]);
+            self.git(&["-c", "commit.gpgsign=false", "commit", "-q", "-m", rel]);
+        }
+
+        fn head(&self) -> String {
+            let out = Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .current_dir(&self.0)
+                .output()
+                .expect("git rev-parse should run");
+            assert!(out.status.success(), "git rev-parse failed");
+            String::from_utf8(out.stdout).unwrap().trim().to_string()
+        }
+    }
+
+    impl Drop for TempRepo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn merge_base_answers_where_the_branch_left_trunk() {
+        let repo = TempRepo::new("mb");
+        repo.commit("widget.py", "x = 1\n");
+        repo.git(&["checkout", "-q", "-b", "trunk"]);
+        let fork_point = repo.head();
+        repo.git(&["checkout", "-q", "-b", "feature"]);
+        repo.commit("widget.py", "x = 2\n");
+        repo.git(&["checkout", "-q", "trunk"]);
+        repo.commit("widget.py", "x = 3\n");
+        let trunk_tip = repo.head();
+        repo.git(&["checkout", "-q", "feature"]);
+
+        // The commit the branch forked from, not the tip trunk has since reached.
+        assert_eq!(merge_base(&repo.0, "trunk").unwrap(), fork_point);
+        assert_ne!(fork_point, trunk_tip);
+    }
+
+    #[test]
+    fn merge_base_errors_when_the_histories_never_met() {
+        let repo = TempRepo::new("mb-orphan");
+        repo.commit("widget.py", "x = 1\n");
+        repo.git(&["checkout", "-q", "-b", "trunk"]);
+        repo.git(&["checkout", "-q", "--orphan", "stranger"]);
+        repo.commit("widget.py", "x = 2\n");
+
+        let err = merge_base(&repo.0, "trunk").unwrap_err();
+        assert!(err.to_string().contains("git merge-base"), "got: {err}");
+    }
+
+    #[test]
+    fn blob_at_reads_the_file_as_it_stood() {
+        let repo = TempRepo::new("blob");
+        repo.commit("widget.py", "x = 1\n");
+        let first = repo.head();
+        repo.commit("widget.py", "x = 2\n");
+
+        assert_eq!(blob_at(&repo.0, &first, "widget.py").unwrap(), "x = 1\n");
+        assert_eq!(
+            blob_at(&repo.0, &repo.head(), "widget.py").unwrap(),
+            "x = 2\n"
+        );
+    }
+
+    #[test]
+    fn blob_at_errors_when_the_path_is_absent() {
+        let repo = TempRepo::new("blob-missing");
+        repo.commit("widget.py", "x = 1\n");
+
+        let err = blob_at(&repo.0, &repo.head(), "ghost.py").unwrap_err();
+        assert!(err.to_string().contains("ghost.py"), "got: {err}");
+    }
 }

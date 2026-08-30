@@ -9,7 +9,9 @@
 //! top of the tree-wide presence check. *Added* source files are not subjects
 //! (new code is the coverage floor's job), a test file is never a subject, an
 //! empty/comment-only file holds no logic, and a `co-change`-exempt source needn't
-//! co-change.
+//! co-change. A modification counts when it changes the code the compiler sees:
+//! the merge-base and HEAD forms are compared with comments and formatting
+//! whitespace normalized away.
 //!
 //! Each test builds a throwaway git repo (per the guardrail: red cases — a
 //! changed source with no test change — and clean cases).
@@ -333,6 +335,198 @@ fn python_modified_empty_file_is_not_a_subject() {
     assert!(stale(&repo, &base, Language::Python).is_empty());
 }
 
+const WIDGET_PY_COMMENTED: &str = "# widget helpers\ndef widget():\n    return 1\n";
+
+#[test]
+fn python_comment_only_edit_is_not_a_subject() {
+    // Rewording a `#` comment leaves the compiler the same program, so the colocated
+    // test still pins the behavior the file has.
+    let repo = TempRepo::new("py-comment-only");
+    repo.write("widget.py", WIDGET_PY_COMMENTED);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write(
+        "widget.py",
+        "# widget utilities\ndef widget():\n    return 1\n",
+    );
+    repo.commit("reword the comment");
+
+    assert!(stale(&repo, &base, Language::Python).is_empty());
+}
+
+#[test]
+fn python_removing_a_comment_is_not_a_subject() {
+    // Deleting a comment outright is the same edit as rewording one.
+    let repo = TempRepo::new("py-comment-gone");
+    repo.write("widget.py", WIDGET_PY_COMMENTED);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("widget.py", WIDGET_PY);
+    repo.commit("drop the comment");
+
+    assert!(stale(&repo, &base, Language::Python).is_empty());
+}
+
+#[test]
+fn python_blank_line_only_edit_is_not_a_subject() {
+    // A blank line is a non-logical newline: the token stream is unchanged.
+    let repo = TempRepo::new("py-blank-line");
+    repo.write("widget.py", WIDGET_PY);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("widget.py", "def widget():\n\n    return 1\n");
+    repo.commit("space the body out");
+
+    assert!(stale(&repo, &base, Language::Python).is_empty());
+}
+
+#[test]
+fn python_trailing_whitespace_only_edit_is_not_a_subject() {
+    // Trailing spaces reach no token, so a whitespace sweep needs no test change.
+    let repo = TempRepo::new("py-trailing-ws");
+    repo.write("widget.py", "def widget():   \n    return 1   \n");
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("widget.py", WIDGET_PY);
+    repo.commit("strip trailing whitespace");
+
+    assert!(stale(&repo, &base, Language::Python).is_empty());
+}
+
+#[test]
+fn python_comment_edit_carrying_a_code_change_is_stale() {
+    // The code half decides: a comment riding along with a real edit is still a
+    // modification the test must follow.
+    let repo = TempRepo::new("py-comment-plus-code");
+    repo.write("widget.py", WIDGET_PY_COMMENTED);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write(
+        "widget.py",
+        "# widget utilities\ndef widget():\n    return 2\n",
+    );
+    repo.commit("reword the comment and change the value");
+
+    assert_eq!(stale(&repo, &base, Language::Python), vec!["widget.py"]);
+}
+
+#[test]
+fn python_docstring_edit_is_stale() {
+    // A docstring is a string expression the interpreter keeps — code, not a comment.
+    let repo = TempRepo::new("py-docstring");
+    repo.write(
+        "widget.py",
+        "\"\"\"Widget helpers.\"\"\"\n\n\ndef widget():\n    return 1\n",
+    );
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write(
+        "widget.py",
+        "\"\"\"Widget utilities.\"\"\"\n\n\ndef widget():\n    return 1\n",
+    );
+    repo.commit("reword the docstring");
+
+    assert_eq!(stale(&repo, &base, Language::Python), vec!["widget.py"]);
+}
+
+#[test]
+fn python_string_literal_edit_is_stale() {
+    // Text inside a string is a value the code returns.
+    let repo = TempRepo::new("py-string");
+    repo.write("widget.py", "def widget():\n    return \"one\"\n");
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("widget.py", "def widget():\n    return \"two\"\n");
+    repo.commit("change the returned string");
+
+    assert_eq!(stale(&repo, &base, Language::Python), vec!["widget.py"]);
+}
+
+#[test]
+fn python_indentation_change_is_stale() {
+    // Indentation carries block structure: moving a statement into the branch above
+    // it changes what runs.
+    let repo = TempRepo::new("py-indent");
+    repo.write(
+        "widget.py",
+        "def widget(flag):\n    if flag:\n        count = 1\n    return 1\n",
+    );
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write(
+        "widget.py",
+        "def widget(flag):\n    if flag:\n        count = 1\n        return 1\n",
+    );
+    repo.commit("pull the return into the branch");
+
+    assert_eq!(stale(&repo, &base, Language::Python), vec!["widget.py"]);
+}
+
+#[test]
+fn python_comment_edit_in_unparseable_source_is_stale() {
+    // Content that fails to parse is held to its test as written: an unreadable file
+    // gets the strict answer, never a silent skip.
+    let repo = TempRepo::new("py-unparseable");
+    repo.write("widget.py", "def widget(:\n    return 1\n");
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("widget.py", "# still broken\ndef widget(:\n    return 1\n");
+    repo.commit("add a comment to the broken source");
+
+    assert_eq!(stale(&repo, &base, Language::Python), vec!["widget.py"]);
+}
+
+#[test]
+fn python_comment_only_edit_compares_against_the_merge_base() {
+    // The base side of the comparison is the merge base, matching the `<base>...HEAD`
+    // diff: trunk moving on with its own code change leaves this branch's edit a
+    // comment reword.
+    let repo = TempRepo::new("py-merge-base");
+    repo.write("widget.py", WIDGET_PY_COMMENTED);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    git(&repo.0, &["checkout", "-q", "-b", "trunk"]);
+    git(&repo.0, &["checkout", "-q", "-b", "feature"]);
+
+    repo.write(
+        "widget.py",
+        "# widget utilities\ndef widget():\n    return 1\n",
+    );
+    repo.commit("reword the comment");
+
+    git(&repo.0, &["checkout", "-q", "trunk"]);
+    repo.write(
+        "widget.py",
+        "# widget helpers\ndef widget():\n    return 2\n",
+    );
+    repo.write(
+        "widget_test.py",
+        "from widget import widget\n\n\ndef test_widget():\n    assert widget() == 2\n",
+    );
+    repo.commit("advance trunk");
+    git(&repo.0, &["checkout", "-q", "feature"]);
+
+    assert!(stale(&repo, "trunk", Language::Python).is_empty());
+}
+
 #[test]
 fn python_conftest_is_not_a_subject() {
     // conftest.py is pytest support, never a colocated-test subject.
@@ -568,6 +762,123 @@ fn typescript_deleting_a_type_only_module_is_clean() {
     repo.commit("delete the type-only module");
 
     assert!(stale(&repo, &base, Language::TypeScript).is_empty());
+}
+
+const TS_WIDGET_COMMENTED: &str = "// widget factory\nexport const widget = () => 1;\n";
+
+#[test]
+fn typescript_line_comment_only_edit_is_not_a_subject() {
+    // Rewording a `//` comment leaves the emitted JavaScript identical.
+    let repo = TempRepo::new("ts-comment-only");
+    repo.write("widget.ts", TS_WIDGET_COMMENTED);
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write(
+        "widget.ts",
+        "// widget builder\nexport const widget = () => 1;\n",
+    );
+    repo.commit("reword the comment");
+
+    assert!(stale(&repo, &base, Language::TypeScript).is_empty());
+}
+
+#[test]
+fn typescript_removing_a_block_comment_is_not_a_subject() {
+    // A `/* … */` block carries no runtime code, so deleting one changes nothing the
+    // colocated test could pin.
+    let repo = TempRepo::new("ts-block-comment");
+    repo.write(
+        "widget.ts",
+        "/* widget factory\n   used by the CLI */\nexport const widget = () => 1;\n",
+    );
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("widget.ts", TS_WIDGET);
+    repo.commit("drop the block comment");
+
+    assert!(stale(&repo, &base, Language::TypeScript).is_empty());
+}
+
+#[test]
+fn typescript_blank_line_only_edit_is_not_a_subject() {
+    let repo = TempRepo::new("ts-blank-line");
+    repo.write("widget.ts", TS_WIDGET);
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("widget.ts", "\nexport const widget = () => 1;\n\n");
+    repo.commit("space the module out");
+
+    assert!(stale(&repo, &base, Language::TypeScript).is_empty());
+}
+
+#[test]
+fn typescript_comment_edit_carrying_a_code_change_is_stale() {
+    let repo = TempRepo::new("ts-comment-plus-code");
+    repo.write("widget.ts", TS_WIDGET_COMMENTED);
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write(
+        "widget.ts",
+        "// widget builder\nexport const widget = () => 2;\n",
+    );
+    repo.commit("reword the comment and change the value");
+
+    assert_eq!(stale(&repo, &base, Language::TypeScript), vec!["widget.ts"]);
+}
+
+#[test]
+fn typescript_template_literal_edit_is_stale() {
+    // Text inside a template literal is a value the module produces.
+    let repo = TempRepo::new("ts-template");
+    repo.write("widget.ts", "export const widget = () => `one`;\n");
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("widget.ts", "export const widget = () => `two`;\n");
+    repo.commit("change the produced string");
+
+    assert_eq!(stale(&repo, &base, Language::TypeScript), vec!["widget.ts"]);
+}
+
+#[test]
+fn typescript_string_literal_edit_is_stale() {
+    let repo = TempRepo::new("ts-string");
+    repo.write("widget.ts", "export const widget = () => 'one';\n");
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("widget.ts", "export const widget = () => 'two';\n");
+    repo.commit("change the returned string");
+
+    assert_eq!(stale(&repo, &base, Language::TypeScript), vec!["widget.ts"]);
+}
+
+#[test]
+fn typescript_comment_edit_in_unparseable_source_is_stale() {
+    // Content that fails to parse is held to its test as written.
+    let repo = TempRepo::new("ts-unparseable");
+    repo.write("widget.ts", "export const widget = (() => 1;\n");
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write(
+        "widget.ts",
+        "// still broken\nexport const widget = (() => 1;\n",
+    );
+    repo.commit("add a comment to the broken source");
+
+    assert_eq!(stale(&repo, &base, Language::TypeScript), vec!["widget.ts"]);
 }
 
 #[test]

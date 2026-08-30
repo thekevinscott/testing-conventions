@@ -4,6 +4,11 @@
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
+/// The rule id a violation carries. A clean run never names it — asserting on the
+/// rule rather than on empty stderr keeps the check pointed at this rule, since the
+/// binary also writes its version banner to stderr on every run.
+const RULE: &str = "one-function-per-file";
+
 /// Absolute path to a fixture tree under `tests/fixtures/one_function/`.
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -77,7 +82,11 @@ fn python_red_counts_every_function_past_the_first() {
 fn python_clean_exits_zero() {
     let output = run("python", "python/clean");
     assert_eq!(code(&output), 0);
-    assert_eq!(stderr(&output), "");
+    assert!(
+        !stderr(&output).contains(RULE),
+        "a clean tree reports no violation: {}",
+        stderr(&output)
+    );
 }
 
 #[test]
@@ -150,7 +159,11 @@ fn typescript_red_flags_an_arrow_bound_to_a_module_scope_const() {
 fn typescript_clean_exits_zero() {
     let output = run("typescript", "typescript/clean");
     assert_eq!(code(&output), 0);
-    assert_eq!(stderr(&output), "");
+    assert!(
+        !stderr(&output).contains(RULE),
+        "a clean tree reports no violation: {}",
+        stderr(&output)
+    );
 }
 
 #[test]
@@ -217,7 +230,11 @@ fn rust_red_names_the_extra_function() {
 fn rust_clean_exits_zero() {
     let output = run("rust", "rust/clean");
     assert_eq!(code(&output), 0);
-    assert_eq!(stderr(&output), "");
+    assert!(
+        !stderr(&output).contains(RULE),
+        "a clean tree reports no violation: {}",
+        stderr(&output)
+    );
 }
 
 #[test]

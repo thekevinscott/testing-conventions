@@ -90,7 +90,7 @@ merge** — do not wait to be told:
 
 - **Merge conflicts.** `git fetch origin <default-branch>` and check whether the branch still sits
   on top of it (`git merge-base --is-ancestor origin/<default-branch> HEAD`); if the default branch
-  has moved, rebase and push before anything else (see **Rebase on request**). A green PR that has
+  has moved, rebase and push before anything else (see **Rebase proactively**). A green PR that has
   drifted behind `main` is not mergeable, and the drift only grows while you wait. **If CI never
   schedules a single run for the PR — no checks appear at all, or none appear for your latest push —
   a merge conflict is the first thing to check, not a runner outage or an approval gate.** GitHub

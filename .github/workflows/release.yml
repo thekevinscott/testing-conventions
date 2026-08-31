@@ -54,11 +54,20 @@ jobs:
 
   # PyPI upload runs in the caller's workflow context. Required because
   # PyPI Trusted Publishers can't validate OIDC tokens minted from a
-  # cross-repo reusable workflow (pypi/warehouse#11096). The `if:` gate
-  # skips this job for non-PyPI repos.
+  # cross-repo reusable workflow (pypi/warehouse#11096).
+  #
+  # The gate is publish-time, not plan-time. `pypi_pending` is 'true' only
+  # when the engine reached the PyPI package and handed this job its upload;
+  # it is 'false' when the version is already live. `has_pypi` reports that
+  # the planned matrix held pypi rows, which is also true when a cascaded
+  # rebuild (a `packages/rust/**` edit is in the Python package's globs)
+  # produced wheels for a version PyPI already has — uploading those earns a
+  # `400 File already exists`. `!cancelled()` lets a pending upload proceed
+  # when an unrelated registry failed; the registries are independent. See
+  # docs/internals/repo.md, "The delegated PyPI upload".
   pypi-publish:
     needs: release
-    if: needs.release.outputs.has_pypi == 'true'
+    if: ${{ !cancelled() && needs.release.outputs.pypi_pending == 'true' }}
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -96,6 +105,18 @@ jobs:
           done
           echo "dist/ contents:"; ls -l dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  # Cuts the git tag for what the job above uploaded. The release job tags
+  # crates.io and npm as it publishes them, but a PyPI package is only handed
+  # over at that point, so its tag follows the upload and is read from
+  # registry truth: the version PyPI reports as live gets the tag. Leaving it
+  # out is what let a published version stay untagged, and an untagged version
+  # is one the next run's plan recomputes and hands over a second time.
+  pypi-tag:
+    needs: pypi-publish
+    uses: thekevinscott/putitoutthere/.github/workflows/pypi-tag.yml@v0
+    permissions:
+      contents: write
 
   # The moving major tag `@v0` is advanced by a dedicated, publish-gated workflow
   # (`.github/workflows/move-major-tag.yml`, #235), not inline here — so the tag move is a

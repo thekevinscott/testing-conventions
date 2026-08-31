@@ -301,6 +301,49 @@ own setup instructions already name as the end state.
 The observability half is upstream: the truncated error line is
 [putitoutthere#651](https://github.com/thekevinscott/putitoutthere/issues/651).
 
+## The delegated PyPI upload
+
+PyPI is the one registry the reusable workflow cannot publish for us. Its Trusted Publisher matching
+filters candidates by `repository_owner` + `repository_name` *before* it looks at
+`job_workflow_ref`, and the `repository` claim always names the caller even inside a reusable
+workflow, so a token minted in putitoutthere's context never matches our TP record
+([pypi/warehouse#11096](https://github.com/pypi/warehouse/issues/11096)). The upload therefore lives
+in `release.yml`'s own `pypi-publish` job, and the engine *delegates* it: the `release` job builds
+the distributions, hands them over as artifacts, and stops.
+
+Delegation splits one publish into two halves that run in different workflows, and `release.yml`
+owns the second half. Two rules make that half correct, and both come from the reusable workflow's
+contract rather than from anything we invent:
+
+- **Gate on `pypi_pending`, never `has_pypi`.** `has_pypi` is plan-time — the planned matrix held
+  pypi rows — which is also true for a run that merely *rebuilt* wheels. `packages/rust/**` sits in
+  the Python package's `globs`, so every Rust change cascades a Python rebuild, and the engine can
+  then decide the Python version is already live and hand over nothing. `pypi_pending` is
+  publish-time: `'true'` only when the engine reached the package and delegated its upload, `'false'`
+  when the version is already on PyPI. Pair it with `!cancelled()` so a red npm or crates.io lane
+  does not swallow a PyPI upload the engine already handed over — the three registries are
+  independent.
+- **Tag after the upload, from registry truth.** The engine tags crates.io and npm as it publishes
+  them, and deliberately leaves a delegated PyPI package untagged: a tag records what shipped, and
+  at hand-over nothing has. The `pypi-tag` job cuts it once the upload lands, reading the version
+  PyPI reports as live, which makes it idempotent and self-healing.
+
+The two rules hold each other up. A published version that goes untagged is one the next run's plan
+reads as still owed, so it recomputes the same version and delegates it a second time — and a
+`pypi-publish` job gated on `has_pypi` runs anyway and uploads files PyPI already stores, which is a
+`400 File already exists` and a red `Release`. The worked case: three interleaved red runs over
+2026-08-30/31 rejected `0.0.92`, `0.0.93` and `0.0.94` in turn, each one re-uploading a version a
+green run minutes earlier had already published, while `testing-conventions-py-v0.0.93` and
+`-v0.0.94` ended up naming commits whose builds never reached PyPI at all.
+
+This wiring is a **contract with `@v0`, and contracts drift.** Both rules arrived upstream together
+in [putitoutthere#623](https://github.com/thekevinscott/putitoutthere/issues/623); `release.yml` kept
+the older shape for ten days and went red on the difference. When `@v0` moves, re-read
+putitoutthere's README → "Publishing to PyPI" and match the template it publishes there. No
+`tc-checks` wiring gate guards this: a regression is loud — `Release` fails on the upload — and
+wiring gates are earned by silent, correctness-affecting failures, not by plumbing that announces
+itself (see AGENTS.md, "Wiring gates are earned").
+
 ## Rolling release: how `@v0` advances
 
 `@v0` is a **moving major tag**: consumers pin `…/testing-conventions.yml@v0` and `…/actions/detect@v0`, and the tag is force-moved forward on each release so every consumer tracks `main`. We own all consumers and fix forward — this is rolling release, the opposite of a semver pin.

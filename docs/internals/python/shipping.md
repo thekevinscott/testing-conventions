@@ -85,8 +85,10 @@ my-tool/
         _binary/
           __init__.py  # entrypoint — execs the staged binary
   putitoutthere.toml
-  CHANGELOG.md
-  MIGRATIONS.md
+  changelog.d/           # one fragment per change: YYYY-MM-DD-<slug>.md
+  migrations.d/          # one fragment per breaking change
+  CHANGELOG.md           # frozen archive of pre-fragment entries
+  MIGRATIONS.md          # frozen archive of pre-fragment entries
   LICENSE
 ```
 
@@ -308,7 +310,7 @@ just ci
 | `security.yml` | `bandit -r myproject` |
 | `coverage.yml` | `pytest --cov --cov-fail-under=85` |
 | `docs.yml` | Build + deploy mkdocs/sphinx site |
-| `changelog-check.yml` | CHANGELOG.md + MIGRATIONS.md touched (or `skip-changelog:` trailer) |
+| `changelog-check.yml` | a `changelog.d/` + `migrations.d/` fragment per changed package (or a `skip-changelog:` line) |
 | `release.yml` | `uses: thekevinscott/putitoutthere/.github/workflows/release.yml@v0` |
 
 **Use `astral-sh/setup-uv@v7`**, not `actions/setup-python`. uv installs and pins Python itself:

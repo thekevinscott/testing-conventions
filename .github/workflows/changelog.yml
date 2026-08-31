@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,57 +13,25 @@ concurrency:
 
 jobs:
   enforce:
+    # The job name is the check-run name branch protection references, so it stays as written
+    # even though the gate now requires fragments rather than an edit to the two files. Renaming
+    # it is a branch-protection change, which cannot land atomically with a PR.
     name: CHANGELOG + MIGRATIONS touched
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
+          # The gate diffs base...head, so it needs both commits, not a shallow tip.
           fetch-depth: 0
 
-      - name: Check
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
+      - uses: astral-sh/setup-uv@v7
 
-          # Bypass when any commit on the PR carries a `skip-changelog:` trailer.
-          if git log --format=%B "$BASE_SHA..$HEAD_SHA" \
-            | grep -Eiq '^skip-changelog:'; then
-            echo "skip-changelog trailer present; bypassing enforcement."
-            exit 0
-          fi
-
-          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
-
-          packages=$(printf '%s\n' "$changed" \
-            | awk -F/ '$1 == "packages" && NF >= 2 { print $2 }' \
-            | sort -u)
-
-          if [ -z "$packages" ]; then
-            echo "No package files touched; nothing to enforce."
-            exit 0
-          fi
-
-          fail=0
-          for pkg in $packages; do
-            touched_code=$(printf '%s\n' "$changed" \
-              | grep -E "^packages/${pkg}/" \
-              | grep -Ev "^packages/${pkg}/(CHANGELOG|MIGRATIONS)\.md$" \
-              | grep -Ev "^packages/${pkg}/.*\.(test|spec)\.(ts|tsx|js|py|rs)$" \
-              | grep -Ev "^packages/${pkg}/(tests?|__tests__)/" \
-              || true)
-
-            if [ -z "$touched_code" ]; then
-              continue
-            fi
-
-            for f in CHANGELOG.md MIGRATIONS.md; do
-              if ! printf '%s\n' "$changed" | grep -qx "packages/${pkg}/${f}"; then
-                echo "::error file=packages/${pkg}/${f}::packages/${pkg} has code changes but ${f} is not updated. Add an entry under '## Unreleased' or include a 'skip-changelog:' trailer for genuinely internal refactors."
-                fail=1
-              fi
-            done
-          done
-
-          exit $fail
+      # The logic — which paths are package source, which are frozen stubs or fragments or tests,
+      # and the raw-body `skip-changelog:` scan — lives in the colocated-tested `tc-checks
+      # changelog-gate` command, per AGENTS.md "Logic lives in scripts, not workflow YAML". The
+      # SHAs are CLI arguments, never an env side-channel.
+      - name: Every changed package adds a changelog and a migration fragment
+        run: >-
+          uv run --project internals/checks tc-checks changelog-gate
+          "${{ github.event.pull_request.base.sha }}"
+          "${{ github.event.pull_request.head.sha }}"

@@ -1,7 +1,11 @@
 # Migrations
 
-Upgrade notes for breaking changes. New entries go under `## Unreleased`.
-On release, the section is renamed to `## v<OLD> → v<NEW>`.
+> **Frozen archive.** New entries are fragments under [`migrations.d/`](migrations.d/) — one file
+> per change, so two PRs touching this package add two different paths instead of colliding at
+> the top of this one. This file holds the entries written before that convention: read it for
+> history, never append to it. See `docs/internals/repo.md`, "CHANGELOG + MIGRATIONS".
+
+Upgrade notes for breaking changes up to the freeze, newest first.
 
 Each entry has five sections, in order:
 
@@ -11,7 +15,7 @@ Each entry has five sections, in order:
 4. **Behavior changes without code changes** — same API, different runtime behavior.
 5. **Verification** — commands that confirm the upgrade worked, with expected output.
 
-## Unreleased
+## Unreleased at the freeze
 
 ### Summary
 

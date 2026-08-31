@@ -4,19 +4,46 @@ Cross-cutting rules that apply across all language packages. Language-specific g
 
 ## CHANGELOG + MIGRATIONS
 
-The `CHANGELOG.md` and `MIGRATIONS.md` *files* live at each package root. The philosophy below is global — every language package follows it.
+Each package records its changes as **fragments** — one file per change, added under
+`packages/<pkg>/changelog.d/` and `packages/<pkg>/migrations.d/`. The convention below is global;
+every language package follows it.
 
-Every PR that changes public API touches both files. Enforced in CI; a `skip-changelog:` trailer bypasses the check for genuinely internal refactors.
+A PR that changes public API under `packages/<pkg>/` adds one fragment to each of that package's
+two fragment directories. Enforced in CI by `changelog.yml`, which runs the `changelog-gate` check
+(`internals/checks`); a `skip-changelog: <reason>` line on any commit bypasses it for genuinely
+internal refactors, and the reason stays in git history.
 
-**`CHANGELOG.md`** — Keep a Changelog format. New entries land under `## Unreleased`, grouped `Added` / `Changed` / `Deprecated` / `Removed` / `Fixed`. Breaking changes carry a `**BREAKING**` prefix and link to their `MIGRATIONS.md` section. On release, `## Unreleased` is renamed to `## v<OLD> → v<NEW>` and a fresh `## Unreleased` opens.
+**Why fragments.** A shared file that every PR appends to at the same anchor makes concurrent PRs
+conflict by construction: the gate requires each PR to edit it, and the convention puts each new
+entry at the top, so any two open PRs against one package collide. A fragment is a new file, so
+two PRs touching the same package produce no conflict.
 
-**`MIGRATIONS.md`** — lives at the package root. New entries land under `## Unreleased`. Each entry has five sections, in order:
+**Naming.** `packages/<pkg>/<kind>.d/YYYY-MM-DD-<slug>.md`, where `<kind>` is `changelog` or
+`migrations`, the date is the UTC merge date, and `<slug>` is kebab-case (lowercase letters,
+digits, hyphens). The directory names the package and the kind, so the filename carries neither.
+Each fragment directory holds a `README.md` describing the convention; it is not an entry.
+
+**Changelog fragment** — Keep a Changelog categories. The body opens with a bold category —
+`**Added**` / `**Changed**` / `**Deprecated**` / `**Removed**` / `**Fixed**` / `**Security**` —
+then the entry text as it would read in a changelog. The category lives in the body, not the
+filename. A breaking change carries a `**BREAKING**` prefix and names its migration fragment.
+
+**Migration fragment** — a `### <title>` heading and five sections, in order:
 
 1. **Summary** — one paragraph: what changed and why.
-2. **Required changes** — before/after for config, CLI flags, function/method arguments, action inputs. "None" if purely additive.
-3. **Deprecations removed** — anything previously warned about that's now gone. "None" if nothing was removed.
+2. **Required changes** — before/after for config, CLI flags, function/method arguments, action inputs.
+3. **Deprecations removed** — anything previously warned about that's now gone.
 4. **Behavior changes without code changes** — same API, different runtime behavior (tag format, exit codes, defaults).
 5. **Verification** — commands the consumer runs to confirm the upgrade worked, with the expected output.
+
+Keep every heading; write `_None._` under one that does not apply.
+
+**Fragments are permanent and append-only.** Nothing is assembled back into a single file and
+deleted, and no `## Unreleased` section is ever renamed — the release record is the git tag history
+and the GitHub Release for each version. The package-root `CHANGELOG.md` and `MIGRATIONS.md` are a
+**frozen archive** of the entries written before this convention: read them for history, never
+append to them. Direction of travel is one way — an entry becomes a fragment, never the reverse.
+If you are adding lines to `CHANGELOG.md` or `MIGRATIONS.md`, stop: you want a fragment.
 
 Public-API surface for the purpose of these files: every exported value/type, every CLI flag, every config key, every observable artifact (tag format, GitHub Release body shape). Internal refactors, test-only changes, and docs-only edits stay out.
 

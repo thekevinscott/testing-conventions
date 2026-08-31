@@ -6,7 +6,7 @@ description: Adopt the standard on a monorepo — one workflow call per package,
 
 A monorepo adopts the standard **one workflow call per package**: each `uses:` job names its
 package's real source directory, and the workflow derives everything else from the package
-itself. All seven gates run per call. This repository consumes itself the same way — its
+itself. All eight gates run per call. This repository consumes itself the same way — its
 dogfood workflow is exactly this file with our package paths.
 
 ```yaml

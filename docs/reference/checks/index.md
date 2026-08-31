@@ -1,10 +1,10 @@
 ---
-description: The seven checks the workflow runs — one page per check, each carrying its motivation, per-language behavior, run conditions, and configuration surface.
+description: The eight checks the workflow runs — one page per check, each carrying its motivation, per-language behavior, run conditions, and configuration surface.
 ---
 
-# The seven checks
+# The eight checks
 
-The workflow runs seven checks, and each has one page here carrying its complete picture: why the
+The workflow runs eight checks, and each has one page here carrying its complete picture: why the
 check exists, what it enforces per language, when it runs, and every configuration key and
 exemption rule that touches it. Land on a check's page and you have everything you need for that
 check.
@@ -12,6 +12,7 @@ check.
 | Check | `gates` name | Asks |
 | --- | --- | --- |
 | [`unit colocated-test`](./colocated-test) | `colocated-test` | Does a unit test **exist** for every source file — and move with it on a pull request? |
+| [`unit one-function-per-file`](./one-function-per-file) | `one-function-per-file` | Does each source file hold at most **one substantial function** — so the file name is the subject? |
 | [`unit lint`](./unit-lint) | `unit-lint` | Does every unit test **mock every collaborator**? |
 | [`unit coverage`](./unit-coverage) | `unit-coverage` | Does the unit suite **run** the code — whole-tree and on the changed lines? |
 | [`unit mutation`](./mutation) | `mutation` | Does the unit suite **verify** the code — break it, and a test fails? |

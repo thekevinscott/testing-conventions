@@ -107,7 +107,7 @@ page*: fewer, denser pages beat a page per feature.
 
 Consistency is a feature: the same idea uses the same word everywhere.
 
-- **check** — one of the seven CI jobs the workflow runs (`unit coverage`, `integration lint`),
+- **check** — one of the eight CI jobs the workflow runs (`unit coverage`, `integration lint`),
   named as it appears in the pull-request UI. "Rule" is acceptable for the enforced convention
   itself; never "gate" (except the `gates` input, which the reference names precisely), "lint"
   (except a named lint like `no-first-party-mock`), or "test".

@@ -65,6 +65,7 @@ export default defineConfig({
               link: '/reference/checks/',
               items: [
                 { text: 'unit colocated-test', link: '/reference/checks/colocated-test' },
+                { text: 'unit one-function-per-file', link: '/reference/checks/one-function-per-file' },
                 { text: 'unit lint', link: '/reference/checks/unit-lint' },
                 { text: 'unit coverage', link: '/reference/checks/unit-coverage' },
                 { text: 'unit mutation', link: '/reference/checks/mutation' },

@@ -86,7 +86,9 @@ flags every function past the first that exceeds the threshold. `max_lines` is s
 language; a file whose functions genuinely belong together takes a
 `one-function-per-file` exemption with a reason. Python and TypeScript are checked with
 no configuration; Rust opts in by naming a threshold, because a Rust file is a module and
-grouping functions in one is idiomatic rather than a lapse.
+grouping functions in one is idiomatic rather than a lapse. **Wired into the reusable
+workflow** as a step of the `Static checks (<language>)` job, named `one-function-per-file`
+in the `gates` allowlist ([#512](https://github.com/thekevinscott/testing-conventions/issues/512)).
 
 #### Isolation
 

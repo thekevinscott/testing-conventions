@@ -34,6 +34,9 @@ jobs:
       - name: Check unit lint
         if: ${{ !cancelled() && contains(inputs.gates, '"unit-lint"') }}
         run: tc unit lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+      - name: Check one function per file
+        if: ${{ !cancelled() && contains(inputs.gates, '"one-function-per-file"') }}
+        run: tc unit one-function-per-file --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
       - name: Lint integration tests
         if: ${{ !cancelled() && contains(inputs.gates, '"integration-lint"') }}
         run: tc integration lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
@@ -67,6 +70,16 @@ def test_each_legacy_job_header_is_a_violation():
     for job in _LEGACY_JOBS:
         text = WIRED + f"  {job}:\n    runs-on: ubuntu-latest\n"
         assert f"the legacy `{job}` job still exists" in violations(text)
+
+
+def test_a_workflow_without_the_one_function_step_is_a_violation():
+    text = WIRED.replace("unit one-function-per-file --language", "REMOVED")
+    assert "the one-function-per-file gate step is missing" in violations(text)
+
+
+def test_a_workflow_without_the_one_function_guard_is_a_violation():
+    text = WIRED.replace("contains(inputs.gates, '\"one-function-per-file\"')", "REMOVED")
+    assert "the one-function-per-file gate-membership guard is missing" in violations(text)
 
 
 def test_each_missing_required_substring_is_a_violation():

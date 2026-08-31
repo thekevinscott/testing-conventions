@@ -118,6 +118,22 @@ def test_e2e_rust_crate_enters_the_colocated_test_matrix(run_detect):
     assert out["languages"] == "[]"
 
 
+def test_e2e_one_function_matrix_carries_every_detected_language(run_detect):
+    out = run_detect(
+        sources={
+            "widget.py": "x = 1\n",
+            "Cargo.toml": '[package]\nname = "x"\n',
+            "src/lib.rs": "pub fn f() {}\n",
+        }
+    )
+    assert out["one_function_languages"] == '["python","rust"]'
+
+
+def test_e2e_one_function_matrix_is_empty_on_an_empty_tree(run_detect):
+    out = run_detect()
+    assert out["one_function_languages"] == "[]"
+
+
 def test_e2e_cargo_without_rust_source_is_not_a_crate(run_detect):
     out = run_detect(sources={"Cargo.toml": '[package]\nname = "x"\n'})
     assert out["coverage_languages"] == "[]"

@@ -60,13 +60,28 @@ landed that aren't — and every parent merge forces a retarget-and-rebase round
 When work depends on unmerged work, fold it into the same PR as ordered commits (one reviewable
 unit), or wait for the dependency to merge and branch from the new `main`.
 
-## Rebase on request
+## Rebase proactively
 
-When asked to rebase, rebase the working branch onto the latest default branch and **push it
-immediately** — resolving any conflicts — before running or testing locally. The rebase and its
-push come first; local verification resumes afterward. A rebase request is a request to make the
-remote branch current *now*, so treat the push as the deliverable, not a step to defer behind a
-test run.
+Rebase on your own initiative, without asking. Getting a PR to green is the job and a rebase is
+mechanical, so bringing one back as a question costs a round trip and buys nothing. Rebase the
+working branch onto the latest default branch and **push it immediately** — resolving any
+conflicts — whenever:
+
+- the branch has a merge conflict,
+- a CI check needs retriggering,
+- a rebase could plausibly turn a check green,
+- commits are unsigned and need re-signing.
+
+The rebase and its push come first; local verification resumes afterward. Treat the push as the
+deliverable, not a step to defer behind a test run. Rebasing onto the updated base is also the
+mechanism behind **PRs target main**, and the first condition is the conflict check that
+**Shepherding a PR across the finish line** already calls for.
+
+**The red/green carve-out.** Never rebase away a red run the cadence still requires you to witness.
+A rebase retriggers checks against a different base, superseding the very run that proves the new
+tests can fail. Witness the red on CI, then rebase. "A rebase could plausibly turn a check green"
+means a check red for a reason unrelated to the change under test — a broken base, a stale
+lockfile, an upstream fix that already landed — never a red you are still required to produce.
 
 ## Shepherding a PR across the finish line
 

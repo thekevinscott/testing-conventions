@@ -47,6 +47,29 @@ If you are adding lines to `CHANGELOG.md` or `MIGRATIONS.md`, stop: you want a f
 
 Public-API surface for the purpose of these files: every exported value/type, every CLI flag, every config key, every observable artifact (tag format, GitHub Release body shape). Internal refactors, test-only changes, and docs-only edits stay out.
 
+## The CLI command surface
+
+Every subcommand `--help` lists runs a rule and can fail. A command that parses and exits `0`
+without doing work hands a consumer a pass they never earned, and it reads as a documented feature
+because it sits in the help output next to real ones. The `check` umbrella was the one such
+scaffold — declared in the repo's first commit, dispatched into the no-subcommand arm, and left
+unwired when #56 closed as not planned — and it is gone; nothing replaces it. New commands land
+wired, or they do not land.
+
+Two shapes sit outside that rule, both deliberate:
+
+- **`workflow`** is hidden (`#[command(hide = true)]`) rather than absent. It does real work — the
+  drift guard that walks a workflow file's invocations against the binary's own command tree — but
+  it runs from this repo's CI, not from a consumer's, so it stays out of the documented surface.
+- **A bare `testing-conventions`**, with no subcommand at all, prints the version banner on stderr
+  and exits `0`. Nothing to run, nothing to report.
+
+The command tree (`testing_conventions::command()`) is also the workflow guard's source of truth,
+so removing a subcommand is a two-sided edit: the variant in `packages/rust/src/lib.rs`, and every
+guard fixture under `packages/rust/tests/fixtures/workflow/` that names it. A clean fixture must
+invoke commands the binary still exposes, or the fixture stops meaning "clean" and starts meaning
+"stale."
+
 ## Monorepo package-root derivation
 
 `detect.py` derives seven outputs a suite-executing job needs to install, build, run, and

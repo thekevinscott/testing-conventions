@@ -29,7 +29,7 @@ have nothing to change: it never invoked `check`.
 
 **Deprecations removed**
 
-_None._ `check` carried no deprecation warning; it is removed outright.
+_None._
 
 **Behavior changes without code changes**
 

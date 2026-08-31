@@ -26,7 +26,7 @@ fn banner() -> String {
 
 #[test]
 fn a_successful_run_names_its_version() {
-    let (code, _, stderr) = cli(&["check"]);
+    let (code, _, stderr) = cli(&[]);
     assert_eq!(code, 0);
     assert!(
         stderr.contains(&banner()),

@@ -53,8 +53,8 @@ Every subcommand `--help` lists runs a rule and can fail. A command that parses 
 without doing work hands a consumer a pass they never earned, and it reads as a documented feature
 because it sits in the help output next to real ones. The `check` umbrella was the one such
 scaffold — declared in the repo's first commit, dispatched into the no-subcommand arm, and left
-unwired when #56 closed as not planned — and it is gone; nothing replaces it. New commands land
-wired, or they do not land.
+unwired when #56 closed as not planned — and it is gone; nothing replaces it. A new command lands
+wired.
 
 Two shapes sit outside that rule, both deliberate:
 

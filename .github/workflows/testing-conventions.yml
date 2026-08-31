@@ -103,20 +103,15 @@ name: Testing Conventions
 # auto-provisioned are all read from that root's own manifest, so a per-package-lockfile monorepo
 # package (dirsql PR #410) installs and builds correctly with no configuration.
 #
-# `build_command` (#243/#289) and `rust_toolchain` (#263) are the remaining *escape hatches*, for a
-# build the package manifest cannot express, run/provisioned at that same derived package root.
-# `build_command` is a shell step run after toolchain + dependency setup and before the suite, in
-# the suite-executing jobs only — `unit coverage` (whole-tree), `unit coverage --base`
-# (changed-line), and `unit mutation`. It is NOT a workflow input (#289): the command lives in the
-# package's own `testing-conventions.toml` as `[python] build_command` (with a required `reason`),
-# discovered at the package root by `detect` exactly like `config` and surfaced as
-# `needs.detect.outputs.build_command`. Set it for a Python build the auto-derivation above does not
-# cover (a PEP 517 backend with no pre-build shell hook); a package with no such key leaves it empty
-# ⇒ no build step. TypeScript and Rust need no key — npm's `prepare`/`postinstall` and Cargo's
-# `build.rs` build their compiled modules during dependency install. The static rules
+# `build_command` is a build declaration read from the package's own `testing-conventions.toml`
+# as `[<language>] build_command` — `[python]`, `[typescript]`, or `[rust]`, per the package's
+# primary language — discovered at the package root by `detect` exactly like `config` and surfaced
+# as `needs.detect.outputs.build_command`. The suite-executing jobs (`unit coverage`, `unit
+# coverage --base`, `unit mutation`) run it after toolchain + dependency setup and before the
+# suite; the packaging job runs it before the pack. Empty ⇒ no build step. The static rules
 # (colocated-test, unit lint, one-function-per-file, integration lint) only parse source, and
-# `e2e verify` checks the
-# attestation rather than running the e2e suite, so none of those jobs build or import anything.
+# `e2e verify` checks the attestation rather than running the e2e suite, so none of those jobs
+# build or import anything.
 #
 # `gates` (#262) is an optional allowlist naming which gates run — empty (the default) runs
 # every applicable gate. The eight gate names are colocated-test, one-function-per-file,

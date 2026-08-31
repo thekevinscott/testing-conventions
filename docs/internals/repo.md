@@ -112,13 +112,13 @@ package's own manifest instead.
   unchanged when `package_root` is `.`. Every suite/lint job's `CONFIG` env reads this output
   instead of `inputs.config` directly, so a per-package call's own config file is discovered,
   never named.
-- **`build_command`** (`derive_build_command`, #289): the `[python].build_command` shell command
-  read from the discovered `config` file — the one escape hatch a PEP 517 Python backend can't
-  express (npm's `prepare`/`postinstall` and Cargo's `build.rs` cover TypeScript and Rust). This is
-  the only detect function that opens and parses a `testing-conventions.toml`'s *contents*, not just
-  resolves its path; `''` when the file is absent, unparseable, or declares no build command. The
-  suite-executing jobs run `needs.detect.outputs.build_command` before the suite, replacing the
-  removed `build_command` *workflow input*.
+- **`build_command`** (`derive_build_command`, #289/#335): the `[<language>].build_command` shell
+  command read from the discovered `config` file, keyed off the package's `primary_language` — so
+  `[python]`, `[typescript]`, and `[rust]` are all read. This is the only detect function that
+  opens and parses a `testing-conventions.toml`'s *contents*, not just resolves its path; `''` when
+  the file is absent, unparseable, or declares no build command. The suite-executing jobs run
+  `needs.detect.outputs.build_command` before the suite and the packaging job runs it before the
+  pack, replacing the removed `build_command` *workflow input*.
 
 These are the primitive the four gate fixes (#278–#281) consume; deriving them is out of scope
 for what those jobs *do* with them (installing, building, discovering `dist/`, discovering

@@ -101,19 +101,20 @@ package root the suite tiers derive from — the same root as the row above, not
 Two optional inputs refine a call: `languages` restricts the detected set explicitly, and
 `config` names a config file somewhere other than the package root.
 
+## The build declaration
+
+One config key states a build fact an ecosystem leaves unstandardized:
+
+- **[`build_command`](./reference/config#build-command)** — a build step declared per language
+  (`[python]`, `[typescript]`, `[rust]`) in the package's own `testing-conventions.toml` and run at
+  the package root. Where an ecosystem standardizes the build, the tool derives it.
+
 ## Escape hatches
 
-Two inputs and one config key cover what a manifest cannot express. They carry the same bar as
+Two inputs waive or override something that already works, so they carry the same bar as
 [exemptions](./guide/configure#exempt-a-file) — a reasoned last resort, with the manifest-level
 fix preferred:
 
-- **`build_command`** — a build step beyond the manifest's own hooks, declared per language in the
-  package's own `testing-conventions.toml` and run at the package root. Each language's standard
-  build is derived (a maturin/PEP 517 backend, Cargo's `build.rs` and `cargo package`, npm's
-  `prepare` / `prepack`); `build_command` names only what an ecosystem structurally can't
-  standardize — a PEP 517 backend's absent pre-build shell step, or a TypeScript compile in a
-  `build` script npm doesn't run on `pack`. It supplies a necessary fact rather than waiving a
-  check, so unlike the other escape hatches it needs no `reason`.
 - **`rust_toolchain`** — forces cargo provisioning when no manifest declares the need.
 - **`gates`** — restricts a call to named gates, for the rare package where one genuinely
   cannot run.

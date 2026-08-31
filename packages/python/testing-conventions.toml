@@ -1,0 +1,8 @@
+# The pytest plugin's adoption of `unit one-function-per-file`. Every other floor stays at the
+# zero-config default.
+#
+# 12 is the lowest threshold this tree passes today: `config/detect.py` and
+# `pytest_plugin/hooks.py` each hold one substantial function plus a handful of short ones the
+# threshold keeps trivial. Walk it down as those files split.
+[python]
+one_function_per_file = { max_lines = 12 }

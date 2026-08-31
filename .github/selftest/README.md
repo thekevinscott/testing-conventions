@@ -60,7 +60,7 @@ self-test drives the *published* `testing-conventions` binary (what consumers ge
 
   Each package also carries its own `testing-conventions.toml` at its package root.
   `detect-package-root-ts` / `detect-package-root-py` drive the *local* detect action
-  (not the `@v0`-pinned one the reusable workflow's `detect` job uses) to prove
+  (not the `@v0` one the reusable workflow's `detect` job uses) to prove
   `package_root` / `ts_package_manager` / `python_env` / `provision_rust` / `config`
   resolve correctly for each package — including that each package's own config file
   is discovered with no `config` input — so, like `detect-routes-python`, they aren't

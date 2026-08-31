@@ -196,6 +196,16 @@ thing that moves it (Layer 2) — a required check never depends on state that c
 commit. `docs/internals/repo.md` carries the mechanics ("Hermetic mode", "Validated promotion") and the
 full worked-example history ("Self-test and the `@v0` path").
 
+**Scope: this repo's own artifacts.** The invariant and its two layers govern what this repo builds
+and publishes: `detect`, the CLI binary, and the `@v0` tag it moves. Those are what Layer 1 pins to
+the commit under test and what Layer 2 gates at promotion. **Third-party actions track major tags**,
+which is the house style in every workflow here — `actions/checkout@v6`, `astral-sh/setup-uv@v7`,
+`dtolnay/rust-toolchain@stable`, `pypa/gh-action-pypi-publish@release/v1`,
+`thekevinscott/putitoutthere@v0`, `thekevinscott/pr-monitor@v1`. Keep them there: read a third-party
+`uses:` ref as correct as written and move on. The repo owner settled this, so it stands as a rule
+rather than a judgment the next PR reweighs (#507 pinned a SHA and #509 restored the tag; that round
+trip is what this paragraph ends).
+
 ## Two-step rollout for workflow-consumed CLI changes
 
 The reusable workflow (`.github/workflows/testing-conventions.yml`) never runs this repo's own

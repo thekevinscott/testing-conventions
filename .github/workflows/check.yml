@@ -9,7 +9,7 @@ name: Check
 # This is the gate we were missing: every release failure so far
 # (repository-URL mismatch, the npm bundled-cli launcher, ...) was a config
 # problem only surfaced mid-release. As putitoutthere grows new `check`
-# lints, this gate inherits them automatically via the pinned @v0 ref.
+# lints, this gate inherits them automatically via the moving @v0 major tag.
 
 on:
   pull_request:

@@ -22,11 +22,7 @@ jobs:
     # until the job is killed.
     timeout-minutes: 20
     steps:
-      # Pinned to a commit, not the floating `v1`: this is a required check, and
-      # **CI hermeticity** says a required check may depend only on the commit under
-      # test. `v1` moving from willfire 0.1.2 to 0.1.11 is what turned this gate red
-      # with no commit here to blame (#502). A bump is now a reviewable commit.
-      - uses: thekevinscott/pr-monitor@bd34710b23a81c40c80680d45ca0bd6e76aeba86 # v1
+      - uses: thekevinscott/pr-monitor@v1
         with:
           # dogfood calls the reusable workflow, whose gate jobs take their matrix from
           # `detect`'s outputs (`fromJSON(needs.detect.outputs.…)`) and name themselves

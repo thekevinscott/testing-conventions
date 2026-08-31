@@ -4,10 +4,10 @@ description: The reusable GitHub Actions workflow — every input, every check a
 
 # Workflow
 
-The reusable workflow is the adoption surface: one `uses:` call runs every check. The four static
-source scans (colocated-test, its co-change variant, unit-lint, and integration-lint) run as steps
-of one `Static checks (<language>)` job per language; the toolchain-heavy suites each run as their
-own job. This page is the canonical record of its inputs, the checks it runs, and its versioning
+The reusable workflow is the adoption surface: one `uses:` call runs every check. The five static
+source scans (colocated-test, its co-change variant, one-function-per-file, unit-lint, and
+integration-lint) run as steps of one `Static checks (<language>)` job per language; the
+toolchain-heavy suites each run as their own job. This page is the canonical record of its inputs, the checks it runs, and its versioning
 contract.
 To adopt it, start with [Getting Started](../getting-started) or [Adopt on a
 monorepo](../monorepo).

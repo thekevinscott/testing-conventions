@@ -12,18 +12,21 @@ name: Testing Conventions
 #       uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
 #
 # The principle is **one suite-executing rule command → one job**, fanned out per
-# language — with the four static source scans (colocated-test, its co-change variant,
-# unit-lint, integration-lint) consolidated into a single `static` job per language,
+# language — with the five static source scans (colocated-test, its co-change variant,
+# unit-lint, one-function-per-file, integration-lint) consolidated into a single `static`
+# job per language,
 # since each is a sub-second scan that would otherwise pay full job setup for <1s of
 # work (#410). It runs the published `testing-conventions` binary via `npx` (a
 # prebuilt, per-platform npm package — no Rust toolchain, no compile from source),
 # failing the build on any violation. The shipped rule jobs are:
 #
-#   - static               — the four static source scans as steps of one job per
+#   - static               — the five static source scans as steps of one job per
 #                            language (#410): unit colocated-test (every source file has
 #                            a colocated unit test, all langs; the rust arm checks inline
 #                            `#[cfg(test)]` presence, #40/#274) with its co-change variant,
-#                            unit lint (the unit-suite isolation lint), and integration lint
+#                            unit lint (the unit-suite isolation lint), unit
+#                            one-function-per-file (one substantial function per source
+#                            file; rust opts in via config), and integration lint
 #                            (the integration mocking lints) — Python, TypeScript, Rust
 #   - unit coverage        — the unit coverage floor (Python, TypeScript, and Rust
 #                            via cargo-llvm-cov, #37)
@@ -111,12 +114,14 @@ name: Testing Conventions
 # cover (a PEP 517 backend with no pre-build shell hook); a package with no such key leaves it empty
 # ⇒ no build step. TypeScript and Rust need no key — npm's `prepare`/`postinstall` and Cargo's
 # `build.rs` build their compiled modules during dependency install. The static rules
-# (colocated-test, unit lint, integration lint) only parse source, and `e2e verify` checks the
+# (colocated-test, unit lint, one-function-per-file, integration lint) only parse source, and
+# `e2e verify` checks the
 # attestation rather than running the e2e suite, so none of those jobs build or import anything.
 #
 # `gates` (#262) is an optional allowlist naming which gates run — empty (the default) runs
-# every applicable gate. The seven gate names are colocated-test, unit-lint, unit-coverage,
-# mutation, integration-lint, packaging, and e2e-verify; a named gate still applies its own
+# every applicable gate. The eight gate names are colocated-test, one-function-per-file,
+# unit-lint, unit-coverage, mutation, integration-lint, packaging, and e2e-verify; a named
+# gate still applies its own
 # conditions (language presence, the PR event, a discoverable dist/attestation), and its
 # diff-scoped variant rides with it (colocated-test covers the co-change job, unit-coverage
 # the changed-line job). The allowlist is authoritative: a gate left out is skipped even when
@@ -176,7 +181,7 @@ on:
         type: string
         default: ''
       gates:
-        description: 'Optional JSON array naming which gates run, e.g. ["colocated-test", "unit-lint", "integration-lint"] (#262). Empty (the default) runs every applicable gate. Gate names: colocated-test, unit-lint, unit-coverage, mutation, integration-lint, packaging, e2e-verify. A named gate still applies its own conditions, and its diff-scoped variant rides with it (colocated-test covers the co-change job, unit-coverage the changed-line job). The allowlist is authoritative: a gate left out is skipped even when run_e2e / packaging_artifact is set.'
+        description: 'Optional JSON array naming which gates run, e.g. ["colocated-test", "unit-lint", "integration-lint"] (#262). Empty (the default) runs every applicable gate. Gate names: colocated-test, one-function-per-file, unit-lint, unit-coverage, mutation, integration-lint, packaging, e2e-verify. A named gate still applies its own conditions, and its diff-scoped variant rides with it (colocated-test covers the co-change job, unit-coverage the changed-line job). The allowlist is authoritative: a gate left out is skipped even when run_e2e / packaging_artifact is set.'
         type: string
         default: ''
       rust_toolchain:
@@ -207,8 +212,12 @@ jobs:
       isolation_languages: ${{ steps.scan_hermetic.outputs.isolation_languages || steps.scan_published.outputs.isolation_languages }}
       # The `static` job's matrix (#410): the same rust-inclusive union the colocated/isolation/
       # integration sets hold, under its own name so a future per-set divergence in detect needs no
-      # workflow change. The four static gates run as steps of that one job.
+      # workflow change. The five static gates run as steps of that one job.
       static_languages: ${{ steps.scan_hermetic.outputs.static_languages || steps.scan_published.outputs.static_languages }}
+      # `unit one-function-per-file`: the same rust-inclusive union — the rule is
+      # capability-identical in all three languages, and an unconfigured rust tree reports that
+      # the rule is not enabled and passes, so rust rides the set rather than being filtered here.
+      one_function_languages: ${{ steps.scan_hermetic.outputs.one_function_languages || steps.scan_published.outputs.one_function_languages }}
       # `unit coverage` (#37/#171): present python/typescript, plus rust whenever a
       # crate is present — Rust coverage is zero-config now (`lines = 100` by default,
       # #206) — the matrix the whole-tree and changed-line coverage jobs fan out over.
@@ -299,12 +308,12 @@ jobs:
   static:
     name: Static checks (${{ matrix.language }})
     needs: detect
-    # The four static gates — colocated-test (with its co-change variant), unit-lint,
-    # integration-lint — run as steps of one job per language: each is a sub-second
+    # The five static gates — colocated-test (with its co-change variant), unit-lint,
+    # one-function-per-file, integration-lint — run as steps of one job per language: each is a sub-second
     # source scan, so a job apiece paid ~20s of setup per gate for <1s of work. The
     # job runs when ANY member gate is allowlisted; each step guards its own gate and
     # its own language set, so `gates` semantics are unchanged (#262).
-    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"colocated-test"') || contains(inputs.gates, '"unit-lint"') || contains(inputs.gates, '"integration-lint"')) && (needs.detect.outputs.static_languages || needs.detect.outputs.integration_lint_languages) != '[]' }}
+    if: ${{ (inputs.gates == '' || contains(inputs.gates, '"colocated-test"') || contains(inputs.gates, '"unit-lint"') || contains(inputs.gates, '"one-function-per-file"') || contains(inputs.gates, '"integration-lint"')) && (needs.detect.outputs.static_languages || needs.detect.outputs.integration_lint_languages) != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -352,6 +361,18 @@ jobs:
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
         run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+      - name: Check one function per file
+        # The `|| integration_lint_languages` fallback covers a stale `@v0` detect that predates
+        # `one_function_languages`: the two sets are identical, so the gate still fans out
+        # correctly until the tag advances.
+        if: ${{ !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"one-function-per-file"')) && contains(needs.detect.outputs.one_function_languages || needs.detect.outputs.integration_lint_languages, format('"{0}"', matrix.language)) }}
+        env:
+          LANGUAGE: ${{ matrix.language }}
+          SCAN_PATH: ${{ inputs.source }}
+          VERSION: ${{ inputs.version }}
+          CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
+          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
+        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit one-function-per-file --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
       - name: Lint integration tests
         if: ${{ !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"integration-lint"')) && contains(needs.detect.outputs.integration_lint_languages, format('"{0}"', matrix.language)) }}
         env:

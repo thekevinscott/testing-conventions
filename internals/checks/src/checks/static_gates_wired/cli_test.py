@@ -60,7 +60,7 @@ def test_raises_listing_every_problem_on_an_unwired_workflow(tmp_path):
     try:
         cli.callback(workflow=str(workflow))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
-        assert "consolidate the four static gates" in error.message
+        assert "consolidate the five static gates" in error.message
         assert "the legacy `colocated-test` job still exists" in error.message
     else:
         raise AssertionError("an unwired workflow must raise")

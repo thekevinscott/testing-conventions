@@ -195,6 +195,23 @@ the isolation rules in #102: register `Rule::NoFirstPartyPatch` (`id()` /
 `[[python.exempt]] rules = ["no-first-party-patch"]` entry. Auditable in one diff,
 reason-required, stale entries error — never a silent ignore.
 
+## Shapes the visitor walks
+
+The `rustpython` visitor recognises each rule through a fixed set of AST shapes:
+
+- **Functions.** `def` and `async def` share the fixture bookkeeping, so an `async`
+  fixture shelters a patch exactly as a sync one does, and `no-monkeypatch` reads the
+  parameter list of both.
+- **Environment mutation.** `os.environ[...]` is caught in all three statement forms —
+  assignment, augmented assignment (`os.environ["PATH"] += ":/x"`), and `del` — plus the
+  method calls (`update`, `pop`, `clear`, …).
+- **Patch receivers.** `patch(...)` is a bare name; `patch.object(...)` / `patch.dict(...)`
+  are recognised when the receiver is `patch` itself or an attribute chain ending in it
+  (`mock.patch.object`, `unittest.mock.patch.dict`). Any other callee shape — a subscript,
+  a call result — is left alone.
+- **Fixture decorators.** A bare `@fixture` name or an attribute (`@pytest.fixture`),
+  called or not. Any other decorator expression is an ordinary decorator.
+
 ## Precision limits / non-goals
 
 Deliberately **not** caught by the syntactic heuristic — left to review, and stated

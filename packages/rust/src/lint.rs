@@ -89,15 +89,18 @@ pub fn find_suite_violations(package_root: &Path) -> Result<Vec<Violation>> {
 /// package ([`first_party_package`]); a tree that declares none reports nothing.
 pub fn find_unit_isolation_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     let root = root.as_ref();
+    // Resolved from the same `pyproject.toml` as `first_party_package`, so a tree with no
+    // manifest exits here and the package name is the only remaining unknown.
+    let Some(tests) = crate::tiers::suite_tests_dir(root, "pyproject.toml") else {
+        return Ok(Vec::new());
+    };
     let Some(first_party) = first_party_package(root) else {
         return Ok(Vec::new());
     };
     let mut files = Vec::new();
     collect_python_files(root, &mut files, is_python_unit_test_file)?;
     // The suite tiers run first-party code for real, so their files are never unit subjects.
-    if let Some(tests) = crate::tiers::suite_tests_dir(root, "pyproject.toml") {
-        files.retain(|file| !file.starts_with(&tests));
-    }
+    files.retain(|file| !file.starts_with(&tests));
     files.sort();
 
     let mut violations = Vec::new();
@@ -1078,13 +1081,8 @@ mod tests {
     /// Parse `src` (a single expression statement) and return its call.
     fn parse_call(src: &str) -> ExprCall {
         let suite = ast::Suite::parse(src, "t.py").expect("snippet should parse");
-        match suite.into_iter().next().expect("one statement") {
-            ast::Stmt::Expr(stmt) => match *stmt.value {
-                Expr::Call(call) => call,
-                other => panic!("expected a call, got {other:?}"),
-            },
-            other => panic!("expected an expression statement, got {other:?}"),
-        }
+        let stmt = suite.into_iter().next().expect("one statement");
+        (*stmt.expect_expr_stmt().value).expect_call_expr()
     }
 
     #[test]
@@ -1567,6 +1565,96 @@ mod tests {
         assert!(is_environ_mutator("clear"));
         assert!(!is_environ_mutator("get"));
         assert!(!is_environ_mutator("keys"));
+    }
+
+    /// The rules the suite lint reports for `source`, in report order.
+    fn lint_rules(source: &str) -> Vec<&'static str> {
+        let suite = ast::Suite::parse(source, "t.py").expect("snippet should parse");
+        let mut visitor = LintVisitor {
+            file: Path::new("t.py"),
+            source,
+            fixture_depth: 0,
+            first_party: Some("myproject"),
+            imports: HashMap::new(),
+            violations: Vec::new(),
+        };
+        for stmt in suite {
+            visitor.visit_stmt(stmt);
+        }
+        visitor.violations.iter().map(|v| v.rule).collect()
+    }
+
+    #[test]
+    fn an_async_fixture_shelters_a_patch_that_an_async_test_does_not() {
+        assert!(
+            lint_rules("@pytest.fixture\nasync def client():\n    patch(\"pkg.mod.attr\")\n")
+                .is_empty()
+        );
+        assert_eq!(
+            lint_rules("async def widget_test():\n    patch(\"pkg.mod.attr\")\n"),
+            vec!["no-inline-patch"]
+        );
+        assert_eq!(
+            lint_rules("async def widget_test(monkeypatch):\n    pass\n"),
+            vec!["no-monkeypatch"]
+        );
+    }
+
+    #[test]
+    fn an_augmented_assignment_to_environ_is_a_mutation() {
+        assert_eq!(
+            lint_rules("def widget_test():\n    os.environ[\"PATH\"] += \":/x\"\n"),
+            vec!["no-environ-mutation"]
+        );
+        assert!(lint_rules("def widget_test():\n    total += 1\n").is_empty());
+    }
+
+    #[test]
+    fn a_fixture_decorator_is_a_bare_name_or_an_attribute() {
+        assert!(
+            lint_rules("@fixture\ndef client():\n    patch(\"pkg.mod.attr\")\n").is_empty(),
+            "a bare `@fixture` shelters the patch"
+        );
+        assert_eq!(
+            lint_rules("@registry[\"fixture\"]\ndef client():\n    patch(\"pkg.mod.attr\")\n"),
+            vec!["no-inline-patch"],
+            "a subscripted decorator is not a fixture"
+        );
+    }
+
+    #[test]
+    fn patch_object_is_recognized_only_through_a_patch_receiver() {
+        assert_eq!(
+            lint_rules("def widget_test():\n    mock.patch.object(svc, \"send\")\n"),
+            vec!["no-inline-patch"]
+        );
+        assert!(
+            lint_rules("def widget_test():\n    helpers[0].object(svc, \"send\")\n").is_empty(),
+            "a subscripted receiver is not `patch`"
+        );
+        assert!(
+            lint_rules("def widget_test():\n    helpers[0](\"pkg.mod.attr\")\n").is_empty(),
+            "a subscripted callee is not a patch call"
+        );
+    }
+
+    #[test]
+    fn find_suite_without_a_tests_directory_reports_nothing() {
+        let tree = TempDir::new();
+        tree.write("pyproject.toml", "[project]\nname = \"myproject\"\n");
+        assert!(find_suite_violations(&tree.0)
+            .expect("a readable tree should succeed")
+            .is_empty());
+    }
+
+    #[test]
+    fn find_unit_isolation_without_a_project_name_reports_nothing() {
+        let tree = TempDir::new();
+        tree.write("pyproject.toml", "[build-system]\nrequires = []\n");
+        tree.write("widget_test.py", "from myproject.ledger import record\n");
+        assert!(find_unit_isolation_violations(&tree.0)
+            .expect("a readable tree should succeed")
+            .is_empty());
     }
 
     #[test]

@@ -99,7 +99,7 @@ def test_colocated_test_matrix_lists_rust_after_the_file_paired_languages(fs):
 
 
 def test_static_languages_is_the_rust_inclusive_union(fs):
-    # #410: the `static` job's matrix — the four static gates run as its steps — fans out over its
+    # #410: the `static` job's matrix — the five static gates run as its steps — fans out over its
     # own `static_languages` set (the file-paired languages plus rust), named apart from the
     # colocated/isolation/integration sets so a future per-set divergence needs no workflow change.
     fs["python"] = True
@@ -111,6 +111,28 @@ def test_static_languages_is_the_rust_inclusive_union(fs):
 def test_static_languages_empty_when_nothing_is_present(fs):
     out = detect.compute_outputs("", scan_root="/repo")
     assert out["static_languages"] == "[]"
+
+
+def test_one_function_languages_is_the_rust_inclusive_union(fs):
+    # The one-function-per-file step runs for every language the scan finds, rust included: the
+    # rule is capability-identical in all three, and an unconfigured rust tree reports "not
+    # enabled" and passes, so the matrix carries it rather than the workflow filtering it out.
+    fs["python"] = True
+    fs["rust_crate"] = True
+    out = detect.compute_outputs("", scan_root="/repo")
+    assert out["one_function_languages"] == '["python","rust"]'
+
+
+def test_one_function_languages_empty_when_nothing_is_present(fs):
+    out = detect.compute_outputs("", scan_root="/repo")
+    assert out["one_function_languages"] == "[]"
+
+
+def test_one_function_languages_honours_the_restrictor(fs):
+    fs["python"] = True
+    fs["rust_crate"] = True
+    out = detect.compute_outputs('["python"]', scan_root="/repo")
+    assert out["one_function_languages"] == '["python"]'
 
 
 def test_restrictor_excludes_an_unnamed_language(fs):

@@ -42,6 +42,9 @@ outputs:
   isolation_languages:
     description: 'Present languages plus rust (the unit-lint matrix).'
     value: ${{ steps.scan.outputs.isolation_languages }}
+  one_function_languages:
+    description: 'The `unit one-function-per-file` matrix: present languages plus rust when a crate is present — an unconfigured rust tree reports that the rule is not enabled and passes.'
+    value: ${{ steps.scan.outputs.one_function_languages }}
   coverage_languages:
     description: 'Present languages, plus rust when a crate is present (Rust coverage is zero-config, #206).'
     value: ${{ steps.scan.outputs.coverage_languages }}

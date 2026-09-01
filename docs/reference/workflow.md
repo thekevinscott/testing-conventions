@@ -4,10 +4,10 @@ description: The reusable GitHub Actions workflow — every input, every check a
 
 # Workflow
 
-The reusable workflow is the adoption surface: one `uses:` call runs every check. The four static
-source scans (colocated-test, its co-change variant, unit-lint, and integration-lint) run as steps
-of one `Static checks (<language>)` job per language; the toolchain-heavy suites each run as their
-own job. This page is the canonical record of its inputs, the checks it runs, and its versioning
+The reusable workflow is the adoption surface: one `uses:` call runs every check. The five static
+source scans (colocated-test, its co-change variant, one-function-per-file, unit-lint, and
+integration-lint) run as steps of one `Static checks (<language>)` job per language; the
+toolchain-heavy suites each run as their own job. This page is the canonical record of its inputs, the checks it runs, and its versioning
 contract.
 To adopt it, start with [Getting Started](../getting-started) or [Adopt on a
 monorepo](../monorepo).
@@ -30,22 +30,24 @@ jobs:
 | `rust_toolchain`     | `false`                    | An [escape hatch](../monorepo#escape-hatches): `true` forces a stable Rust toolchain, with build caching (the cargo registry, and `target/` at the derived workspace-aware location — the workspace root's `target/` for a crate that's a workspace member, else the package root's own, keyed off `Cargo.lock`), in the suite-executing jobs before the derived [`[python] build_command`](./config#build-command) runs. `unit coverage` / changed-line coverage / `unit mutation` already auto-provision it when the package root's manifest declares a Rust-compiling build (a `Cargo.toml`, a maturin backend, a napi key — detect's `provision_rust`); set this by hand only for a build the manifest doesn't express. The `rust` matrix arm always carries its own toolchain. |
 | `packaging_artifact` | `''`                       | Name of an uploaded build artifact holding built distributions; when set, the packaging check downloads and inspects it as-is, building nothing. When empty, the packaging job derives the distribution build from the package's own manifest (`uv build` / `<pm> pack` / `cargo package`), runs it, and scans what it wrote — or, when the manifest can't state a build, scans a conventional `dist/` already committed at the derived package root (`.` for a single-package repo — see [Adopt on a monorepo](../monorepo)). An artifact holding no recognized distribution fails the job. |
 | `run_e2e`            | `false`                    | Forces the `e2e verify` job on. It is already on when committed receipts (`e2e-attestations/`) are present at the package root. The job is diff-scoped (`--base`), so it runs on `pull_request` only; it needs full history. |
-| `gates`              | `''` (all applicable)      | An [escape hatch](../monorepo#escape-hatches): a JSON array naming which checks run (`colocated-test`, `unit-lint`, `unit-coverage`, `mutation`, `integration-lint`, `packaging`, `e2e-verify`), for the rare package where one genuinely cannot run. Empty runs every applicable check. A named check's diff-scoped variant rides with it, and the allowlist is authoritative even when `run_e2e` / `packaging_artifact` is set. |
+| `gates`              | `''` (all applicable)      | An [escape hatch](../monorepo#escape-hatches): a JSON array naming which checks run (`colocated-test`, `one-function-per-file`, `unit-lint`, `unit-coverage`, `mutation`, `integration-lint`, `packaging`, `e2e-verify`), for the rare package where one genuinely cannot run. Empty runs every applicable check. A named check's diff-scoped variant rides with it, and the allowlist is authoritative even when `run_e2e` / `packaging_artifact` is set. |
 
 ## The checks and when they run
 
 Each check fails the build on a violation, with the offending files in the log. Each links to its
 own page under [Checks](./checks/) — the complete per-check record: motivation, per-language
-behavior, run conditions, and configuration surface. The four static source scans (colocated-test, its co-change variant, unit-lint,
-integration-lint) run as steps of one `Static checks (<language>)` job per language — each a
-sub-second scan, so one job's setup covers all four; the toolchain-heavy suites (`unit coverage`,
-its changed-line variant, `unit mutation`) each run as their own job. Every check keeps its own
+behavior, run conditions, and configuration surface. The five static source scans (colocated-test,
+its co-change variant, one-function-per-file, unit-lint, integration-lint) run as steps of one
+`Static checks (<language>)` job per language — each a sub-second scan, so one job's setup covers
+all five; the toolchain-heavy suites (`unit coverage`, its changed-line variant, `unit mutation`)
+each run as their own job. Every check keeps its own
 `gates` membership and `--base` semantics — a gate left out of `gates` is skipped whether it runs as
 a job or a step.
 
 | Check | Runs | Notes |
 | --- | --- | --- |
 | [`unit colocated-test`](./checks/colocated-test) | always | Python, TypeScript, and Rust (inline `#[cfg(test)]` presence). Runs as a step of the `Static checks (<language>)` job. Scans `source`, leaving `<package root>/tests/` to the suite tiers. Plus the diff-scoped co-change (`--base`) step on pull requests, for Python and TypeScript — Rust units are inline, so a sibling test can't go stale and co-change doesn't apply. |
+| [`unit one-function-per-file`](./checks/one-function-per-file) | always | Python and TypeScript at the default `max_lines = 1`; Rust when a `[rust].one_function_per_file` table names a threshold, and a run without one reports the rule is off and passes. Runs as a step of the `Static checks (<language>)` job. Scans `source`, leaving `<package root>/tests/` to the suite tiers. |
 | [`unit coverage`](./checks/unit-coverage) | always | The language's [default floor](./config#coverage), plus the changed-line (`--base`) job on pull requests. |
 | [`unit lint`](./checks/unit-lint) | always | Python, TypeScript, Rust. Runs as a step of the `Static checks (<language>)` job. Scans `source`, leaving `<package root>/tests/` to the suite tiers. |
 | [`integration lint`](./checks/integration-lint) | always | Python, TypeScript, Rust. Runs as a step of the `Static checks (<language>)` job. Subjects derive from the [package root](../monorepo#source-vs-the-package-root): the `tests/integration/` and `tests/e2e/` suites (Rust: the crate root's `tests/`). A test file under `tests/` outside a standard tier is flagged (`unknown-tier`); a tree with no manifest is scanned at `source` directly. |

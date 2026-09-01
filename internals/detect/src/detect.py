@@ -543,8 +543,8 @@ def compute_outputs(
     `languages` (python/typescript present) drives the co-change job — rust units are inline
     `#[cfg(test)]` modules, so a sibling test can't go stale and co-change doesn't apply. The
     whole-tree colocated-test set, the `static_languages` set (the `static` job's matrix, whose
-    steps run the four static gates, #410), and the lint/isolation and coverage sets add Rust
-    whenever a crate is present — the rust presence arm checks the inline module (#40/#274), and
+    steps run the five static gates, #410), the `one_function_languages` set, and the
+    lint/isolation and coverage sets add Rust whenever a crate is present — the rust presence arm checks the inline module (#40/#274), and
     Rust coverage is zero-config now (`lines = 100` by default, #206), so neither waits for config.
     `packaging_dist` is looked for at the derived `package_root` (#280) — a per-package `uses:`
     call inspects only its own package's `dist/`; a repo-root `dist/` counts only when the
@@ -593,11 +593,17 @@ def compute_outputs(
         "colocated_test_languages": _to_json(with_rust),
         "integration_lint_languages": _to_json(with_rust),
         "isolation_languages": _to_json(with_rust),
-        # The `static` job's matrix (#410): the four static gates — colocated-test (and its
-        # co-change variant), unit-lint, integration-lint — run as its steps, fanned out over this
-        # rust-inclusive union. The same set the colocated/isolation/integration sets already hold,
-        # under its own name so a future language can diverge per set without breaking the matrix.
+        # The `static` job's matrix (#410): the five static gates — colocated-test (and its
+        # co-change variant), unit-lint, one-function-per-file, integration-lint — run as its
+        # steps, fanned out over this rust-inclusive union. The same set the
+        # colocated/isolation/integration sets already hold, under its own name so a future
+        # language can diverge per set without breaking the matrix.
         "static_languages": _to_json(with_rust),
+        # `unit one-function-per-file`: every detected language, rust included — the rule is
+        # capability-identical in all three, and an unconfigured rust tree reports that the rule
+        # is not enabled and passes, so the matrix carries rust rather than the workflow
+        # filtering it out.
+        "one_function_languages": _to_json(with_rust),
         "coverage_languages": _to_json(with_rust),
         # `unit mutation` (#204): the same set as coverage — present python/typescript plus
         # rust when a crate is here — now that all three arms are at parity (#201/#202/#203).

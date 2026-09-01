@@ -209,7 +209,7 @@ checks rows, so a consumer's checks UI is unchanged):
   `cli_command` is non-empty via the shared `./.github/actions/download-hermetic-cli` composite
   action — one `uses:` line instead of the download-artifact-plus-chmod pair repeated across all
   six rule jobs (`static`, `unit-coverage`, `coverage-changed`, `mutation`, `e2e-verify`,
-  `packaging` — the four static gates share the one `static` job since #410) — and runs
+  `packaging` — the five static gates share the one `static` job since #410) — and runs
   `${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} <subcommand> …`. The
   fallback token is deliberate and load-bearing: the workflow and action `@v0` refs are resolved
   at different moments, so a consumer can transiently pair a new workflow with an old detect that

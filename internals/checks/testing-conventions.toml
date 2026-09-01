@@ -1,6 +1,12 @@
 # Repo-only checks package config (#321). Coverage/lint floors stay at the zero-config
 # defaults (branch coverage on, fail_under = 100); only config.py is exempted.
 #
+# 11 is the lowest `unit one-function-per-file` threshold this tree passes today: a check module is
+# a `cli` callback beside the small pure decision it wraps, and the longest of those decisions runs
+# 11 lines. Walk it down as the modules split.
+[python]
+one_function_per_file = { max_lines = 11 }
+
 # checks/config.py holds nothing but shared string constants — the workflow paths every check
 # imports and the detect fixture expected-outputs the detect-package-root checks assert against
 # (the "re-export barrel" exemption case the README names). It has no behavior, so it carries no

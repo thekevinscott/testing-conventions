@@ -378,10 +378,10 @@ jobs:
         run: uv run --project internals/checks tc-checks isolation-wired
 
   static-gates-wired:
-    name: The four static gates run as steps of one `static` job
-    # The red→green signal for #410: the four static gates — colocated-test (with its co-change
-    # variant), unit-lint, and integration-lint — must run as steps of one `static` job per
-    # language, not four separate jobs each paying ~20s of setup for a sub-second scan. A static
+    name: The five static gates run as steps of one `static` job
+    # The red→green signal for #410: the five static gates — colocated-test (with its co-change
+    # variant), unit-lint, one-function-per-file, and integration-lint — must run as steps of one
+    # `static` job per language, not a job apiece paying ~20s of setup for a sub-second scan. A static
     # grep of the workflow file, so it tracks the wiring regardless of what the published binary
     # ships.
     runs-on: ubuntu-latest

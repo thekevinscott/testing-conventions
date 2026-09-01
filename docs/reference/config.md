@@ -16,8 +16,7 @@ unknown keys, malformed TOML, and reason-less `exempt` entries are rejected. An 
 error names the key, lists the accepted keys, and points at the package's
 [`MIGRATIONS.md`](https://github.com/thekevinscott/testing-conventions/blob/main/packages/rust/MIGRATIONS.md),
 which records every key a release renamed or removed alongside its replacement. Each `[python]` /
-`[typescript]` / `[rust]` table is optional, and within it both `coverage` and `exempt` are
-optional.
+`[typescript]` / `[rust]` table is optional, and so is every key within it.
 
 ```toml
 [python]
@@ -48,6 +47,22 @@ coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
 features = ["cli"]
 coverage = { regions = 100, lines = 100 }
 ```
+
+## The language tables
+
+`[python]`, `[typescript]`, and `[rust]` take the same keys, one Rust-only addition aside. Each key
+has its own section below.
+
+| Key | Meaning |
+| --- | --- |
+| `coverage` | The language's coverage floor. |
+| `one_function_per_file` | The `one-function-per-file` threshold. |
+| `exempt` | The exemption entries, each its own `[[<language>.exempt]]` table. |
+| `build_command` | The build declaration a build-dependent job runs. |
+| `reason` | A free-form note on the table's `build_command`, kept as written. An exemption entry's required `reason` is a separate field. |
+| `features` | `[rust]` only: the cargo features the suite-running Rust rules enable. |
+
+`[e2e]` is the fourth root table, language-agnostic, carrying `extra_scope` and `exclude`.
 
 ## Coverage
 
@@ -210,8 +225,9 @@ held to the same floor CI enforces:
 
 - **TypeScript** — the npm package exports `vitestConfig` from its root; extend it with
   `mergeConfig` from `vitest/config`. It carries the v8 provider, the `src/**` coverage scope
-  (declaration files excluded), and the `100/100/100/100` thresholds. `vitest` is an optional peer
-  dependency, and the import resolves to the library entry, separate from the CLI.
+  (declaration files excluded), the `100/100/100/100` thresholds, and `src/**/*.test.ts` as the
+  test include, so a local run collects the same colocated unit suite the checks scan. `vitest` is
+  an optional peer dependency, and the import resolves to the library entry, separate from the CLI.
 - **Python** — the `testing-conventions` wheel auto-loads a pytest plugin that holds a
   `pytest --cov` run to the same floor: branch coverage on, `fail_under = 100`, and test files
   (`*_test.py` / `conftest.py`) omitted from the denominator. It acts only when a coverage run is

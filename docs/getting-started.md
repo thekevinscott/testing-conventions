@@ -77,10 +77,10 @@ the check red).
 
 ## Where you are
 
-Every pull request now runs the full standard: colocated tests, a 100% coverage floor, mocked-out
-collaborators in unit tests, real first-party code in integration tests, a binary mutation gate on
-changed lines, and clean packaging. When a check goes red, its log names the file and the rule;
-you fix the code, or record a reasoned exemption in
+Every pull request now runs the full standard: colocated tests, one substantial function per file,
+a 100% coverage floor, mocked-out collaborators in unit tests, real first-party code in integration
+tests, a binary mutation gate on changed lines, and clean packaging. When a check goes red, its log
+names the file and the rule; you fix the code, or record a reasoned exemption in
 [`testing-conventions.toml`](./guide/configure).
 
 ## Teach your agent
@@ -91,6 +91,7 @@ non-negotiables and points at this site and its machine-readable digest (`llms.t
 refreshes the block; everything outside its markers stays yours. `install` reads the block by its
 `begin`/`end` marker pair — if the `end` marker is missing (a hand edit deleted or fenced it),
 `install` stops and names it so you can restore the marker, keeping your surrounding prose intact.
+Pass a path to manage a different file: `npx testing-conventions install CLAUDE.md`.
 
 ## Next
 

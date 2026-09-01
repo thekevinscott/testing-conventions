@@ -12,6 +12,12 @@ whole, or record a reasoned exemption — and stop there: escape hatches (the `g
 driving the CLI in another CI system) are documented as facts in Reference, and no tutorial or
 guide promotes them as destinations.
 
+The CLI's own surface has exactly one home: **Running a check directly** on the Reference checks
+index, which carries the subcommand form and the flags every check shares (`--language`,
+`--config`, `--base`). A check's own page names only the flags unique to it, tutorials and
+how-tos stay on the workflow, and a new flag lands in that one section rather than growing a
+page of its own.
+
 ## Diátaxis: four modes, one job per page
 
 The docs follow [Diátaxis](https://diataxis.fr/). Every page belongs to **exactly one** of four

@@ -32,9 +32,10 @@ change what the branch changed.
 
 `e2e verify` asks two questions, each a plain content diff of `<base>...HEAD`:
 
-1. **Did this branch change the scoped source?** The scope is the caller's own `source`, joined
-   with every declared extra scope and minus every exclude, with the receipts themselves
-   excluded. An empty diff passes: the branch owes no decision.
+1. **Did this branch change the scoped source?** The scope is `--scope` — the caller's own
+   `source`, as the workflow passes it — joined with every declared extra scope and minus every
+   exclude, with the receipts themselves excluded. An empty diff passes: the branch owes no
+   decision.
 2. **Does this branch's diff add or update a receipt?** A receipt added or updated under
    `e2e-attestations/` passes; otherwise the check fails, naming the fix.
 
@@ -82,6 +83,9 @@ history. The [`gates` input](/reference/workflow#inputs) names it `e2e-verify`.
 
 - [`run_e2e`](/reference/workflow#inputs) — the workflow input forcing the job on before the
   first receipt exists.
+- `--scope <dir>` — the flag naming what counts as scoped source, at or below the path `verify`
+  reads. The workflow passes the caller's own `source`, so the scoped diff matches what the call
+  scans; a direct invocation defaults to that path itself. `--base <ref>` supplies the diff.
 - [`[e2e] extra_scope` and `exclude`](/reference/config#e2e-extra-scope-and-exclude) — for a
   package whose e2e artifact is compiled from a **shared source tree beside it** (a native core
   bound into several language bindings), which no scope at or below the package root can reach.

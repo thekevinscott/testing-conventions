@@ -66,6 +66,7 @@ wrong directory entirely), not a file living in the wrong place relative to `sou
 | --- | --- | --- | --- |
 | Language detection | file extensions per language | `source` | Recursive scan of `source` |
 | `unit colocated-test` | source files paired with same-named unit tests | `source` | Recursive scan of `source`; `<package root>/tests/` is explicitly excluded |
+| `unit one-function-per-file` | module-scope functions in source files | `source` | Recursive scan of `source`; test files and the suite tiers under `<package root>/tests/` are outside it |
 | `unit lint` | colocated unit test files | `source` | Recursive scan of `source`; `<package root>/tests/` is explicitly excluded |
 | `unit coverage` / `unit mutation` | source + colocated unit tests | `source` (scanned); package root (installed/run) | Recursive scan of `source` for subjects; toolchain provisioning and the suite run happen at the package root |
 | `integration lint` | integration and e2e suite files | package root | **Fixed paths only** — `<package root>/tests/integration/` and `<package root>/tests/e2e/` (plural **`tests`**; Rust: the crate root's `tests/`). Never a recursive scan of `source`, and not configurable |

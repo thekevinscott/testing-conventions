@@ -187,7 +187,8 @@ Deliberately **not** caught by the `syn` heuristic — left to review / a future
 
 - A collaborator reached through an **unqualified call** with no path prefix
   (bare `foo()`, `x.method()`) — `syn` can't resolve the receiver.
-- A collaborator behind a **`use … as …` rename** or a **type alias**.
+- A **call through a `use … as …` alias** or a **type alias** — D2 judges the import by
+  its source path and flags it there, and the aliased call site reads to D1 as a bare path.
 - A **trait method** whose impl lives out of module (method-call syntax carries no
   resolvable path).
 - An effectful call **hidden in a macro** (`println!`, a custom `macro_rules!`).

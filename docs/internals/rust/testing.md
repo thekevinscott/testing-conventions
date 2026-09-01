@@ -61,6 +61,16 @@ package-root config the run depends on, plus a `tests/` tier that fails loudly i
 collects it (`tests/integration/tiers.*` asserts it is never reached). Rust's crate layout forces
 the package shape already; the parity bar is met by giving Python and TypeScript the same default.
 
+### Fixture comments are input
+
+A comment inside a fixture is data the gates read: line-scoped exemptions pin `lines` to fixed
+line numbers, coverage and mutation land at calibrated ratios, and some fixtures exist to prove
+comment lines are skipped (the `workflow` install-line fixture names the tool inside a comment on
+purpose). An edit to a fixture comment is therefore a test change: it preserves the file's line
+count, and the tests that stage the fixture run again afterward. Comments — fixture or test —
+state their constraint directly and cite no issue or PR number; that history lives in git blame
+(see `AGENTS.md`, "Code style").
+
 ## Diff-scoped fixture calibration
 
 Each `--base` suite judges a diff against a floor, so its fixture pair is calibrated to a **known**

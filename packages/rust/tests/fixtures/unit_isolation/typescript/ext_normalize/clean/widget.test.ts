@@ -1,4 +1,4 @@
-// Clean fixture for #393: Vitest resolves `./formatter` and `./formatter.js` to the
+// Clean fixture: Vitest resolves `./formatter` and `./formatter.js` to the
 // same module, so a mock and its import may spell the extension differently and still
 // match. Standard nodenext ESM writes imports with `.js` and mocks bare; the inverse
 // spelling (bare import, `.js` mock) resolves identically. Both collaborators are

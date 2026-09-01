@@ -1,4 +1,4 @@
-# Lifts the first-party double in tests/integration.rs (#32/#102). `path` is
+# Lifts the first-party double in tests/integration.rs. `path` is
 # relative to the scanned root.
 [[rust.exempt]]
 path = "tests/integration.rs"

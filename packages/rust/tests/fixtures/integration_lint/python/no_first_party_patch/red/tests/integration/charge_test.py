@@ -1,4 +1,4 @@
-# Red fixture for the Python integration-isolation rule (#42, `no-first-party-patch`).
+# Red fixture for the Python integration-isolation rule (`no-first-party-patch`).
 # An integration test runs first-party code for real, so patching a first-party
 # target is the violation. The patch lives in a fixture (so it does NOT also trip
 # `no-inline-patch`) — isolating the new rule.

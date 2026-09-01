@@ -1,4 +1,4 @@
-"""Generate the packaging npm-tarball fixtures for #73.
+"""Generate the packaging npm-tarball fixtures.
 
 `npm pack` produces a gzipped tar (`.tgz`) with a top-level `package/` dir. Two
 minimal ones stand in for a consumer's published package:

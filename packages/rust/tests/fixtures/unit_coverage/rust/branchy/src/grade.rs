@@ -1,6 +1,6 @@
 //! A unit whose colocated inline test exercises only the high-score arm, so one
 //! of the branch's two outcomes is never taken — branch coverage reads 50%, the
-//! number a `branch` floor gates (#267).
+//! number a `branch` floor gates.
 
 /// Classify a score: `"pass"` at 60 or above, `"fail"` below.
 pub fn label(score: u8) -> &'static str {

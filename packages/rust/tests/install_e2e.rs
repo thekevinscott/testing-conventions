@@ -42,6 +42,6 @@ fn install_cli_writes_the_block_with_live_pointers_only() {
     );
     assert!(
         !text.contains("https://thekevinscott.github.io/testing-conventions/guide/cli"),
-        "the block must not link the removed CLI guide page (#353)"
+        "the block must not link the removed CLI guide page"
     );
 }

@@ -1,7 +1,7 @@
 //! Behavior plus a `#[cfg(not(test))]` module and NO inline `#[cfg(test)]` test
 //! module. A `not(test)` gate compiles in *non-test* builds — it is production
 //! code, not a test module — so this file has no inline test and is an orphan the
-//! presence check must flag. (#390)
+//! presence check must flag.
 
 /// Behavior — a function with a body, so this file is a unit-test subject.
 pub fn compute(x: u8) -> u8 {

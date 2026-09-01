@@ -1,6 +1,6 @@
 //! Two units: `double` is exercised by the colocated inline test, `triple` is
 //! defined and never called — an uncovered *function* whose lines barely dent a
-//! low line floor, so only a `functions` floor catches it (#267).
+//! low line floor, so only a `functions` floor catches it.
 
 /// Double a value.
 pub fn double(value: u8) -> u8 {

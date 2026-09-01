@@ -1,4 +1,4 @@
-# Red fixture for Python unit isolation (#42, `unmocked-collaborator`). A unit test
+# Red fixture for Python unit isolation (`unmocked-collaborator`). A unit test
 # must isolate the unit under test, so importing a first-party collaborator without
 # mocking it is the violation — patch it (by string, in a fixture) instead.
 from myproject.widget import build  # unit under test — never a collaborator

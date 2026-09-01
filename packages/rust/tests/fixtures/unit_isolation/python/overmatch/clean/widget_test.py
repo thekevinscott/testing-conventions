@@ -1,4 +1,4 @@
-# Clean fixture for #393: a multi-symbol collaborator import is mocked when EVERY
+# Clean fixture: a multi-symbol collaborator import is mocked when EVERY
 # imported symbol is patched at that import's own module path
 # (`myproject.ledger.record` and `myproject.ledger.erase`). No symbol is left real, so
 # there is no violation.

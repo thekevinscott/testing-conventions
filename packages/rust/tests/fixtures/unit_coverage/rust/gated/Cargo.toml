@@ -1,4 +1,4 @@
-# `gated` fixture for cargo-feature passthrough (#266): the `boost` module is
+# `gated` fixture for cargo-feature passthrough: the `boost` module is
 # behind the `boost` feature, and its inline test fully covers it. With
 # `[rust] features = ["boost"]` in config, the coverage run compiles and
 # measures the module, and the crate clears a 100 floor on its unit suite.

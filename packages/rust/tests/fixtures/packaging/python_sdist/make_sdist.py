@@ -1,4 +1,4 @@
-"""Generate the packaging Python-sdist fixtures for #106.
+"""Generate the packaging Python-sdist fixtures.
 
 A Python sdist is a gzipped tar (`name-version.tar.gz`) with a top-level
 `name-version/` dir. Two minimal ones stand in for a consumer's source
@@ -9,7 +9,7 @@ distribution:
                         flag it.
   clean-0.1.0.tar.gz  — the same shape without it; the rule must pass.
 
-The packaging checker unpacks the `.tar.gz` (#73 added tar.gz support) and scans
+The packaging checker unpacks the `.tar.gz` and scans
 for `*_test.py`. These don't need to be installable — only to contain (or not) a
 test file.
 

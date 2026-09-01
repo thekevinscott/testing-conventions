@@ -47,7 +47,7 @@ fn install_points_at_the_docs_root_and_the_machine_readable_contract() {
     );
     assert!(
         !text.contains(REMOVED_CLI_PAGE),
-        "the block must not link the removed CLI guide page (#353)"
+        "the block must not link the removed CLI guide page"
     );
 }
 
@@ -76,7 +76,7 @@ fn reinstall_replaces_a_stale_block_carrying_the_removed_link() {
     );
     assert!(
         !text.contains(REMOVED_CLI_PAGE),
-        "a refresh drops the removed CLI guide link (#353)"
+        "a refresh drops the removed CLI guide link"
     );
 }
 

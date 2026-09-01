@@ -1,4 +1,4 @@
-# `gated_untested` fixture for cargo-feature passthrough (#266): the `boost`
+# `gated_untested` fixture for cargo-feature passthrough: the `boost`
 # module is behind the `boost` feature and carries no tests. With
 # `[rust] features = ["boost"]` in config, the coverage run compiles and
 # measures the module, whose uncovered regions and lines fail a 100 floor —

@@ -1,4 +1,4 @@
-"""Generate the packaging Rust-crate fixtures for #74.
+"""Generate the packaging Rust-crate fixtures.
 
 `cargo package` produces `name-version.crate` — a gzipped tar wrapping a single
 `name-version/` dir (Cargo.toml, src/, and the crate-root `tests/` unless a Cargo

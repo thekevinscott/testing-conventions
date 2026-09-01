@@ -1,4 +1,4 @@
-# Red fixture for Python unit isolation (#393, defect 1a — any-symbol-clears-all).
+# Red fixture for Python unit isolation (any-symbol-clears-all).
 # A `from … import a, b` collaborator is mocked only when EVERY imported symbol is
 # individually patched. Here the fixture patches `myproject.ledger.record` but leaves
 # the sibling `erase` un-mocked — so the import still reaches a real collaborator and

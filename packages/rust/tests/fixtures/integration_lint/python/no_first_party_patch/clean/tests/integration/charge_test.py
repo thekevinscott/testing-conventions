@@ -1,4 +1,4 @@
-# Clean fixture for the Python integration-isolation rule (#42). An integration
+# Clean fixture for the Python integration-isolation rule. An integration
 # test mocks only the outside world — third-party packages and effectful stdlib —
 # while first-party code (`myproject.charge` and its collaborators) runs for real.
 from unittest.mock import patch

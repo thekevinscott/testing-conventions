@@ -1,4 +1,4 @@
-# Red fixture for Python unit isolation (#393, defect 1b — last-segment match against
+# Red fixture for Python unit isolation (last-segment match against
 # any target). A patch mocks an imported symbol only when the patch target's MODULE
 # PATH corresponds to the import's source, not merely its last dotted segment. Here
 # `patch("otherpkg.unrelated.record")` shares a last segment with `record` but names a

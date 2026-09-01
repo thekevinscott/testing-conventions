@@ -1,4 +1,4 @@
-# Red fixture for R4 (#52): a fixture patches a module-global config CONSTANT.
+# Red fixture for `no-constant-patch`: a fixture patches a module-global config CONSTANT.
 # Inject config explicitly instead of patching the constant.
 import pytest
 from unittest.mock import patch

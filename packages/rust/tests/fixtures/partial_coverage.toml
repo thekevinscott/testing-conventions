@@ -1,5 +1,5 @@
 # Each coverage table sets only one field; the rest must fall back to the language's
-# default floor (#216 — partial override / "extend our defaults").
+# default floor (partial override / "extend our defaults").
 [python.coverage]
 fail_under = 90
 

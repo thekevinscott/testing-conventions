@@ -1,4 +1,4 @@
-# Clean fixture crate for the Rust unit-isolation rule's import detector (#44, D2).
+# Clean fixture crate for the Rust unit-isolation rule's import detector.
 # `[workspace]` isolates it from cargo; parsed by `syn`, never compiled.
 [package]
 name = "iso_imports_clean"

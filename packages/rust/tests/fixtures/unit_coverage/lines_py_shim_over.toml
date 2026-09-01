@@ -1,4 +1,4 @@
-# Over-exemption (#226 determinism guard): line 1 (`def launch`) runs on import and is
+# Over-exemption (determinism guard): line 1 (`def launch`) runs on import and is
 # covered, so listing it is a hard error — a line-scoped exemption may only name
 # uncovered lines.
 [python]

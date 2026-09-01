@@ -1,4 +1,4 @@
-# `padded` fixture for unit-suite scoping (#265): `scale` is fully exercised by
+# `padded` fixture for unit-suite scoping: `scale` is fully exercised by
 # its colocated inline test, while `shift` is exercised only by the integration
 # test under `tests/`. The unit suite alone leaves every `shift` region and line
 # unexecuted, so this crate reads well under 100% — a run that also counts the

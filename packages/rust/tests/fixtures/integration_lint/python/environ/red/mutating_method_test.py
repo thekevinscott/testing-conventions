@@ -1,4 +1,4 @@
-# Red fixture for R3 (#51): a test mutates os.environ via a method call.
+# Red fixture for `no-environ-mutation`: a test mutates os.environ via a method call.
 import os
 
 

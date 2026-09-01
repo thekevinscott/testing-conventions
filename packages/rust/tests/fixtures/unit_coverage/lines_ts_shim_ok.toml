@@ -1,4 +1,4 @@
-# Line-scoped coverage exemption (#226): only shim.ts's uncovered `launch` (lines 1-4, including the closing brace)
+# Line-scoped coverage exemption: only shim.ts's uncovered `launch` (lines 1-4, including the closing brace)
 # is excused, not the whole file. core.ts is fully covered, so the project clears the
 # 100 floor with just these lines lifted.
 [typescript]

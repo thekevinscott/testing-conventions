@@ -1,19 +1,6 @@
-//! Mutation testing for Rust (`unit mutation --language rust`) — the rung
-//! above coverage. A test that *runs* a line still passes if you delete its
-//! assertions; a surviving mutant proves it. This module wraps
-//! [cargo-mutants](https://github.com/sourcefrog/cargo-mutants): it runs the engine,
-//! reads its `outcomes.json`, and reports the **surviving** mutants the suite failed
-//! to catch.
-//!
-//! The gate is **binary, not a percentage** (equivalent mutants make a fixed score
-//! unreachable, and a score isn't comparable across engines) and on by default: any
-//! *un-exempted* surviving mutant is a finding. This module stays a pure measurement —
-//! [`measure_rust`] returns the survivors and [`unexplained_survivors`] is the pure
-//! core over a parsed report; the CLI layer turns a non-empty result into the failure.
-//!
-//! Diff-scoping (`--base`) is delegated to cargo-mutants' own `--in-diff`: the
-//! `<base>...HEAD` diff is written out and passed through, so only mutants on changed
-//! lines are tested ("no unexplained surviving mutant on the lines you touched").
+//! Mutation testing (`unit mutation`) — the rung above coverage: a test that *runs* a
+//! line still passes if you delete its assertions, and a surviving mutant proves it. Each
+//! language drives its engine through an adapter; this module measures, the CLI layer gates.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
@@ -37,10 +24,8 @@ pub struct Survivor {
 }
 
 /// One mutation measurement: whether the engine ran, and what it found. Telling
-/// [`Measurement::EngineNotRun`] from an all-killed [`Measurement::Tested`] keeps a
-/// vacuous pass visible — a diff-scoped run that never built a mutant reads differently
-/// from one that tested mutants and caught every one, and a counted pass carries its
-/// own evidence.
+/// [`Measurement::EngineNotRun`] from an all-killed [`Measurement::Tested`] keeps a vacuous
+/// pass visible, and a counted pass carries its own evidence.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Measurement {
     /// The `--base` diff carried no mutatable changed lines; the engine never ran.
@@ -117,13 +102,8 @@ fn parse_mutants_list(json: &str) -> Result<Vec<MutantInfo>> {
 }
 
 /// The surviving mutants not lifted by a `mutation` exemption — the rule's findings.
-///
-/// A survivor is a `MissedMutant` outcome (the suite ran the mutated code but no test
-/// failed). `exempt` is the resolved set of `mutation`-rule exempt paths (crate-root
-/// relative); a survivor in an exempt file is dropped (an equivalent or deliberately
-/// defensive mutation, lifted with a reason). `Timeout` / `Unviable` are *not*
-/// survivors — a timeout is inconclusive, not a pass, and an unviable mutant never
-/// compiled.
+/// `exempt` is the resolved set of crate-root-relative exempt paths; a survivor in an
+/// exempt file is dropped.
 pub fn unexplained_survivors(report: &MutantsReport, exempt: &[String]) -> Vec<Survivor> {
     evaluate(cargo_mutants_survivors(report), exempt)
 }
@@ -151,11 +131,9 @@ fn cargo_mutants_survivors(report: &MutantsReport) -> Vec<Survivor> {
         .collect()
 }
 
-/// The `(file, line)` locations cargo-mutants produced a **viable, conclusive** mutant
-/// for — caught or missed (`CaughtMutant` / `MissedMutant`), not the inconclusive
-/// `Timeout` / `Unviable`. The line-scoped guard reads this to tell an
-/// over-exemption (a listed line whose mutants were all *caught*, no survivor) from an
-/// out-of-scope line (no mutant there at all — e.g. outside a `--base` diff).
+/// The `(file, line)` locations cargo-mutants produced a **viable, conclusive** mutant for —
+/// caught or missed, not the inconclusive `Timeout` / `Unviable`. The line-scoped guard reads
+/// this to tell an over-exemption from a line that has no mutant at all.
 pub fn mutated_lines(report: &MutantsReport) -> MutatedLines {
     report
         .outcomes
@@ -184,9 +162,7 @@ fn conclusive_count(report: &MutantsReport) -> usize {
 }
 
 /// The shared whole-file evaluation core: drop the survivors lifted by a file-level
-/// `mutation` exemption (a file-path match), leaving the rule's findings. The
-/// line-scoped path ([`evaluate_scoped`]) generalizes this to per-line exemptions with
-/// a determinism guard.
+/// `mutation` exemption. [`evaluate_scoped`] generalizes this to per-line exemptions.
 pub fn evaluate(survivors: Vec<Survivor>, exempt: &[String]) -> Vec<Survivor> {
     survivors
         .into_iter()
@@ -195,16 +171,8 @@ pub fn evaluate(survivors: Vec<Survivor>, exempt: &[String]) -> Vec<Survivor> {
 }
 
 /// Apply file- and line-scoped `mutation` exemptions to the raw `survivors`, with the
-/// determinism guard. `mutated` is the set of `(file, line)` that produced a
-/// viable mutant (caught or survived); `whole_file` is the file-level exemptions and
-/// `line_scoped` the per-line ones.
-///
-/// Guard: a line-scoped exemption that names a line whose mutants were **all caught**
-/// (in `mutated`, but with no survivor) is over-exemption — a hard error, the
-/// counterpart to the stale-path rule. A listed line with **no** mutant at all is left
-/// alone (it may simply be outside a `--base` diff), neither an error nor a drop. Then
-/// every survivor whose file is whole-file-exempt, or whose `(file, line)` is
-/// line-exempt, is dropped; an unlisted survivor still fails the gate.
+/// determinism guard: a listed line whose mutants were all *caught* is over-exemption and a
+/// hard error, while a listed line with no mutant is left alone (it may be off the diff).
 pub fn evaluate_scoped(
     survivors: Vec<Survivor>,
     mutated: &MutatedLines,
@@ -245,10 +213,8 @@ pub fn evaluate_scoped(
 }
 
 /// A mutant's outcome, normalized across the engines (Stryker / cosmic-ray / cargo-mutants)
-/// — the union of their result vocabularies reduced to what the gate needs. Each
-/// language adapter maps its native outcomes onto this so the Rust core gates on one
-/// representation instead of three per-engine report formats. The serialized form is
-/// `snake_case` (`no_coverage`, `compile_error`, …) — the wire contract adapters emit.
+/// so the Rust core gates on one representation instead of three report formats. The
+/// serialized form is `snake_case` (`no_coverage`, `compile_error`, …) — the adapters' wire contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MutantStatus {
@@ -273,10 +239,8 @@ impl MutantStatus {
         matches!(self, MutantStatus::Survived | MutantStatus::NoCoverage)
     }
 
-    /// Whether this came from a **viable, conclusive** mutant — one that actually ran
-    /// (`Survived` / `Killed` / `NoCoverage` / `Timeout`), not one that never compiled or
-    /// errored out. The determinism guard reads this to tell an over-exemption (a
-    /// listed line whose mutants were all caught) from an out-of-scope line (no mutant there).
+    /// Whether this came from a **viable, conclusive** mutant — one that actually ran, not one
+    /// that never compiled or errored out. The determinism guard reads this.
     fn is_viable(self) -> bool {
         matches!(
             self,
@@ -322,12 +286,8 @@ pub fn parse_normalized_results(json: &str) -> Result<Vec<NormalizedMutant>> {
 }
 
 /// Gate a normalized result set: drop the survivors lifted by a file- or line-scoped
-/// `mutation` exemption (with the determinism guard), leaving the rule's findings.
-///
-/// This is the engine-agnostic core each language arm feeds once its adapter has produced
-/// [`NormalizedMutant`]s — the replacement for the per-engine `*_survivors` /
-/// `*_mutated_lines` + [`evaluate_scoped`] wiring. Survivors are `Survived` / `NoCoverage`
-/// mutants; the guard reads every *viable* mutant's `(file, line)`.
+/// `mutation` exemption (with the determinism guard), leaving the rule's findings. This is
+/// the engine-agnostic core each language arm feeds once its adapter has normalized.
 pub fn evaluate_normalized(
     mutants: &[NormalizedMutant],
     whole_file: &[String],
@@ -382,16 +342,9 @@ fn describe_normalized(mutant: &NormalizedMutant) -> String {
     }
 }
 
-/// Run cargo-mutants over the crate at `root` and return the [`Measurement`]: the
-/// un-exempted survivors plus the conclusive-mutant count, or
-/// [`Measurement::EngineNotRun`] for a `base` diff that changes no lines — or no Rust
-/// source — under the crate.
-///
-/// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested (via
-/// cargo-mutants' `--in-diff`); without it, the whole crate. `exempt` is the file-level
-/// `mutation` exempt paths and `exempt_lines` the line-scoped ones, applied with
-/// the determinism guard in [`evaluate_scoped`]. The tool provisions cargo-mutants itself
-/// on first use ([`ensure_cargo_mutants`]) — only a cargo toolchain need be present.
+/// Run cargo-mutants over the crate at `root` and return the [`Measurement`], or
+/// [`Measurement::EngineNotRun`] for a `base` diff that changes no lines — or no Rust source
+/// — under the crate. The tool provisions cargo-mutants itself ([`ensure_cargo_mutants`]).
 pub fn measure_rust(
     root: &Path,
     exempt: &[String],
@@ -400,16 +353,13 @@ pub fn measure_rust(
     features: &[String],
 ) -> Result<Measurement> {
     let out = MutantsOut::new();
-    // cargo-mutants addresses files relative to the crate's cargo workspace root, so
-    // both the `--in-diff` diff it consumes and the report paths it emits carry the
-    // scan path's workspace-relative prefix whenever the crate is a member of a
-    // workspace rooted above it. A standalone crate is its own workspace root: no prefix.
+    // cargo-mutants addresses files relative to the crate's cargo workspace root, so both the
+    // `--in-diff` diff it consumes and the report paths it emits carry the scan path's
+    // workspace-relative prefix. A standalone crate is its own workspace root: no prefix.
     let workspace_root = cargo_workspace_root(root)?;
     let prefix = canonical_scan_prefix(root, &workspace_root);
     let mut base_diff = None;
     let diff = match base {
-        // An empty diff (no changed lines under the crate — a PR that doesn't touch it)
-        // means nothing to mutate: the engine is skipped, and the caller reports it.
         Some(base) => {
             match write_base_diff(root, &workspace_root, prefix.as_deref(), base, &out)? {
                 None => return Ok(Measurement::EngineNotRun),
@@ -418,9 +368,6 @@ pub fn measure_rust(
                         parse_base_diff(&std::fs::read_to_string(&path).with_context(|| {
                             format!("reading the written base diff `{}`", path.display())
                         })?);
-                    // A diff that touches the crate but changes no Rust source (a README
-                    // edit) holds nothing the engine could judge: skip it up front, the
-                    // same pre-filter the TypeScript and Python arms apply.
                     if !parsed.files.iter().any(|file| file.ends_with(".rs")) {
                         return Ok(Measurement::EngineNotRun);
                     }
@@ -434,12 +381,9 @@ pub fn measure_rust(
     let engine = ensure_cargo_mutants()?;
     let run = run_cargo_mutants(&engine, root, &out.0, diff.as_deref(), features)?;
     let outcomes = out.0.join("mutants.out").join("outcomes.json");
-    // cargo-mutants writes no `outcomes.json` when a run produces no mutants (e.g. an
-    // `--in-diff` that matches none of the crate's lines). `run_cargo_mutants` already
-    // bailed on a fatal exit, so a missing report here is an engine run that judged
-    // zero mutants — legitimate only if none of the crate's mutants sits on the diff's
-    // inserted lines, which [`zero_mutant_verdict`] proves against the engine's own
-    // mutant list before the zero is allowed to stand.
+    // cargo-mutants writes no `outcomes.json` when a run produces no mutants, so a missing
+    // report here is a run that judged zero — legitimate only if none of the crate's mutants
+    // sits on the diff, which [`zero_mutant_verdict`] proves before the zero can stand.
     let json = match std::fs::read_to_string(&outcomes) {
         Ok(json) => json,
         Err(_) => {
@@ -479,37 +423,9 @@ fn one_line(replacement: &str) -> String {
     }
 }
 
-/// Run the bundled TypeScript mutation adapter over the scan path at `root` and return
-/// the [`Measurement`] — the TS arm of the mutation rule, parity with [`measure_rust`].
-///
-/// The consumer installs **nothing** Stryker-related: the npm package ships a Node
-/// adapter that drives Stryker through its own Node API and emits the engine-agnostic
-/// [`NormalizedMutant`] schema, which this gates over via [`evaluate_normalized`]
-/// — the same core the Rust and Python arms feed. Only the project's own test runner
-/// (vitest) needs to be present, exactly as cargo-mutants needs a buildable crate and
-/// cosmic-ray needs pytest.
-///
-/// The adapter runs at the **package root** — the nearest directory at or above `root`
-/// holding a `package.json` ([`crate::tiers::package_root`]) — and Stryker runs **in
-/// place** there: mutants are applied to the package's real tree (backed up under
-/// `.stryker-tmp`, restored at run end), so the manifest, the package's `tsconfig.json`,
-/// and every reference a source legitimately makes above the scan path
-/// (`import pkg from '../package.json'`, a shared `../tsconfig`) resolve exactly as they
-/// do in the tree — including for the engine's own tooling, which a sandbox copy would
-/// resolve from the isolated install's tree instead. The run stays scan-path-scoped end
-/// to end: mutate patterns address the
-/// scan path within the package, the scan path's colocated suite judges the mutants (the
-/// adapter's `--vitest-dir`), and the results are rebased scan-path-relative before
-/// gating, so exemption paths match every other check. A scan path that is itself the
-/// package root — or a loose tree with no manifest — runs at the scan path, unprefixed.
-///
-/// With `base` set, only mutants on the `<base>...HEAD` changed lines are tested —
-/// Stryker has no native git-diff mode, so the changed lines become `--mutate
-/// <file>:<line>-<line>` ranges (line granularity, matching cargo-mutants' `--in-diff`).
-/// Without it, the scan path's sources run ([`scan_scoped_mutate_globs`]). `exempt` is the
-/// file-level exempt paths and `exempt_lines` the line-scoped ones. `adapter` is the path
-/// to the bundled Node adapter (`dist/mutation/main.js`) — the CLI receives it from the
-/// npm launcher's `--ts-mutation-adapter` argument and hands it down explicitly.
+/// Run the bundled TypeScript mutation adapter over the scan path at `root` and return the
+/// [`Measurement`] — the TS arm, parity with [`measure_rust`]. The adapter runs at the package
+/// root and its results are rebased scan-path-relative, so exemption paths match every check.
 pub fn measure_typescript(
     root: &Path,
     exempt: &[String],
@@ -523,8 +439,6 @@ pub fn measure_typescript(
     let mutate = match base {
         Some(base) => {
             let ranges = mutate_ranges(root, base)?;
-            // Nothing mutatable changed on the diff: the engine is skipped, and the
-            // caller reports it.
             if ranges.is_empty() {
                 return Ok(Measurement::EngineNotRun);
             }
@@ -541,10 +455,8 @@ pub fn measure_typescript(
     })
 }
 
-/// The scan path relative to its package root, as a `/`-joined string — the prefix every
-/// package-root-relative path carries for a scan path below the root. `None` when the scan
-/// path *is* the package root (nothing to prefix), which also covers a loose tree whose
-/// "package root" fell back to the scan path itself.
+/// The scan path relative to its package root, as a `/`-joined string. `None` when the scan
+/// path *is* the package root, which also covers a loose tree with no manifest.
 fn scan_prefix(root: &Path, package_root: &Path) -> Option<String> {
     let rel = root.strip_prefix(package_root).ok()?;
     let parts: Vec<String> = rel
@@ -598,18 +510,9 @@ fn to_scan_relative(mutants: Vec<NormalizedMutant>, prefix: Option<&str>) -> Vec
         .collect()
 }
 
-/// The checked working directory for an adapter run rooted at `root`, for the named
-/// `engine` ("TypeScript" / "Python").
-///
-/// [`crate::tiers::package_root`] walks `scan_root.ancestors()`, which ends at `""`
-/// for a **relative** scan path like `src` — and `Path::new("").join("package.json")`
-/// resolves against the cwd, so the walk stops there and hands back an empty path.
-/// That is the right answer for the callers that join onto it, but
-/// `Command::current_dir("")` fails with ENOENT. Normalise it to `.`.
-///
-/// The directory is then checked, because `Command::output()` reports a missing working
-/// directory and a missing interpreter as the same ENOENT (#478/#493) — so without the
-/// check a directory that isn't there reads as an interpreter that isn't installed.
+/// The checked working directory for an adapter run rooted at `root`, for the named `engine`.
+/// [`crate::tiers::package_root`] hands back `""` for a relative scan path like `src`, and
+/// `Command::current_dir("")` fails with the same ENOENT a missing interpreter gives.
 fn adapter_cwd<'a>(root: &'a Path, engine: &str) -> Result<&'a Path> {
     let cwd = if root.as_os_str().is_empty() {
         Path::new(".")
@@ -625,10 +528,9 @@ fn adapter_cwd<'a>(root: &'a Path, engine: &str) -> Result<&'a Path> {
     Ok(cwd)
 }
 
-/// The context a failed adapter spawn carries. `Command::output()` surfaces the bare OS
-/// error, whose ENOENT names nothing at all — so the message names every path the spawn
-/// used: the interpreter, the entry point it was handed, and the directory it ran in
-/// (#493). Naming none of them is what made #478 read as a missing `node`.
+/// The context a failed adapter spawn carries. `Command::output()` surfaces a bare ENOENT
+/// that names nothing, so the message names every path the spawn used: the interpreter, the
+/// entry point it was handed, and the directory it ran in.
 fn spawn_context(interpreter: &str, entry: &str, cwd: &Path) -> String {
     format!(
         "spawning `{interpreter} {entry}` in `{}` (is `{interpreter}` on PATH?)",
@@ -636,18 +538,9 @@ fn spawn_context(interpreter: &str, entry: &str, cwd: &Path) -> String {
     )
 }
 
-/// Run the bundled TS mutation `adapter` at `package_root` and return the
-/// normalized-results JSON it writes. The adapter (a Node entry shipped with the npm
-/// package) drives Stryker via its Node API and emits a [`NormalizedMutant`] array — so
-/// the consumer drives the engine through this CLI alone; the npm package resolves
-/// `@stryker-mutator/*` from the tool's own tree. The adapter's working directory is
-/// Stryker's project root: the in-place run mutates and resolves against it.
-///
-/// `mutate`, when set, scopes the run to `--mutate` patterns; `vitest_dir`, when set,
-/// scopes vitest's test discovery to that directory within the project (the scan path).
-/// Results are written to a temp file the adapter names via `--out` (so Stryker's own
-/// stdout logging can't corrupt them), then read back. `node` and the project's own test
-/// runner must be available; a non-zero adapter exit surfaces its captured output.
+/// Run the bundled TS mutation `adapter` at `package_root` and return the normalized-results
+/// JSON it writes. Results go to a temp file the adapter names via `--out`, so Stryker's own
+/// stdout logging can't corrupt them; a non-zero adapter exit surfaces its captured output.
 fn run_ts_adapter(
     package_root: &Path,
     adapter: &Path,
@@ -713,11 +606,9 @@ impl Drop for AdapterOut {
     }
 }
 
-/// Build the Stryker `--mutate` specs scoping a run to the `<base>...HEAD` changed
-/// lines: each mutatable source file's contiguous runs of changed lines become a
-/// `<file>:<start>-<end>` range (Stryker's line-range form). Reuses the patch-coverage
-/// diff parser. Test and declaration files are filtered out — Stryker's configured
-/// `mutate` set normally excludes them, but passing `--mutate` replaces that set.
+/// Build the Stryker `--mutate` specs scoping a run to the `<base>...HEAD` changed lines, as
+/// `<file>:<start>-<end>` ranges. Test and declaration files are filtered out here because
+/// passing `--mutate` replaces Stryker's configured set rather than narrowing it.
 fn mutate_ranges(root: &Path, base: &str) -> Result<Vec<String>> {
     let changed = crate::patch_coverage::changed_lines(root, base)?;
     let mut specs = Vec::new();
@@ -757,22 +648,8 @@ fn contiguous_runs(lines: &BTreeSet<u64>) -> Vec<(u64, u64)> {
 }
 
 /// Run the bundled Python mutation adapter over the project at `root` and return the
-/// [`Measurement`] — the Python arm of the mutation rule, parity with
-/// [`measure_rust`] and [`measure_typescript`].
-///
-/// The tool drives the engine: the wheel ships a Python adapter that runs cosmic-ray through
-/// its own library API (`WorkDB`) and emits the normalized [`NormalizedMutant`] schema
-/// the gate consumes. maturin (`bindings = "bin"`) ships the rust binary directly as the wheel's
-/// script — with no Python launcher to inject a path, unlike the TS arm — so the binary invokes
-/// the adapter as an installed module (`python3 -m testing_conventions.mutation.main`), resolved
-/// from the wheel's environment alongside cosmic-ray. The project supplies its own test runner
-/// (pytest), exactly as cargo-mutants needs a buildable crate and Stryker needs vitest.
-///
-/// With `base` set, only mutants on the `<base>...HEAD` changed lines are reported: cosmic-ray
-/// has no native git-diff mode, so the run is scoped to the changed `.py` files (passed as
-/// `--module`) and the survivors are filtered to the changed lines in the core — line
-/// granularity, matching the other arms. Without it, the whole project's sources run (tests
-/// excluded). `exempt` is the file-level exempt paths and `exempt_lines` the line-scoped ones.
+/// [`Measurement`] — the Python arm, parity with [`measure_rust`]. maturin ships the binary
+/// directly, so it invokes the adapter as a module resolved from the wheel's own environment.
 pub fn measure_python(
     root: &Path,
     exempt: &[String],
@@ -791,8 +668,6 @@ pub fn measure_python(
                 .filter(|file| is_mutatable_py(file))
                 .cloned()
                 .collect();
-            // Nothing mutatable changed on the diff: the engine is skipped, and the
-            // caller reports it.
             if modules.is_empty() {
                 return Ok(Measurement::EngineNotRun);
             }
@@ -802,7 +677,6 @@ pub fn measure_python(
     let json = run_py_adapter(root, &modules)?;
     let mut mutants = parse_normalized_results(&json)?;
     if let Some(changed) = &changed {
-        // Diff-scoping v1: keep only mutants on the changed lines.
         mutants.retain(|mutant| {
             changed
                 .get(&mutant.file)
@@ -816,13 +690,9 @@ pub fn measure_python(
     })
 }
 
-/// Run the bundled Python mutation adapter over `root` and return the normalized-results JSON
-/// it writes. The rust binary spawns `python3 -m testing_conventions.mutation.main --out <tmp>
-/// [--module <path> ...]`; the adapter drives cosmic-ray in-process and emits a
-/// [`NormalizedMutant`] array. `modules`, when non-empty, scopes the run to those source
-/// files (the `<base>...HEAD` changed ones); empty runs the whole project. Results are written
-/// to a temp file the adapter names via `--out`, then read back. `PYTHONDONTWRITEBYTECODE` keeps
-/// `__pycache__` out of the scanned tree; a non-zero adapter exit surfaces its captured output.
+/// Run the bundled Python mutation adapter over `root` and return the normalized-results
+/// JSON it writes. `modules`, when non-empty, scopes the run to those source files; empty
+/// runs the whole project. `PYTHONDONTWRITEBYTECODE` keeps `__pycache__` out of the tree.
 fn run_py_adapter(root: &Path, modules: &[String]) -> Result<String> {
     let out = AdapterOut::new();
     std::fs::create_dir_all(&out.0).context("creating the mutation adapter output dir")?;
@@ -891,10 +761,9 @@ impl Drop for MutantsOut {
     }
 }
 
-/// The directory of the cargo workspace `root` belongs to — the source-tree root
-/// cargo-mutants addresses its diff and report paths from. A standalone crate is its
-/// own workspace root. `cargo locate-project --workspace` is the authoritative lookup:
-/// membership involves member globs and `exclude` lists a manifest walk can't settle.
+/// The directory of the cargo workspace `root` belongs to. `cargo locate-project --workspace`
+/// is the authoritative lookup: membership involves member globs and `exclude` lists a
+/// manifest walk can't settle.
 fn cargo_workspace_root(root: &Path) -> Result<PathBuf> {
     let output = Command::new("cargo")
         .current_dir(root)
@@ -926,15 +795,9 @@ fn canonical_scan_prefix(root: &Path, workspace_root: &Path) -> Option<String> {
     scan_prefix(&root, &workspace_root)
 }
 
-/// Write the `<base>...HEAD` diff cargo-mutants' `--in-diff` scopes to, returning its
-/// path — or `None` when the diff is empty (no changed lines under the crate).
-///
-/// cargo-mutants matches `--in-diff` paths relative to the crate's cargo workspace
-/// root, so the diff is generated there: `--relative` makes the paths workspace-root-
-/// relative, and for a workspace-member crate a pathspec (`prefix`) restricts the diff
-/// to changes under the scan path. A standalone crate is its own workspace root, so
-/// the same invocation runs in the crate dir with no pathspec. Scoping means a PR that
-/// doesn't touch the crate yields an empty diff either way.
+/// Write the `<base>...HEAD` diff cargo-mutants' `--in-diff` scopes to, returning its path —
+/// or `None` when the diff is empty. cargo-mutants matches `--in-diff` paths relative to the
+/// cargo workspace root, so the diff is generated there, `--relative`, with `prefix` as a pathspec.
 fn write_base_diff(
     root: &Path,
     workspace_root: &Path,
@@ -970,19 +833,17 @@ fn write_base_diff(
     Ok(Some(path))
 }
 
-/// The tool's own reading of a base diff: the changed files (new-side paths, `b/`
-/// convention stripped) and the inserted line numbers per file, in new-file numbering.
-/// Paths stay on the diff's own basis — workspace-root-relative, the same basis
+/// The tool's own reading of a base diff: the changed files (new-side paths, `b/` stripped)
+/// and the inserted line numbers per file. Paths stay workspace-root-relative, the basis
 /// cargo-mutants addresses mutants on.
 struct BaseDiff {
     files: Vec<String>,
     inserted: BTreeMap<String, BTreeSet<u32>>,
 }
 
-/// Parse a unified diff into a [`BaseDiff`]. Each hunk body is consumed by the counts
-/// its `@@` header declares, so a content line that begins with `+++` or `---` never
-/// reads as a file header. A deleted file (`+++ /dev/null`) has no lines in `HEAD`, so
-/// it carries neither a changed file nor inserted lines.
+/// Parse a unified diff into a [`BaseDiff`]. Each hunk body is consumed by the counts its `@@`
+/// header declares, so a content line beginning `+++` or `---` never reads as a file header.
+/// A deleted file (`+++ /dev/null`) carries neither a changed file nor inserted lines.
 fn parse_base_diff(diff: &str) -> BaseDiff {
     let mut files = Vec::new();
     let mut inserted: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
@@ -1041,12 +902,9 @@ fn parse_range(range: &str) -> Option<(u32, u32)> {
     }
 }
 
-/// Rebase a cargo-mutants report's workspace-root-relative mutant paths onto the scan
-/// path: strip the scan prefix so survivor reporting and `mutation` exemption matching
-/// address scan-path-relative files, as every other check does. Baseline outcomes carry
-/// no path and pass through; a mutant outside the scan path is outside the gate's scope
-/// and dropped (parity with the TS arm's [`to_scan_relative`]). `None` is the standalone
-/// crate: the report already addresses the scan path.
+/// Rebase a cargo-mutants report's workspace-root-relative mutant paths onto the scan path, so
+/// exemption matching and survivor reporting address scan-path-relative files. A baseline
+/// outcome carries no path and passes through; a mutant outside the scan path is dropped.
 fn rebase_report_paths(report: MutantsReport, prefix: Option<&str>) -> MutantsReport {
     let Some(prefix) = prefix else {
         return report;
@@ -1071,14 +929,8 @@ fn rebase_report_paths(report: MutantsReport, prefix: Option<&str>) -> MutantsRe
 const CARGO_MUTANTS_VERSION: &str = "27.1.0";
 
 /// Ensure the pinned cargo-mutants is available and return the absolute path to its binary,
-/// provisioning it on first use.
-///
-/// The consumer installs nothing and never names the engine:
-/// cargo ships no library form of cargo-mutants, so — unlike the in-process TS/Python
-/// adapters — the tool runs a pinned `cargo install cargo-mutants` into its own cache
-/// directory and drives the installed binary from there. A cached binary is reused; only a
-/// cargo toolchain need be present. This is the one deliberate asymmetry from the other
-/// arms, called out per the cross-language-parity rule.
+/// provisioning it on first use. cargo ships no library form, so — unlike the in-process
+/// TS/Python adapters — a pinned `cargo install` runs into the tool's own cache directory.
 fn ensure_cargo_mutants() -> Result<PathBuf> {
     let root = cargo_mutants_cache_root();
     let bin = root.join("bin").join(cargo_mutants_bin_name());
@@ -1126,19 +978,8 @@ fn resolve_cache_base(xdg: Option<OsString>, home: Option<OsString>) -> PathBuf 
 }
 
 /// Return `bin` if it already exists, otherwise take an exclusive advisory lock at
-/// `lock_path`, re-check (another caller may have installed while this one waited for the
-/// lock), and run `install` if still absent.
-///
-/// The lock closes a race: a bare check-then-install with no locking let N
-/// concurrent callers that all observed an absent binary each launch a full `cargo install`
-/// — correct (no corrupted output) but ruinously slow, since a from-source cargo-mutants
-/// compile is duplicated N times instead of once. Concurrent callers now wait ~one install and
-/// find the binary, instead of each running their own; a cold cache costs one serial install
-/// regardless of how many callers race for it.
-///
-/// Pure over the filesystem plus the injected installer, so a test drives every branch with
-/// a temp path and a fake installer (no from-source compile). An installer that reports
-/// success but produces no binary is an error.
+/// `lock_path`, re-check, and run `install` if still absent. The lock keeps N concurrent
+/// callers to one from-source compile instead of N. An install producing no binary is an error.
 fn provision(
     bin: &Path,
     lock_path: &Path,
@@ -1188,10 +1029,9 @@ fn install_argv(root: &Path) -> Vec<OsString> {
     ]
 }
 
-/// Provision cargo-mutants into `root`, executing the built `cargo install` command with
-/// `run`. `run` is injected so a test drives the success and failure branches with a fake
-/// (no from-source compile). The coverage-instrumentation env is stripped so the compile
-/// doesn't re-enter a `cargo llvm-cov` rustc wrapper.
+/// Provision cargo-mutants into `root`, executing the built `cargo install` with `run`, which
+/// is injected so a test drives both branches with a fake. The coverage-instrumentation env is
+/// stripped so the compile doesn't re-enter a `cargo llvm-cov` rustc wrapper.
 fn run_install(
     root: &Path,
     run: impl FnOnce(&mut Command) -> std::io::Result<Output>,
@@ -1236,12 +1076,8 @@ fn strip_llvm_cov_env(command: &mut Command) {
 }
 
 /// Run the cargo-mutants argv ([`mutants_argv`]) in `root`, where `engine` is the provisioned
-/// cargo-mutants binary ([`ensure_cargo_mutants`]) invoked by absolute path, and return the
-/// engine's [`Output`] for the caller's diagnostics.
-///
-/// The exit code is classified by [`classify_mutants_exit`] (`0`/`2`/`3` normal, else fatal).
-/// The outer instrumentation env is stripped so a nested run (this rule's own tests under
-/// `cargo llvm-cov`) doesn't re-enter the rustc wrapper and hang.
+/// binary invoked by absolute path, returning its [`Output`]. The outer instrumentation env is
+/// stripped so a nested run (this rule's own tests under coverage) can't re-enter the wrapper.
 fn run_cargo_mutants(
     engine: &Path,
     root: &Path,
@@ -1259,13 +1095,9 @@ fn run_cargo_mutants(
     Ok(output)
 }
 
-/// Decide whether an engine run that judged zero mutants is legitimate: `listed` is the
-/// crate's full mutant list and `diff` the tool's own reading of the very diff the engine
-/// filtered by. A listed mutant whose span touches an inserted line proves the filter
-/// dropped real mutants — a fatal error naming the sites and the engine's output — while
-/// no overlap confirms an honest zero. The inserted lines are a subset of the engine's
-/// affected-lines rule (insertions plus deletion-adjacent lines), so a legitimate zero
-/// never trips this.
+/// Decide whether an engine run that judged zero mutants is legitimate: `listed` is the crate's
+/// full mutant list and `diff` the tool's own reading of the diff the engine filtered by. A
+/// listed mutant whose span touches an inserted line proves the filter dropped real mutants.
 fn zero_mutant_verdict(listed: &[MutantInfo], diff: &BaseDiff, run: &Output) -> Result<()> {
     let dropped: Vec<&MutantInfo> = listed
         .iter()
@@ -1340,16 +1172,9 @@ fn list_cargo_mutants(
     parse_mutants_list(&String::from_utf8_lossy(&output.stdout))
 }
 
-/// The argv for one cargo-mutants run: `mutants --output <out> [--in-diff <diff>]
-/// [--features <list>]`. Split from execution so the shape is unit-tested without a real
-/// engine run.
-///
-/// The `[rust] features` list rides on cargo-mutants' **own** `--features` option, which it
-/// applies to every cargo invocation the run makes. Cargo builds a crate's test targets
-/// before running them, and a list passed after the `--` separator reaches `cargo test`
-/// alone — so a crate whose test target names a `#[cfg(feature = ...)]` item fails to compile
-/// in the unmutated tree, and the run judges nothing. On the engine's option the targets
-/// build, the gated code is mutated, and the tests covering it judge those mutants.
+/// The argv for one cargo-mutants run: `mutants --output <out> [--in-diff <diff>] [--features
+/// <list>]`. `features` rides on the engine's own `--features` so it reaches every cargo
+/// invocation; after a `--` it would reach `cargo test` alone and the baseline build would fail.
 fn mutants_argv(out: &Path, in_diff: Option<&Path>, features: &[String]) -> Vec<OsString> {
     let mut argv = vec![
         OsString::from("mutants"),
@@ -1368,18 +1193,10 @@ fn mutants_argv(out: &Path, in_diff: Option<&Path>, features: &[String]) -> Vec<
 }
 
 /// Classify a finished cargo-mutants run's exit code as a normal outcome or a fatal error.
-/// Split from [`run_cargo_mutants`] so the exit-code handling is unit-tested with an injected
-/// [`Output`] rather than a real (and, for a timeout, a genuinely slow) engine run.
-///
-/// cargo-mutants exits `0` when every mutant is caught, `2` when some are missed (survivors),
-/// and `3` when some mutants **timed out** and none were missed — all three write an
-/// `outcomes.json` the gate reads, and a timeout is inconclusive (this module's own `Timeout`
-/// semantics), not a survivor. Any other code — a usage error, or a baseline that didn't
-/// build/pass (exit 4) — is fatal.
+/// `0` (all caught), `2` (some missed) and `3` (some timed out, none missed) each write an
+/// `outcomes.json` the gate reads. Any other code — a baseline that didn't build (4) — is fatal.
 fn classify_mutants_exit(root: &Path, output: &Output) -> Result<()> {
     match output.status.code() {
-        // 0 = all caught, 2 = some missed (survivors), 3 = some timed out with none missed:
-        // all three produce an outcomes.json to read, and a timeout is inconclusive.
         Some(0) | Some(2) | Some(3) => Ok(()),
         _ => bail!(
             "cargo-mutants did not run cleanly in `{}` (baseline build/test failure?):\n{}{}",
@@ -1394,9 +1211,6 @@ fn classify_mutants_exit(root: &Path, output: &Output) -> Result<()> {
 mod tests {
     use super::*;
 
-    // A normalized result set covering every status: two survivors (Survived + NoCoverage),
-    // a caught Killed, an inconclusive-but-viable Timeout, and two unviable mutants
-    // (CompileError / RuntimeError). `snake_case` on the wire; an extra field is ignored.
     const NORMALIZED: &str = r#"[
         {"file": "src/a.ts", "line": 2, "status": "survived",
          "mutator": "ConditionalExpression", "replacement": "true", "id": "ignored"},
@@ -1422,10 +1236,8 @@ mod tests {
     fn normalized_survivors_are_survived_and_nocoverage_only() {
         let mutants = parse_normalized_results(NORMALIZED).unwrap();
         let survivors = normalized_survivors(&mutants);
-        // Survived (2) + NoCoverage (5); not killed/timeout/compile/runtime.
         assert_eq!(survivors.len(), 2);
         assert_eq!((survivors[0].line, survivors[1].line), (2, 5));
-        // Replacement is folded into the description when present, omitted otherwise.
         assert!(survivors[0].description.contains("ConditionalExpression"));
         assert!(survivors[0].description.contains("-> true"));
         assert_eq!(survivors[1].description, "ArithmeticOperator");
@@ -1434,8 +1246,6 @@ mod tests {
     #[test]
     fn normalized_mutated_lines_collects_only_viable_mutants() {
         let mutants = parse_normalized_results(NORMALIZED).unwrap();
-        // Survived/Killed/NoCoverage/Timeout ran; CompileError/RuntimeError never produced
-        // a viable mutant.
         assert_eq!(
             normalized_mutated_lines(&mutants),
             [2u32, 5, 9, 12]
@@ -1447,8 +1257,6 @@ mod tests {
 
     #[test]
     fn normalized_conclusive_count_is_survived_killed_and_nocoverage() {
-        // Survived (2) + NoCoverage (5) + Killed (9) were judged; Timeout ran but judged
-        // nothing, and CompileError / RuntimeError never produced a viable mutant.
         let mutants = parse_normalized_results(NORMALIZED).unwrap();
         assert_eq!(normalized_conclusive_count(&mutants), 3);
         assert_eq!(normalized_conclusive_count(&[]), 0);
@@ -1477,15 +1285,12 @@ mod tests {
         let mutants = parse_normalized_results(NORMALIZED).unwrap();
         let line_scoped = BTreeMap::from([("src/a.ts".to_string(), BTreeSet::from([2u32]))]);
         let kept = evaluate_normalized(&mutants, &[], &line_scoped).unwrap();
-        // Line 2's survivor is lifted; line 5's still stands.
         assert_eq!(kept.len(), 1);
         assert_eq!(kept[0].line, 5);
     }
 
     #[test]
     fn evaluate_normalized_rejects_exempting_a_caught_line() {
-        // Line 9 had only a Killed mutant (viable, no survivor) — over-exemption is an error,
-        // via the shared determinism guard.
         let mutants = parse_normalized_results(NORMALIZED).unwrap();
         let line_scoped = BTreeMap::from([("src/a.ts".to_string(), BTreeSet::from([9u32]))]);
         let err = evaluate_normalized(&mutants, &[], &line_scoped).unwrap_err();
@@ -1497,16 +1302,12 @@ mod tests {
 
     #[test]
     fn evaluate_normalized_leaves_an_unviable_listed_line_alone() {
-        // Line 15 had only a CompileError (no viable mutant) — neither an error nor a drop;
-        // the real survivors still stand.
         let mutants = parse_normalized_results(NORMALIZED).unwrap();
         let line_scoped = BTreeMap::from([("src/a.ts".to_string(), BTreeSet::from([15u32]))]);
         let kept = evaluate_normalized(&mutants, &[], &line_scoped).unwrap();
         assert_eq!(kept.len(), 2);
     }
 
-    // A pared `outcomes.json`: the baseline, one missed mutant, and one caught — the
-    // real shape (externally-tagged `scenario`, extra fields the rule ignores).
     const SAMPLE: &str = r#"{
         "outcomes": [
             {"scenario": "Baseline", "summary": "Success",
@@ -1535,7 +1336,6 @@ mod tests {
     fn collects_only_missed_mutants_as_survivors() {
         let report = parse_mutants_report(SAMPLE).unwrap();
         let survivors = unexplained_survivors(&report, &[]);
-        // Only the MissedMutant — the baseline and the CaughtMutant are not survivors.
         assert_eq!(survivors.len(), 1);
         assert_eq!(survivors[0].file, "src/lib.rs");
         assert_eq!(survivors[0].line, 7);
@@ -1544,7 +1344,6 @@ mod tests {
 
     #[test]
     fn conclusive_count_is_caught_plus_missed() {
-        // The MissedMutant and the CaughtMutant were judged; the Baseline is not a mutant.
         let report = parse_mutants_report(SAMPLE).unwrap();
         assert_eq!(conclusive_count(&report), 2);
         assert_eq!(conclusive_count(&MutantsReport { outcomes: vec![] }), 0);
@@ -1566,8 +1365,6 @@ mod tests {
 
     #[test]
     fn rebase_report_paths_strips_the_workspace_prefix() {
-        // A workspace-member crate's report addresses files workspace-root-relative
-        // (`member/src/lib.rs`); gating addresses them scan-path-relative (`src/lib.rs`).
         let report = parse_mutants_report(SAMPLE).unwrap();
         let prefixed = MutantsReport {
             outcomes: report
@@ -1586,21 +1383,18 @@ mod tests {
         let survivors = unexplained_survivors(&rebased, &[]);
         assert_eq!(survivors.len(), 1);
         assert_eq!(survivors[0].file, "src/lib.rs");
-        // The baseline outcome carries no path and passes through.
         assert_eq!(rebased.outcomes.len(), 3);
     }
 
     #[test]
     fn rebase_report_paths_drops_an_out_of_scope_mutant_and_keeps_none_identity() {
         let report = parse_mutants_report(SAMPLE).unwrap();
-        // `src/lib.rs` / `src/other.rs` don't carry the `member/` prefix: out of scope.
         let rebased = rebase_report_paths(report.clone(), Some("member"));
         assert_eq!(
             rebased.outcomes.len(),
             1,
             "only the pathless baseline outcome remains"
         );
-        // No prefix (a standalone crate): the report passes through untouched.
         let unchanged = rebase_report_paths(report, None);
         assert_eq!(unchanged.outcomes.len(), 3);
         assert_eq!(unexplained_survivors(&unchanged, &[])[0].file, "src/lib.rs");
@@ -1608,11 +1402,9 @@ mod tests {
 
     #[test]
     fn adapter_cwd_normalises_the_empty_package_root_to_the_current_dir() {
-        // `tiers::package_root` yields `""` for a relative scan path such as `src`,
-        // and `Command::current_dir("")` fails with ENOENT — which the adapter's
-        // error context mislabelled as a missing `node`. Every TypeScript consumer
-        // of the mutation gate hit this, since the reusable workflow scans `src`.
-        // Cargo runs a unit test from the crate root, so `.` and `src` are both real.
+        // `tiers::package_root` yields `""` for a relative scan path such as `src`, and
+        // `Command::current_dir("")` fails with ENOENT — which the adapter's error context
+        // mislabelled as a missing `node`, hitting every TypeScript consumer of the gate.
         assert_eq!(
             adapter_cwd(Path::new(""), "TypeScript").unwrap(),
             Path::new(".")
@@ -1625,9 +1417,8 @@ mod tests {
 
     #[test]
     fn adapter_cwd_rejects_a_directory_that_is_not_there() {
-        // The check is the point: `Command::output()` reports a missing working directory
-        // with the same ENOENT as a missing interpreter, so an unchecked spawn tells a
-        // consumer whose scan path is wrong that the interpreter is missing instead.
+        // `Command::output()` reports a missing working directory with the same ENOENT as a
+        // missing interpreter, so an unchecked spawn blames the interpreter for a wrong path.
         let err = adapter_cwd(Path::new("no/such/dir"), "Python")
             .expect_err("a directory that is not there is an error");
         assert_eq!(
@@ -1638,8 +1429,6 @@ mod tests {
 
     #[test]
     fn spawn_context_names_the_interpreter_the_entry_and_the_working_directory() {
-        // Every path the spawn used, so an ENOENT is diagnosable from the message alone.
-        // The #478 message named none of them, and cost hours to a wrong first guess.
         assert_eq!(
             spawn_context("node", "/pkg/dist/mutation/main.js", Path::new("/pkg")),
             "spawning `node /pkg/dist/mutation/main.js` in `/pkg` (is `node` on PATH?)"
@@ -1656,12 +1445,10 @@ mod tests {
             scan_prefix(Path::new("/repo/pkg/src/nested"), Path::new("/repo/pkg")),
             Some("src/nested".to_string())
         );
-        // The scan path is the package root itself: nothing to prefix.
         assert_eq!(
             scan_prefix(Path::new("/repo/pkg"), Path::new("/repo/pkg")),
             None
         );
-        // Relative scan paths resolve the same way.
         assert_eq!(
             scan_prefix(Path::new("pkg/src"), Path::new("pkg")),
             Some("src".to_string())
@@ -1706,7 +1493,6 @@ mod tests {
         let rebased = to_scan_relative(mutants.clone(), Some("src"));
         assert_eq!(rebased.len(), 1, "the out-of-scan-path mutant is dropped");
         assert_eq!(rebased[0].file, "a.ts");
-        // No prefix (the scan path is the package root): paths pass through untouched.
         let unchanged = to_scan_relative(mutants, None);
         assert_eq!(unchanged.len(), 2);
         assert_eq!(unchanged[0].file, "src/a.ts");
@@ -1750,8 +1536,6 @@ mod tests {
 
     #[test]
     fn mutated_lines_collects_caught_and_missed() {
-        // The MissedMutant (src/lib.rs:7) and the CaughtMutant (src/other.rs:3) are both
-        // viable, conclusive mutants; the Baseline is not.
         let report = parse_mutants_report(SAMPLE).unwrap();
         assert_eq!(
             mutated_lines(&report),
@@ -1783,7 +1567,6 @@ mod tests {
 
     #[test]
     fn evaluate_scoped_rejects_exempting_a_caught_line() {
-        // src/other.rs:3 had only a caught mutant (no survivor) — over-exemption.
         let report = parse_mutants_report(SAMPLE).unwrap();
         let line_scoped = BTreeMap::from([("src/other.rs".to_string(), BTreeSet::from([3u32]))]);
         let err = evaluate_scoped(
@@ -1801,8 +1584,6 @@ mod tests {
 
     #[test]
     fn evaluate_scoped_leaves_an_unmutated_listed_line_alone() {
-        // Line 99 has no mutant at all (e.g. outside a `--base` diff) — neither an error
-        // nor a drop; the real survivor on line 7 still stands.
         let report = parse_mutants_report(SAMPLE).unwrap();
         let line_scoped = BTreeMap::from([("src/lib.rs".to_string(), BTreeSet::from([99u32]))]);
         let kept = evaluate_scoped(
@@ -1901,12 +1682,9 @@ mod tests {
 
     #[test]
     fn provision_does_not_duplicate_the_install_under_concurrent_callers() {
-        // On a cold cache, N concurrent callers must share one install, not each run
-        // their own — cargo-mutants' from-source compile duplicated N times (instead of once)
-        // is what turned a ~1-minute cold-cache cost into ~7 minutes under nextest. A
-        // barrier forces both threads to observe the absent binary together, and the install
-        // closure sleeps briefly to widen the race window so this reproduces deterministically
-        // rather than flakily.
+        // On a cold cache, N concurrent callers must share one install: cargo-mutants' compile
+        // duplicated N times turned a ~1-minute cold-cache cost into ~7 minutes. The barrier and
+        // the sleeping installer widen the race window so this reproduces deterministically.
         use std::sync::{Arc, Barrier};
         use std::thread;
         use std::time::Duration;
@@ -1953,22 +1731,18 @@ mod tests {
     #[test]
     fn resolve_cache_base_prefers_xdg_then_home_then_temp() {
         let xdg = |s: &str| Some(OsString::from(s));
-        // XDG wins when set and non-empty.
         assert_eq!(
             resolve_cache_base(xdg("/xdg"), xdg("/home")),
             PathBuf::from("/xdg")
         );
-        // An empty XDG falls through to $HOME/.cache.
         assert_eq!(
             resolve_cache_base(xdg(""), xdg("/home")),
             PathBuf::from("/home/.cache")
         );
-        // A missing XDG likewise uses $HOME/.cache.
         assert_eq!(
             resolve_cache_base(None, xdg("/home")),
             PathBuf::from("/home/.cache")
         );
-        // Neither set → the temp dir.
         assert_eq!(resolve_cache_base(None, None), std::env::temp_dir());
         assert_eq!(
             resolve_cache_base(xdg(""), Some(OsString::new())),
@@ -1987,7 +1761,6 @@ mod tests {
             root.to_string_lossy().contains("testing-conventions"),
             "tool-namespaced; got {root:?}"
         );
-        // A real base dir (HOME/XDG in the test env) makes it absolute — not an empty path.
         assert!(
             root.is_absolute(),
             "expected an absolute path; got {root:?}"
@@ -2026,9 +1799,6 @@ mod tests {
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect()
         };
-        // The features land on cargo-mutants' own `--features`, which reaches every cargo
-        // invocation — after a `--` separator they would reach `cargo test` alone, and a test
-        // target needing the feature would break the unmutated baseline build.
         assert_eq!(
             argv(None, &["cli", "boost"]),
             vec!["mutants", "--output", "/out", "--features", "cli,boost"]
@@ -2045,7 +1815,6 @@ mod tests {
                 "cli",
             ]
         );
-        // No features configured: the engine runs on the crate's default features.
         assert_eq!(argv(None, &[]), vec!["mutants", "--output", "/out"]);
     }
 
@@ -2107,8 +1876,6 @@ diff --git a/src/lib.rs b/src/lib.rs
 
     #[test]
     fn parse_base_diff_skips_a_deleted_file() {
-        // A deleted file has no lines in HEAD: `+++ /dev/null` carries neither a changed
-        // file nor inserted lines.
         let diff = "\
 --- a/src/dead.rs
 +++ /dev/null
@@ -2150,8 +1917,6 @@ diff --git a/src/lib.rs b/src/lib.rs
 
     #[test]
     fn parse_base_diff_skips_no_newline_annotations_mid_hunk() {
-        // "\ No newline at end of file" annotates the line before it and counts against
-        // neither side of the hunk.
         let diff = "\
 +++ b/n.txt
 @@ -1 +1 @@
@@ -2180,7 +1945,6 @@ diff --git a/src/lib.rs b/src/lib.rs
         let mut ran = false;
         run_install(Path::new("/cache/root"), |command| {
             ran = true;
-            // The pinned argv reaches the runner.
             let argv: Vec<String> = command
                 .get_args()
                 .map(|arg| arg.to_string_lossy().into_owned())
@@ -2326,12 +2090,9 @@ diff --git a/src/lib.rs b/src/lib.rs
     #[test]
     fn zero_mutant_verdict_accepts_a_zero_with_no_mutant_on_the_inserted_lines() {
         let run = fake_output(0, "");
-        // No mutants listed at all.
         zero_mutant_verdict(&[], &diff_with_inserted("src/lib.rs", &[5]), &run).unwrap();
-        // Inserted lines sit just outside the span on either side.
         let listed = [listed_mutant("src/lib.rs", 5, 8, "replace add -> 0")];
         zero_mutant_verdict(&listed, &diff_with_inserted("src/lib.rs", &[4, 9]), &run).unwrap();
-        // A mutant in a different file never matches.
         zero_mutant_verdict(&listed, &diff_with_inserted("src/other.rs", &[6]), &run).unwrap();
     }
 
@@ -2357,7 +2118,6 @@ diff --git a/src/lib.rs b/src/lib.rs
     #[cfg(unix)]
     #[test]
     fn classify_mutants_exit_accepts_the_caught_and_survivor_exits() {
-        // 0 (all caught) and 2 (some missed/survived) both leave an outcomes.json to read.
         classify_mutants_exit(Path::new("/crate"), &fake_output(0, "")).unwrap();
         classify_mutants_exit(Path::new("/crate"), &fake_output(2, "")).unwrap();
     }
@@ -2365,9 +2125,6 @@ diff --git a/src/lib.rs b/src/lib.rs
     #[cfg(unix)]
     #[test]
     fn classify_mutants_exit_accepts_a_timeout_exit_3() {
-        // cargo-mutants exits 3 when mutants timed out and none were missed — an
-        // inconclusive-not-fatal outcome (this module's own `Timeout` semantics). It still
-        // wrote an outcomes.json, so the run is a pass, not the "baseline failure" bail.
         classify_mutants_exit(Path::new("/crate"), &fake_output(3, ""))
             .expect("a timeout (exit 3) is inconclusive, not fatal");
     }
@@ -2375,7 +2132,6 @@ diff --git a/src/lib.rs b/src/lib.rs
     #[cfg(unix)]
     #[test]
     fn classify_mutants_exit_is_fatal_on_a_baseline_failure() {
-        // Exit 4 (the clean/baseline build or test failed) — and any other code — stays fatal.
         let err = classify_mutants_exit(Path::new("/crate"), &fake_output(4, "baseline broke"))
             .unwrap_err();
         assert!(

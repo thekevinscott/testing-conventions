@@ -2,6 +2,7 @@
 isn't copied into every check module.
 """
 REUSABLE_WORKFLOW = ".github/workflows/testing-conventions.yml"
+NODE_PACKAGE_MANIFEST = "packages/node/package.json"
 
 # The outputs `./.github/actions/detect` must produce for the monorepo TS fixture.
 TS_FIXTURE_PACKAGE_ROOT = ".github/selftest/monorepo/packages/ts"

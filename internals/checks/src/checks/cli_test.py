@@ -22,6 +22,10 @@ def test_changelog_gate_is_registered():
     assert "changelog-gate" in main.commands
 
 
+def test_cli_node_engine_wired_is_registered():
+    assert "cli-node-engine-wired" in main.commands
+
+
 def test_colocated_rust_red_is_registered():
     assert "colocated-rust-red" in main.commands
 

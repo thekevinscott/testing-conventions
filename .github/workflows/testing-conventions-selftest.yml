@@ -172,6 +172,15 @@ jobs:
       - name: testing-conventions.yml must consolidate the static gates into one `static` job
         run: uv run --project internals/checks tc-checks static-gates-wired
 
+  cli-node-engine-wired:
+    name: Every CLI-invoking job provisions the published engines.node floor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: each job's node-version pin must satisfy packages/node's engines.node
+        run: uv run --project internals/checks tc-checks cli-node-engine-wired
+
   rolling-release-wired:
     name: The major tag advances only via the gated move-major-tag workflow
     runs-on: ubuntu-latest

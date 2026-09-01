@@ -668,10 +668,6 @@ mod tests {
 
     #[test]
     fn default_rust_coverage_is_the_strict_line_floor() {
-        // The zero-config Rust floor is `lines = 100` — matching Python/TS — with
-        // every other metric opt-in (None): `regions` (a Rust-only sub-line metric),
-        // `functions`, and `branch` (nightly-only instrumentation). Locked here
-        // so it can't silently drift from the Defaults reference.
         assert_eq!(
             RustCoverage::default(),
             RustCoverage {

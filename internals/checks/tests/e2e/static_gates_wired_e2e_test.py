@@ -2,8 +2,7 @@
 
 The command reads a workflow file, so it runs here (the package-root e2e suite), not the isolated
 unit suite. `CliRunner` invokes it and captures the exit code and output — no `sys.argv` juggling,
-no mocks. The default-path test runs against this repo's real reusable workflow, which is what
-proves the five static gates are wired there and not merely in a fixture.
+no mocks.
 """
 import os
 from pathlib import Path

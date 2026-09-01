@@ -32,8 +32,8 @@ _HAS_SCAN_PATH_FROM_INPUTS_SOURCE = re.compile(r"SCAN_PATH:\s*.*inputs\.source")
 _HAS_BASE_FLAG = re.compile(r"--base")
 _HAS_BASE_FROM_INPUTS_BASE = re.compile(r"BASE:\s*.*inputs\.base")
 _HAS_PULL_REQUEST_GATE = re.compile(r"github\.event_name == 'pull_request'")
-# #333: the run step appends the detect-rendered `$EXTRA_SCOPE` / `$EXCLUDE` (repeated
-# `--extra-scope`/`--exclude` arguments) and their env is wired from detect's outputs.
+# The run step appends the detect-rendered `$EXTRA_SCOPE` / `$EXCLUDE` (repeated
+# `--extra-scope`/`--exclude` arguments), and their env is wired from detect's outputs.
 _HAS_EXTRA_SCOPE_ARG = re.compile(r"\$EXTRA_SCOPE")
 _HAS_EXTRA_SCOPE_FROM_DETECT = re.compile(r"EXTRA_SCOPE:\s*.*e2e_extra_scope")
 _HAS_EXCLUDE_ARG = re.compile(r"\$EXCLUDE")

@@ -49,7 +49,7 @@ jobs:
       - uses: ./.github/actions/download-hermetic-cli
 """
 
-# `packaging-red` reverts to a bare npx run with no artifact download — the pre-#379 shape.
+# `packaging-red` reverts to a bare npx run with no artifact download.
 UNWIRED = WIRED.replace(
     "  packaging-red:\n    needs: [build-cli]\n    steps:\n      - uses: ./.github/actions/download-hermetic-cli\n",
     "  packaging-red:\n    steps:\n      - run: npx -y testing-conventions packaging\n",
@@ -57,8 +57,6 @@ UNWIRED = WIRED.replace(
 
 
 def test_declares_the_workflow_argument_defaulting_to_the_selftest_workflow():
-    # Assert click's own registered metadata (the `@click.argument`) — `.callback` bypasses
-    # arg parsing, so this is what pins the decorator without a CliRunner collaborator.
     (argument,) = cli.params
     assert argument.name == "workflow"
     assert argument.default == SELFTEST_WORKFLOW

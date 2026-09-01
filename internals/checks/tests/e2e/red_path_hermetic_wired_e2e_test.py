@@ -20,7 +20,7 @@ WIRED_STEPS = (
     "      - uses: ./.github/actions/download-hermetic-cli\n"
 )
 WIRED = "jobs:\n" + "".join(f"  {job}:\n{WIRED_STEPS}" for job in RED_PATH_JOBS)
-# One job reverts to a bare npx run with no artifact download — the pre-#379 shape.
+# One job reverts to a bare npx run with no artifact download.
 UNWIRED = WIRED.replace(
     "  coverage-rust-red:\n" + WIRED_STEPS,
     "  coverage-rust-red:\n    steps:\n      - run: npx -y testing-conventions unit coverage\n",

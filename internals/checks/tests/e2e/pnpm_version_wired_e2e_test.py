@@ -26,8 +26,7 @@ def test_passes_on_a_wired_fixture(tmp_path):
 
 
 def test_fails_on_an_unguarded_fixture(tmp_path):
-    # Reads detect but has no fallback, so a published detect predating the output leaves
-    # `version` empty — the shape that blocked the first #475 release.
+    # Reads detect with no fallback, so a detect predating the output leaves `version` empty.
     bad = tmp_path / "wf.yml"
     bad.write_text(UNGUARDED)
     result = CliRunner().invoke(cli, [str(bad)])

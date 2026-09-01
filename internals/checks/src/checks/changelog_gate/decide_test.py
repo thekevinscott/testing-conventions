@@ -33,7 +33,6 @@ def test_skip_line_is_case_insensitive():
 
 
 def test_skip_line_must_start_its_line():
-    # A mention inside prose is not the bypass — only a line that opens with the token.
     assert has_skip_line("we could skip-changelog: but we won't\n") is False
 
 
@@ -60,7 +59,6 @@ def test_changed_packages_ignores_a_bare_file_directly_under_packages():
 
 
 def test_changed_packages_ignores_the_packages_directory_itself():
-    # No package segment at all: the path must have a segment *under* `packages/`.
     assert changed_packages(["packages"]) == []
 
 
@@ -150,7 +148,6 @@ def test_fragment_is_none_for_a_non_fragment_path():
 
 
 def test_fragment_is_none_for_a_nested_path_under_a_fragment_dir():
-    # The trailing segment forbids nesting, so a stray subdirectory is not a fragment.
     assert fragment("packages/rust/changelog.d/old/2026-08-30-a-fix.md") is None
 
 
@@ -222,7 +219,6 @@ def test_missing_kinds_ignores_a_fragment_added_under_another_package():
 
 
 def test_missing_kinds_ignores_a_malformed_fragment_name():
-    # A file that breaks the naming convention does not satisfy the gate.
     assert missing_kinds(["packages/rust/changelog.d/a-fix.md"], "packages/rust") == [
         "changelog",
         "migrations",

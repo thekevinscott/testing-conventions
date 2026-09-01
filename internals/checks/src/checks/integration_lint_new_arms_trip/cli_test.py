@@ -30,21 +30,17 @@ def test_checks_are_the_expected_invocations():
 
 
 def test_declares_a_variadic_command_argument():
-    # Assert click's own registered metadata — `.callback` bypasses arg parsing, so this is what
-    # pins the `@click.argument` decorator without a CliRunner collaborator.
     (argument,) = cli.params
     assert argument.name == "command"
     assert argument.nargs == -1
 
 
 def test_command_echoes_ok_when_the_red_check_holds(capsys):
-    # `false` exits non-zero, so the red-path expectation holds -> "[cli] ok", no raise.
     cli.callback(command=("false",))
     assert "[cli] ok" in capsys.readouterr().out
 
 
 def test_command_raises_when_the_red_check_is_violated():
-    # `true` exits 0, so the red-path expectation is violated -> the check raises.
     try:
         cli.callback(command=("true",))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it

@@ -14,8 +14,7 @@ from checks.static_gates_wired.cli import (
     violations,
 )
 
-# A minimal `static` job carrying every substring the check requires, and none of the four legacy
-# job headers — the consolidated shape the implementation lands.
+# A minimal `static` job carrying every required substring and none of the legacy job headers.
 WIRED = """\
 jobs:
   detect:
@@ -89,8 +88,6 @@ def test_each_missing_required_substring_is_a_violation():
 
 
 def test_declares_the_workflow_argument_defaulting_to_the_reusable_workflow():
-    # Assert click's own registered metadata (the `@click.argument`) — `.callback` bypasses arg
-    # parsing, so this is what pins the decorator without a CliRunner collaborator.
     (argument,) = cli.params
     assert argument.name == "workflow"
     assert argument.default == REUSABLE_WORKFLOW

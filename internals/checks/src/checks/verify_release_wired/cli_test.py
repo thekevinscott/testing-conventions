@@ -7,8 +7,7 @@ the raise branches run. The raise path is asserted against the propagated except
 from checks.verify_release_wired.cli import DEFAULT_MOVE_TAG, cli
 
 # A minimal wired-and-gated move-major-tag.yml: both verification steps present, both suite
-# workflows dispatched, and a move job that needs the verify jobs. (The decision's branches are
-# exhausted in decide_test; here we only need one clean sample and one ungated sample.)
+# workflows dispatched, and a move job that needs the verify jobs.
 WIRED = """\
 jobs:
   verify-layout:

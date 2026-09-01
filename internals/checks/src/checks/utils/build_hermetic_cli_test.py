@@ -37,9 +37,8 @@ def test_runs_the_commands_in_order_then_stages(tmp_path, capsys):
     assert calls[1][1] == str(root / "packages/node")
     staged = stage / "testing-conventions"
     assert staged.read_bytes() == b"binary"
-    # Exec bit set at staging: artifact upload/download preserves paths, not modes. Exact
-    # permission bits, not just truthy — a partial-exec mode (e.g. owner+group only) would
-    # still be truthy against a loose `& 0o111` check.
+    # Artifact upload/download preserves paths, not modes, so the exec bit is set at staging.
+    # Exact bits, not truthy — a partial-exec mode would pass a loose `& 0o111` check.
     assert staged.stat().st_mode & 0o777 == 0o755
     assert (stage / "dist" / "mutation" / "main.js").read_text() == "adapter"
 
@@ -58,8 +57,7 @@ def test_stages_into_a_stage_dir_with_missing_parent_directories(tmp_path):
 
 
 def test_stages_into_an_already_existing_stage_dir(tmp_path):
-    # mkdir(exist_ok=True): a rerun (or a stage dir some earlier step already created) must
-    # not raise FileExistsError.
+    # mkdir(exist_ok=True): a rerun over an existing stage dir must not raise FileExistsError.
     binary, node_dist = "bin", "dist"
     root = _root(tmp_path, binary, node_dist)
     stage = tmp_path / "stage"
@@ -73,8 +71,7 @@ def test_stages_into_an_already_existing_stage_dir(tmp_path):
 
 
 def test_stages_dist_over_an_already_existing_dist_dir(tmp_path):
-    # copytree(dirs_exist_ok=True): a rerun (or a stage/dist an earlier step already created)
-    # must merge rather than raise FileExistsError.
+    # copytree(dirs_exist_ok=True): a rerun over an existing dist must merge, not raise.
     binary, node_dist = "bin", "dist"
     root = _root(tmp_path, binary, node_dist)
     stage = tmp_path / "stage"

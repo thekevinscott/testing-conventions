@@ -1,17 +1,7 @@
-"""The static-gates-wired check — repo-only (#410).
+"""The static-gates-wired check — repo-only.
 
-Backs the `tc-checks static-gates-wired` subcommand: the five static gates — colocated-test (with
-its co-change variant), unit-lint, one-function-per-file, and integration-lint — must run as steps
-of one `static` job per language rather than a job apiece, each of which paid ~20s of setup for a
-sub-second scan. The check asserts the consolidation statically: the four legacy job keys are gone,
-a `static:` job fans out over the rust-inclusive `static_languages` matrix (with the stale-`@v0`
-`integration_lint_languages` fallback), all five gate run lines survive with their gate-membership
-guards, and the co-change step alone stays gated on the pull_request event.
-
-A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
-untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:` text is
-templated before the shell sees it, so a literal `${{ ... }}` in a grep pattern is silently
-evaluated).
+Backs the `tc-checks static-gates-wired` subcommand: asserts the reusable workflow runs the five
+static gates as steps of one `static` job per language. See `docs/internals/repo.md`.
 """
 from __future__ import annotations
 
@@ -22,10 +12,8 @@ import click
 from checks.config import REUSABLE_WORKFLOW
 from checks.utils.check_failed import CheckFailed
 
-# The four job headers the consolidation removes — none may remain as a `  <name>:` job header.
 _LEGACY_JOBS = ("colocated-test", "colocated-test-changed", "unit-lint", "integration-lint")
 
-# Each required substring, with the failure message naming what its absence means.
 _REQUIRED = (
     ("  static:", "no `static:` job — the five static gates aren't consolidated into one job"),
     (

@@ -40,8 +40,6 @@ def test_raises_on_a_workflow_with_a_pip_arm(tmp_path):
 
 
 def test_declares_the_workflow_argument_defaulting_to_the_reusable_workflow():
-    # Assert click's own registered metadata (the `@click.argument`) — `.callback` bypasses
-    # arg parsing, so this is what pins the decorator without a CliRunner collaborator.
     (argument,) = cli.params
     assert argument.name == "workflow"
     assert argument.default == REUSABLE_WORKFLOW

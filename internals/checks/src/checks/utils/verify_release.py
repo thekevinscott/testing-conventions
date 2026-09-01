@@ -33,10 +33,8 @@ from datetime import datetime, timezone
 
 from checks.utils.check_failed import CheckFailed
 
-# The remote-fetch targets a consumer's `detect` composite action resolves: GitHub fetches the
-# repo at `@v0` and runs `action.yml`, which reaches its implementation via
-# `$GITHUB_ACTION_PATH/../../../internals/detect/src/detect.py` (#363). Both must survive into the
-# archived tree of the promoted commit, or every consumer's detect job dies the moment `@v0` moves.
+# A consumer's `detect` action reaches its implementation through these two paths, so both must
+# survive into the promoted commit's archived tree or every consumer's detect job dies at `@v0`.
 REQUIRED_ACTION_PATHS = (
     ".github/actions/detect/action.yml",
     "internals/detect/src/detect.py",
@@ -44,16 +42,12 @@ REQUIRED_ACTION_PATHS = (
 
 NPM_TAG_PREFIX = "testing-conventions-npm-v"
 
-# The throwaway tag naming the release commit for dispatch (created at the release SHA, deleted
-# after). The SHA in the name keeps concurrent verifications from colliding on the ref.
+# The SHA in the tag name keeps concurrent verifications from colliding on the ref.
 TEMP_TAG_PREFIX = "verify-release-"
 
-# How long to wait for a dispatched run to register, and how often to poll.
 RUN_APPEAR_TIMEOUT_S = 120
 RUN_POLL_INTERVAL_S = 10
 
-
-# --- pure decisions ---
 
 def published_version(tags: list[str]) -> str:
     """The highest npm version among `testing-conventions-npm-v*` tags, as a bare `X.Y.Z`.
@@ -137,8 +131,6 @@ def verification_error(sha: str, failed: list[str]) -> str:
 def verification_ok(sha: str, workflows) -> str:
     return f"the version-pinned verification passed for {', '.join(workflows)} at {sha}"
 
-
-# --- operations (git + gh through the injected `run`) ---
 
 def _ensure_ok(result, argv: list[str]) -> None:
     """Raise unless `result` (a completed subprocess) exited zero — a nonzero (incl. signal) code raises."""

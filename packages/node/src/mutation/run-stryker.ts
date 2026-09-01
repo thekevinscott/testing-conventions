@@ -12,10 +12,8 @@ export interface RunStrykerOptions {
    */
   mutate?: string[];
   /**
-   * Stryker `testFiles` patterns, relative to the project root — the scan path within the
-   * package, so the colocated unit suite alone judges the mutants. Stryker matches these against
-   * the project's input files and hands the runner that subset, leaving the runner rooted at the
-   * project root so its own config resolves unchanged. Omitted ⇒ the runner's own discovery.
+   * Stryker `testFiles` patterns, relative to the project root: the suites that judge the
+   * mutants. Omitted ⇒ the runner's own discovery.
    */
   testFiles?: string[];
 }

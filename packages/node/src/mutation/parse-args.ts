@@ -14,9 +14,9 @@ export interface AdapterArgs {
  * Parse the adapter's CLI arguments with Node's built-in `util.parseArgs`: `--out <path>` (where
  * to write the normalized JSON — the rule passes a temp file so Stryker's own stdout logging can't
  * corrupt the results), `--mutate <a,b,...>` (Stryker mutate patterns, comma-split into a list),
- * and `--test-files <a,b,...>` (Stryker `testFiles` patterns, likewise comma-split — the scan path
- * within the package, so the colocated unit suite alone judges the mutants). All are optional; the
- * rust binary supplies the argv, so it stays a fixed, controlled shape.
+ * and `--test-files <a,b,...>` (Stryker `testFiles` patterns, comma-split — the scan path within
+ * the package, so its colocated suite alone judges the mutants). All are optional; the rust
+ * binary supplies the argv, so it stays a fixed, controlled shape.
  */
 export function parseArgs(argv: string[]): AdapterArgs {
   const { values } = parseNodeArgs({

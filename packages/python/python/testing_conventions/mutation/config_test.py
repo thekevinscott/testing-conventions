@@ -5,9 +5,6 @@ from testing_conventions.mutation.config import EXCLUDES, build_config, render_c
 
 
 def test_the_excludes_match_test_files_at_every_depth(tmp_path, monkeypatch):
-    # cosmic-ray expands each exclude with `glob.glob(pattern, recursive=True)` from the scan
-    # path, so a bare `*_test.py` reaches the top level only and every nested suite is mutated
-    # as if it were production source.
     for rel in (
         "calc.py",
         "calc_test.py",

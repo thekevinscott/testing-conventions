@@ -1,4 +1,2 @@
-# The package root: pytest's own upward search anchors its rootdir here, so both the
-# top-level colocated suite under src/ and the one nested in src/pkg/ resolve their imports
-# against the scan path while the package-level tests/ tier stays out of the src-scoped run.
+# Anchors pytest's rootdir here, so a suite under src/pkg/ imports against the scan path.
 [tool.pytest.ini_options]

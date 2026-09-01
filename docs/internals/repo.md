@@ -541,6 +541,40 @@ The static checks hold their inspection in a pure predicate over the workflow fi
 
 The two pre-existing first-party helpers were resolved per the #321 open question: `detect.py` moved to `internals/detect` (#363), and `move_major_tag.py` — which stayed a loose script under `.github/scripts/` until #452 — moved to `internals/move-major-tag`, emptying `.github/scripts/` entirely.
 
+## The code-line counter's package (`internals/code-lines`)
+
+`code_lines.py` (#536) is the ruler epic #534 measures against: one command that reports the repo's non-test code lines, area by area, the same way on every run. The figure had been produced by hand three times and come out different every time — two passes over the same tree disagreed by 61% (14,108 against 8,750) purely over what counts. The package mirrors `internals/move-major-tag`: `src/code_lines.py` with its colocated `code_lines_test.py`, integration tests (the git and filesystem boundary mocked) and e2e tests (a real repo, the real script as a subprocess) under `tests/`, and pytest a dev-dependency pinned in the package's `uv.lock`. `code-lines-tests.yml` runs the three tiers from that lock.
+
+Run it from anywhere in the repository:
+
+```
+python3 internals/code-lines/src/code_lines.py
+```
+
+It prints a markdown table of `code`, `comment`, `blank` and `test` lines per area, sorted by code descending, with a totals row — pasteable straight into an issue. The four columns stay separate so a comment sweep (#525) and a code reduction (#534) are never read off one number.
+
+**It reports; a person decides.** Its one caller is whoever types the command. `code-lines-tests.yml` runs the package's own three tiers, the way every `internals/` package's workflow does; enforcing a line budget stays a human call.
+
+### The counting rules
+
+**Scope** is a tracked `.rs`, `.py`, `.ts`, `.js` or `.mjs` file at least one directory deep under `packages/` or `internals/`. The depth rule is the whole of the build-config exclusion: `packages/node/vite.config.ts` sits *at* a package root and is out, while `packages/rust/src/lib.rs` sits inside a source directory and is in. **Area** is the first three path components, which names each package's source root exactly — `packages/rust/src`, `packages/python/python`, `internals/checks/src`, `packages/node/scripts`.
+
+**Test code is excluded wherever it lives**, and its lines are reported in their own column rather than dropped: a `tests` component at any depth, `*.test.ts` / `*.test.js` / `*.test.mjs`, `*_test.py` / `test_*.py` (which catches the colocated siblings — `checks/*/cli_test.py` next to `checks/*/cli.py`), and Rust's inline `#[cfg(test)]` module. The Rust exclusion is a **counting rule applied while parsing**: the scanner brace-matches the region and attributes those lines to `test`. Nothing on disk moves, which the e2e suite pins by asserting `git status --porcelain` is empty after a run.
+
+**Comments and blank lines are excluded from `code`.** Python docstrings count as comments, and that single rule is worth ~1,135 lines across `internals/` and `packages/python/` — 744 in `internals/checks/src` alone. A `#`-prefix counter reads every one of them as code, which is most of the 61% gap between the two hand counts.
+
+### Why it is written rather than configured
+
+`tokei`, `scc` and `cloc` all split comment from code competently, and one of them driven by a config file would have been the smaller answer. Three things ruled it out.
+
+The `#[cfg(test)]` rule is the first. No off-the-shelf counter models "this file contains a test module," so expressing it means stripping the regions into a scratch copy of the tree and counting that — which needs a string-aware, brace-matching Rust scanner anyway, the single hardest part of the job, and then adds a tree copy, a subprocess, JSON parsing and a path remap on top of it. Configuring costs more code here than writing.
+
+The second is that Python's standard library already classifies Python exactly. `tokenize` yields comment tokens and `ast` names the docstring nodes, so the trap that broke the hand counts is twenty lines of exact answer rather than a heuristic that is right most of the time.
+
+The third is the toolchain. All three counters are foreign binaries — Rust, Go, Perl — and none installs through `uv`, this repo's only Python package manager. A helper that reports a number would be pulling in a new toolchain to do it.
+
+So the tool is stdlib-only Python, in the shape every other `internals/` helper takes. It counts itself — `internals/code-lines/src` appears in its own table like any other area — and it costs 208 code lines, which moves the tree from 8,750 to 8,958 the day it lands. That is 2.4% added to buy a figure that stops moving by 61% between measurements, and it is the cheapest thing that expresses the rules: the alternative is one more hand count, which is what produced the 61%.
+
 ## Rust CI: nextest, and why the coverage job's cache needed no change (#370)
 
 `rust.yml`'s `integration` job ("Integration + e2e tests + coverage (95%)") runs the ~65 files under `packages/rust/tests/` through `cargo llvm-cov`. #370 (epic #366) asked for two things: a reliable, distinct cache for the coverage-instrumented build, and running under `nextest`. Only the second turned out to be real.

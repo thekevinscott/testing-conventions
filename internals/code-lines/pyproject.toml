@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+# Repo-only, never published: run it as a plain stdlib script, with no install step.
+name = "testing-conventions-code-lines"
+version = "0"
+description = "Repo-only non-test code-line counter for testing-conventions."
+requires-python = ">=3.11"
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.hatch.build]
+exclude = ["**/*_test.py"]
+
+[tool.hatch.build.targets.wheel]
+include = ["src/code_lines.py"]
+
+[tool.hatch.build.targets.wheel.sources]
+src = ""
+
+[tool.pytest.ini_options]
+# Without `src` on the path, the three test tiers cannot import `code_lines`.
+pythonpath = ["src"]

@@ -42,6 +42,9 @@ outputs:
   isolation_languages:
     description: 'Present languages plus rust (the unit-lint matrix).'
     value: ${{ steps.scan.outputs.isolation_languages }}
+  static_languages:
+    description: 'The `static` job''s matrix: present languages plus rust when a crate is present — the five static gates (colocated-test with its co-change variant, unit-lint, one-function-per-file, integration-lint) run as steps of that one job. Held under its own name so a future per-set divergence needs no workflow change.'
+    value: ${{ steps.scan.outputs.static_languages }}
   one_function_languages:
     description: 'The `unit one-function-per-file` matrix: present languages plus rust when a crate is present — an unconfigured rust tree reports that the rule is not enabled and passes.'
     value: ${{ steps.scan.outputs.one_function_languages }}

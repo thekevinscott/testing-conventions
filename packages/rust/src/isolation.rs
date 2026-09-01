@@ -441,6 +441,7 @@ fn collect_rust_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     /// Run the visitor over a source snippet with the given external-crate deps.
     fn violations_in(src: &str, deps: &[&str]) -> Vec<Violation> {
@@ -695,5 +696,179 @@ use crate::support::Helper;
             &item("#[allow(unused_imports)] use a::B;").attrs
         ));
         assert!(!has_double_attr(&item("use a::B;").attrs));
+    }
+
+    struct TempTree(PathBuf);
+
+    impl TempTree {
+        fn new(files: &[(&str, &str)]) -> Self {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let root = std::env::temp_dir().join(format!(
+                "tc-isolation-{}-{}",
+                std::process::id(),
+                COUNTER.fetch_add(1, Ordering::Relaxed),
+            ));
+            for (rel, content) in files {
+                let path = root.join(rel);
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, content).unwrap();
+            }
+            std::fs::create_dir_all(&root).unwrap();
+            TempTree(root)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempTree {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn a_tree_without_a_manifest_resolves_to_empty_crate_sets() {
+        let tree = TempTree::new(&[("src/lib.rs", "fn run() {}\n")]);
+        assert!(first_party_crates(tree.path()).unwrap().is_empty());
+        assert!(external_deps(tree.path()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_path_dependency_is_first_party_and_a_registry_one_is_not() {
+        let tree = TempTree::new(&[(
+            "Cargo.toml",
+            "[package]\n\
+             name = \"my-crate\"\n\n\
+             [dependencies]\n\
+             sibling-lib = { path = \"../sibling-lib\" }\n\
+             rand = \"0.8\"\n\n\
+             [dev-dependencies]\n\
+             test-support = { path = \"../test-support\" }\n\
+             mockall = \"0.13\"\n",
+        )]);
+
+        let first_party = first_party_crates(tree.path()).unwrap();
+        assert_eq!(
+            first_party,
+            ["my_crate", "sibling_lib", "test_support"]
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect::<BTreeSet<String>>(),
+            "the crate's own name and every path dep, hyphens normalized"
+        );
+
+        let external = external_deps(tree.path()).unwrap();
+        assert_eq!(
+            external,
+            ["rand", "sibling_lib"]
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect::<BTreeSet<String>>(),
+            "`[dependencies]` only — a dev-dependency is test tooling, not a collaborator"
+        );
+    }
+
+    #[test]
+    fn a_call_through_a_non_path_callee_is_left_alone() {
+        let src = "\
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn t() {
+        let _ = (make())(1);
+    }
+}
+";
+        assert!(
+            violations_in(src, &["rand"]).is_empty(),
+            "a callee that is not a path carries no leading segment to classify"
+        );
+    }
+
+    #[test]
+    fn a_renamed_import_is_judged_by_its_source_path() {
+        let src = "\
+#[cfg(test)]
+mod tests {
+    use crate::other::Thing as Local;
+    use super::Widget as W;
+}
+";
+        let violations = violations_in(src, &[]);
+        assert_eq!(violations.len(), 1, "got {violations:?}");
+        assert!(
+            violations[0].message.contains("crate::other::Thing"),
+            "the message names the source path, not the alias: {}",
+            violations[0].message
+        );
+    }
+
+    #[test]
+    fn a_grouped_import_is_flattened_leaf_by_leaf() {
+        let src = "\
+#[cfg(test)]
+mod tests {
+    use crate::other::{Named, deeper::Other};
+    use super::{Widget, helper};
+}
+";
+        let violations = violations_in(src, &[]);
+        assert_eq!(violations.len(), 2, "got {violations:?}");
+        assert!(
+            violations[0].message.contains("crate::other::Named"),
+            "{}",
+            violations[0].message
+        );
+        assert!(
+            violations[1]
+                .message
+                .contains("crate::other::deeper::Other"),
+            "{}",
+            violations[1].message
+        );
+    }
+
+    #[test]
+    fn a_glob_of_an_unresolvable_root_is_still_a_glob_import() {
+        let deps: BTreeSet<String> = ["rand"].iter().map(|s| s.to_string()).collect();
+        let segs = |p: &str| p.split("::").map(str::to_string).collect::<Vec<_>>();
+        assert_eq!(
+            classify_use(&segs("helpers"), true, &deps),
+            Some("glob import"),
+            "a glob is foreign even when `syn` cannot resolve its root"
+        );
+        assert_eq!(
+            classify_use(&segs("helpers::Thing"), false, &deps),
+            None,
+            "a named import of an unresolvable root is the heuristic's documented limit"
+        );
+    }
+
+    #[test]
+    fn a_leading_colon_survives_into_the_message() {
+        let src = "\
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn t() {
+        let _ = ::std::fs::read(\"x\");
+    }
+}
+";
+        let violations = violations_in(src, &[]);
+        assert_eq!(violations.len(), 1, "got {violations:?}");
+        assert!(
+            violations[0].message.contains("`::std::fs::read`"),
+            "{}",
+            violations[0].message
+        );
+    }
+
+    #[test]
+    fn a_bare_cfg_not_is_not_a_test_module() {
+        let module = |s: &str| syn::parse_str::<syn::ItemMod>(s).expect("module parses");
+        assert!(!has_cfg_test(&module("#[cfg(not)] mod t {}").attrs));
     }
 }

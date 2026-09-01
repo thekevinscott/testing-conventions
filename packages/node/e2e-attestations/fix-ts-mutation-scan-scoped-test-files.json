@@ -1,0 +1,7 @@
+{
+  "command": "pnpm run test:e2e",
+  "ran_at": 1788301120,
+  "exit_code": 0,
+  "commit": "88fc4f7a6412f401e899995a0e6ab9d7878a20c5",
+  "branch": "fix/ts-mutation-scan-scoped-test-files"
+}

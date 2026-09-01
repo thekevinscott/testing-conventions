@@ -1,32 +1,5 @@
-//! Workflow guard — keep the reusable workflow in step with the CLI.
-//!
-//! The reusable workflow (`.github/workflows/testing-conventions.yml`) is the
-//! documented `@v0` consumption path: a consumer pins `@v0`, and the workflow runs
-//! the *published* `testing-conventions` binary via `npx`. When a CLI subcommand is
-//! renamed or removed — e.g. `unit location` → `unit colocated-test` — but a
-//! workflow still invokes the old name, every `@v0` consumer breaks with
-//! `unrecognized subcommand`, silently: the workflow file is frozen at the tag
-//! while `npx` keeps pulling the latest binary.
-//!
-//! This module is the deterministic guard against that drift. [`invocations`]
-//! extracts every `testing-conventions …` call from a workflow file's shell, and
-//! [`unknown_subcommands`] checks each one's subcommand chain against the binary's
-//! own command tree (the source of truth, [`crate::command`]), flagging any chain
-//! the binary no longer exposes. Run in CI against the reusable workflow it fails
-//! the build the moment a workflow and the CLI fall out of step — before a release
-//! can strand `@v0`.
-//!
-//! Extraction is a line-based, shell-aware scan, not a full GitHub Actions parser:
-//! it tokenizes each non-comment line, finds the `testing-conventions` binary token
-//! (the bare command word, optionally version-pinned `…@x` /
-//! `…${VERSION:+@$VERSION}` — the `npx` / on-`PATH` form the reusable workflow and
-//! the docs use) in *command position*, and reads the tokens after it as the
-//! invocation. Command position is the bright-line that separates a real call from
-//! the tool named as an argument to another command — `pip install
-//! testing-conventions pytest` installs it as a dependency, and is not an
-//! invocation. A path-qualified invocation (`./bin/testing-conventions`), a
-//! subcommand split across a `\`-continuation, or one named in non-`run:` prose is a
-//! documented limit.
+//! Workflow guard — flag a workflow invocation naming a subcommand the CLI no longer
+//! exposes. Extraction is a line-based, shell-aware scan, not a GitHub Actions parser.
 
 use std::path::{Path, PathBuf};
 
@@ -37,20 +10,15 @@ use crate::violation::Violation;
 /// A single `testing-conventions` invocation found in a workflow file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invocation {
-    /// Workflow file the invocation was found in.
     pub file: PathBuf,
     /// 1-based line of the invocation.
     pub line: usize,
-    /// Tokens after the `testing-conventions` binary name, in order — the
-    /// subcommand chain first, then flags / values / positionals.
+    /// Tokens after the `testing-conventions` binary name, in order.
     pub args: Vec<String>,
 }
 
-/// Walk `path` — a workflow file, or a directory of them — and return every
-/// `testing-conventions` invocation, in file-then-line order.
-///
-/// Directories are scanned recursively for `*.yml` / `*.yaml` files (sorted, for
-/// deterministic output). Returns an error if a file or directory cannot be read.
+/// Every `testing-conventions` invocation under `path` — a workflow file or a directory
+/// of them — in file-then-line order.
 pub fn invocations(path: impl AsRef<Path>) -> Result<Vec<Invocation>> {
     let path = path.as_ref();
     let mut files = Vec::new();
@@ -73,8 +41,8 @@ pub fn invocations(path: impl AsRef<Path>) -> Result<Vec<Invocation>> {
     Ok(out)
 }
 
-/// Collect workflow files under `path` into `out`: `path` itself when it is a
-/// file, else every `*.yml` / `*.yaml` under it, recursively.
+/// Collect workflow files under `path` into `out`: `path` itself when it is a file, else
+/// every `*.yml` / `*.yaml` under it, recursively.
 fn collect_workflow_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     if path.is_file() {
         out.push(path.to_path_buf());
@@ -95,7 +63,7 @@ fn collect_workflow_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-/// `true` when `path` has a `.yml` / `.yaml` extension (a GitHub Actions workflow).
+/// `true` when `path` has a `.yml` / `.yaml` extension.
 fn is_workflow_file(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|e| e.to_str()),
@@ -103,13 +71,8 @@ fn is_workflow_file(path: &Path) -> bool {
     )
 }
 
-/// The args of a `testing-conventions` invocation on `line`, or `None` if the
-/// line has no such call. Comments are ignored and surrounding quotes stripped.
-///
-/// The binary token counts only when it is in *command position* — the command
-/// being run, not an argument to another command — so a package-install line
-/// (`pip install testing-conventions pytest`) is not read as an invocation whose
-/// trailing token would be validated as a subcommand.
+/// The args of a `testing-conventions` invocation on `line`, or `None`. Comments are
+/// ignored and surrounding quotes stripped.
 fn line_invocation(line: &str) -> Option<Vec<String>> {
     let tokens = tokenize(line);
     let pos = tokens.iter().position(|t| is_binary_token(t))?;
@@ -119,16 +82,12 @@ fn line_invocation(line: &str) -> Option<Vec<String>> {
     Some(tokens[pos + 1..].to_vec())
 }
 
-/// `true` when the binary token at `pos` is in *command position*: the command
-/// being run, not an argument to another command. After stepping back over an
-/// `npx` launcher and its option flags, the preceding token must mark a command
-/// boundary — nothing (start of the shell), the YAML `run:` scalar lead-in, or a
-/// shell command separator. A token governed by any other command word
-/// (`pip install …`, `cp … testing-conventions`) is an argument, not an invocation.
+/// `true` when the binary token at `pos` is the command being run, not an argument to
+/// another command (`pip install testing-conventions` is an argument).
 fn is_command_position(tokens: &[String], pos: usize) -> bool {
     let mut i = pos;
-    // Step back over an `npx` launcher — its option flags, then `npx` itself — so
-    // the documented `npx -y testing-conventions …` form reads as command position.
+    // Stepping back over an `npx` launcher and its flags keeps `npx -y testing-conventions`
+    // in command position.
     if i > 0 {
         let mut j = i;
         while j > 0 && tokens[j - 1].starts_with('-') {
@@ -144,21 +103,13 @@ fn is_command_position(tokens: &[String], pos: usize) -> bool {
     }
 }
 
-/// `true` when `token` ends a command so the next token starts a new one: the YAML
-/// `run:` scalar lead-in, or a shell command separator.
+/// `true` when `token` ends a command: the YAML `run:` lead-in, or a shell separator.
 fn is_command_boundary(token: &str) -> bool {
     matches!(token, "run:" | "&&" | "||" | "|" | ";" | "&" | "(" | "{")
 }
 
-/// `true` when `token` is the `testing-conventions` binary as a command word: bare,
-/// or version-pinned (`testing-conventions@0.1.0`,
-/// `testing-conventions${VERSION:+@$VERSION}`).
-///
-/// Only the bare command word is matched — the `npx` / on-`PATH` form the reusable
-/// workflow and the "roll your own" docs use. A path-qualified token
-/// (`packages/…/testing-conventions`, a `cp` / `install` argument) is deliberately
-/// *not* matched, so a path that merely ends in the binary name isn't read as an
-/// invocation.
+/// `true` when `token` is the bare `testing-conventions` command word, optionally
+/// version-pinned. A path-qualified token is not matched.
 fn is_binary_token(token: &str) -> bool {
     // Strip any version pin / shell expansion suffix, then require an exact match.
     let end = [token.find('@'), token.find("${")]
@@ -169,9 +120,8 @@ fn is_binary_token(token: &str) -> bool {
     &token[..end] == "testing-conventions"
 }
 
-/// Split `line` into shell-ish tokens: whitespace separates, `'…'` and `"…"`
-/// group (and are stripped), and an unquoted `#` starting a token begins a comment
-/// that runs to end of line.
+/// Split `line` into shell-ish tokens: whitespace separates, `'…'` and `"…"` group (and
+/// are stripped), and an unquoted `#` starting a token comments out the rest.
 fn tokenize(line: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut cur = String::new();
@@ -211,31 +161,21 @@ fn tokenize(line: &str) -> Vec<String> {
     tokens
 }
 
-/// Of `invocations`, the ones whose subcommand chain names a subcommand the binary
-/// — described by `root`, its clap command tree — no longer exposes.
-///
-/// Each invocation's leading tokens are walked against the tree: a token in a
-/// subcommand position (the current command takes subcommands) must name one of
-/// them, else it is flagged. A global flag (`-…`) before the subcommand is skipped
-/// — together with its value when the command declares the option as value-taking —
-/// so a subcommand after a leading flag is still validated. The walk stops at the
-/// first command that takes positionals rather than subcommands, so a path argument
-/// is never mistaken for a subcommand.
+/// Of `invocations`, the ones whose subcommand chain names a subcommand the clap tree
+/// `root` no longer exposes.
 pub fn unknown_subcommands(invocations: &[Invocation], root: &clap::Command) -> Vec<Violation> {
     let mut out = Vec::new();
     for inv in invocations {
         let mut node = root;
         let mut i = 0;
         while i < inv.args.len() {
-            // A command that takes positionals (not subcommands) means the
-            // remaining tokens are arguments, not a subcommand chain to validate.
+            // Past the last subcommand the remaining tokens are positionals, so walking on
+            // would flag a path argument as an unknown subcommand.
             if !node.has_subcommands() {
                 break;
             }
             let tok = &inv.args[i];
             if tok.starts_with('-') {
-                // A global flag before the subcommand: skip it (and its value, when
-                // the command declares it value-taking) rather than ending the walk.
                 i += if flag_takes_value(node, tok) { 2 } else { 1 };
                 continue;
             }
@@ -263,9 +203,8 @@ pub fn unknown_subcommands(invocations: &[Invocation], root: &clap::Command) -> 
     out
 }
 
-/// `true` when `token` (a `-…` / `--…` flag) is an option of `node` that consumes a
-/// following value, so the subcommand walk must skip that value too. An inline
-/// `--flag=value` carries its own value and consumes no following token.
+/// `true` when the flag `token` is an option of `node` that consumes a following value,
+/// so the subcommand walk must skip that value too.
 fn flag_takes_value(node: &clap::Command, token: &str) -> bool {
     if token.contains('=') {
         return false;
@@ -282,9 +221,8 @@ fn flag_takes_value(node: &clap::Command, token: &str) -> bool {
     })
 }
 
-/// Check `path` (a workflow file or directory): every `testing-conventions`
-/// invocation must name a subcommand `root` still exposes. Returns one
-/// [`Violation`] per offending invocation.
+/// One [`Violation`] per invocation under `path` naming a subcommand `root` no longer
+/// exposes.
 pub fn check(path: impl AsRef<Path>, root: &clap::Command) -> Result<Vec<Violation>> {
     Ok(unknown_subcommands(&invocations(path)?, root))
 }
@@ -294,7 +232,6 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    /// A throwaway directory tree, removed on drop.
     struct TempTree(PathBuf);
 
     impl TempTree {
@@ -363,8 +300,6 @@ mod tests {
         assert!(!is_binary_token("testing-conventions.yml@v0"));
         assert!(!is_binary_token("actions/checkout@v6"));
         assert!(!is_binary_token("npx"));
-        // Path-qualified tokens — e.g. a `cp` / `install` argument — are not
-        // invocations, even when they end in the binary name.
         assert!(!is_binary_token(
             "packages/rust/target/release/testing-conventions"
         ));
@@ -391,10 +326,6 @@ mod tests {
 
     #[test]
     fn line_invocation_ignores_a_package_install_line() {
-        // `testing-conventions` as an *argument* to a package manager — the tool
-        // being installed as a dependency, not run — is not an invocation. A
-        // `pip install testing-conventions pytest` line would otherwise read
-        // `pytest` as a subcommand and spuriously flag it.
         assert_eq!(
             line_invocation("- run: pip install testing-conventions pytest"),
             None
@@ -407,7 +338,6 @@ mod tests {
             line_invocation("- run: cargo install testing-conventions"),
             None
         );
-        // The real command-position forms still read as invocations.
         assert_eq!(
             line_invocation("- run: testing-conventions install"),
             Some(vec!["install".to_string()])
@@ -420,9 +350,6 @@ mod tests {
 
     #[test]
     fn unknown_subcommands_validates_across_leading_global_flags() {
-        // A global flag (and its value) before the subcommand must not stop the
-        // walk: the subcommand after it is still validated. Modeled with a
-        // small command tree carrying a value-taking `--config` global.
         let root = clap::Command::new("tc")
             .arg(
                 clap::Arg::new("config")
@@ -430,8 +357,6 @@ mod tests {
                     .action(clap::ArgAction::Set),
             )
             .subcommand(clap::Command::new("unit").subcommand(clap::Command::new("coverage")));
-        // `location` is not a `unit` subcommand — flagged despite the leading
-        // `--config x`.
         let flagged = unknown_subcommands(&[inv(1, &["--config", "x", "unit", "location"])], &root);
         assert_eq!(flagged.len(), 1, "{flagged:?}");
         assert!(
@@ -439,8 +364,6 @@ mod tests {
             "{}",
             flagged[0].message
         );
-        // A live subcommand after the same flag stays clean — the flag's value `x`
-        // is not mistaken for a subcommand.
         assert!(
             unknown_subcommands(&[inv(2, &["--config", "x", "unit", "coverage"])], &root)
                 .is_empty()
@@ -457,12 +380,10 @@ mod tests {
             ),
             ("notes.txt", "testing-conventions install\n"),
         ]);
-        // Directory: both workflow files, not the .txt; sorted file-then-line.
         let dir = invocations(tree.path()).unwrap();
         assert_eq!(dir.len(), 2);
         assert_eq!(dir[0].args, vec!["install"]);
         assert_eq!(dir[0].line, 1);
-        // Single file: just that file.
         let file = invocations(tree.path().join("ci.yml")).unwrap();
         assert_eq!(file.len(), 1);
     }
@@ -473,7 +394,6 @@ mod tests {
         assert!(invocations(&missing).is_err());
     }
 
-    /// An [`Invocation`] from a bare token list (file/line are placeholders).
     fn inv(line: usize, args: &[&str]) -> Invocation {
         Invocation {
             file: PathBuf::from("ci.yml"),
@@ -491,7 +411,6 @@ mod tests {
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].line, 9);
         assert_eq!(v[0].rule, "no-unknown-subcommand");
-        // Named under its parent group, not the root.
         assert!(v[0].message.contains("`location`"), "{}", v[0].message);
         assert!(v[0].message.contains("`unit`"), "{}", v[0].message);
     }
@@ -521,10 +440,8 @@ mod tests {
             inv(2, &["unit", "coverage", "--language", "typescript", "src"]),
             inv(3, &["unit", "lint", "--language", "rust", "."]),
             inv(4, &["integration", "lint", "--language", "python", "src"]),
-            // A leaf's positional must not be read as a subcommand.
             inv(5, &["packaging", "--language", "python", "dist"]),
             inv(6, &["install"]),
-            // Flags-only and empty invocations have no subcommand to check.
             inv(7, &["--version"]),
             inv(8, &[]),
         ];

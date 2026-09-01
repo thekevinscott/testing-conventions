@@ -1,7 +1,5 @@
-//! `install`: write the testing contract into the repository's agent
-//! context file (`AGENTS.md`) as a marker-delimited, hash-versioned block —
-//! the beads (`bd init`) pattern. Idempotent: re-running refreshes the owned
-//! region and touches nothing outside it.
+//! `install`: upsert the testing contract into the repository's agent context
+//! file as a marker-delimited, hash-versioned block.
 
 use std::fs;
 use std::io::ErrorKind;
@@ -14,9 +12,6 @@ const SCHEMA_VERSION: u32 = 1;
 const BEGIN_OPEN: &str = "<!-- testing-conventions:begin ";
 const END_MARKER: &str = "<!-- testing-conventions:end -->";
 
-/// The managed region's content — the few non-negotiables plus pointers to
-/// the docs site and the machine-readable contract. Thin on purpose: the
-/// consumer's file is theirs; the full contract lives on the docs site.
 const TEMPLATE: &str = "\
 ## Testing conventions
 
@@ -31,8 +26,7 @@ This repository enforces [testing-conventions](https://thekevinscott.github.io/t
 Machine-readable contract: https://thekevinscott.github.io/testing-conventions/llms.txt
 ";
 
-/// The begin marker carries the schema version and the first 12 hex chars of
-/// the SHA-256 of the region content, so staleness is visible at a glance.
+/// The begin marker: the schema version and the first 12 hex chars of the region's SHA-256.
 fn begin_marker() -> String {
     let hex = Sha256::digest(TEMPLATE.as_bytes())
         .iter()
@@ -41,11 +35,8 @@ fn begin_marker() -> String {
     format!("{BEGIN_OPEN}v{SCHEMA_VERSION} hash={} -->", &hex[..12])
 }
 
-/// Upsert the managed block into the file at `path`: create the file when
-/// absent, append when no marker is present, otherwise replace only the region
-/// between the markers. A current block is a byte-identical no-op. A begin marker
-/// with no matching end marker is a damaged block — `install` refuses it rather
-/// than appending and orphaning the marker.
+/// Upsert the managed block into the file at `path`: create when absent, append when no
+/// marker is present, otherwise replace the region between the markers.
 pub fn install(path: &Path) -> anyhow::Result<()> {
     if path
         .symlink_metadata()
@@ -69,11 +60,6 @@ pub fn install(path: &Path) -> anyhow::Result<()> {
         None => format!("{region}\n"),
         Some(text) => match text.find(BEGIN_OPEN) {
             Some(start) => {
-                // A begin marker with no matching end marker is a damaged block —
-                // hand-edited or partly deleted. Appending a fresh block would orphan
-                // this begin marker, so the *next* run would span from it to the new
-                // end marker and delete everything between, eating user prose. Refuse
-                // and leave the file untouched instead.
                 let rel_end = text[start..].find(END_MARKER).ok_or_else(|| {
                     anyhow!(
                         "{}: a `testing-conventions` begin marker has no matching end marker \
@@ -103,8 +89,8 @@ pub fn install(path: &Path) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Atomic write: temp file in the target's directory, then rename, so a
-    // crash mid-write leaves the original intact.
+    // Written to a temp file beside the target and renamed, so a crash mid-write leaves
+    // the original intact.
     let name = path
         .file_name()
         .with_context(|| format!("{} has no file name", path.display()))?;

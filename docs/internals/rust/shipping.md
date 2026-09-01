@@ -24,7 +24,7 @@ Cheap, always wanted.
 - **Re-export the public surface from `lib.rs`.** `pub use` the handful of types/functions consumers need; keep paths shallow. Deep `my_crate::internal::detail::Thing` leaking to consumers is a smell.
 - **Typed errors with `thiserror`** for libraries — one variant per failure mode, `#[error("...")]` messages. No `anyhow` in a library's public API; no `Box<dyn Error>` returned from a library.
 - **`#[derive(Debug)]` on every public type.** Convention. Add `Clone` / `PartialEq` / `Eq` / `Hash` deliberately, where the type's semantics support them.
-- **Doc comments (`///`) on every public item**, with a runnable example where it earns one — doc tests run under `cargo test`, so the docs can't silently rot. Prose explains *why*; the signature carries the *what*.
+- **A one-line doc comment (`///`) on a public item**, where the signature leaves something to say. `AGENTS.md`'s **Comments: none is best, few is acceptable, verbose is unacceptable** governs: three lines is the ceiling, and a parameter or return is documented only where the type does not already say it.
 - **Constructors follow `new` / `with_*` / `from` / `try_*`** — `make()` / `create()` / `build_new()` are non-idiomatic.
 - **`#[non_exhaustive]`** on public enums/structs that may grow — lets you add variants later without a breaking change.
 - **Semver discipline.** Adding a variant to a non-`#[non_exhaustive]` public enum, changing a signature, removing a `pub` item — all breaking. The `release:` trailer must reflect it.

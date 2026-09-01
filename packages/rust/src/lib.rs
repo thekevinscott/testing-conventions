@@ -76,7 +76,6 @@ enum Command {
     },
 }
 
-/// Rules enforced on the unit-test suite (the README's "Unit" taxonomy).
 #[derive(Subcommand, Debug)]
 enum UnitRule {
     /// Check that every source file has a colocated, matching-named unit test
@@ -182,9 +181,7 @@ enum UnitRule {
     },
 }
 
-/// Languages the integration-test lints support — its own set (Python,
-/// TypeScript, Rust), distinct from the file-pairing `colocated_test::Language`,
-/// so adding Rust here doesn't touch the colocated-test/coverage rules.
+/// Languages the integration-test lints support.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum IntegrationLintLanguage {
     /// Python test files (`*_test.py`, `test_*.py`, `conftest.py`).
@@ -198,8 +195,6 @@ pub enum IntegrationLintLanguage {
     Rust,
 }
 
-/// Lints enforced on integration tests (mocking mechanism & style, and more to
-/// come). The README's "Integration" taxonomy.
 #[derive(Subcommand, Debug)]
 enum IntegrationRule {
     /// Lint integration test files for mocking mechanism & style (Python, TypeScript, Rust).
@@ -216,8 +211,6 @@ enum IntegrationRule {
     },
 }
 
-/// E2E attestation commands: record a local e2e decision and (later)
-/// verify in CI that a branch changing the scoped source carries a receipt.
 #[derive(Subcommand, Debug)]
 enum E2eCommand {
     /// Run the e2e command of your choosing and, when it passes, commit the
@@ -270,17 +263,11 @@ where
     I: IntoIterator<Item = T>,
     T: Into<std::ffi::OsString> + Clone,
 {
-    // CI resolves this binary from npm's unpinned `latest`, so the run itself is the
-    // only place that can name which build it got. Written before parsing, so a run
-    // that dies on an unrecognized flag — a stale binary meeting a newer workflow —
-    // still names the version that refused it, and to stderr, because `e2e slug`'s
-    // stdout is read by command substitution. `CARGO_PKG_VERSION` is clap's `version`
-    // source too, so the banner and `--version` cannot disagree.
+    // Printed before parsing so a run that dies on an unrecognized flag still names its
+    // version, and on stderr because `e2e slug`'s stdout is read by command substitution.
     eprintln!("testing-conventions {}", env!("CARGO_PKG_VERSION"));
     let cli = Cli::try_parse_from(args)?;
     match cli.command {
-        // Every rule is named explicitly, under its test-kind group (e.g. `unit
-        // colocated-test`), so a bare invocation has nothing to run.
         None => Ok(0),
         Some(Command::Unit { rule }) => match rule {
             UnitRule::ColocatedTest {
@@ -352,33 +339,19 @@ where
     }
 }
 
-/// The binary's own clap command tree — the source of truth for which subcommands
-/// it exposes. The `workflow` guard checks a workflow's invocations against
-/// it, so a renamed or removed subcommand is caught the moment they diverge.
+/// The binary's own clap command tree, which the `workflow` guard checks invocations against.
 pub fn command() -> clap::Command {
     Cli::command()
 }
 
-/// Run the unit colocated-test check over `root` for `language`. Always runs the
-/// tree-wide **presence** check (every source file has its colocated test; Rust:
-/// an inline `#[cfg(test)]` module). When `base` is `Some`, *additionally* runs the
-/// commit-scoped **co-change** check over `<base>...HEAD` — a modified or
-/// deleted source whose colocated test didn't co-change — and the run fails if
-/// either check does. Returns `0` only when both pass.
-///
-/// Presence loads the `colocated-test`-rule exemptions and co-change the
-/// `co-change`-rule exemptions from the config at `config_path` (no config file →
-/// no exemptions). `--base` rejects `--language rust`: Rust units are inline
-/// `#[cfg(test)]` in the same file, so a sibling test can't go stale (presence,
-/// without `--base`, still supports Rust).
+/// Run the colocated-test presence check over `root`, plus the diff-scoped co-change
+/// check when `base` is set. Returns `0` only when both pass.
 fn run_unit_colocated_test(
     root: &Path,
     language: colocated_test::Language,
     base: Option<&str>,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
-    // `--base` carries the co-change check, which rejects Rust the same way the
-    // standalone `unit co-change` did — before any work, so the message matches.
     if base.is_some() && language == colocated_test::Language::Rust {
         anyhow::bail!(
             "`unit colocated-test --base` supports `--language python` / `typescript`; Rust \
@@ -397,11 +370,8 @@ fn run_unit_colocated_test(
     })
 }
 
-/// The tree-wide colocated-test **presence** check: every source file under `root`
-/// has its colocated unit test (Rust: an inline `#[cfg(test)]` module). Prints each
-/// orphan to stderr and returns `Ok(false)` when any are found, `Ok(true)` when the
-/// tree is clean. The `colocated-test`-rule exemptions from the config at
-/// `config_path` lift a file (no config file → nothing exempt).
+/// Print every source file under `root` missing its colocated unit test; `Ok(false)`
+/// when any were found.
 fn report_colocated_presence(
     root: &Path,
     language: colocated_test::Language,
@@ -409,8 +379,6 @@ fn report_colocated_presence(
 ) -> anyhow::Result<bool> {
     let exempt = colocated_test_exemptions(root, language, config_path)?;
     let orphans = match language {
-        // Rust units are inline `#[cfg(test)]` modules, so "colocated" means a test
-        // module in the same file, not a sibling file.
         colocated_test::Language::Rust => colocated_test::missing_inline_tests(root, &exempt)?,
         _ => colocated_test::missing_unit_tests(root, language, &exempt)?,
     };
@@ -436,9 +404,7 @@ fn report_colocated_presence(
     Ok(false)
 }
 
-/// The `colocated-test`-rule exempt paths for `language`, resolved (and validated)
-/// from the config at `config_path`. A missing config file means no exemptions —
-/// the check still runs, just with nothing exempted.
+/// The `colocated-test`-rule exempt paths for `language`; empty when the config is absent.
 fn colocated_test_exemptions(
     root: &Path,
     language: colocated_test::Language,
@@ -455,15 +421,8 @@ fn colocated_test_exemptions(
     )
 }
 
-/// The commit-scoped **co-change** check over `root`, diffing `<base>...HEAD`:
-/// every modified or deleted source whose colocated test didn't co-change. Prints
-/// each stale source to stderr and returns `Ok(false)` when any are found,
-/// `Ok(true)` when clean.
-///
-/// Loads the `co-change`-rule exemptions from the config at `config_path` (no
-/// config file → no exemptions); an exempt source needn't co-change. The caller
-/// rejects `--language rust` before this runs: Rust units are inline `#[cfg(test)]`
-/// in the same file, so a sibling test can't go stale.
+/// Print every source under `root` that `<base>...HEAD` changed without its colocated
+/// test; `Ok(false)` when any were found.
 fn report_co_change(
     root: &Path,
     base: &str,
@@ -489,9 +448,7 @@ fn report_co_change(
     Ok(false)
 }
 
-/// The `co-change`-rule exempt paths for `language`, resolved (and validated)
-/// from the config at `config_path`. A missing config file means no exemptions —
-/// every changed source must co-change its test.
+/// The `co-change`-rule exempt paths for `language`; empty when the config is absent.
 fn co_change_exemptions(
     root: &Path,
     language: colocated_test::Language,
@@ -504,10 +461,7 @@ fn co_change_exemptions(
     config::resolve_exempt(root, config.exemptions(language), config::Rule::CoChange)
 }
 
-/// Split a resolved exempt-scope map into the whole-file paths and the
-/// line-scoped sets — the two shapes the `coverage` / `mutation` measure functions
-/// take. A [`config::LineScope::WholeFile`] becomes a path in the first vec; a
-/// [`config::LineScope::Lines`] a `path → lines` entry in the second map.
+/// Split a resolved exempt-scope map into whole-file paths and line-scoped sets.
 fn split_scopes(
     scopes: std::collections::BTreeMap<String, config::LineScope>,
 ) -> (
@@ -527,23 +481,8 @@ fn split_scopes(
     (whole_file, line_scoped)
 }
 
-/// Run the unit-test coverage check over `root` for `language`, enforcing the
-/// floor from the config at `config_path`. Returns `0` when the floor is met,
-/// `1` otherwise.
-///
-/// With `base` set, the same configured floor is measured over the
-/// `<base>...HEAD` diff (the changed lines) rather than the whole tree,
-/// via the diff-scoped [`patch_coverage::measure`] / `measure_typescript` /
-/// `measure_rust`; without it, the whole-tree [`coverage::measure`] family runs.
-///
-/// Coverage is zero-config by default for Python and TypeScript: a missing
-/// config file — or a config with no `[<language>].coverage` table — falls back to
-/// the language's sane default floor ([`config::PythonCoverage::default`] /
-/// [`config::TypeScriptCoverage::default`]), the same way `unit colocated-test` and
-/// `integration lint` treat an absent config as "nothing exempt". A present
-/// `coverage` table overrides the default; `coverage`-rule exemptions still apply.
-/// Rust is zero-config too: a missing `[rust].coverage` table falls back to
-/// [`config::RustCoverage::default`] (`lines = 100`, `regions` opt-in, no branch).
+/// Run the unit coverage check over `root`, measuring the configured floor over the
+/// whole tree or, with `base` set, over the `<base>...HEAD` diff. `0` when the floor is met.
 fn run_unit_coverage(
     root: &Path,
     language: colocated_test::Language,
@@ -613,10 +552,6 @@ fn run_unit_coverage(
         }
         colocated_test::Language::Rust => {
             let rust = config.rust.unwrap_or_default();
-            // Zero-config: a missing `[rust].coverage` table falls back to the
-            // default Rust floor (`lines = 100`, with `regions` opt-in and no branch
-            // component) — matching Python/TypeScript — rather than erroring for a
-            // required table. A present table overrides it.
             let coverage = rust.coverage.unwrap_or_default();
             let thresholds = coverage::RustThresholds {
                 regions: coverage.regions,
@@ -660,22 +595,8 @@ fn run_unit_coverage(
     }
 }
 
-/// Run `unit mutation` over `root`: run the per-language engine and fail
-/// on any surviving mutant not lifted by a `mutation` exemption.
-///
-/// The gate is **on by default and binary** — "no *unexplained* surviving mutant":
-/// every survivor must be killed with an assertion, or lifted by a reason-required
-/// `[[<language>.exempt]] rules = ["mutation"]` for an equivalent / deliberately-defensive
-/// mutation. There is no percentage floor (equivalent mutants make one unreachable)
-/// and no report-only mode — the only loosening is a reasoned, per-file exemption.
-/// All three languages are wired: Rust (cargo-mutants), TypeScript (Stryker), and
-/// Python (cosmic-ray). `--base` scopes the run to the diff.
-///
-/// A pass names its evidence: a run that tested mutants states the non-zero
-/// conclusive-mutant count, a run the engine finished without producing a mutant to
-/// judge states that, and a `--base` diff with no mutatable changed lines states the
-/// engine never ran — the vacuous pass stays visible. All three exit 0 (reporting,
-/// not gating).
+/// Run the per-language mutation engine over `root` and fail on any surviving mutant
+/// not lifted by a `mutation` exemption. `base` scopes the run to the diff.
 fn run_unit_mutation(
     root: &Path,
     language: colocated_test::Language,
@@ -705,8 +626,6 @@ fn run_unit_mutation(
                 &typescript.exempt,
                 config::Rule::Mutation,
             )?);
-            // The npm launcher appends `--ts-mutation-adapter`; its absence means the binary
-            // was run directly, not through the published CLI.
             let adapter = ts_adapter.ok_or_else(|| {
                 anyhow::anyhow!(
                     "the TypeScript mutation adapter path is required: pass \
@@ -759,14 +678,8 @@ fn run_unit_mutation(
     Ok(1)
 }
 
-/// Run the one-function-per-file rule over `root` for `language`, printing each
-/// violation to stderr as `path:line: rule — message` and returning `1` when any
-/// are found, `0` otherwise.
-///
-/// The threshold and the waivers both come from the config at `config_path`: a
-/// missing file means the language's default threshold with nothing waived. Rust has
-/// no default threshold, so an unconfigured Rust run reports that and exits `0` —
-/// see [`config::Config::one_function_threshold`] for why.
+/// Run the one-function-per-file rule over `root`, printing each violation and returning
+/// `1` when any are found. A language with no configured threshold reports that and exits `0`.
 fn run_unit_one_function(
     root: &Path,
     language: colocated_test::Language,
@@ -819,10 +732,8 @@ fn run_unit_one_function(
     Ok(1)
 }
 
-/// Run the `unit lint` check over `root` for `language` — the unit-suite
-/// isolation lints (`unmocked-collaborator`, `untyped-mock`, `no-out-of-module-call`,
-/// `no-out-of-module-import`) — printing each violation to stderr as
-/// `path:line: rule — message` and returning `1` when any are found, `0` otherwise.
+/// Run the unit-suite isolation lints over `root`, printing each violation and returning
+/// `1` when any are found.
 fn run_unit_lint(
     root: &Path,
     language: isolation::Language,
@@ -854,15 +765,8 @@ fn run_unit_lint(
     Ok(1)
 }
 
-/// Run the integration-test lints over `root` for `language`, printing each
-/// violation to stderr as `path:line: rule — message` and returning `1` when any
-/// are found, `0` otherwise.
-///
-/// The subjects derive from the package root — the nearest directory at or
-/// above `root` holding the language's manifest: the `tests/integration/` and
-/// `tests/e2e/` suites (Rust: the crate root's `tests/`, cargo's own layout).
-/// A tree with no manifest — loose scripts — is scanned at `root` directly, and
-/// exemption paths resolve relative to whichever root the scan used.
+/// Run the integration-test lints over the package root above `root`, printing each
+/// violation and returning `1` when any are found. A tree with no manifest is scanned at `root`.
 fn run_integration_lint(
     root: &Path,
     language: IntegrationLintLanguage,
@@ -913,16 +817,10 @@ fn run_integration_lint(
     Ok(1)
 }
 
-/// Selects a language's `[[<lang>.exempt]]` table from a loaded config — the one
-/// varying piece between the `unit lint` and `integration lint` waiver paths.
+/// Selects a language's `[[<lang>.exempt]]` table from a loaded config.
 type ExemptSelect = fn(&config::Config) -> &[config::Exemption];
 
-/// Drop the violations waived by the config's `exempt` list. A
-/// violation is waived when its `rule` is a known [`config::Rule`] and its
-/// `root`-relative path is exempt for that rule. `exemptions` selects the
-/// language's `[[<lang>.exempt]]` table from the loaded config. A missing config
-/// file waives nothing; a reason-less or stale entry errors (via `load_config` /
-/// `resolve_exempt`), so the escape hatch can't silently rot.
+/// Drop the violations whose `root`-relative path is exempt for their rule.
 fn apply_waivers(
     violations: Vec<lint::Violation>,
     root: &Path,
@@ -936,7 +834,6 @@ fn apply_waivers(
     }
     let config = config::load_config(config_path)?;
     let exempt = exemptions(&config);
-    // Resolve each rule's exempt set once (and surface a stale entry as an error).
     let mut resolved: std::collections::HashMap<config::Rule, std::collections::BTreeSet<String>> =
         std::collections::HashMap::new();
     let mut kept = Vec::new();
@@ -965,20 +862,13 @@ fn apply_waivers(
     Ok(kept)
 }
 
-/// Run the packaging check: inspect the built artifact at `artifact` for test
-/// files that must not ship (README "Packaging"), per `language`'s test-file
-/// globs.
-///
-/// `artifact` is either an already-unpacked directory or a packed artifact the
-/// rule unpacks itself — a Python wheel (`.whl`) today; the TypeScript and
-/// Rust archives follow. Returns `0` when no test file is present, `1`
-/// otherwise (after printing each offending path, relative to the artifact root).
+/// Inspect the built artifact at `artifact` — an unpacked directory or a packed archive —
+/// for test files matching `language`'s globs. `1` when any are present.
 fn run_packaging(artifact: &Path, language: colocated_test::Language) -> anyhow::Result<i32> {
     let globs = match language {
         colocated_test::Language::Python => vec!["*_test.py".to_string()],
         colocated_test::Language::TypeScript => vec!["*.test.*".to_string()],
-        // `#[cfg(test)]` units compile out for free; the only thing to keep out of
-        // the `.crate` source tarball is the crate-root integration `tests/` dir.
+        // `#[cfg(test)]` units compile out, so only the crate-root `tests/` dir can ship.
         colocated_test::Language::Rust => vec!["tests/".to_string()],
     };
     let offenders = packaging::inspect(artifact, &globs)?;
@@ -996,10 +886,8 @@ fn run_packaging(artifact: &Path, language: colocated_test::Language) -> anyhow:
     Ok(1)
 }
 
-/// Run the workflow guard over `path` (a workflow file or directory): flag every
-/// `testing-conventions` invocation that names a subcommand this binary no longer
-/// exposes, printing each as `path:line: rule — message` and returning `1` when any
-/// are found, `0` otherwise.
+/// Flag every `testing-conventions` invocation under `path` naming a subcommand this
+/// binary no longer exposes. `1` when any are found.
 fn run_workflow(path: &Path) -> anyhow::Result<i32> {
     let violations = workflow::check(path, &command())?;
     if violations.is_empty() {
@@ -1021,9 +909,8 @@ fn run_workflow(path: &Path) -> anyhow::Result<i32> {
     Ok(1)
 }
 
-/// Run `command` as the branch's e2e decision and, when it passes, commit the
-/// receipt. Exits with `command`'s own exit code, so a wrapping recipe, CI step,
-/// or agent reads a failing e2e run as a failure.
+/// Run `command` as the branch's e2e decision and, when it passes, commit the receipt.
+/// Returns `command`'s own exit code.
 fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
     let repo = std::env::current_dir()?;
     let attestation = e2e::attest(&repo, command)?;
@@ -1044,18 +931,9 @@ fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
     Ok(0)
 }
 
-/// Verify a receipt answers this branch's e2e nudge — the CI side. Exits `0`
-/// when it does; otherwise prints the actionable hint and exits `1`. Never
-/// runs e2e, never judges the recorded run.
-///
-/// `path` is the directory whose committed receipts are read — the default `.`
-/// resolves against the current directory, so a no-argument call behaves
-/// exactly like a call made from `path` as cwd. `scope`, when set, narrows
-/// what counts as scoped source to a directory under `path` — `None` behaves
-/// exactly like passing `path` itself. `base` makes both checks content diffs
-/// of `<base>...HEAD`; absent, receipt presence is the whole check.
-/// `extra_scopes` join repo-root-relative sibling trees into the scoped diff
-/// and `excludes` carve feature-gated subtrees back out.
+/// Verify a receipt under `path` answers this branch's e2e nudge. `0` when it does;
+/// otherwise prints the hint and returns `1`. `scope` defaults to `path`; `base`, when set,
+/// makes the check a `<base>...HEAD` content diff.
 fn run_e2e_verify(
     path: &Path,
     scope: Option<&Path>,
@@ -1076,9 +954,7 @@ fn run_e2e_verify(
     }
 }
 
-/// Print the standardized receipt slug for `branch` (default: the checked-out
-/// branch) — the public form of the filename derivation, so scripts can locate
-/// a branch's receipt at `e2e-attestations/<slug>.json`.
+/// Print the receipt slug for `branch`, defaulting to the checked-out branch.
 fn run_e2e_slug(branch: Option<&str>) -> anyhow::Result<i32> {
     let slug = match branch {
         Some(name) => e2e::branch_slug(name),

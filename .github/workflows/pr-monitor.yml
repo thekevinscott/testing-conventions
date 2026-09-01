@@ -6,7 +6,6 @@ on:
 permissions:
   actions: read
   contents: read
-  # willfire reads the PR and its changed files to predict which workflows dispatch.
   pull-requests: read
 
 concurrency:
@@ -17,17 +16,12 @@ jobs:
   monitor:
     name: 'CI Gate'
     runs-on: ubuntu-latest
-    # The action has no timeout of its own (see monitor.ts) -- this is the
-    # backstop. If a predicted run never dispatches, the gate waits here
-    # until the job is killed.
+    # The action has no timeout of its own, so this is the backstop: a predicted run that never
+    # dispatches waits here until the job is killed.
     timeout-minutes: 20
     steps:
       - uses: thekevinscott/pr-monitor@v1
         with:
-          # dogfood calls the reusable workflow, whose gate jobs take their matrix from
-          # `detect`'s outputs (`fromJSON(needs.detect.outputs.…)`) and name themselves
-          # `Static checks (${{ matrix.language }})`. Those names do not exist until
-          # detect has run, so willfire cannot predict them and fails closed on an
-          # incomplete prediction. Granting detect lets it resolve them. The grant names
-          # the repo the workflow *file* lives in — for a reusable workflow, the callee.
+          # The grant names the callee repo for a reusable workflow — see docs/internals/repo.md,
+          # "Our own PRs need the same resolution".
           execute: thekevinscott/testing-conventions:detect

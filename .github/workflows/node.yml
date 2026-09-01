@@ -23,14 +23,13 @@ jobs:
         working-directory: packages/node
     steps:
       - uses: actions/checkout@v6
-      # pnpm must be on PATH before setup-node's cache: pnpm runs `pnpm store path` to
-      # resolve what to cache (#372, epic #366) — action-setup stays ahead of setup-node.
+      # pnpm must be on PATH before setup-node's cache: setup-node runs `pnpm store path` to
+      # resolve what to cache.
       - uses: pnpm/action-setup@v5
         with:
           version: ">=11"
-      # cache-dependency-path points at package.json, not pnpm-lock.yaml: .gitignore excludes
-      # every pnpm-lock.yaml in this repo (regenerated fresh each `--no-frozen-lockfile`
-      # install, never committed), so there's no lockfile in the checkout to hash.
+      # cache-dependency-path names package.json because .gitignore excludes every pnpm-lock.yaml
+      # here, so no lockfile exists in the checkout to hash.
       - uses: actions/setup-node@v6
         with:
           node-version: 24

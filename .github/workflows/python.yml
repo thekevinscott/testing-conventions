@@ -17,12 +17,8 @@ concurrency:
 jobs:
   build-wheel:
     name: Build wheel (once)
-    # The package is maturin `bindings = "bin"` (packages/python/pyproject.toml): the wheel
-    # ships the Rust binary with no per-Python-version native extension, so it builds to an
-    # interpreter-agnostic `py3-none-*` tag (verified: `maturin build` produces
-    # `testing_conventions-*-py3-none-manylinux_*.whl`, installs and runs identically under
-    # 3.9-3.13). One Rust compile here, consumed by both `build` and `plugin` below, instead
-    # of a redundant compile per matrix leg (#371, epic #366).
+    # The maturin `bindings = "bin"` wheel ships the Rust binary with no per-version native
+    # extension, so one interpreter-agnostic `py3-none` build feeds every matrix leg below.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -35,8 +31,6 @@ jobs:
           python-version: '3.13'
       - uses: astral-sh/setup-uv@v7
       - name: Build wheel
-        # Builds through the manifest's pinned PEP 517 backend (maturin), which compiles in
-        # release mode.
         run: uv build --wheel -o dist
         working-directory: packages/python
       - uses: actions/upload-artifact@v7
@@ -87,9 +81,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      # Install the built wheel (registers the pytest11 entry point) alongside the
-      # test toolchain, so the integration tests load the plugin exactly as a
-      # consumer's `pip install`ed run would.
+      # Installing the built wheel registers the pytest11 entry point, so the integration tests
+      # load the plugin the way a consumer's install does.
       - name: Install the wheel with the test toolchain
         run: pip install dist/*.whl pytest pytest-cov coverage
       - name: Run the plugin integration tests

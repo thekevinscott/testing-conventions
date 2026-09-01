@@ -1,40 +1,7 @@
 name: Dogfood
 
-# testing-conventions enforcing its own conventions on its own packages (#30),
-# now including by consuming the *shipped reusable workflow* over our own source
-# (#175), not just the CLI directly.
-#
-#   conventions   — `uses:` the reusable workflow (the exact file consumers pin to
-#                   @v0) over packages/python, zero-config (no `with:` beyond the
-#                   path). packages/python ships a wheel but carries no `.py`, so
-#                   every language's jobs are *skipped, not failed* (#94) — the
-#                   dogfooding case the detect-skip was built for, proven here on
-#                   our real package. (This obsoletes the old note that "Python has
-#                   no source → coverage can't pass": #94's detect-skip handles it,
-#                   so we can finally point the reusable workflow at our own tree.)
-#                   A planted `.py` without a colocated test would flip it red.
-#   colocated-test — TS colocated-test over packages/node/src (bin.ts has a
-#                   colocated bin.test.ts). The shipped reusable workflow's own
-#                   `colocated-test` job, scoped to just this gate via `gates` — it's
-#                   a static check (parses source, never installs or runs the suite),
-#                   so the TS coverage job's package-manager assumptions (#56, resolved
-#                   by #278's manifest-derived `ts_package_manager`) never applied here
-#                   to begin with. Rust uses inline `#[cfg(test)]`, out of scope for the
-#                   file-based rule.
-#   e2e-verify    — dogfoods the e2e attestation nudge (#71): packages/node carries a
-#                   tests/e2e suite and committed receipts under e2e-attestations/, and CI runs
-#                   the reusable workflow's own `e2e-verify` job, scoped to `packages/node`
-#                   via `source` — the in-repo whole-hog proof for this gate (#281). Before
-#                   #281 this had to be a bespoke job (build the CLI from source, `cd
-#                   packages/node`) because the reusable workflow's e2e-verify job could
-#                   only check the checkout root, not a package subdirectory. NOTE: the
-#                   reusable job runs the *published* `testing-conventions` binary via
-#                   `npx`, and the `e2e verify <path>` argument only exists once a release
-#                   carries #281 — so right after #281 merges (before the next release
-#                   publishes it and `@v0` moves), this job runs the old binary against
-#                   the new workflow's `<path>` argument and fails with an unrecognized-
-#                   argument error until that release goes out (see docs/internals/repo.md,
-#                   "Self-test and the `@v0` path").
+# testing-conventions enforcing its own conventions on its own packages, by consuming the
+# shipped reusable workflow. See docs/internals/repo.md, "Self-test and the `@v0` path".
 
 on:
   pull_request:
@@ -43,7 +10,6 @@ on:
       - 'packages/python/**'
       - 'internals/checks/**'
       - '.github/workflows/dogfood.yml'
-      # Re-run the dogfood whenever the reusable workflow it consumes changes.
       - '.github/workflows/testing-conventions.yml'
   push:
     branches: [main]
@@ -59,24 +25,16 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Also runs on `push: [main]` (the dogfood-over-main run); scope cancellation to PR pushes so
-  # a main run is never cancelled out from under itself.
+  # Scope cancellation to PR pushes so the `push: [main]` run is never cancelled out from
+  # under itself.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-cli:
     name: Build the CLI from HEAD (hermetic, #356)
-    # Hermetic merge-gating (#356, epic #353): every `uses:` call in this file runs in this
-    # repo's own CI, so the reusable workflow derives the hermetic path and its rule jobs
-    # download the `hermetic-cli` artifact this job stages — the binary and TS mutation adapter
-    # built from the commit under test, not the published npm release. The build lives HERE, in
-    # a repo-only caller workflow: a guarded job in the reusable workflow would render a skipped
-    # row in every consumer's checks UI. One build per run — the artifact is run-scoped, and
-    # every `uses:` call shares it via `needs: [build-cli]` (a called workflow's jobs start only
-    # after the caller's needs are met). Toolchain provisioning + build/stage/upload is the
-    # shared `./.github/actions/build-hermetic-cli` composite action (also used by
-    # testing-conventions-selftest.yml) so the two builds can't drift; this job holds only the
-    # checkout.
+    # The hermetic CLI is built here, in a repo-only caller: a guarded job in the reusable
+    # workflow would render a skipped row in every consumer's checks UI. One build per run —
+    # the artifact is run-scoped and every `uses:` call shares it via `needs: [build-cli]`.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -84,12 +42,6 @@ jobs:
 
   conventions:
     name: Shipped reusable workflow over the Python plugin source
-    # #175 / #218: consume our own shipped reusable workflow over a real package — the
-    # Python plugin source under packages/python/python. Everything is unit-tested (the
-    # pytest hook via its pluggy metadata, the coverage monkeypatch via an injected
-    # module, the version shim via a forced import fallback), so it runs zero-config with
-    # no exemptions. This call runs `detect` + the CLI hermetically from HEAD (#356), not the
-    # published binary, so a regression here is caught in this PR's own CI.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -107,10 +59,6 @@ jobs:
 
   e2e-verify:
     name: E2E attestation (packages/node)
-    # #281: the shipped reusable workflow's own e2e-verify job, scoped to packages/node
-    # via `source` and to just this gate via `gates` — replaces the old bespoke
-    # build-from-source job now that the reusable workflow's e2e-verify job accepts a
-    # package subdirectory instead of only the checkout root.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -120,28 +68,13 @@ jobs:
 
   checks:
     name: Shipped reusable workflow over the self-test checks package
-    # #321: the repo-only self-test checks are a uv package (internals/checks), so they're
-    # dogfooded through the shipped reusable workflow like any other package — colocated test,
-    # isolation, coverage, integration-lint, and diff-scoped mutation.
-    #
-    # `source` is the *inner* importable-package dir (internals/checks/src), not the package root
-    # — exactly as the Python plugin scans packages/python/python, not packages/python. The
-    # unit-tier gates recurse `source` (the colocated `*_test.py` units under src/), and the suite
-    # tiers derive from the package root (internals/checks, where the pyproject lives):
-    # integration lint scans internals/checks/tests/integration + tests/e2e from this same call
-    # (#418), and the coverage/mutation venv provisions there too.
+    # `source` is the inner importable-package dir, so the unit-tier gates recurse it while the
+    # suite tiers derive from the package root (internals/checks, where the pyproject lives).
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       version: ${{ inputs.version }}
       source: internals/checks/src
 
-  # internals/detect (#363) and internals/move-major-tag (#452) are NOT dogfooded here, unlike
-  # internals/checks above. Their colocated unit tests alone don't reach the coverage floor —
-  # each module's orchestration is exercised only by its integration suite (the boundary mocked)
-  # and the full script by its e2e suite, and `unit coverage` measures the colocated unit suite
-  # only, so scanning their src/ fails the floor. (The old second blocker — the unit-suite
-  # isolation lint flagging the integration/e2e tests as un-isolated units — is gone: #418's
-  # tier derivation leaves `<package root>/tests/` to the suite lints.) Each keeps its existing,
-  # proven test-quality gate instead: a dedicated pytest workflow across all three tiers
-  # (detect-action.yml, move-major-tag-tests.yml).
+  # internals/detect and internals/move-major-tag are gated by their own pytest workflows
+  # instead: their colocated unit tests alone sit below the coverage floor.

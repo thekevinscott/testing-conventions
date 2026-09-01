@@ -1,147 +1,7 @@
 name: Testing Conventions
 
-# Reusable, consumer-facing workflow: enforce a library's testing conventions in
-# CI. Drop a single short file into your repo and opt into the full rule set with
-# our defaults — no config required.
-#
-#   # .github/workflows/conventions.yml
-#   name: Conventions
-#   on: [pull_request]
-#   jobs:
-#     conventions:
-#       uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
-#
-# The principle is **one suite-executing rule command → one job**, fanned out per
-# language — with the five static source scans (colocated-test, its co-change variant,
-# unit-lint, one-function-per-file, integration-lint) consolidated into a single `static`
-# job per language,
-# since each is a sub-second scan that would otherwise pay full job setup for <1s of
-# work (#410). It runs the published `testing-conventions` binary via `npx` (a
-# prebuilt, per-platform npm package — no Rust toolchain, no compile from source),
-# failing the build on any violation. The shipped rule jobs are:
-#
-#   - static               — the five static source scans as steps of one job per
-#                            language (#410): unit colocated-test (every source file has
-#                            a colocated unit test, all langs; the rust arm checks inline
-#                            `#[cfg(test)]` presence, #40/#274) with its co-change variant,
-#                            unit lint (the unit-suite isolation lint), unit
-#                            one-function-per-file (one substantial function per source
-#                            file; rust opts in via config), and integration lint
-#                            (the integration mocking lints) — Python, TypeScript, Rust
-#   - unit coverage        — the unit coverage floor (Python, TypeScript, and Rust
-#                            via cargo-llvm-cov, #37)
-#   - packaging            — no test files in the built distribution
-#
-# Diff-scoped variants run as their own jobs on `pull_request` only (they need
-# `fetch-depth: 0` and a base ref): `unit colocated-test --base` (co-change, #161),
-# `unit coverage --base` (changed-line coverage, #162), `unit mutation --base`
-# (#204) — the mutation gate, binary and on by default, scoped to the changed lines
-# because whole-tree mutation is too slow to gate — and `e2e verify --base` (#319),
-# the freshness gate below. The `e2e verify` job (#68) checks the committed e2e
-# receipts; it's verify-if-present — it runs whenever branch-keyed receipts sit in
-# `e2e-attestations/` at the package root, and `run_e2e` forces it on (#186) — and
-# diff-scoped (#319): it measures freshness over the scoped source the branch changed
-# (`<base>..HEAD`), so it too runs on `pull_request` only, which keeps it adoptable by
-# a squash-merging repo (a squash-stale receipt never reds an unrelated PR).
-#
-# The `detect` job runs the repo-only detect action (`.github/actions/detect`, tested
-# by pytest, #189): it scans `source` and auto-detects every supported language *present*
-# (#185), and the rule jobs fan out over those. `languages` is an optional restrictor
-# (empty default ⇒ auto-detect all; a JSON array ⇒ only those named), so the zero-input
-# drop-in covers Python, TypeScript, and Rust alike. A language with no sources under
-# `source` is dropped from the matrix and skipped, not failed (#94). The action also
-# recognizes a crate (`Cargo.toml` / `*.rs`) and emits separate
-# `colocated_test_languages` (#274), `integration_lint_languages`,
-# `isolation_languages`, and `coverage_languages` sets that add Rust, plus
-# `packaging_dist` / `e2e_attestation` flags the packaging and e2e-verify jobs gate
-# on (#186). Only the co-change `*-changed` job stays on the python/typescript
-# `languages` set — rust units are inline, so a sibling test can't go stale.
-#
-# The Packaging rule (#41) is the exception: it inspects the *built distribution*,
-# not the source tree, so it doesn't ride the source matrix. It's default-on and
-# build-then-scan (#186/#335): it derives the distribution build from the package's
-# own manifest — `uv build` (Python `[project]`), `<pm> pack --pack-destination dist`
-# (TypeScript), `cargo package` (Rust `[package]`) — provisions the toolchain, runs it
-# at the derived package root, and fails if any .whl/.tar.gz (python), .tgz
-# (typescript), or .crate (rust) ships a test file. So a native monorepo adopts the
-# gate with `gates: ["packaging"]` and no bespoke build job. When the manifest can't
-# state a build it scans a committed dist/ instead, and it's skipped — never failed —
-# when no build is derivable and neither a dist/ nor an artifact exists. A prebuilt
-# artifact is scanned as-is when you'd rather build it yourself:
-#
-#   jobs:
-#     build:
-#       runs-on: ubuntu-latest
-#       steps:
-#         - run: uv build                   # → dist/*.whl, dist/*.tar.gz
-#         - uses: actions/upload-artifact@v7
-#           with: { name: dist, path: dist/ }
-#     conventions:
-#       needs: build
-#       uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
-#       with:
-#         packaging_artifact: dist
-#
-# No config file is required: every check runs with sane defaults, opting a new
-# library into the full set in one drop-in (#80). The coverage floor falls back to
-# the language's strict default — a 100% line floor for all three (#194/#195): Python
-# branch on at 100, TypeScript all four metrics at 100, and Rust `lines = 100` with
-# `regions` opt-in and no branch component (#206) — when no `testing-conventions.toml`
-# is present. Add a config file only to loosen a floor or declare exemptions.
-#
-# `languages` is a JSON array (when set) so the matrix can fan out over it directly
-# (reusable-workflow inputs can't be native lists); empty — the default — means
-# auto-detect every supported language present under `source` (#185).
-#
-# `unit coverage` (whole-tree) and `unit coverage --base` (changed-line) install, provision,
-# and build at the *derived package root* (#277/#278) — the nearest directory at-or-above
-# `source`, down to the checkout root, holding a `package.json` / `pyproject.toml` / `Cargo.toml`
-# (`.` for a single-package repo, so an existing single-package call is unaffected). The
-# TypeScript package manager, the Python environment model (a bare `uv venv`, or `uv sync` for a
-# `pyproject.toml` with a `[project]` table — which also builds a maturin package's native
-# module; Python is provisioned by uv either way, #399), and whether a Rust toolchain is
-# auto-provisioned are all read from that root's own manifest, so a per-package-lockfile monorepo
-# package (dirsql PR #410) installs and builds correctly with no configuration.
-#
-# `build_command` is a build declaration read from the package's own `testing-conventions.toml`
-# as `[<language>] build_command` — `[python]`, `[typescript]`, or `[rust]`, per the package's
-# primary language — discovered at the package root by `detect` exactly like `config` and surfaced
-# as `needs.detect.outputs.build_command`. The suite-executing jobs (`unit coverage`, `unit
-# coverage --base`, `unit mutation`) run it after toolchain + dependency setup and before the
-# suite; the packaging job runs it before the pack. Empty ⇒ no build step. The static rules
-# (colocated-test, unit lint, one-function-per-file, integration lint) only parse source, and
-# `e2e verify` checks the attestation rather than running the e2e suite, so none of those jobs
-# build or import anything.
-#
-# `gates` (#262) is an optional allowlist naming which gates run — empty (the default) runs
-# every applicable gate. The eight gate names are colocated-test, one-function-per-file,
-# unit-lint, unit-coverage, mutation, integration-lint, packaging, and e2e-verify; a named
-# gate still applies its own
-# conditions (language presence, the PR event, a discoverable dist/attestation), and its
-# diff-scoped variant rides with it (colocated-test covers the co-change job, unit-coverage
-# the changed-line job). The allowlist is authoritative: a gate left out is skipped even when
-# its forcing input (`run_e2e`, `packaging_artifact`) is set, so a scoped call stays scoped.
-# Membership is the quoted-name test `contains(inputs.gates, '"<gate>"')` — the same check
-# detect.py's `eligible` applies to `languages` — so a consumer that must run the
-# suite-executing gates in its own build-capable jobs (a native binding whose second-language
-# core these jobs cannot build, #263) still adopts the static gates here.
-#
-# `rust_toolchain` (#263) is the manual override that provisions a stable Rust toolchain — with
-# a cargo registry + target cache — in the suite-executing jobs, before `build_command` runs.
-# `unit coverage`, `unit coverage --base`, and `unit mutation` already auto-provision it whenever
-# the package root's manifest declares a Rust-compiling build (#277); set this by hand only for a
-# build the manifest does not express. The rust matrix arm always carries its own toolchain.
-# `false` (the default) adds nothing beyond auto-derivation.
-#
-# Hermetic self-gating (#356): when this repo's own CI calls this workflow with no explicit
-# `version`, detect derives it (from `github.repository`, which belongs to the *calling* run —
-# so this can never hold for a consumer) and emits `cli_command`: the rule jobs then download
-# the `hermetic-cli` artifact the repo-only caller workflow's build-cli job staged, and run the
-# CLI built from HEAD instead of the published npm binary — a PR changing detect or a rule is
-# gated by its own commit, not by whatever `@v0`/npm currently resolve to. There is no input
-# and no job for this: the derivation lives in tested Python (internals/detect), the build in
-# the caller workflows, and this file carries only guarded *steps* — a consumer's checks UI
-# and execution path are byte-for-byte unchanged. See docs/internals/repo.md, "Hermetic mode".
+# Reusable, consumer-facing workflow: one `uses:` call runs every check.
+# See docs/reference/workflow.md for the inputs, the checks, and the `@v0` contract.
 
 on:
   workflow_call:
@@ -191,94 +51,34 @@ jobs:
     name: Detect requested languages with sources
     runs-on: ubuntu-latest
     outputs:
-      # JSON array of the requested python/typescript languages with sources under
-      # `source` — the matrix the co-change `*-changed` job fans out over (rust units
-      # are inline `#[cfg(test)]` modules, so a sibling test can't go stale and
-      # co-change doesn't apply).
       languages: ${{ steps.scan_hermetic.outputs.languages || steps.scan_published.outputs.languages }}
-      # The same set plus rust — the whole-tree colocated-test matrix (#274): the
-      # rust arm checks inline `#[cfg(test)]` presence (#40).
       colocated_test_languages: ${{ steps.scan_hermetic.outputs.colocated_test_languages || steps.scan_published.outputs.colocated_test_languages }}
-      # The same set plus rust — the matrix the integration-lint job fans out over
-      # (#126).
       integration_lint_languages: ${{ steps.scan_hermetic.outputs.integration_lint_languages || steps.scan_published.outputs.integration_lint_languages }}
-      # `unit lint` (#125): python/typescript + rust, also kept off the coverage matrix.
       isolation_languages: ${{ steps.scan_hermetic.outputs.isolation_languages || steps.scan_published.outputs.isolation_languages }}
-      # The `static` job's matrix (#410): the same rust-inclusive union the colocated/isolation/
-      # integration sets hold, under its own name so a future per-set divergence in detect needs no
-      # workflow change. The five static gates run as steps of that one job.
       static_languages: ${{ steps.scan_hermetic.outputs.static_languages || steps.scan_published.outputs.static_languages }}
-      # `unit one-function-per-file`: the same rust-inclusive union — the rule is
-      # capability-identical in all three languages, and an unconfigured rust tree reports that
-      # the rule is not enabled and passes, so rust rides the set rather than being filtered here.
       one_function_languages: ${{ steps.scan_hermetic.outputs.one_function_languages || steps.scan_published.outputs.one_function_languages }}
-      # `unit coverage` (#37/#171): present python/typescript, plus rust whenever a
-      # crate is present — Rust coverage is zero-config now (`lines = 100` by default,
-      # #206) — the matrix the whole-tree and changed-line coverage jobs fan out over.
-      # Kept as its own set so a future coverage-less language can diverge.
       coverage_languages: ${{ steps.scan_hermetic.outputs.coverage_languages || steps.scan_published.outputs.coverage_languages }}
-      # `unit mutation` (#204): the same set as coverage now that all three arms are at
-      # parity (#201/#202/#203) — the matrix the diff-scoped mutation job fans out over.
       mutation_languages: ${{ steps.scan_hermetic.outputs.mutation_languages || steps.scan_published.outputs.mutation_languages }}
-      # Whether a built distribution is discoverable at the derived package_root (#280;
-      # the checkout root for every single-package consumer), and whether committed e2e
-      # receipts sit in `e2e-attestations/` at that same package_root (#186/#281) — the
-      # packaging and e2e-verify jobs gate on these so they run by default and skip
-      # (never fail) when absent.
       packaging_dist: ${{ steps.scan_hermetic.outputs.packaging_dist || steps.scan_published.outputs.packaging_dist }}
       e2e_attestation: ${{ steps.scan_hermetic.outputs.e2e_attestation || steps.scan_published.outputs.e2e_attestation }}
-      # The monorepo primitive (#277): everything a suite-executing job needs to install,
-      # build, and run at the right directory, derived from `source` and the package's own
-      # manifest rather than a second, consumer-facing scoping input.
       package_root: ${{ steps.scan_hermetic.outputs.package_root || steps.scan_published.outputs.package_root }}
       ts_package_manager: ${{ steps.scan_hermetic.outputs.ts_package_manager || steps.scan_published.outputs.ts_package_manager }}
-      # #475: the pnpm version handed to `pnpm/action-setup` — the consumer's own
-      # `packageManager` pin echoed back when it names pnpm, since the action throws on any
-      # pairing of a `version` input with a non-string-equal pin, else the `>=11` floor. Never
-      # empty from a detect that has this output, so the steps below read empty as "detect
-      # predates it" and fall back, the way `mutation_languages` does.
       ts_pnpm_version: ${{ steps.scan_hermetic.outputs.ts_pnpm_version || steps.scan_published.outputs.ts_pnpm_version }}
       python_env: ${{ steps.scan_hermetic.outputs.python_env || steps.scan_published.outputs.python_env }}
       provision_rust: ${{ steps.scan_hermetic.outputs.provision_rust || steps.scan_published.outputs.provision_rust }}
-      # The workspace-aware Rust build cache location (#410): the workspace root's `target/` for
-      # a workspace-member crate, else the package root's own — cargo resolves the target
-      # directory at the workspace root regardless of the invoking cwd, so a bare
-      # `package_root`-keyed cache archives (and restores) a directory `cargo` never writes to.
       cargo_target_dir: ${{ steps.scan_hermetic.outputs.cargo_target_dir || steps.scan_published.outputs.cargo_target_dir }}
-      # The config file every job's `--config` should receive (#277): `inputs.config`
-      # verbatim unless it's the default, in which case a package-root
-      # testing-conventions.toml wins if present — so a per-package call stops naming it.
       config: ${{ steps.scan_hermetic.outputs.config || steps.scan_published.outputs.config }}
-      # The `build_command` declaration (#289, #335), read from the package's primary-language
-      # table of that discovered config file rather than passed on the `uses:` call — the
-      # suite-executing and packaging jobs run it before the suite/build. Empty when none is
-      # declared (no build step).
       build_command: ${{ steps.scan_hermetic.outputs.build_command || steps.scan_published.outputs.build_command }}
-      # The distribution build the packaging job runs before scanning (#335) — `uv build` /
-      # `<pm> pack --pack-destination dist` / `cargo package`, derived from the package-root
-      # manifest — and the language whose toolchain to provision for it. Both empty when the
-      # manifest structurally can't state a build, so the job falls back to a committed dist/
-      # or a packaging_artifact, exactly as before.
       packaging_build: ${{ steps.scan_hermetic.outputs.packaging_build || steps.scan_published.outputs.packaging_build }}
       packaging_language: ${{ steps.scan_hermetic.outputs.packaging_language || steps.scan_published.outputs.packaging_language }}
-      # Extra e2e freshness roots and their feature-gated excludes (#333), read from that same
-      # discovered config — a shared source tree beside the package (a native core bound into
-      # several bindings) that no `--scope` at-or-below the package root can reach. Rendered as
-      # repeated `--extra-scope`/`--exclude` arguments the e2e-verify job appends; empty when the
-      # package declares none, so a package that declares nothing is byte-identical to before.
       e2e_extra_scope: ${{ steps.scan_hermetic.outputs.e2e_extra_scope || steps.scan_published.outputs.e2e_extra_scope }}
       e2e_exclude: ${{ steps.scan_hermetic.outputs.e2e_exclude || steps.scan_published.outputs.e2e_exclude }}
-      # The hermetic CLI invocation and the mutation job's pre-rendered adapter argument (#356),
-      # decided in detect.py (tested Python — see docs/internals/repo.md, "Hermetic mode"), not here:
-      # the artifact path when this repo gates itself, empty (-> the run lines' npx fallback)
-      # for every other caller. Plain coalescing like every output above — no logic in YAML.
       cli_command: ${{ steps.scan_hermetic.outputs.cli_command || steps.scan_published.outputs.cli_command }}
       ts_mutation_adapter_args: ${{ steps.scan_hermetic.outputs.ts_mutation_adapter_args || steps.scan_published.outputs.ts_mutation_adapter_args }}
     steps:
       - uses: actions/checkout@v6
       - id: scan_hermetic
-        # HEAD's composite action: when the guard holds, the caller is this repo, so the
-        # checkout above IS the commit under test and the local path resolves to it (#356).
+        # `uses:` cannot be dynamic, so the HEAD and published detect actions are separate steps.
         if: ${{ github.repository == 'thekevinscott/testing-conventions' && inputs.version == '' }}
         uses: ./.github/actions/detect
         with:
@@ -288,8 +88,6 @@ jobs:
           caller_repository: ${{ github.repository }}
           version: ${{ inputs.version }}
       - id: scan_published
-        # The published action at the same @v0 the consumer pins — the path every external
-        # caller takes, and this repo's own path when an explicit `version` is under test (#357).
         if: ${{ !(github.repository == 'thekevinscott/testing-conventions' && inputs.version == '') }}
         uses: thekevinscott/testing-conventions/.github/actions/detect@v0
         with:
@@ -302,11 +100,6 @@ jobs:
   static:
     name: Static checks (${{ matrix.language }})
     needs: detect
-    # The five static gates — colocated-test (with its co-change variant), unit-lint,
-    # one-function-per-file, integration-lint — run as steps of one job per language: each is a sub-second
-    # source scan, so a job apiece paid ~20s of setup per gate for <1s of work. The
-    # job runs when ANY member gate is allowlisted; each step guards its own gate and
-    # its own language set, so `gates` semantics are unchanged (#262).
     if: ${{ (inputs.gates == '' || contains(inputs.gates, '"colocated-test"') || contains(inputs.gates, '"unit-lint"') || contains(inputs.gates, '"one-function-per-file"') || contains(inputs.gates, '"integration-lint"')) && (needs.detect.outputs.static_languages || needs.detect.outputs.integration_lint_languages) != '[]' }}
     runs-on: ubuntu-latest
     strategy:
@@ -316,9 +109,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # Full history on pull requests only: the co-change step diffs
-          # `...HEAD`; the other steps parse the tree. The values are quoted —
-          # a bare 0 is falsy in expressions, so `&& 0 || 1` would always yield 1.
+          # The fetch-depth values are quoted: a bare 0 is falsy, so `&& 0 || 1` would always yield 1.
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
@@ -333,10 +124,7 @@ jobs:
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
         run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit colocated-test --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
       - name: Check co-change vs ${{ inputs.base }}
-        # `!cancelled()`: a failing earlier gate must not hide this gate's result —
-        # the job still fails when any step failed. PR-only (needs the base ref);
-        # rust is excluded by the rule via the `languages` membership test (inline
-        # `#[cfg(test)]` units can't go stale).
+        # `!cancelled()`: an earlier gate's failure must not hide this gate's result.
         if: ${{ !cancelled() && github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && contains(needs.detect.outputs.languages, format('"{0}"', matrix.language)) }}
         env:
           LANGUAGE: ${{ matrix.language }}
@@ -357,8 +145,7 @@ jobs:
         run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
       - name: Check one function per file
         # The `|| integration_lint_languages` fallback covers a stale `@v0` detect that predates
-        # `one_function_languages`: the two sets are identical, so the gate still fans out
-        # correctly until the tag advances.
+        # `one_function_languages`; the two sets are identical.
         if: ${{ !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"one-function-per-file"')) && contains(needs.detect.outputs.one_function_languages || needs.detect.outputs.integration_lint_languages, format('"{0}"', matrix.language)) }}
         env:
           LANGUAGE: ${{ matrix.language }}
@@ -380,13 +167,6 @@ jobs:
   unit-coverage:
     name: Unit-test coverage (${{ matrix.language }})
     needs: detect
-    # `unit coverage` enforces the Python (#26), TypeScript (#31), and Rust (#37)
-    # floors. The matrix is `coverage_languages` — the requested languages with
-    # sources present (#94), plus rust whenever a crate is here (Rust coverage is
-    # zero-config now, `lines = 100` by default, #206) — so a requested-but-absent
-    # language is skipped rather than erroring. #56 (config-driven `check`) will
-    # eventually drive this from the config file. A `gates` allowlist that leaves
-    # unit-coverage out skips the job (#262).
     if: ${{ (inputs.gates == '' || contains(inputs.gates, '"unit-coverage"')) && needs.detect.outputs.coverage_languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
@@ -398,11 +178,8 @@ jobs:
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
-      # Unlike the static colocated-test / lint checks, `unit coverage` shells out
-      # to the language's coverage tool — so its toolchain, and the project's own
-      # test deps, must be present. Rust provisioning comes first (#278): `uv sync`
-      # and an npm `prepare` script may themselves compile a Rust core, so cargo must
-      # already be on PATH before the language-env steps below run.
+      # Rust provisioning comes first: `uv sync` or an npm `prepare` script may itself compile a
+      # Rust core, so cargo must be on PATH before the language-env steps below run.
       - if: matrix.language == 'rust'
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -412,14 +189,6 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
-      # Provision cargo for a build the package manifest declares — a maturin/PyO3 or
-      # napi-rs build compiling a Rust core — in the python/typescript arms too (the
-      # rust arm already set its own up above): auto-derived from the package root's
-      # own manifest (`provision_rust`, #277), or forced by the manual `rust_toolchain`
-      # override (#263) for a build no manifest field expresses. Plus a cargo registry
-      # + target cache (keyed at the workspace-aware `cargo_target_dir`, #410 — the
-      # workspace root's target/ for a workspace-member crate, else the package root's
-      # own) so the core isn't recompiled from scratch every run.
       - if: (inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') && matrix.language != 'rust'
         uses: dtolnay/rust-toolchain@stable
       - if: inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true'
@@ -433,16 +202,8 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      # Provision Python with uv (#399), identically across the three suite-executing jobs so the
-      # block can't drift. An installable project (a pyproject.toml with a [project] table —
-      # python_env == 'uv', #277) is synced: `uv sync` installs its own dependencies AND
-      # builds/installs the project itself, so a maturin package's native module compiles right
-      # here (cargo already provisioned above). A plain package has no project to sync, so a bare
-      # `uv venv` stands in. The suite toolchain installs into that same venv, which goes on PATH:
-      # pytest as the runner fallback (a synced project's own locked pytest is already satisfied
-      # and wins — the consumer's lock is the pin), and the testing-conventions wheel, whose
-      # dependencies carry the coverage/mutation engines (named last, so the #92 subcommand-drift
-      # guard reads it as an install argument, not an invocation).
+      # The testing-conventions wheel is named last: the subcommand-drift guard reads a trailing
+      # token as an install argument, not an invocation.
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
@@ -458,10 +219,6 @@ jobs:
           if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
           uv pip install pytest testing-conventions
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-      # TypeScript shells out to vitest, so install the project's own deps — the
-      # manager (pnpm or npm, #277) and the install location (the package root, #278)
-      # are both derived from the package's own manifest/lockfile, so a
-      # per-package-lockfile monorepo package installs correctly with no config.
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
         with:
@@ -478,11 +235,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PM" = "pnpm" ]; then pnpm install --frozen-lockfile; else npm ci; fi
-      # Build a caller-supplied native module the manifest can't express before the
-      # suite imports it (#243): the escape hatch for a build not covered by the
-      # auto-derivation above. Runs at the package root (#278), like the install
-      # steps. Passed via env (not interpolated into `run`) and `eval`-ed so a full
-      # shell string — `uv run maturin develop`, `pnpm build`, `a && b` — works.
+      # The command is passed through env and `eval`-ed, so a full shell string works and no
+      # caller value is interpolated into `run:`.
       - if: needs.detect.outputs.build_command != ''
         name: Run the build step (build_command)
         working-directory: ${{ needs.detect.outputs.package_root }}
@@ -503,11 +257,6 @@ jobs:
   coverage-changed:
     name: Unit-test coverage — changed lines (${{ matrix.language }})
     needs: detect
-    # Diff-scoped changed-line coverage (#162): on a PR, the configured floor is
-    # measured over only the `<base>...HEAD` changed lines, so a changed line below
-    # the floor fails no matter how small the diff. Mirrors the whole-tree
-    # unit-coverage job's per-language toolchain setup; PR-only (needs the base ref).
-    # Rides the unit-coverage gate: a gate's diff-scoped variant travels with it (#262).
     if: ${{ github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"unit-coverage"')) && needs.detect.outputs.coverage_languages != '[]' }}
     runs-on: ubuntu-latest
     strategy:
@@ -517,16 +266,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # Changed-line coverage diffs `<base>...HEAD`, so the base ref must be
-          # reachable.
+          # `--base` diffs `<base>...HEAD`, so the base ref must be reachable.
           fetch-depth: 0
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
-      # Mirrors the whole-tree unit-coverage job's setup order and derivation (#278):
-      # Rust provisioning first (`uv sync` / an npm `prepare` script may compile a
-      # Rust core), then the language env, then `build_command` — all at the
-      # #277-derived package root.
+      # Rust provisioning comes first: `uv sync` or an npm `prepare` script may itself compile a
+      # Rust core, so cargo must be on PATH before the language-env steps below run.
       - if: matrix.language == 'rust'
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -536,10 +282,6 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
-      # Provision cargo for a build the package manifest declares, or the manual
-      # `rust_toolchain` override for a build no manifest field expresses (#263/#277),
-      # as in the whole-tree coverage job — plus the registry + target cache, keyed at
-      # the workspace-aware `cargo_target_dir` (#410).
       - if: (inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') && matrix.language != 'rust'
         uses: dtolnay/rust-toolchain@stable
       - if: inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true'
@@ -553,16 +295,8 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      # Provision Python with uv (#399), identically across the three suite-executing jobs so the
-      # block can't drift. An installable project (a pyproject.toml with a [project] table —
-      # python_env == 'uv', #277) is synced: `uv sync` installs its own dependencies AND
-      # builds/installs the project itself, so a maturin package's native module compiles right
-      # here (cargo already provisioned above). A plain package has no project to sync, so a bare
-      # `uv venv` stands in. The suite toolchain installs into that same venv, which goes on PATH:
-      # pytest as the runner fallback (a synced project's own locked pytest is already satisfied
-      # and wins — the consumer's lock is the pin), and the testing-conventions wheel, whose
-      # dependencies carry the coverage/mutation engines (named last, so the #92 subcommand-drift
-      # guard reads it as an install argument, not an invocation).
+      # The testing-conventions wheel is named last: the subcommand-drift guard reads a trailing
+      # token as an install argument, not an invocation.
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
@@ -594,9 +328,6 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PM" = "pnpm" ]; then pnpm install --frozen-lockfile; else npm ci; fi
-      # Build a caller-supplied native module before the suite imports it (#243), as in the
-      # whole-tree coverage job; empty `build_command` ⇒ skipped. Runs at the package root
-      # (#278).
       - if: needs.detect.outputs.build_command != ''
         name: Run the build step (build_command)
         working-directory: ${{ needs.detect.outputs.package_root }}
@@ -618,18 +349,8 @@ jobs:
   mutation:
     name: Unit mutation — changed lines (${{ matrix.language }})
     needs: detect
-    # `unit mutation` (#204) — the rung above coverage: a test that *runs* a changed
-    # line still passes if you delete its assertions, and a surviving mutant proves it.
-    # The gate is binary and on by default (no report-only mode): an un-exempted survivor
-    # on a changed line fails the build, with reasoned `[[<lang>.exempt]] rules =
-    # ["mutation"]` entries the only loosening. Whole-tree mutation is too slow to gate,
-    # so this is **PR-only and diff-scoped** (`--base`, like coverage-changed) — only the
-    # mutants on the `<base>...HEAD` changed lines are run. The matrix is
-    # `mutation_languages` (the coverage set; all three arms are at parity, #201/#202/#203).
-    # `mutation_languages` is a new detect output, so until a release moves `@v0` to a
-    # detect that emits it (this PR's own run still pins the old `@v0`), it's empty — fall
-    # back to `coverage_languages` (the identical set) so the matrix stays valid. A `gates`
-    # allowlist that leaves mutation out skips the job (#262).
+    # `mutation_languages` is a newer detect output, so the matrix falls back to
+    # `coverage_languages` (the identical set) until `@v0` advances to a detect that emits it.
     if: ${{ github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"mutation"')) && (needs.detect.outputs.mutation_languages || needs.detect.outputs.coverage_languages) != '[]' }}
     runs-on: ubuntu-latest
     strategy:
@@ -644,13 +365,8 @@ jobs:
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
-      # Provision cargo (+ cache) for a build_command that compiles a Rust core (#263)
-      # BEFORE the language-env steps below — a maturin/PyO3 build triggered by `uv sync`
-      # (not just an explicit `build_command`) needs cargo already on PATH. Auto-provisions
-      # whenever the package root's own manifest declares a Rust-compiling build too
-      # (detect's `provision_rust`, #277), not only when the caller passes `rust_toolchain`;
-      # the rust arm sets its own toolchain up below, so skip it here. `target` caches at
-      # the workspace-aware `cargo_target_dir` (#279, #410), mirroring the coverage jobs (#278).
+      # Cargo comes first: a maturin/PyO3 build triggered by `uv sync` needs it on PATH before
+      # the language-env steps below run.
       - if: (inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') && matrix.language != 'rust'
         uses: dtolnay/rust-toolchain@stable
       - if: inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true'
@@ -664,23 +380,8 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      # Like coverage, `unit mutation` shells out to the language's mutation engine, so
-      # its toolchain — and the project's own test deps — must be present. Set up per
-      # language, installed from the derived package root (#279) so a monorepo's
-      # per-package lockfile/manifest is the one that's read. #56 (config-driven `check`)
-      # will eventually drive this from config.
-      # Provision Python with uv (#399), identically across the three suite-executing jobs so the
-      # block can't drift. An installable project (a pyproject.toml with a [project] table —
-      # python_env == 'uv', #277) is synced: `uv sync` installs its own dependencies AND
-      # builds/installs the project itself, so a maturin package's native module compiles right
-      # here (cargo already provisioned above). A plain package has no project to sync, so a bare
-      # `uv venv` stands in. The union suite toolchain installs into that same venv, which goes on
-      # PATH: coverage.py + pytest for the coverage gate, the testing-conventions adapter wheel for
-      # mutation — `unit mutation --language python` spawns `python3 -m
-      # testing_conventions.mutation.main` (#248), which the wheel puts on the path alongside its
-      # cosmic-ray dependency (#258), and cosmic-ray's spawned pytest imports the project's own
-      # dependencies from this same venv (#279). The wheel is named last, so the #92
-      # subcommand-drift guard reads it as an install argument, not an invocation.
+      # The testing-conventions wheel is named last: the subcommand-drift guard reads a trailing
+      # token as an install argument, not an invocation.
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
@@ -696,10 +397,6 @@ jobs:
           if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
           uv pip install pytest testing-conventions
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-      # TypeScript drives Stryker, which runs the project's test runner — install the
-      # project's deps (which must include @stryker-mutator/core and a runner plugin) with
-      # whichever package manager the package root's own manifest/lockfile names (#279):
-      # `pnpm/action-setup` only when it's pnpm, so an npm-only package doesn't require it.
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
         with:
@@ -716,9 +413,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PM" = "pnpm" ]; then pnpm install --frozen-lockfile; else npm ci; fi
-      # Rust drives cargo-mutants over the crate. The published CLI provisions the engine
-      # itself now (#242) — a pinned `cargo install` into its cache on first use — so only the
-      # cargo toolchain is set up here; cache that dir so the from-source install is reused.
+      # The CLI installs cargo-mutants itself on first use; caching that dir reuses the build.
       - if: matrix.language == 'rust'
         uses: dtolnay/rust-toolchain@stable
       - if: matrix.language == 'rust'
@@ -727,11 +422,6 @@ jobs:
         with:
           path: ~/.cache/testing-conventions
           key: cargo-mutants-provision-${{ runner.os }}
-      # Build a caller-supplied native module before the mutation engine runs the suite
-      # (#243): cosmic-ray / Stryker / cargo-mutants import the same module, so it must be
-      # compiled here too; empty `build_command` ⇒ skipped. Runs at the derived package
-      # root (#279) — breaking for a monorepo consumer whose command assumed the checkout
-      # root (packages/rust/MIGRATIONS.md).
       - if: needs.detect.outputs.build_command != ''
         name: Run the build step (build_command)
         working-directory: ${{ needs.detect.outputs.package_root }}
@@ -748,41 +438,22 @@ jobs:
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
-          # detect pre-renders the hermetic `--ts-mutation-adapter <path>` argument (#356) — the
-          # npm launcher appends it on the published path, and the hermetic path bypasses the
-          # launcher. Deliberately unquoted below (the $EXTRA_SCOPE pattern): empty on the
-          # published path, word-split into the flag+path hermetically.
+          # `$TS_MUTATION_ADAPTER_ARGS` is deliberately unquoted: empty on the published path,
+          # word-split into flag and path on the hermetic one.
           TS_MUTATION_ADAPTER_ARGS: ${{ needs.detect.outputs.ts_mutation_adapter_args }}
         run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit mutation --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH" $TS_MUTATION_ADAPTER_ARGS
 
   e2e-verify:
     name: E2E attestation freshness (e2e verify)
     needs: detect
-    # Diff-scoped freshness, verify-if-present (#186, #319): on a PR, verify the
-    # committed attestation covers the scoped source *this branch changed*
-    # (`<base>..HEAD`) rather than the newest scoped commit in all history — the
-    # same diff-relative model the changed-line coverage/mutation gates use. A
-    # branch that changed the scoped source fails (with a re-attest nudge) until it
-    # re-attests; a branch that changed none of it has nothing to re-attest and
-    # passes. This is PR-only (it needs a base ref), so it rides the same
-    # `github.event_name == 'pull_request'` gate as the other `--base` jobs — which
-    # is also what makes it adoptable by a squash-merging repo: a squash rewrites
-    # the attested commit into a new one on the base branch, and a history-absolute
-    # walk would read that as permanently stale and red every later PR (#319). A
-    # repo with no attestation is skipped, never failed; `run_e2e` forces the job
-    # on. Never runs the e2e suite itself. The `gates` allowlist is authoritative
-    # (#262): checked first, so a scoped call that leaves e2e-verify out skips the
-    # job even when `run_e2e` is set.
     if: ${{ github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"e2e-verify"')) && (inputs.run_e2e || needs.detect.outputs.e2e_attestation == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
-          # `e2e verify --base` diffs `<base>..HEAD`, so it needs full history and
-          # the base ref reachable — `fetch-depth: 0` fetches every branch, so
-          # `inputs.base` (e.g. `origin/main`) resolves. Check out the PR's actual
-          # head commit, not the ephemeral merge commit, which an attestation can
-          # never name (it's rebuilt fresh on every push) — #293.
+          # `--base` diffs `<base>..HEAD`, so full history is needed and `inputs.base` must resolve.
+          # Check out the PR's head commit, not the ephemeral merge commit, which an attestation
+          # can never name — it is rebuilt on every push.
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Download the CLI built from HEAD (hermetic, #356)
@@ -794,59 +465,24 @@ jobs:
           PACKAGE_ROOT: ${{ needs.detect.outputs.package_root }}
           SCAN_PATH: ${{ inputs.source }}
           BASE: ${{ inputs.base }}
-          # Extra freshness roots and their excludes (#333), pre-rendered by detect as repeated
-          # `--extra-scope`/`--exclude` arguments — empty when the package declares no `[e2e]`
-          # roots, so the invocation is byte-identical to before for every current consumer.
           EXTRA_SCOPE: ${{ needs.detect.outputs.e2e_extra_scope }}
           EXCLUDE: ${{ needs.detect.outputs.e2e_exclude }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
-        # The attestation file lives at the derived package root (#281), matching
-        # `detect`'s package-scoped `e2e_attestation` flag above; the freshness walk
-        # is scoped to the caller's own `source` (#294) — narrower than the package
-        # root whenever a package also carries tests/docs/config outside `source` — and
-        # to the `<base>..HEAD` diff (#319), so only a change this branch made to the
-        # scoped source trips it. `$EXTRA_SCOPE` / `$EXCLUDE` are detect's pre-rendered
-        # `--extra-scope`/`--exclude` arguments for a shared source tree beside the
-        # package (#333) — deliberately unquoted so an empty value expands to nothing
-        # (byte-identical to before for a package declaring no `[e2e]` roots) and a
-        # rendered value word-splits into the repeated flags. Requires a CLI new enough
-        # to accept `--base` / `--extra-scope` (published by the #319 and #333 CLI PRs,
-        # landed ahead of this one per AGENTS.md's "Two-step rollout for
-        # workflow-consumed CLI changes").
+        # `$EXTRA_SCOPE` / `$EXCLUDE` are deliberately unquoted: empty expands to nothing, and a
+        # rendered value word-splits into the repeated flags.
         run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE" $EXTRA_SCOPE $EXCLUDE
 
   packaging:
     name: Packaging (no test files in the built artifact)
     needs: detect
-    # Default-on, build-then-scan (#186, #335): packaging inspects the *built distribution*,
-    # not the source tree, so it doesn't ride the source matrix — but it runs by default. It
-    # provisions the toolchain and builds the distribution from the manifest alone
-    # (`packaging_build` — `uv build` / `<pm> pack` / `cargo package`, #335), then scans it,
-    # so a native monorepo adopts the gate with `gates: ["packaging"]` and no bespoke build
-    # job. It runs when an explicit `packaging_artifact` was uploaded (the prebuilt escape
-    # hatch — scanned as-is, nothing built), OR detect derived a `packaging_build`, OR a
-    # conventional dist/ is already committed at the derived package root (#280; the checkout
-    # root for every single-package consumer). Skipped — never failed — when none holds. Each
-    # distribution's language is inferred from its extension. The `gates` allowlist is
-    # authoritative (#262): checked first, so a scoped call that leaves packaging out skips
-    # the job even when `packaging_artifact` is set.
     if: ${{ (inputs.gates == '' || contains(inputs.gates, '"packaging"')) && (inputs.packaging_artifact != '' || needs.detect.outputs.packaging_build != '' || needs.detect.outputs.packaging_dist == 'true') }}
     runs-on: ubuntu-latest
     steps:
-      # A local `uses: ./...` action reference (the hermetic-cli download below) resolves from
-      # the job's own checkout — every other rule job always checks out first, so it just works
-      # there; this job normally skips checkout on the packaging_artifact path (nothing to
-      # build), so it needs its own checkout whenever the hermetic path also needs one. This
-      # must run BEFORE the artifact download below: actions/checkout always deletes the
-      # workspace's existing contents before initializing its own checkout (regardless of the
-      # `clean` input, which only controls git-clean *after* a checkout is already in place) —
-      # checking out after the download would wipe the artifact it just fetched.
+      # Checkout must precede the artifact download: actions/checkout deletes the workspace's
+      # existing contents before initializing, so downloading first would wipe the artifact.
       - name: Check out the repository to build/inspect its distribution, or just to resolve the hermetic-cli download action
         if: inputs.packaging_artifact == '' || needs.detect.outputs.cli_command != ''
         uses: actions/checkout@v6
-      # Acquire the distributions one of two ways: a named upload artifact (scanned as-is),
-      # or the consumer checkout above — where the build steps below produce the distribution,
-      # or a committed dist/ already sits (#186).
       - name: Download the uploaded distributions
         if: inputs.packaging_artifact != ''
         uses: actions/download-artifact@v8
@@ -856,12 +492,8 @@ jobs:
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
-      # --- Provision the toolchain and build the distribution (#335) ---
-      # Skipped entirely when a `packaging_artifact` was uploaded (it's already built) or
-      # detect derived no `packaging_build` (the manifest can't state one — fall back to a
-      # committed dist/). Rust provisioning comes first (#278): a `uv build` or npm `prepack`
-      # may itself compile a Rust core, so cargo must be on PATH before the language env — and
-      # `cargo package` needs it directly when the package itself is the crate.
+      # Rust provisioning comes first: `uv build` or an npm `prepack` may itself compile a Rust
+      # core, and `cargo package` needs cargo directly.
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_build != '' && (needs.detect.outputs.packaging_language == 'rust' || inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') }}
         uses: dtolnay/rust-toolchain@stable
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_build != '' && (needs.detect.outputs.packaging_language == 'rust' || inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') }}
@@ -875,17 +507,11 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      # Python packaging is always `uv build` (derived only for a `[project]` pyproject,
-      # python_env == 'uv') — the PEP 517 build resolves its own build deps in isolation and
-      # compiles a maturin/PyO3 core along the way (cargo already provisioned above).
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_language == 'python' }}
         uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.12'
           enable-cache: true
-      # TypeScript `<pm> pack` runs the package's own prepare/prepack lifecycle, so its dev
-      # deps (and a bare `build` script named in build_command below) need the manager and the
-      # project's node_modules — both derived from the package's own manifest/lockfile (#277).
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm' }}
         uses: pnpm/action-setup@v5
         with:
@@ -902,9 +528,6 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PM" = "pnpm" ]; then pnpm install --frozen-lockfile; else npm ci; fi
-      # A compile the ecosystem can't standardize a name for (a bare npm `build` script) runs
-      # before the pack — the same build_command the suite jobs run (#289, #335), at the
-      # package root, eval-ed so a full shell string works.
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_build != '' && needs.detect.outputs.build_command != '' }}
         name: Run the build step (build_command)
         working-directory: ${{ needs.detect.outputs.package_root }}
@@ -913,8 +536,6 @@ jobs:
         run: |
           set -euo pipefail
           eval "$BUILD_COMMAND"
-      # Build the distribution from the manifest alone (#335): `uv build` → dist/*.whl+*.tar.gz,
-      # `<pm> pack --pack-destination dist` → dist/*.tgz, `cargo package` → target/package/*.crate.
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_build != '' }}
         name: Build the distribution (packaging_build)
         working-directory: ${{ needs.detect.outputs.package_root }}
@@ -931,17 +552,10 @@ jobs:
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
         run: |
           set -euo pipefail
-          # nullglob: an unmatched glob expands to nothing (not the literal);
-          # globstar: `**` recurses, so a nested dist is found too.
+          # nullglob: an unmatched glob expands to nothing, not the literal; globstar: `**` recurses.
           shopt -s nullglob globstar
           pkg="${PACKAGE_ROOT:-.}"
-          # The downloaded artifact when one was named (the prebuilt escape hatch), else the
-          # just-built distribution at the derived package root (#280 — "." for a single-package
-          # repo): dist/ holds the wheel/sdist/tarball (uv build, <pm> pack), target/package/
-          # holds the crate (cargo package).
           if [ -n "$PACKAGING_ARTIFACT" ]; then dist_root=_packaging_artifact; crate_root=_packaging_artifact; else dist_root="$pkg/dist"; crate_root="$pkg/target/package"; fi
-          # Language is inferred from the distribution's extension: a wheel/sdist is
-          # python, an `npm pack` tarball is typescript, a Cargo crate is rust.
           checked=0
           check () {
             local lang="$1"; shift

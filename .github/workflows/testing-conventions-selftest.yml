@@ -1,150 +1,8 @@
 name: Testing Conventions (self-test)
 
-# Smoke-test the reusable workflow (`testing-conventions.yml`) end to end, so a
-# regression in its *wiring* — a renamed input, a broken `npx` invocation, a
-# dropped toolchain step — is caught here rather than only in a consumer repo.
-# The rule *logic* is already covered by the Rust e2e tests (`coverage_e2e.rs`,
-# `coverage_ts_e2e.rs`, …); this covers the workflow that drives it.
-#
-# It exercises the *published* `testing-conventions` (what consumers run via
-# `npx`), not this branch's source — so it tracks the released surface, which is
-# the contract consumers actually depend on.
-#
-# Each rule is self-tested as a clean/fail pair: a "clean" fixture driven through
-# the reusable workflow's `uses:` call that must pass, and a violating fixture that
-# must fail. A `uses:` call that fails would fail the whole run, so the fail path
-# drives the published command directly and asserts on its non-zero exit.
-#
-# unit coverage (the rule this self-test was added for, #57):
-#   clean        calls the reusable workflow against a fixture that meets its
-#                floor and is clean for the colocated-test & integration-lint
-#                jobs that run alongside coverage — the whole call must pass.
-#   below-floor  runs the same `unit coverage` invocation the workflow's job runs
-#                against a sub-floor fixture and asserts a non-zero exit.
-#
-# packaging (#41) — this inspects a built artifact, not the source tree, so its
-# clean path exercises the upload-artifact → packaging_artifact wiring end to end:
-#   packaging-clean  uploads a clean built wheel as an artifact and calls the
-#                    reusable workflow with `packaging_artifact` — the packaging
-#                    job downloads and inspects it; the whole call must pass.
-#   packaging-red    drives the published `packaging` command on a committed wheel
-#                    that ships a `*_test.py` and asserts a non-zero exit.
-#
-# pnpm version (#475) — a consumer's `packageManager` pin decides which pnpm the workflow
-# installs, because `pnpm/action-setup` refuses to run when its `version` input and a
-# `packageManager` field disagree by a single character:
-#   pnpm-version-wired  asserts every `pnpm/action-setup` step reads
-#                       `needs.detect.outputs.ts_pnpm_version` rather than a literal. Static
-#                       only — this repo pins floors via `engines` and has no `packageManager`
-#                       field, so no dogfooded package walks the conflicting path.
-#
-# packaging-package-root (#280) — dist/ discovery moves from the checkout root to the derived
-# package root, so a per-package `uses:` call finds its own `dist/` with no build/upload step:
-#   packaging-package-root-wired  asserts the packaging job reads `needs.detect.outputs.package_root`
-#                                  — the red→green signal for the wiring itself.
-#   packaging-package-root-clean  a `source`-scoped call over a fixture package with its own
-#                                  committed `dist/` passes with no `packaging_artifact` — the
-#                                  acceptance scenario itself.
-#   packaging-package-root-red    drives the published `packaging` command on the sibling
-#                                  fixture package's committed `dist/` tarball (ships a test
-#                                  file) and asserts a non-zero exit.
-#
-# unit lint (#125; renamed from `unit isolation` in #160) — wired for Python, TypeScript,
-# and Rust. The published binary (what `npx` pulls) now ships Python isolation too, so
-# `detect` routes it into the lint matrix (#146); the `clean` / `absent-language-skipped`
-# jobs exercise the Python arm end to end.
-#   isolation-wired  asserts the reusable workflow actually invokes `unit lint`
-#                    — the red→green signal for the wiring itself.
-#   isolation-python-wired  runs the workflow's real `detect` script against the clean
-#                    Python fixture and asserts it routes Python into the lint matrix
-#                    (`isolation_languages`) — the red→green signal for wiring Python (#146).
-#   isolation-clean  calls the reusable workflow against a clean Rust crate, proving
-#                    `detect` recognizes a crate and fans the lint job over it.
-#   isolation-red    drives the published `unit lint` on a violating crate and
-#                    asserts a non-zero exit.
-#
-# integration lint — the TypeScript + Rust arms and the config waiver (#126):
-#   integration-lint-config-waiver   a #102 waiver in a *non-default* config path
-#                                    lifts a Python integration violation; the
-#                                    `uses:` call passes only because the job now
-#                                    forwards `--config`.
-#   integration-lint-rust            a clean Rust crate passes the reusable workflow
-#                                    — the rust arm runs and rust stays out of the
-#                                    coverage matrix it doesn't support.
-#   integration-lint-new-arms-trip   drives the published command for the rust and
-#                                    typescript arms and asserts the non-zero exit on
-#                                    a violation (a `uses:` call can't assert a fail).
-#
-# build_command (#243/#289) — a hook so a native-binding project can run the suite-executing jobs.
-# The hook is the package's own `[python].build_command` config key (#289), read by detect, not a
-# `uses:`-call input:
-#   build-command-wired   asserts the reusable workflow runs the derived `build_command`
-#                         (`needs.detect.outputs.build_command`) before the suite — the red→green
-#                         signal for the wiring itself.
-#   build-command-clean   calls the reusable workflow over a fixture whose `widget.py` imports
-#                         a module produced only by the `[python].build_command` (a maturin/napi
-#                         stand-in), so the coverage / mutation jobs pass only because the build ran
-#                         first. Expected to fail pre-release (the `@v0` detect emits no
-#                         `build_command` and the published binary rejects the config key).
-#
-# gates (#262) — an allowlist so a consumer can run a subset of gates:
-#   gates-wired           asserts the reusable workflow scopes its jobs to a `gates` allowlist
-#                         input — the red→green signal for the wiring itself.
-#   gates-scoped-static   calls the reusable workflow over the #243 native-binding fixture with
-#                         the three static gates named and a build_command-free config, so the call
-#                         passes only because the suite-executing gates are skipped.
-#   gates-scoped-packaging-excluded  uploads the red wheel as `packaging_artifact` with a `gates`
-#                         allowlist that leaves packaging out, so the call passes only because
-#                         the allowlist overrides the forcing input.
-#
-# rust_toolchain (#263) — cargo for a build_command that compiles a Rust core:
-#   rust-toolchain-wired  asserts the suite-executing jobs provision a Rust toolchain behind a
-#                         `rust_toolchain` input — the red→green signal for the wiring itself.
-#   rust-toolchain-clean  calls the reusable workflow with `rust_toolchain: true` and a
-#                         `[python].build_command` that invokes cargo before producing the module
-#                         the suite imports, so the call passes only because cargo was provisioned
-#                         ahead of the build (ubuntu-24.04 runners carry no preinstalled Rust).
-#                         Expected to fail pre-release, same `@v0`/binary lag as build-command-clean.
-#
-# hermetic mode (#356, epic #353) — building detect + the CLI from HEAD instead of `@v0`/npx:
-#   build-cli       checks out the repo and calls the shared
-#                   ./.github/actions/build-hermetic-cli composite action (also used by
-#                   dogfood.yml, so the two builds can't drift) to build and stage the
-#                   hermetic-cli artifact once per run; every `uses:` call below needs it, so
-#                   the reusable workflow's hermetic steps download this commit's own binary +
-#                   detect. The job lives HERE — a repo-only caller — because a guarded job in
-#                   the reusable workflow would render a skipped row in every consumer's checks
-#                   UI.
-#   hermetic-wired  asserts the whole contract statically: the derivation guard literal, the
-#                   local detect step, the cli_command output, the ${CLI_COMMAND:- fallback,
-#                   and the hermetic-cli download (via ./.github/actions/download-hermetic-cli)
-#                   in the reusable workflow (and that it has no `inputs.hermetic` and no
-#                   `build-cli:` job); a build-cli job here and in dogfood.yml that calls
-#                   ./.github/actions/build-hermetic-cli rather than inlining the steps; and a
-#                   needs: [build-cli] edge on every `uses:` call. There is no separate
-#                   acceptance job: every `uses:` call IS the acceptance test — each one builds
-#                   and runs this commit's own detect + CLI.
-#
-# rust colocated-test (#274) — the presence arm fans over rust:
-#   colocated-rust-wired  asserts the whole-tree colocated-test job fans out over the
-#                         rust-inclusive `colocated_test_languages` matrix — the red→green
-#                         signal for the wiring itself. Co-change stays python/typescript
-#                         (rust units are inline, so a sibling test can't go stale).
-#   colocated-rust-red    drives the published `unit colocated-test --language rust` on a
-#                         crate whose bodied `fn` has no inline `#[cfg(test)]` module and
-#                         asserts the non-zero exit (a `uses:` call can't assert a fail).
-#                         The clean runtime path rides the existing `["rust"]` fixtures
-#                         (integration-lint-rust, isolation-clean, coverage-rust-clean),
-#                         whose sources all carry inline tests.
-#
-# uv-only Python provisioning (#399) — one provisioning tool in the suite-executing jobs:
-#   uv-provisioning-wired  asserts the reusable workflow provisions Python with uv alone —
-#                          no actions/setup-python + `python -m pip install` second arm —
-#                          and that the python-arm steps are identical across unit-coverage /
-#                          coverage-changed / mutation, so a provisioning change can't drift
-#                          between jobs. The runtime paths ride the existing fixtures: `clean`
-#                          covers the plain (`python_env == 'pip'`) package end to end, and
-#                          monorepo-coverage-py / mutation-monorepo-py the uv-managed one.
+# Smoke-tests the reusable workflow end to end, so a wiring regression surfaces here
+# rather than in a consumer repo. See docs/internals/repo.md, "Self-test and the `@v0`
+# path", for the `-wired` / `-clean` / `-red` job convention.
 
 on:
   pull_request:
@@ -169,16 +27,6 @@ concurrency:
 jobs:
   build-cli:
     name: Build the CLI from HEAD (hermetic, #356)
-    # Hermetic merge-gating (#356, epic #353): every `uses:` call in this file runs in this
-    # repo's own CI, so the reusable workflow derives the hermetic path and its rule jobs
-    # download the `hermetic-cli` artifact this job stages — the binary and TS mutation adapter
-    # built from the commit under test, not the published npm release. The build lives HERE, in
-    # a repo-only caller workflow: a guarded job in the reusable workflow would render a skipped
-    # row in every consumer's checks UI. One build per run — the artifact is run-scoped, and
-    # every `uses:` call shares it via `needs: [build-cli]` (a called workflow's jobs start only
-    # after the caller's needs are met). Toolchain provisioning + build/stage/upload is the
-    # shared `./.github/actions/build-hermetic-cli` composite action (also used by dogfood.yml)
-    # so the two builds can't drift; this job holds only the checkout.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -196,12 +44,6 @@ jobs:
 
   absent-language-skipped:
     name: A requested language with no sources is skipped, not failed
-    # Point the reusable workflow at the all-Python `clean/` suite but request the
-    # zero-config default ["python", "typescript"]. There are no TypeScript sources
-    # here, so the TypeScript jobs must be skipped (#94) and the call passes on the
-    # Python jobs alone. Before #94 the TypeScript coverage job fired and errored on
-    # the empty input (a `pnpm install` with no project, an empty vitest
-    # denominator), failing the whole call.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -212,11 +54,6 @@ jobs:
 
   no-source-library-passes:
     name: A library with no sources for the requested languages passes (jobs skipped)
-    # The dogfooding case (#94): our own packages/python ships a wheel but carries
-    # zero .py, so its coverage job has nothing to measure and errors today. A
-    # library with no sources for any requested language must pass with every
-    # language's jobs skipped — never failed. Mirrored here with a source-free
-    # fixture and the zero-config default.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -226,13 +63,6 @@ jobs:
 
   integration-lint-config-waiver:
     name: Integration lint forwards the consumer's --config (#102 waiver honored)
-    # The integration-lint job must pass the caller's `config` through to
-    # `integration lint`, so a #102 waiver lifts the violation it names. This fixture
-    # is a clean Python suite (its colocated-test and coverage jobs pass) whose one
-    # integration test trips `no-constant-patch`, lifted by a `[[python.exempt]]`
-    # entry in a *non-default* config path. The whole `uses:` call passes only when
-    # the job forwards `--config` (#126): before it did, the job dropped the flag, so
-    # the waiver was ignored, the violation was reported, and the call failed.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -243,16 +73,6 @@ jobs:
 
   integration-lint-rust:
     name: A clean Rust library passes the reusable workflow (rust arm runs)
-    # A clean Rust crate must pass the reusable workflow: the rust arm runs
-    # `integration lint` and `unit lint`, and — since Rust coverage went zero-config
-    # (`lines = 100`, #206) — the crate now also enters the coverage matrix. The
-    # fixture's integration test runs first-party for real (no double) for the lint,
-    # and its inline unit test covers every line, clearing the coverage arm under
-    # unit-suite scoping (#265). Rust rides the whole-tree colocated-test matrix too
-    # (#274) — the inline test satisfies the presence arm. (On this PR's own runs the
-    # detect action is still fetched at the old `@v0`, which omits
-    # `colocated_test_languages`, so the job falls back to the python/typescript set
-    # and skips rust until a release advances the tag — the #204 pattern.)
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -263,10 +83,6 @@ jobs:
   integration-lint-new-arms-trip:
     name: The TypeScript and Rust integration-lint arms fail on a violation
     needs: [build-cli]
-    # The fail path for the new arms (#126): a `uses:` call that fails would fail the
-    # whole run, so drive the published command directly — the exact invocation the
-    # workflow's rust/typescript arms run — and assert the non-zero exit that fails a
-    # consumer's build, with a clean pass alongside each.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -274,9 +90,6 @@ jobs:
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - name: The rust/typescript integration-lint arms trip on a violation and pass when clean
-        # The assertion (drive each published invocation, then pass/fail on its exit code) is a
-        # tested check in the repo-only checks package (internals/checks, #321/#328); `uv run`
-        # syncs it and runs the `tc-checks` group's subcommand.
         run: uv run --project internals/checks tc-checks integration-lint-new-arms-trip
 
   below-floor:
@@ -292,11 +105,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: A sub-floor suite must fail `unit coverage`
-        # The same invocation the reusable workflow's unit-coverage job runs; the non-zero exit is
-        # what fails a consumer's build. The assertion is a tested check in the repo-only checks
-        # package (internals/checks, #321/#328). The published `unit coverage --language python`
-        # measures with coverage.py + pytest through a bare `python3`, which under `uv run` is the
-        # checks venv — it carries both, pinned in its uv.lock.
         run: uv run --project internals/checks tc-checks below-floor
 
   mutation-gate:
@@ -309,33 +117,18 @@ jobs:
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - uses: dtolnay/rust-toolchain@stable
-      # The published CLI provisions cargo-mutants itself now (#242); only the cargo
-      # toolchain is needed here. Cache the provisioning dir so it's reused across runs.
+      # The CLI provisions cargo-mutants itself on first use; caching that dir reuses the build.
       - name: Cache the provisioned cargo-mutants
         uses: actions/cache@v4
         with:
           path: ~/.cache/testing-conventions
           key: cargo-mutants-provision-${{ runner.os }}
       - name: A clean crate passes and a survivor crate trips `unit mutation`
-        # The clean crate must pass (every mutant caught) and the survivor crate must fail (a
-        # surviving mutant) — the same invocations the reusable workflow's mutation job runs. The
-        # assertion is a tested check in the repo-only checks package (internals/checks, #321/#328);
-        # `uv run` syncs it and runs the subcommand.
         run: uv run --project internals/checks tc-checks mutation-gate
 
   python-mutation-clean:
     name: A clean Python library passes `unit mutation`
     needs: [build-cli]
-    # #258 regression guard. `unit mutation --language python` spawns the mutation adapter
-    # (`python3 -m testing_conventions.mutation.main`, #248), resolved from the Python
-    # environment. The published npm binary (`npx`) does not put that module on the path — it
-    # must be importable by the `python3` it spawns. PYTHONPATH resolves the adapter from source
-    # (this PR's code, not the released wheel), and under `uv run` that `python3` is the checks
-    # venv — it carries the adapter's engine (cosmic-ray) and its pytest runner, pinned in its
-    # uv.lock. Drive the published command
-    # over a mutation-clean fixture: it clears the gate only when the adapter resolves. (Whole-tree,
-    # not `--base`, so the adapter always runs — a `--base` diff with no changed Python lines
-    # returns early and never spawns it, which is why this trap stayed hidden.)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -346,18 +139,14 @@ jobs:
         with:
           python-version: '3.12'
       - name: A mutation-clean Python library clears `unit mutation`
-        # The zero exit proves the source adapter resolves (#258). The assertion is a tested check
-        # in the repo-only checks package (internals/checks, #321/#328); `uv run` syncs it and runs
-        # the subcommand, with the adapter on PYTHONPATH.
+        # The adapter resolves from source, not the published wheel — see docs/internals/repo.md,
+        # "CI provisions from disk".
         env:
           PYTHONPATH: ${{ github.workspace }}/packages/python/python
         run: uv run --project internals/checks tc-checks python-mutation-clean
 
   mutation-wired:
     name: The reusable workflow enforces unit mutation
-    # The red→green signal for #204: the reusable workflow must actually invoke
-    # `unit mutation`, or the shipped rule isn't enforced on the @v0 path. A static grep
-    # of the workflow file, so it passes regardless of what the published binary ships.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -367,9 +156,6 @@ jobs:
 
   isolation-wired:
     name: The reusable workflow enforces unit lint
-    # The red→green signal for #125: the reusable workflow must actually invoke
-    # `unit lint`, or the shipped rule isn't enforced on the @v0 path. A static grep of
-    # the workflow file, so it passes regardless of what the published binary ships.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -379,11 +165,6 @@ jobs:
 
   static-gates-wired:
     name: The five static gates run as steps of one `static` job
-    # The red→green signal for #410: the five static gates — colocated-test (with its co-change
-    # variant), unit-lint, one-function-per-file, and integration-lint — must run as steps of one
-    # `static` job per language, not a job apiece paying ~20s of setup for a sub-second scan. A static
-    # grep of the workflow file, so it tracks the wiring regardless of what the published binary
-    # ships.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -393,12 +174,6 @@ jobs:
 
   rolling-release-wired:
     name: The major tag advances only via the gated move-major-tag workflow
-    # The red→green signal for #235. `@v0` is a moving tag, but the reusable workflow runs
-    # the *published* npm binary while its own file is frozen at the tag — so the tag must
-    # advance only AFTER that binary publishes, or a consumer gets new-workflow + old-binary
-    # (the #55 `unrecognized subcommand` stranding). Assert the invariant statically: a
-    # dedicated `move-major-tag.yml` that is publish-gated (`workflow_run` on Release) and
-    # concurrency-guarded owns the move, and `release.yml` no longer moves the tag inline.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -408,12 +183,6 @@ jobs:
 
   verify-release-wired:
     name: The major tag advances only after the version-pinned verification passes
-    # The red→green signal for #357. Publish-gating (rolling-release-wired) proves the binary
-    # published; it does not prove the combination the tag move is about to bless — the new
-    # workflow file, the published binary, the current @v0 detect — is green over the consumer
-    # surface. Assert the promotion is gated statically: move-major-tag.yml runs the layout check
-    # and dispatches the version-pinned self-test + dogfood suites before the move, and the job
-    # that advances @v0 needs those verification jobs (fail closed).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -423,12 +192,6 @@ jobs:
 
   hermetic-wired:
     name: The reusable workflow derives a hermetic (build-from-HEAD) mode
-    # Red→green wiring signal for #356 (epic #353, Layer 1): the derivation is decided in
-    # tested Python (internals/detect's `hermetic()`, from caller_repository + version — the
-    # `github` context of a reusable workflow belongs to the *calling* run, so a consumer can
-    # never match), the build lives in the repo-only caller workflows, and the reusable
-    # workflow carries hermetic *steps* only — no input to misuse, no job row for a consumer
-    # to see.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -438,10 +201,6 @@ jobs:
 
   detect-routes-python:
     name: the detect action routes Python into the unit-lint matrix
-    # Detection now lives in the repo-only detect action, tested by pytest (#189). This
-    # confirms it routes Python into `isolation_languages` end to end, the way the
-    # reusable workflow's detect job consumes it — driven with the `clean` job's inputs.
-    # (Replaces the old job that extracted the inline `detect` bash, which is gone.)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -452,15 +211,10 @@ jobs:
           languages: '["python"]'
           path: .github/selftest/clean
       - name: Assert Python is in isolation_languages
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand; the detect output is single-quoted into the CLI argument.
         run: uv run --project internals/checks tc-checks detect-routes-python '${{ steps.detect.outputs.isolation_languages }}'
 
   isolation-clean:
     name: A clean crate passes the unit-lint job
-    # Exercises the Rust path end to end: ["rust"] over a clean crate, so `detect`
-    # recognizes the crate and fans the lint job over `rust` (#125); the source-matrix
-    # jobs skip on this rust-only fixture.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -471,10 +225,6 @@ jobs:
   isolation-red:
     name: A crate with an un-isolated unit trips the lint check
     needs: [build-cli]
-    # The fail path: a `uses:` call that fails would fail the whole run, so drive the
-    # published `unit lint` command directly on a crate whose unit test reaches out of
-    # its module (effectful `std::fs`) and assert the non-zero exit that fails a
-    # consumer's build.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -482,16 +232,10 @@ jobs:
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - name: A crate with an out-of-module unit-test call must fail `unit lint`
-        # The assertion (drive the published `unit lint`, then pass/fail on its non-zero exit) is a
-        # tested check in the repo-only checks package (internals/checks, #321/#328); `uv run`
-        # syncs it and runs the subcommand.
         run: uv run --project internals/checks tc-checks isolation-red
 
   upload-clean-dist:
     name: Upload the clean built wheel as an artifact
-    # The packaging job consumes a build artifact, so stage one the way a consumer
-    # would: upload the committed clean wheel under a known name for packaging-clean
-    # to pass through `packaging_artifact`.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -502,10 +246,6 @@ jobs:
 
   packaging-clean:
     name: A clean built artifact passes the packaging check
-    # The reusable workflow's `uses:` clean path for packaging: download the
-    # uploaded wheel and inspect it. `source` points at the source-free fixture so the
-    # source-matrix jobs all skip (#94) and only the packaging job runs — the whole
-    # call must pass.
     needs: [upload-clean-dist, build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -517,9 +257,6 @@ jobs:
   packaging-red:
     name: A built artifact shipping a test file trips the packaging check
     needs: [build-cli]
-    # The fail path: a `uses:` call that fails would fail the whole run, so drive the
-    # published `packaging` command directly on a committed wheel that ships
-    # widget/core_test.py and assert the non-zero exit that fails a consumer's build.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -527,20 +264,10 @@ jobs:
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - name: A wheel that ships a `*_test.py` must fail `packaging`
-        # The assertion (drive the published `packaging`, then pass/fail on its non-zero exit) is a
-        # tested check in the repo-only checks package (internals/checks, #321/#328); `uv run`
-        # syncs it and runs the subcommand.
         run: uv run --project internals/checks tc-checks packaging-red
-
-  # ---- Epic #170: realign the workflow with the CLI surface (one rule = one job) ----
 
   coverage-rust-wired:
     name: The reusable workflow fans unit coverage over Rust
-    # Red→green wiring signal for #171: the unit-coverage job's matrix must include
-    # rust (via `detect`'s `coverage_languages` set), or the shipped Rust coverage
-    # arm (#37, cargo-llvm-cov regions/lines floor) isn't enforced on the @v0 path.
-    # A static grep, so it tracks the workflow file regardless of what the published
-    # binary ships.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -550,11 +277,6 @@ jobs:
 
   coverage-rust-clean:
     name: A clean Rust crate passes the reusable workflow's coverage arm
-    # The clean path for #171: a fully-covered crate driven through the reusable
-    # workflow under ["rust"]. `detect` recognizes the crate and fans the
-    # unit-coverage job over rust, which clears the 100 floor — alongside the
-    # unit-lint and integration-lint rust jobs, which the well-isolated,
-    # `tests/`-free crate also passes. Source-matrix python/typescript jobs skip.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -566,10 +288,6 @@ jobs:
   coverage-rust-red:
     name: A below-floor Rust crate trips the coverage arm
     needs: [build-cli]
-    # The fail path for #171: a `uses:` call that fails would fail the whole run, so
-    # drive the published `unit coverage --language rust` directly — the exact
-    # invocation the workflow's rust coverage arm runs — on a sub-floor crate and
-    # assert the non-zero exit that fails a consumer's build.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -583,16 +301,10 @@ jobs:
         with:
           tool: cargo-llvm-cov
       - name: A sub-floor crate must fail `unit coverage --language rust`
-        # The assertion (drive the published `unit coverage --language rust`, then pass/fail on its
-        # non-zero exit) is a tested check in the repo-only checks package (internals/checks,
-        # #321/#328); `uv run` syncs it and runs the subcommand.
         run: uv run --project internals/checks tc-checks coverage-rust-red
 
   diff-scoped-wired:
     name: The reusable workflow runs the diff-scoped --base checks
-    # Red→green wiring signal for #172: the workflow must invoke the commit-scoped
-    # co-change (`unit colocated-test --base`, #161) and changed-line coverage
-    # (`unit coverage --base`, #162) checks, or neither diff-scoped rule runs in CI.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -602,10 +314,6 @@ jobs:
 
   e2e-verify-wired:
     name: The reusable workflow offers an opt-in e2e verify job
-    # Red→green wiring signal for #173: the workflow must offer the e2e freshness
-    # gate (#68) behind an opt-in `run_e2e` input, or consumers can't enforce it on
-    # the @v0 path. A static grep for the input and the command; the rule's runtime
-    # behavior is covered by the Rust e2e test (`e2e_verify_e2e.rs`).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -615,13 +323,6 @@ jobs:
 
   e2e-verify-checks-out-pr-head:
     name: e2e-verify checks out the PR head commit, not the merge ref
-    # Red→green wiring signal: on a pull_request event, actions/checkout's default
-    # ref is the ephemeral merge commit — a synthetic commit an e2e attestation
-    # (which names a real, attested code commit) can never match. A non-trivial
-    # merge (base has moved since the PR branched, the common case on an active
-    # repo) makes `git log` resolve the merge commit itself as "latest," so
-    # `e2e verify` would report every fresh attestation stale. The e2e-verify
-    # job's checkout must pin `github.event.pull_request.head.sha` explicitly.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -631,38 +332,15 @@ jobs:
 
   e2e-verify-scoped-to-path:
     name: e2e-verify passes --scope inputs.source and --base inputs.base on PRs
-    # Red→green wiring signal for #294 and #319: the e2e-verify job's `e2e verify`
-    # invocation must (a) pass `--scope` naming `inputs.source` (the caller's own
-    # scoping input), not rely on the derived `package_root` (which can be a real
-    # parent of `source` — a package root also holding tests/docs/config outside the
-    # caller's scanned directory), and (b) pass `--base` naming `inputs.base` under a
-    # `github.event_name == 'pull_request'` gate, so freshness is diff-relative
-    # (`<base>..HEAD`) rather than history-absolute — the model that keeps the gate
-    # adoptable by a squash-merging repo (#319), and (c) append detect's rendered
-    # `$EXTRA_SCOPE` / `$EXCLUDE` extra-freshness-root arguments (#333). The check itself
-    # lives in the repo-only checks package (internals/checks) as a colocated-tested
-    # `@click.command()` rather than inline bash — an earlier inline version embedded a
-    # literal `${{ inputs.source }}` in a grep pattern, which GitHub Actions templated (and
-    # stripped) before the shell ever ran it, breaking the check silently. It tracks the
-    # workflow file regardless of what the published binary ships; runtime behavior is
-    # covered by the Rust e2e tests (`e2e_verify.rs`, `e2e_verify_e2e.rs`).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: the e2e-verify job must scope, diff, and append the extra freshness roots
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the
-        # `tc-checks` group's subcommand, from the repo root so the check's default
-        # workflow path resolves.
         run: uv run --project internals/checks tc-checks e2e-verify-scope-wired
 
   diff-scoped-runs:
     name: A clean PR passes the diff-scoped --base jobs
-    # The runtime half of #172: call the reusable workflow with the new `base` input
-    # over a fixture added in this PR, so `<base>...HEAD` carries real changed lines.
-    # On a PR the `*-changed` jobs run — co-change excuses the added file but
-    # requires its colocated test to exist, and the added lines clear the coverage
-    # floor — so the whole call passes.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -672,11 +350,6 @@ jobs:
       config: .github/selftest/diff-clean/testing-conventions.toml
       base: origin/main
 
-  # ---- Wire the reusable workflow to the tested detect action (#185/#186 go live) ----
-  # The detection logic is tested in .github/actions/detect (pytest, #189); these assert
-  # the @v0 workflow is actually wired to that engine and gates the default-on jobs on its
-  # outputs — the same static-wiring style as coverage-rust-wired / e2e-verify-wired above.
-
   wiring-detect-action:
     name: The reusable workflow detects via the detect action (#185)
     runs-on: ubuntu-latest
@@ -684,8 +357,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must use the detect action
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks wiring-detect-action
 
   wiring-packaging-default-on:
@@ -695,8 +366,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: packaging must gate on detect's packaging_dist output
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks wiring-packaging-default-on
 
   wiring-e2e-default-on:
@@ -706,82 +375,37 @@ jobs:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: e2e-verify must gate on detect's e2e_attestation output
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks wiring-e2e-default-on
-
-  # ---- #243: a build_command hook so native-binding projects can run the suite jobs ----
 
   build-command-wired:
     name: The reusable workflow runs a build_command before the suite
-    # Red→green wiring signal for #243/#289: the reusable workflow must run the derived
-    # `build_command` step — now read from detect's `build_command` output (the package's own
-    # `[python].build_command`, #289), not a `uses:`-call input — before the suite-executing jobs
-    # (unit coverage / changed-line coverage / mutation) invoke the suite, otherwise a
-    # native-binding consumer's compiled module is never built and the suite fails at import. A
-    # static grep, so it tracks the workflow file regardless of what the published binary ships;
-    # the runtime behavior is covered by `build-command-clean`.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must wire a build_command step
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks build-command-wired
-
-  # ---- #335: packaging builds the distribution from the manifest before scanning ----
 
   packaging-build-wired:
     name: The reusable workflow builds the distribution before scanning
-    # Red→green wiring signal for #335: the reusable workflow's packaging job must gate on
-    # detect's `packaging_build`, provision the toolchain for `packaging_language`, run the
-    # derived build (`uv build` / `<pm> pack` / `cargo package`) before scanning, and scan
-    # `target/package` alongside `dist/` — so a native monorepo adopts the gate with
-    # `gates: ["packaging"]` and no bespoke build job. A colocated-tested check rather than
-    # inline bash (the `${{ }}` templating trap); the runtime behavior is covered by the Rust
-    # packaging tests.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must build the distribution before scanning
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks packaging-build-wired
-
-  # ---- #262: a gates allowlist so a consumer can run a subset of gates ----
 
   gates-wired:
     name: The reusable workflow scopes its gates to the `gates` allowlist
-    # Red→green wiring signal for #262: the reusable workflow must offer a `gates` input
-    # restricting which gates run, or adoption is all-or-nothing — a consumer that drives
-    # the suite-executing gates (unit coverage, mutation) in its own build-capable jobs
-    # cannot adopt the workflow for the static gates, because every call also spins up
-    # coverage + mutation, which fail for lack of a build. A static grep, so it tracks the
-    # workflow file regardless of what the published binary ships; the runtime behavior is
-    # covered by the gates-scoped jobs, which land with the implementation (passing an
-    # input the called workflow does not yet define is a whole-run startup failure, so
-    # they cannot precede it — the same constraint build-command-clean documented).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must wire a `gates` allowlist
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks gates-wired
 
   gates-scoped-static:
     name: A gates allowlist runs the static gates and skips the suite-executing ones
-    # The runtime half of #262 — the motivating scenario itself. The #243 native-binding
-    # fixture's widget.py imports `generated`, a module produced only by a build step —
-    # and this call passes NO build_command. So the whole `uses:` call passes only
-    # because the gates allowlist skips the suite-executing gates (unit coverage,
-    # changed-line coverage, mutation): any of them running would fail at import. The
-    # three named static gates run for real over the fixture — colocated-test (plus its
-    # co-change job, which rides the gate), unit-lint, and integration-lint — and the
-    # unnamed e2e-verify gate is skipped despite this repo's committed attestation.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -793,8 +417,6 @@ jobs:
 
   upload-red-dist:
     name: Upload the red built wheel as an artifact (gates precedence)
-    # Stage the red wheel (it ships a test file, so the packaging rule FAILS on it when
-    # inspected) for gates-scoped-packaging-excluded below.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -805,12 +427,6 @@ jobs:
 
   gates-scoped-packaging-excluded:
     name: The gates allowlist overrides the packaging_artifact forcing
-    # The precedence half of #262: `packaging_artifact` normally forces the packaging job
-    # on — and this artifact is the RED wheel, which fails the packaging rule when
-    # inspected. With a `gates` allowlist that leaves packaging out, the allowlist must
-    # win and the packaging job skip: the call passes only because it does. `source` points
-    # at the source-free fixture so the one named gate has nothing to run and skips too
-    # (#94) — every job but detect skips, and the run passes.
     needs: [upload-red-dist, build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -820,44 +436,17 @@ jobs:
       packaging_artifact: selftest-red-dist
       gates: '["colocated-test"]'
 
-  # ---- #263: provision a Rust toolchain for a build_command that compiles a Rust core ----
-
   rust-toolchain-wired:
     name: The reusable workflow provisions a Rust toolchain for the build
-    # Red→green wiring signal for #263: the suite-executing jobs (unit coverage,
-    # changed-line coverage, mutation) must offer a `rust_toolchain` input that
-    # provisions cargo (with build caching) before `build_command` runs. The Python and
-    # TypeScript arms set up only their own language's toolchain, so a native binding
-    # whose build compiles a Rust core — a maturin/PyO3 extension, a napi-rs addon —
-    # has no cargo to build with: `build_command` fails before the suite ever runs, and
-    # rustup-installing inline in an eval'd string is setup logic in the wrong place,
-    # with no cache. A static grep, so it tracks the workflow file regardless of what
-    # the published binary ships; the runtime behavior is covered by
-    # rust-toolchain-clean, which lands with the implementation (passing an input the
-    # called workflow does not yet define is a whole-run startup failure, so it cannot
-    # precede the input it exercises — the constraint build-command-clean documented).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must wire a `rust_toolchain` setup step
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks rust-toolchain-wired
 
   rust-toolchain-clean:
     name: A rust_toolchain call finds cargo before build_command
-    # The runtime half of #263: the same native-binding fixture as build-command-clean, but the
-    # `[python].build_command` invokes cargo first — the stand-in for a `maturin develop` /
-    # `napi build` that compiles a Rust core. ubuntu-24.04 runners carry no preinstalled Rust, so
-    # the build — and with it every suite-executing job — succeeds only because `rust_toolchain:
-    # true` provisioned the toolchain ahead of the build step. The whole `uses:` call passing is
-    # the green signal that cargo is present (and cached) in the python arm, where only
-    # setup-python runs otherwise. The build hook lives in the package's own config as
-    # `[python].build_command` (#289), read by `detect` — which this call (an in-repo `uses:`
-    # with no pinned `version`) now runs hermetically from HEAD (#356), not the published
-    # `actions/detect@v0`/npx binary, so the call validates this commit's own detect + CLI
-    # directly, not the previously-documented pre-release lag.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -870,18 +459,6 @@ jobs:
 
   build-command-clean:
     name: A build_command makes the suite-executing jobs find a built module
-    # The runtime half of #243/#289: the `build-command` fixture's `widget.py` imports
-    # `generated`, a module absent from the source tree — it stands in for a maturin/napi native
-    # module and is produced only by the `[python].build_command`. So the coverage, changed-line
-    # coverage, and mutation jobs pass iff the workflow runs `build_command` before the suite
-    # (without it, pytest fails at import). The static colocated-test / lint jobs run without the
-    # build and never see the generated module, so they pass as-is. `base: origin/main` exercises
-    # the diff-scoped jobs over this PR-added fixture (its tests pin exact values, so every
-    # changed-line mutant is killed). The build hook lives in the package's own config as
-    # `[python].build_command` (#289), read by `detect` — which this call (an in-repo `uses:`
-    # with no pinned `version`) now runs hermetically from HEAD (#356), not the published
-    # `actions/detect@v0`/npx binary, so the call validates this commit's own detect + CLI
-    # directly, not the previously-documented pre-release lag.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -891,19 +468,8 @@ jobs:
       config: .github/selftest/build-command/build-command.toml
       base: origin/main
 
-  # ---- #274: the whole-tree colocated-test job fans out over rust ----
-
   colocated-rust-wired:
     name: The reusable workflow fans colocated-test over rust
-    # Red→green wiring signal for #274: the whole-tree colocated-test job's matrix must
-    # include rust (via detect's rust-inclusive `colocated_test_languages` set), or the
-    # shipped rust presence arm (#40, inline `#[cfg(test)]`) isn't enforced on the @v0
-    # path — a rust source file with zero inline tests sails through, though the docs
-    # state the check runs for all three languages. Co-change stays on the
-    # python/typescript `languages` set (rust units are inline, so a sibling test can't
-    # go stale). A static grep, so it tracks the workflow file regardless of what the
-    # published binary ships; the fail path is covered by colocated-rust-red, and the
-    # clean path rides the existing `["rust"]` fixture calls.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -914,11 +480,6 @@ jobs:
   colocated-rust-red:
     name: A crate with an untested fn trips the rust colocated-test arm
     needs: [build-cli]
-    # The fail path for #274: a `uses:` call that fails would fail the whole run, so
-    # drive the hermetic `unit colocated-test --language rust` directly — the exact
-    # invocation the workflow's rust arm runs — on a crate whose bodied `fn` has no
-    # inline `#[cfg(test)]` module, and assert the non-zero exit that fails a
-    # consumer's build.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -926,19 +487,7 @@ jobs:
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - name: A bodied fn with no inline test module must fail `unit colocated-test`
-        # The assertion (drive the hermetic `unit colocated-test --language rust`, then pass/fail on
-        # its non-zero exit) is a tested check in the repo-only checks package (internals/checks,
-        # #321/#328/#379); `uv run` syncs it and runs the subcommand.
         run: uv run --project internals/checks tc-checks colocated-rust-red
-
-  # ---- #277: the monorepo package-root primitive ----
-  #
-  # `.github/selftest/monorepo/` carries no manifest or lockfile at its own root — the
-  # per-package-lockfile shape (dirsql PR #410) the epic's gate fixes (#278-#281) run
-  # their fixtures against. These two jobs drive the *local* detect action (not the
-  # `@v0` one the reusable workflow's `detect` job uses), so — like
-  # `detect-routes-python` above — they aren't blocked by the `@v0` rolling-release lag
-  # (docs/internals/repo.md): a detect.py change takes effect here immediately.
 
   detect-package-root-ts:
     name: detect resolves the monorepo fixture's npm TS package
@@ -951,9 +500,6 @@ jobs:
         with:
           languages: '["typescript"]'
           path: .github/selftest/monorepo/packages/ts/src
-      # #277: the fixture's own testing-conventions.toml is discovered with no `config` input —
-      # the detect call above passes only `languages`/`path`. The assertion runs in a
-      # colocated-tested helper (epic #302, #308, #327); detect outputs are passed as CLI arguments.
       - name: Assert package_root / ts_package_manager / provision_rust / config
         run: >-
           uv run --project internals/checks tc-checks detect-package-root-ts
@@ -973,9 +519,6 @@ jobs:
         with:
           languages: '["python"]'
           path: .github/selftest/monorepo/packages/py/src
-      # #277: the fixture's own testing-conventions.toml is discovered with no `config` input —
-      # the detect call above passes only `languages`/`path`. The assertion runs in a
-      # colocated-tested helper (epic #302, #308, #327); detect outputs are passed as CLI arguments.
       - name: Assert package_root / python_env / config
         run: >-
           uv run --project internals/checks tc-checks detect-package-root-py
@@ -983,42 +526,17 @@ jobs:
           "${{ steps.detect.outputs.python_env }}"
           "${{ steps.detect.outputs.config }}"
 
-  # ---- #278: unit-coverage installs and builds at the derived package root ----
-  #
-  # Consumes the #277 primitive: `unit-coverage` / `coverage-changed` must install TS deps,
-  # provision the Python env, and run `build_command` at `needs.detect.outputs.package_root`
-  # instead of the checkout root, or a per-package-lockfile monorepo TS package hits
-  # `ERR_PNPM_NO_PKG_MANIFEST` (dirsql PR #410) and a uv-managed Python package's own
-  # dependencies (e.g. `attrs`) are never installed.
-
   coverage-package-root-wired:
     name: unit-coverage / coverage-changed install and build at the derived package root
-    # Red→green wiring signal for #278: both the whole-tree and changed-line coverage jobs
-    # must reference `needs.detect.outputs.package_root` — the #277 primitive — for their
-    # TS install, Python env provisioning, and `build_command` step, or a per-package call
-    # falls back to installing/building at the checkout root. A static grep scoped to each
-    # job's own block (by anchoring on the next job's header), so it tracks the workflow file
-    # regardless of what the published binary ships; the runtime behavior is covered by the
-    # monorepo `uses:` calls below (blocked from truly exercising the new outputs until a
-    # release moves `@v0`, per docs/internals/repo.md).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: The coverage jobs must reference needs.detect.outputs.package_root
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks coverage-package-root-wired
 
   monorepo-coverage-ts:
     name: The monorepo npm TS fixture passes unit-coverage from its own package root
-    # Runtime half of #278, for the fixture from dirsql PR #410's motivating scenario: a TS
-    # package with its own package-lock.json and no root manifest. Only `source` is set — the
-    # #278 goal for a per-package call (`languages`/`config` are optional refinements; config
-    # is already derived from the package root by #277). This call (an in-repo `uses:` with no
-    # pinned `version`) runs `detect` hermetically from HEAD (#356), so it exercises this
-    # commit's own `package_root` / `ts_package_manager` derivation directly, not the
-    # previously-documented `@v0` pre-release lag.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -1028,67 +546,33 @@ jobs:
 
   monorepo-coverage-py:
     name: The monorepo uv Python fixture passes unit-coverage from its own package root
-    # Same hermetic derivation as monorepo-coverage-ts (#356): this call runs `detect` from
-    # HEAD, so the fixture's `attrs` third-party dependency is installed via this commit's own
-    # `python_env` resolution, not a pre-release-lagged `@v0`. Only `source` is set.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
       version: ${{ inputs.version }}
       source: .github/selftest/monorepo/packages/py
       gates: '["unit-coverage"]'
-  # ---- #280: packaging discovers dist/ at the derived package root, not the checkout root ----
-  #
-  # `.github/selftest/packaging-package-root/` carries its own `clean/` and `red/` packages
-  # (regenerate with `python .github/selftest/packaging-package-root/make_fixtures.py`), each a
-  # standalone package root (its own `package.json`) with a committed `dist/` — proving the
-  # packaging job now finds a per-package `dist/` with no `packaging_artifact` upload, the
-  # configuration this epic exists to remove.
 
   pnpm-version-wired:
     name: The reusable workflow takes its pnpm version from detect, never a literal
-    # The static half of #475: every `pnpm/action-setup` step must read
-    # `needs.detect.outputs.ts_pnpm_version`. A literal there throws
-    # `Multiple versions of pnpm specified` for any consumer that pins `packageManager`,
-    # killing coverage, mutation and packaging before they install anything.
-    #
-    # This has to be a static check rather than a fixture run: the repo pins its floors through
-    # `engines` and carries no `packageManager` field anywhere, so no dogfooded package walks
-    # the conflicting path, and a runtime selftest would need a fixture whose only purpose is
-    # to hold a pin. The derivation itself is covered by detect's own unit/e2e suites.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml's pnpm steps must reference ts_pnpm_version
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks pnpm-version-wired
 
   packaging-package-root-wired:
     name: The reusable workflow's packaging job is wired to the derived package_root
-    # Red→green wiring signal for #280: the packaging job must read
-    # `needs.detect.outputs.package_root`, or a per-package `dist/` the detect action found is
-    # never passed to the check step — it keeps looking at the checkout root's `dist/`. A static
-    # grep, so it tracks the workflow file regardless of what the published binary ships; the
-    # runtime behavior is covered by packaging-package-root-clean / -red below.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml's packaging job must reference package_root
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks packaging-package-root-wired
 
   packaging-package-root-clean:
     name: A per-package dist/ passes the packaging check with no packaging_artifact
-    # The runtime half of #280, and the acceptance scenario itself: `clean/` is its own package
-    # root (a `package.json` sitting there) with a committed `clean/dist/` — no build job, no
-    # upload-artifact, no `packaging_artifact` input, just `source` naming the package. The whole
-    # call must pass. `gates` scopes the call to packaging alone (this fixture carries no
-    # source, so every other gate's matrix is empty and would skip regardless — this just keeps
-    # the job fast and its intent explicit).
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -1099,10 +583,6 @@ jobs:
   packaging-package-root-red:
     name: A per-package dist/ shipping a test file trips the packaging check
     needs: [build-cli]
-    # The fail path for #280: a `uses:` call that fails would fail the whole run (the same
-    # constraint `packaging-red` documents), so drive the published `packaging` command
-    # directly on the committed tarball at `red/dist/` — the exact artifact a per-package
-    # `uses:` call would now discover and inspect at that package's derived root.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -1110,44 +590,19 @@ jobs:
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - name: A per-package dist/ shipping a test file must fail packaging
-        # The assertion (drive the published `packaging` on the per-package tarball, then pass/fail
-        # on its non-zero exit) is a tested check in the repo-only checks package (internals/checks,
-        # #321/#328); `uv run` syncs it and runs the subcommand.
         run: uv run --project internals/checks tc-checks packaging-package-root-red
-  # ---- #279: the mutation job installs and builds from the derived package root ----
 
   mutation-package-root-wired:
     name: The mutation job installs and builds from the derived package root
-    # Red→green wiring signal for #279: the `mutation` job must reference
-    # `needs.detect.outputs.package_root` (in its install steps, its `build_command`
-    # step, and its Rust-build cache path) or it still installs/builds at the checkout
-    # root — the same root-hardwired defect #278 fixes for the coverage jobs. A static
-    # grep, so it tracks the workflow file regardless of what the published binary
-    # ships; the runtime behavior (per-package install picking npm/pnpm and uv/pip) is
-    # covered by mutation-monorepo-ts / mutation-monorepo-py below.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml's mutation job must reference package_root
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks mutation-package-root-wired
 
   mutation-monorepo-ts:
     name: Mutation over the monorepo fixture's npm TS package (per-package call)
-    # The runtime half of #279's TS fix: a per-package `uses:` call over
-    # `.github/selftest/monorepo/packages/ts` (npm, its own lockfile, no root
-    # manifest) with only `source`/`config` set, scoped to just the `mutation` gate.
-    # `base: origin/main` gives the diff-scoped mutation gate real changed lines to
-    # scope to — the whole fixture is new relative to `main` (it landed in the
-    # still-unmerged #277), and `add()`'s existing test kills every default mutant.
-    # Like `detect-package-root-ts`, this exercises `package_root` /
-    # `ts_package_manager` — through `detect`, which this call (an in-repo `uses:`
-    # with no pinned `version`) now runs hermetically from HEAD (#356), not the
-    # published `actions/detect@v0`, so it validates this commit's own
-    # `package_root` / `ts_package_manager` derivation directly, not the
-    # previously-documented pre-release lag.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -1160,17 +615,6 @@ jobs:
 
   mutation-monorepo-py:
     name: Mutation over the monorepo fixture's uv Python package (per-package call)
-    # The runtime half of #279's Python fix: a per-package `uses:` call over
-    # `.github/selftest/monorepo/packages/py` (uv-managed, its own `uv.lock`, an
-    # `attrs` dependency, no root manifest), scoped to just the `mutation` gate.
-    # `base: origin/main` gives the diff-scoped mutation gate real changed lines —
-    # the whole fixture is new relative to `main` — and `Point.shift`'s existing
-    # test (an exact-value assertion) kills every default mutant. Exercises
-    # `package_root` / `python_env` through `detect`, which this call (an in-repo
-    # `uses:` with no pinned `version`) now runs hermetically from HEAD (#356), not
-    # the published `actions/detect@v0`, so it installs via this commit's own
-    # `uv sync` resolution into the project's own venv directly, not the
-    # previously-documented pre-release lag.
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -1181,39 +625,20 @@ jobs:
       gates: '["mutation"]'
       base: origin/main
 
-  # ---- #399: the suite-executing jobs provision Python with uv alone ----
-
   uv-provisioning-wired:
     name: The suite-executing jobs provision Python with uv alone
-    # Red→green wiring signal for #399: the reusable workflow must provision Python one way —
-    # uv — with identical python-arm steps across unit-coverage / coverage-changed / mutation,
-    # or every provisioning change is written twice per job (a pip arm beside the uv arm) and
-    # the arms drift. A static check, so it tracks the workflow file itself; the runtime halves
-    # ride the existing fixtures (`clean` for the plain package, monorepo-coverage-py /
-    # mutation-monorepo-py for the uv-managed one).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: testing-conventions.yml must provision Python with uv alone
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks uv-provisioning-wired
-
-  # ---- #379: the direct-drive red-path jobs run the hermetic CLI, not the published npx ----
 
   red-path-hermetic-wired:
     name: The direct-drive red-path jobs consume the hermetic CLI
-    # Red→green wiring signal for #379: every failure-path job that drives the CLI by hand (to
-    # assert a non-zero exit a `uses:` call can't) must download the hermetic-cli artifact and run
-    # the HEAD binary, or the merge gate still validates those assertions against npm-latest. A
-    # static check over this workflow, so it tracks the file regardless of what the published
-    # binary ships; each red-path job's own run proves the hermetic binary actually resolves.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
       - name: every direct-drive red-path job must download the hermetic CLI
-        # `uv run` syncs the repo-only checks package (internals/checks) and runs the `tc-checks`
-        # group's subcommand, from the repo root so the check's default workflow path resolves.
         run: uv run --project internals/checks tc-checks red-path-hermetic-wired

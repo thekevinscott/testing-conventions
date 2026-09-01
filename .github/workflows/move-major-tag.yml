@@ -1,26 +1,7 @@
 name: Move major tag
 
-# Verify a release, then advance the moving major tag `@v0` to it — the validated-promotion
-# mechanism (#235, #357). Consumers pin `…/testing-conventions.yml@v0` and `…/actions/detect@v0`,
-# and the tag is force-moved forward on each release so every consumer tracks `main`.
-#
-# Gated two ways, both non-negotiable:
-#   * on a successful publish (#235): triggers on the `Release` workflow *completing*, so the
-#     binary is on npm before the tag moves — a consumer never gets new-workflow + old-binary
-#     (the #55 `unrecognized subcommand` stranding);
-#   * on a green verification (#357): before the move, the exact combination the tag is about to
-#     bless — the new workflow file, the published binary, the current `@v0` detect — is run over
-#     the full self-test + dogfood surface, pinned to the just-published version, and the layout
-#     of the remote `detect` action fetch is checked at the release commit. A red verification
-#     leaves `@v0` where it is (fail closed).
-#
-# The narrow scope (detect stays at the current `@v0`, not re-pinned to the release) is
-# structurally forced — the new-workflow × detect-at-the-new-tag combination is unconstructable
-# until the tag moves (`uses:` refs can't be dynamic) — and the coverage it would give is already
-# proven pre-merge by Layer 1's hermetic gate (#356). See docs/internals/repo.md, "Validated
-# promotion". All logic is in the colocated-tested `tc-checks verify-release` command
-# (internals/checks) and the `internals/move-major-tag` helper; this workflow wires
-# triggers, checkouts, and env.
+# Verify a release, then advance the moving major tag `@v0` to it. See
+# docs/internals/repo.md, "Rolling release: how `@v0` advances".
 
 on:
   workflow_run:
@@ -36,8 +17,6 @@ concurrency:
 
 jobs:
   context:
-    # Only when the Release actually published, and only on main. A failed or cancelled release
-    # leaves `@v0` where it is — never advanced ahead of a publish that did not happen.
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main'
@@ -50,9 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # The released commit (a workflow_run checkout defaults to the default-branch HEAD),
-          # with full history + tags so the helper can resolve the published version and the
-          # forward-only ancestry check can resolve `v0`.
+          # A workflow_run checkout defaults to the default-branch HEAD, so the release commit is
+          # named explicitly; full history and tags let the helper resolve the published version and
+          # the `v0` ancestry.
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
           fetch-tags: true
@@ -62,10 +41,8 @@ jobs:
         run: echo "version=$(uv run --project internals/checks tc-checks verify-release resolve-version "${{ github.event.workflow_run.head_sha }}")" >> "$GITHUB_OUTPUT"
 
   verify-layout:
-    # The remote-action-fetch provenance the version-pinned suite can't cover (it runs
-    # detect@v0, the old tag): git archive the release commit and assert action.yml and the
-    # detect.py it reaches are present, so a consumer's `detect@v0` fetch won't resolve a broken
-    # action the moment @v0 moves.
+    # The remote-action-fetch provenance the version-pinned suite cannot cover: it runs
+    # detect@v0, the old tag.
     needs: context
     runs-on: ubuntu-latest
     permissions:
@@ -80,10 +57,8 @@ jobs:
         run: uv run --project internals/checks tc-checks verify-release check-layout "${{ needs.context.outputs.sha }}"
 
   verify-suite:
-    # The full self-test + dogfood surface, pinned to the just-published version (the published
-    # consumer path, per #356's version-input seam). Dispatched at the release commit via a
-    # throwaway tag (workflow_dispatch takes a branch/tag ref, never a SHA), polled to completion,
-    # fail closed. contents:write for the temp tag push; actions:write to dispatch.
+    # `workflow_dispatch` takes a branch or tag ref, never a bare SHA, so verification runs at a
+    # throwaway tag on the release commit.
     needs: context
     runs-on: ubuntu-latest
     permissions:
@@ -105,9 +80,6 @@ jobs:
           testing-conventions-selftest.yml dogfood.yml
 
   move-v0:
-    # Advance @v0 only after both the layout check and the version-pinned suites are green — a
-    # red verification leaves @v0 where it is (the needs: edges are the fail-closed gate). The
-    # forward-only tag logic stays the move_major_tag.py helper, unchanged.
     needs: [context, verify-layout, verify-suite]
     runs-on: ubuntu-latest
     permissions:

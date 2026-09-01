@@ -49,7 +49,6 @@ fn red_flags_unmocked_first_party_collaborator() {
             .any(|v| v.rule == "unmocked-collaborator" && v.message.contains("myproject.ledger")),
         "an imported, un-mocked first-party collaborator must be flagged; got {violations:?}"
     );
-    // The unit under test (`myproject.widget`) is never a collaborator.
     assert!(
         !violations
             .iter()
@@ -81,7 +80,6 @@ fn clean_exits_zero() {
 
 #[test]
 fn waived_exits_zero() {
-    // Same un-mocked collaborator as the red fixture, but the file is waived.
     assert_eq!(
         isolation_exit_with_config("waived", "waived/testing-conventions.toml"),
         0
@@ -90,9 +88,6 @@ fn waived_exits_zero() {
 
 #[test]
 fn legacy_test_prefix_is_not_scanned() {
-    // A unit test is `*_test.py` and a legacy `test_*.py` is ordinary source.
-    // `unit lint` must agree: this `test_widget.py` imports an un-mocked
-    // first-party collaborator, but it is source — so nothing is reported.
     let violations = find_unit_isolation_violations(fixture("legacy_prefix"))
         .expect("walking a readable tree should succeed");
     assert!(
@@ -111,7 +106,6 @@ fn legacy_test_prefix_exits_zero() {
 fn external_red_flags_unmocked_external_deps() {
     let violations = find_unit_isolation_violations(fixture("external/red"))
         .expect("walking a readable tree should succeed");
-    // A third-party package and an effectful-stdlib module, both imported un-mocked.
     assert!(
         violations
             .iter()
@@ -122,7 +116,6 @@ fn external_red_flags_unmocked_external_deps() {
         violations.iter().any(|v| v.message.contains("subprocess")),
         "an imported, un-mocked effectful-stdlib module must be flagged; got {violations:?}"
     );
-    // Pure stdlib (`json`) is never a collaborator.
     assert!(
         !violations.iter().any(|v| v.message.contains("json")),
         "pure stdlib must not be flagged; got {violations:?}"
@@ -163,9 +156,6 @@ fn external_waived_exits_zero() {
 
 #[test]
 fn barrel_reexport_import_is_the_unit_under_test() {
-    // `__init___test.py` doing `from . import Thing, __all__, __version__` imports
-    // the package's own `__init__.py` surface — the unit under test — so nothing is
-    // a collaborator (parity with TS's `index.test.ts` importing `./index.js`).
     let violations = find_unit_isolation_violations(fixture("barrel/clean"))
         .expect("walking a readable tree should succeed");
     assert!(
@@ -182,9 +172,6 @@ fn barrel_clean_exits_zero() {
 
 #[test]
 fn barrel_sibling_direct_import_still_flagged() {
-    // Reaching AROUND the barrel into a sibling module (`from .core import Thing` in
-    // `__init___test.py`) is still a collaborator — the exemption is only for the
-    // bare `from . import …` that resolves to the SUT file itself.
     let violations = find_unit_isolation_violations(fixture("barrel/red"))
         .expect("walking a readable tree should succeed");
     assert!(
@@ -200,13 +187,8 @@ fn barrel_red_exits_nonzero() {
     assert_eq!(isolation_exit("barrel/red"), 1);
 }
 
-// ---- #393: module-qualified, per-symbol mock matching --------------------
-
 #[test]
 fn overmatch_red_flags_partly_mocked_import() {
-    // 1a (any-symbol-clears-all): `from myproject.ledger import record, erase` with a
-    // fixture patching only `…ledger.record` must NOT clear the whole import — the
-    // un-mocked sibling `erase` is a real collaborator, so the import is flagged.
     let violations = find_unit_isolation_violations(fixture("overmatch/red"))
         .expect("walking a readable tree should succeed");
     assert!(
@@ -224,8 +206,6 @@ fn overmatch_red_exits_nonzero() {
 
 #[test]
 fn overmatch_clean_reports_no_violations() {
-    // Every imported symbol is patched at its own module path (`myproject.ledger.record`
-    // and `myproject.ledger.erase`), so the collaborator import is fully mocked.
     let violations = find_unit_isolation_violations(fixture("overmatch/clean"))
         .expect("walking a readable tree should succeed");
     assert!(
@@ -241,10 +221,6 @@ fn overmatch_clean_exits_zero() {
 
 #[test]
 fn wrong_module_red_flags_last_segment_only_match() {
-    // 1b (last-segment match against any target): a patch mocks an import only when its
-    // module path corresponds to the import's source. `patch("otherpkg.unrelated.record")`
-    // and `patch("json.dumps")` share only a last segment with the local imports, so
-    // neither is mocked — both imports are flagged.
     let violations = find_unit_isolation_violations(fixture("wrong_module/red"))
         .expect("walking a readable tree should succeed");
     assert!(
@@ -268,8 +244,5 @@ fn wrong_module_red_exits_nonzero() {
 
 #[test]
 fn tier_layout_suites_are_not_unit_subjects() {
-    // `tests/integration/flow_test.py` deliberately runs first-party code for
-    // real. `<package root>/tests/` belongs to the suite tiers, so the
-    // unit-suite isolation rule reports nothing there.
     assert_eq!(isolation_exit("tier_layout"), 0);
 }

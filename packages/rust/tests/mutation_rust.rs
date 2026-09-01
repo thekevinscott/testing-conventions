@@ -58,8 +58,6 @@ fn survivors_are_reported() {
 
 #[test]
 fn a_mutation_exemption_drops_the_survivors() {
-    // Exempting the survivors' file lifts all of them — an equivalent / deliberately
-    // defensive mutation, waived with a reason via `[[rust.exempt]] rules = ["mutation"]`.
     let exempt = vec!["src/lib.rs".to_string()];
     let (_, survivors) = expect_tested(
         measure_rust(

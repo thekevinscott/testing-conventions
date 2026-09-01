@@ -17,11 +17,6 @@ const FLOOR_100: Thresholds = Thresholds {
     branch: true,
 };
 
-// `full`, `above_85`, and `below_85` are the default package layout —
-// `{pyproject.toml, src/**}` scanned at `src/`. The package-root pyproject anchors
-// pytest's rootdir so the colocated `<module>_test.py` resolves its `from <module>
-// import ...` when coverage runs at the scan path.
-
 #[test]
 fn below_85_fails_an_85_floor() {
     assert!(matches!(
@@ -48,10 +43,6 @@ fn full_passes_a_100_floor() {
 
 #[test]
 fn a_package_root_conftest_governs_a_src_scan() {
-    // The standard package layout scanned at `src/`: pytest resolves its rootdir and
-    // conftest files with its own upward search, so the package-root `conftest.py`'s
-    // fixture is available to the colocated suite below the scan path — the Python arm's
-    // documented anchoring answer, pinned. The suite passes only if that fixture loads.
     assert_eq!(
         measure(&codebase("pkg_config").join("src"), FLOOR_100, &[]).unwrap(),
         Outcome::Pass
@@ -60,10 +51,6 @@ fn a_package_root_conftest_governs_a_src_scan() {
 
 #[test]
 fn conftest_is_omitted_from_the_denominator() {
-    // conftest.py is pytest support, never a coverage subject. `conftest_omit`'s
-    // widget.py is fully covered, but its conftest.py has an unused fixture body
-    // (uncovered) — so the 100 floor passes only because conftest.py is omitted
-    // from the denominator alongside the test files.
     assert_eq!(
         measure(&codebase("conftest_omit"), FLOOR_100, &[]).unwrap(),
         Outcome::Pass
@@ -72,10 +59,6 @@ fn conftest_is_omitted_from_the_denominator() {
 
 #[test]
 fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
-    // `exempt_cov` sits at ~58% only because of shim.py; omitting it (the
-    // `coverage`-rule exemption the CLI resolves from config) leaves core.py,
-    // fully covered, to clear 100. The exemption is doing real work — without it
-    // this codebase fails the floor.
     assert_eq!(
         measure(&codebase("exempt_cov"), FLOOR_100, &["shim.py".to_string()]).unwrap(),
         Outcome::Pass
@@ -84,8 +67,6 @@ fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
 
 #[test]
 fn a_suite_that_cannot_run_is_an_error_not_a_silent_pass() {
-    // An empty directory collects no tests; measuring it must error rather than
-    // report a vacuous pass.
     let empty = std::env::temp_dir().join(format!("tc-empty-{}", std::process::id()));
     std::fs::create_dir_all(&empty).unwrap();
     let result = measure(&empty, FLOOR_85, &[]);

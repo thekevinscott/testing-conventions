@@ -73,7 +73,6 @@ impl TempRepo {
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
-        // Resolve vitest from the fixtures' runner-only install rather than a second one.
         std::os::unix::fs::symlink(toolchain_node_modules(), root.join("node_modules")).unwrap();
         TempRepo(root)
     }
@@ -122,11 +121,6 @@ fn git(dir: &Path, args: &[&str]) {
 
 #[test]
 fn base_scopes_the_run_to_the_changed_lines() {
-    // The default package layout — `{package.json, src/**}` whose source imports
-    // `../package.json`, scanned at `<repo>/src` with `--base` on a diff that touches source.
-    // Stryker's run is rooted at the package root, so the upward import resolves in the initial
-    // (dry) run; the mutate ranges address the changed lines under the scan path, and the
-    // survivors come back scan-path-relative.
     let repo = TempRepo::new("survivor");
     repo.write("src/index.ts", BASELINE);
     repo.write("src/index.test.ts", BASELINE_TEST);
@@ -146,8 +140,6 @@ fn base_scopes_the_run_to_the_changed_lines() {
         )
         .expect("stryker runs"),
     );
-    // The added `isPositive` (lines 8-10) is in the diff and assertion-light, so its mutants
-    // survive; the unchanged `add` and `VERSION` are out of scope and never mutated.
     assert!(
         count >= survivors.len(),
         "every survivor was judged, so the count covers them"
@@ -166,7 +158,6 @@ fn base_scopes_the_run_to_the_changed_lines() {
 
 #[test]
 fn a_loose_tree_base_scopes_the_run_to_the_changed_lines() {
-    // The loose special case: flat scripts at the repo root, no manifest, scanned at the root.
     let repo = TempRepo::loose("survivor");
     repo.write("index.ts", LOOSE_BASELINE);
     repo.write("index.test.ts", LOOSE_BASELINE_TEST);
@@ -186,8 +177,6 @@ fn a_loose_tree_base_scopes_the_run_to_the_changed_lines() {
         )
         .expect("stryker runs"),
     );
-    // The added `isPositive` (lines 5-7) is in the diff and assertion-light, so its
-    // mutants survive; `add` (lines 1-3) is unchanged, so it's out of scope and never mutated.
     assert!(
         count >= survivors.len(),
         "every survivor was judged, so the count covers them"
@@ -206,9 +195,6 @@ fn a_loose_tree_base_scopes_the_run_to_the_changed_lines() {
 
 #[test]
 fn base_with_no_mutatable_changed_files_reports_the_engine_not_run() {
-    // The only change on the diff is to a test file, which is never mutated — so the
-    // diff scopes to nothing, the run is skipped entirely (no Stryker), and the
-    // measurement says so, telling this pass apart from an all-killed run.
     let repo = TempRepo::new("notests");
     repo.write("src/index.ts", BASELINE);
     repo.write("src/index.test.ts", BASELINE_TEST);

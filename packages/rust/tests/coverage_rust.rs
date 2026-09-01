@@ -39,8 +39,6 @@ fn below_fails_a_100_floor() {
 
 #[test]
 fn below_passes_a_lower_floor() {
-    // `below` is ~88% regions / ~87% lines — under 100 (the uncovered `else` arm)
-    // but comfortably over an 80 floor, so the floor is a real, configurable knob.
     assert_eq!(
         measure_rust(&crate_dir("below"), MID, &[], &[]).unwrap(),
         Outcome::Pass
@@ -49,11 +47,6 @@ fn below_passes_a_lower_floor() {
 
 #[test]
 fn integration_tests_do_not_pad_the_unit_floor() {
-    // `padded`'s `shift` unit is exercised only by the crate's integration test
-    // (`tests/covers_shift.rs`); the floor measures the unit suite, so the crate
-    // reads ~70% regions / ~67% lines and fails 100. A run that also
-    // counted the integration target would read 100% and pass — exactly the
-    // padding the Coverage rule forbids.
     assert!(matches!(
         measure_rust(&crate_dir("padded"), FULL, &[], &[]).unwrap(),
         Outcome::Fail(_)
@@ -62,10 +55,6 @@ fn integration_tests_do_not_pad_the_unit_floor() {
 
 #[test]
 fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
-    // `exempt_cov` sits at ~75% only because of shim.rs (its `launch` is never
-    // exercised); omitting it — the `coverage`-rule exemption the CLI resolves
-    // from config — leaves core.rs, fully covered, to clear 100. Without the
-    // exemption this crate fails the floor.
     assert_eq!(
         measure_rust(
             &crate_dir("exempt_cov"),
@@ -80,8 +69,6 @@ fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
 
 #[test]
 fn a_suite_that_cannot_run_is_an_error_not_a_silent_pass() {
-    // An empty directory is not a cargo crate; `cargo llvm-cov` exits non-zero, so
-    // measuring it must error rather than report a vacuous pass.
     let empty = std::env::temp_dir().join(format!("tc-rust-empty-{}", std::process::id()));
     std::fs::create_dir_all(&empty).unwrap();
     let result = measure_rust(&empty, MID, &[], &[]);

@@ -152,9 +152,6 @@ fn deleted_source_without_deleting_its_test_exits_nonzero() {
 
 #[test]
 fn deleting_a_barrel_without_a_test_exits_zero() {
-    // A package barrel with no colocated test can be deleted cleanly — the
-    // deletion can't bring a sibling test into the diff, so co-change no longer
-    // flags it (nor needs an exemption to silence it).
     let repo = TempRepo::new("del-barrel");
     repo.write(
         "cli/interpret/__init__.py",
@@ -192,7 +189,6 @@ fn a_co_change_exemption_lifts_the_stale_source() {
     repo.write("cli.py", "def main():\n    return 1\n");
     repo.commit("edit the launcher, leave its test");
 
-    // Stale with no config (presence satisfied), lifted once the exemption is supplied.
     assert_eq!(co_change(&repo, "python", &base, None).0, 1);
     assert_eq!(
         co_change(&repo, "python", &base, Some("testing-conventions.toml")).0,
@@ -206,8 +202,6 @@ const TS_WIDGET_TEST: &str =
 
 #[test]
 fn modified_type_only_module_exits_zero() {
-    // A type-only module has no runtime behavior and so no colocated test to
-    // co-change with — editing one passes both halves of the rule, unexempted.
     let repo = TempRepo::new("ts-type-only");
     repo.write("widget.ts", TS_WIDGET);
     repo.write("widget.test.ts", TS_WIDGET_TEST);
@@ -229,8 +223,6 @@ fn modified_type_only_module_exits_zero() {
 
 #[test]
 fn the_type_only_skip_does_not_silence_a_runtime_change() {
-    // Both files move in one commit: the type-only module is skipped, and the runtime
-    // module that left its colocated test behind is still named and still fails.
     let repo = TempRepo::new("ts-type-only-red");
     repo.write("widget.ts", TS_WIDGET);
     repo.write("widget.test.ts", TS_WIDGET_TEST);
@@ -261,8 +253,6 @@ fn the_type_only_skip_does_not_silence_a_runtime_change() {
 
 #[test]
 fn python_comment_only_edit_exits_zero() {
-    // A `#` comment reword leaves the interpreter the same program, so the colocated
-    // test still pins current behavior and the run passes unexempted.
     let repo = TempRepo::new("py-comment-only");
     repo.write(
         "widget.py",
@@ -309,8 +299,6 @@ fn typescript_comment_only_edit_exits_zero() {
 
 #[test]
 fn the_comment_only_skip_does_not_silence_a_code_change() {
-    // Two files move in one commit: the comment reword is skipped, and the source whose
-    // code changed without its test is still named and still fails.
     let repo = TempRepo::new("py-comment-only-red");
     repo.write(
         "widget.py",
@@ -348,7 +336,6 @@ fn the_comment_only_skip_does_not_silence_a_code_change() {
 
 #[test]
 fn rust_is_rejected() {
-    // Rust units are inline `#[cfg(test)]` — no sibling test to go stale.
     let repo = TempRepo::new("rust");
     repo.write("lib.rs", "pub fn f() {}\n");
     repo.commit("base");
@@ -361,8 +348,6 @@ fn rust_is_rejected() {
 
 #[test]
 fn base_still_enforces_tree_wide_presence() {
-    // `--base` adds co-change *on top of* presence. An orphan source with no
-    // colocated test is flagged even when the diff itself co-changes cleanly.
     let repo = TempRepo::new("base-presence");
     repo.write("widget.py", WIDGET_PY);
     repo.write("widget_test.py", WIDGET_PY_TEST);

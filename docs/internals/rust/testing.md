@@ -90,3 +90,9 @@ The TypeScript arm drives the bundled Node adapter: the rule spawns
 `packages/node/dist/mutation-cli.js`, whose path it receives explicitly — the integration tests
 hand `common::ts_adapter` to the SDK call, the e2e tests pass it to the spawned binary as
 `--ts-mutation-adapter`, and in production the npm launcher appends the same flag.
+
+Every throwaway git repo the suites build sets `commit.gpgsign=false`, so the suite runs on a
+machine whose global git config turns signing on. `attest` itself inherits the repo's
+`commit.gpgsign` rather than forcing it off — the `e2e_attest*` suites set it back to `true`
+against an unsatisfiable signer to pin that — so the fixture's setting is what keeps every
+*other* commit in the suite hermetic.

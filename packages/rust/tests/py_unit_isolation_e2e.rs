@@ -49,13 +49,11 @@ fn waived_exits_zero() {
     );
 }
 
-// A legacy `test_*.py` is source (not scanned), so the tree is clean
 #[test]
 fn legacy_test_prefix_exits_zero() {
     assert_eq!(isolation_exit("legacy_prefix"), 0);
 }
 
-// external & effectful-stdlib deps
 #[test]
 fn external_red_exits_nonzero() {
     assert_eq!(isolation_exit("external/red"), 1);
@@ -77,8 +75,6 @@ fn external_waived_exits_zero() {
     );
 }
 
-// A barrel test's `from . import …` names the SUT's own surface, not a
-// collaborator; a sibling-direct import (`from .core import …`) is still flagged
 #[test]
 fn barrel_clean_exits_zero() {
     assert_eq!(isolation_exit("barrel/clean"), 0);
@@ -89,8 +85,6 @@ fn barrel_red_exits_nonzero() {
     assert_eq!(isolation_exit("barrel/red"), 1);
 }
 
-// #393: a multi-symbol import is mocked only when every symbol is patched at its own
-// module path; a last-segment match against a different module does not mock it
 #[test]
 fn overmatch_red_exits_nonzero() {
     assert_eq!(isolation_exit("overmatch/red"), 1);
@@ -108,7 +102,5 @@ fn wrong_module_red_exits_nonzero() {
 
 #[test]
 fn tier_layout_suites_are_not_unit_subjects() {
-    // `<package root>/tests/` belongs to the suite tiers; the unit-suite
-    // isolation rule reports nothing there.
     assert_eq!(isolation_exit("tier_layout"), 0);
 }

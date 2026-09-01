@@ -68,10 +68,6 @@ fn git(dir: &Path, args: &[&str]) {
 
 #[test]
 fn a_plus_plus_body_line_keeps_the_files_later_changed_lines_in_scope() {
-    // A hunk that adds a `++ 1` line (rendered `+++ 1` in the diff) followed by more
-    // added lines: the parser that backs coverage and TS/Python mutation must keep
-    // those later lines attributed to `calc.py`, not divert them to a bogus key that
-    // drops them from scoping.
     let repo = TempRepo::new("plusplus");
     repo.write("calc.py", "def calc(n):\n    return n\n");
     repo.commit("base");
@@ -86,13 +82,10 @@ fn a_plus_plus_body_line_keeps_the_files_later_changed_lines_in_scope() {
     let lines = changed
         .get("calc.py")
         .unwrap_or_else(|| panic!("calc.py must be in scope; got keys {:?}", changed.keys()));
-    // The `def never_run():` (line 8) and `return 999` (line 9) come *after* the `++ 1`
-    // line — under the bug they vanish; they must stay in scope.
     assert!(
         lines.contains(&8) && lines.contains(&9),
         "the lines after the ++ line must stay in scope; got {lines:?}"
     );
-    // And no bogus single-token key ("1", from `++ 1`) leaks in.
     assert!(
         !changed.contains_key("1"),
         "the ++ body line must not create a phantom file key; got keys {:?}",
@@ -102,10 +95,6 @@ fn a_plus_plus_body_line_keeps_the_files_later_changed_lines_in_scope() {
 
 #[test]
 fn a_non_ascii_path_is_scoped_under_default_git_config() {
-    // Under git's default `core.quotepath=on`, a changed `src/föö.py` is emitted as a
-    // C-quoted `"b/src/f\303\266\303\266.py"`. `changed_lines` must decode it to the
-    // real UTF-8 key so it matches the coverage report; left quoted, every changed line
-    // in the file is silently skipped (a vacuous pass).
     let repo = TempRepo::new("nonascii");
     repo.write("src/föö.py", "def foo(n):\n    return n\n");
     repo.commit("base");
@@ -123,10 +112,6 @@ fn a_non_ascii_path_is_scoped_under_default_git_config() {
 
 #[test]
 fn co_change_scopes_a_non_ascii_modified_source() {
-    // The co-change name-status walk inherits the same quoting: a `Modified`
-    // `src/föö.py` under default config was mis-keyed (and hard-errored when read
-    // back). Editing it while leaving its colocated test must flag it stale — not
-    // error, and not silently pass.
     let repo = TempRepo::new("cochange-nonascii");
     repo.write("src/föö.py", "def foo(n):\n    return n\n");
     repo.write(

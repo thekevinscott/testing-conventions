@@ -29,16 +29,12 @@ fn stderr(output: &Output) -> String {
 
 #[test]
 fn python_minimal_line_exemption_clears_the_floor() {
-    // Only shim.py's uncovered body (lines 2-4) is exempt; core.py is fully covered, so
-    // the 100 floor passes with just those lines lifted.
     let out = run("python", "exempt_cov", "lines_py_shim_ok.toml");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
 }
 
 #[test]
 fn python_over_exemption_is_a_hard_error() {
-    // Line 1 (`def launch`) runs on import and is covered, so listing it is rejected —
-    // a line-scoped exemption may only name uncovered lines.
     let out = run("python", "exempt_cov", "lines_py_shim_over.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
     assert!(
@@ -50,7 +46,6 @@ fn python_over_exemption_is_a_hard_error() {
 
 #[test]
 fn python_under_listing_still_fails_the_floor() {
-    // Exempting only lines 2-3 leaves line 4 uncovered, so the floor still bites.
     let out = run("python", "exempt_cov", "lines_py_shim_under.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
     assert!(
@@ -62,15 +57,12 @@ fn python_under_listing_still_fails_the_floor() {
 
 #[test]
 fn rust_minimal_line_exemption_clears_the_floor() {
-    // Only src/shim.rs's uncovered `launch` region (lines 6-8) is exempt; core.rs is
-    // fully covered, so the 100 floor passes.
     let out = run("rust", "exempt_cov", "lines_rust_shim_ok.toml");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
 }
 
 #[test]
 fn rust_over_exemption_is_a_hard_error() {
-    // src/core.rs line 6 is fully covered, so listing it is rejected.
     let out = run("rust", "exempt_cov", "lines_rust_over.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
     assert!(
@@ -82,15 +74,12 @@ fn rust_over_exemption_is_a_hard_error() {
 
 #[test]
 fn typescript_minimal_line_exemption_clears_the_floor() {
-    // Only shim.ts's uncovered `launch` (lines 1-4) is exempt; core.ts is fully
-    // covered, so the 100 floor passes.
     let out = run("typescript", "exempt_cov", "lines_ts_shim_ok.toml");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
 }
 
 #[test]
 fn typescript_over_exemption_is_a_hard_error() {
-    // core.ts line 2 is fully covered, so listing it is rejected.
     let out = run("typescript", "exempt_cov", "lines_ts_over.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
     assert!(

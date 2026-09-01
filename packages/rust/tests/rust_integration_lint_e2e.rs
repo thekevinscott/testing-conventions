@@ -29,7 +29,6 @@ fn clean_exits_zero() {
     assert_eq!(lint_exit("clean"), 0);
 }
 
-// waivers
 #[test]
 fn waived_exits_zero() {
     let code = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
@@ -45,7 +44,5 @@ fn waived_exits_zero() {
 
 #[test]
 fn tier_layout_tests_crate_is_linted_from_a_src_scan() {
-    // The integration suite derives from the crate root, so the binary scanning
-    // `src/` still lints the crate's `tests/` directory.
     assert_eq!(lint_exit("derived/src"), 1);
 }

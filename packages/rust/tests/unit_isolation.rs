@@ -28,7 +28,6 @@ fn isolation_exit(fixture_name: &str) -> i32 {
 fn red_flags_unmocked_collaborators() {
     let violations =
         find_unit_violations(fixture("red")).expect("walking a readable tree should succeed");
-    // `./formatter` (first-party) and `lodash` (external) are imported but not mocked.
     assert_eq!(violations.len(), 2, "got: {violations:?}");
     assert!(violations.iter().all(|v| v.rule == "unmocked-collaborator"));
     let msgs = violations
@@ -44,7 +43,6 @@ fn red_flags_unmocked_collaborators() {
         msgs.contains("lodash"),
         "the un-mocked external collaborator must be flagged; got {msgs}"
     );
-    // The unit under test (`./widget`) and the mocked `./logger` must NOT be flagged.
     assert!(
         !msgs.contains("./widget"),
         "the unit under test must not be flagged; got {msgs}"
@@ -79,14 +77,12 @@ fn clean_exits_zero() {
 fn red_flags_untyped_mock() {
     let violations = find_unit_violations(fixture("untyped_mock/red"))
         .expect("walking a readable tree should succeed");
-    // The `lodash` mock has a factory but no `vi.importActual<…>` anchor.
     assert_eq!(violations.len(), 1, "got: {violations:?}");
     assert_eq!(violations[0].rule, "untyped-mock");
     assert!(
         violations[0].message.contains("lodash"),
         "the untyped factory mock must be flagged; got {violations:?}"
     );
-    // The typed `./formatter` mock (`importActual<typeof import(...)>`) is fine.
     assert!(
         !violations.iter().any(|v| v.message.contains("./formatter")),
         "a typed mock must not be flagged; got {violations:?}"
@@ -117,10 +113,6 @@ fn untyped_clean_exits_zero() {
 fn spy_option_mock_reports_no_violations() {
     let violations = find_unit_violations(fixture("untyped_mock/spy_clean"))
         .expect("walking a readable tree should succeed");
-    // `vi.mock(spec, { spy: true })` is Vitest's options object, not a factory —
-    // it spies on the real module and can't drift, so it must not be flagged
-    // `untyped-mock` (and the spy-mocked specifiers count as mocked, so they're
-    // not `unmocked-collaborator` either).
     assert!(
         violations.is_empty(),
         "the options-object spy mock must not be flagged; got {violations:?}"
@@ -132,13 +124,8 @@ fn spy_option_clean_exits_zero() {
     assert_eq!(isolation_exit("untyped_mock/spy_clean"), 0);
 }
 
-// ---- #393: mock specifier extension normalization ------------------------
-
 #[test]
 fn ext_normalize_clean_reports_no_violations() {
-    // Vitest resolves `./formatter` and `./formatter.js` to the same module, so a `.js`
-    // import mocked bare — and the inverse spelling — count as mocked. Neither
-    // collaborator is flagged.
     let violations = find_unit_violations(fixture("ext_normalize/clean"))
         .expect("walking a readable tree should succeed");
     assert!(
@@ -154,8 +141,5 @@ fn ext_normalize_clean_exits_zero() {
 
 #[test]
 fn tier_layout_suites_are_not_unit_subjects() {
-    // `tests/integration/flow.test.ts` deliberately runs first-party code for
-    // real. `<package root>/tests/` belongs to the suite tiers, so the
-    // unit-suite isolation rule reports nothing there.
     assert_eq!(isolation_exit("tier_layout"), 0);
 }

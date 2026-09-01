@@ -137,8 +137,6 @@ fn base_scopes_the_run_to_the_changed_function() {
         )
         .expect("cargo-mutants runs"),
     );
-    // The added `is_positive` is in the diff and assertion-light, so its mutants
-    // survive; `add` is unchanged, so it's out of scope and never mutated.
     assert!(
         count >= survivors.len(),
         "every survivor was judged, so the count covers them"
@@ -157,10 +155,6 @@ fn base_scopes_the_run_to_the_changed_function() {
 
 #[test]
 fn base_finds_survivors_in_a_subdir_crate() {
-    // The crate is a subdirectory of the git repo — the common consumer layout. The
-    // diff must be made crate-relative or cargo-mutants' `--in-diff` (which runs in the
-    // crate dir) matches nothing; with `--relative` the added weak function's mutants
-    // are found.
     let repo = TempRepo::bare("subdir-survivor");
     repo.write("crate/Cargo.toml", CARGO_TOML);
     repo.write("crate/src/lib.rs", BASELINE);
@@ -195,11 +189,6 @@ const MEMBER_CARGO_TOML: &str =
 
 #[test]
 fn base_finds_survivors_in_a_workspace_member_crate() {
-    // The crate is a member of a cargo workspace rooted at the repo root — a monorepo
-    // consumer's layout. cargo-mutants addresses files relative to the workspace root,
-    // so the `--in-diff` diff must reach the engine workspace-root-relative or every
-    // mutant is filtered out and the run passes vacuously; the survivors it finds are
-    // still reported scan-path-relative.
     let repo = TempRepo::bare("workspace-member");
     repo.write(
         "Cargo.toml",
@@ -237,12 +226,8 @@ fn base_finds_survivors_in_a_workspace_member_crate() {
 
 #[test]
 fn base_with_only_non_source_crate_changes_reports_the_engine_not_run() {
-    // The diff touches the crate, but no Rust source: a README edit holds nothing the
-    // engine could judge, so the run is skipped up front and the measurement says so —
-    // the same pre-filter the TypeScript and Python arms apply — rather than handing
-    // the engine a diff it will filter down to nothing.
     let repo = TempRepo::new("readme-only");
-    repo.write("src/lib.rs", WITH_SURVIVOR); // a would-be survivor, left unchanged
+    repo.write("src/lib.rs", WITH_SURVIVOR);
     repo.write("README.md", "before\n");
     repo.commit("baseline");
     let base = repo.head();
@@ -266,16 +251,13 @@ fn base_with_only_non_source_crate_changes_reports_the_engine_not_run() {
 
 #[test]
 fn base_with_no_changes_under_the_crate_reports_the_engine_not_run() {
-    // A PR that changes nothing under the crate (here, only a top-level note) yields an
-    // empty crate-relative diff — nothing to mutate, so the engine is skipped and the
-    // measurement says so, telling this pass apart from an all-killed run.
     let repo = TempRepo::bare("subdir-nochange");
     repo.write("crate/Cargo.toml", CARGO_TOML);
-    repo.write("crate/src/lib.rs", WITH_SURVIVOR); // a would-be survivor, left unchanged
+    repo.write("crate/src/lib.rs", WITH_SURVIVOR);
     repo.write("notes.md", "before\n");
     repo.commit("baseline");
     let base = repo.head();
-    repo.write("notes.md", "before\nafter\n"); // only a non-crate file changes
+    repo.write("notes.md", "before\nafter\n");
     repo.commit("tweak a top-level note, not the crate");
 
     let measurement = measure_rust(

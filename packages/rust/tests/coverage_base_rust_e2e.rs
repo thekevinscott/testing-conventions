@@ -201,9 +201,6 @@ fn rust_covered_change_exits_zero() {
 
 #[test]
 fn rust_a_lower_configured_floor_lets_the_same_diff_pass() {
-    // The behavior change: the diff that fails an 80 floor passes once the configured
-    // floors are 40 — the floor is the single source of truth. The config is committed
-    // so the measurement is deterministic.
     let repo = TempRepo::new("floor40");
     repo.write("testing-conventions.toml", &config_toml(40));
     let base = baseline(&repo);
@@ -219,8 +216,6 @@ fn rust_a_lower_configured_floor_lets_the_same_diff_pass() {
 
 #[test]
 fn rust_a_tiny_below_floor_diff_still_exits_nonzero() {
-    // No small-diff carve-out: a single untested module (the suite never
-    // exercises it → 0% on its lines) fails an 80 floor.
     let repo = TempRepo::new("tiny");
     repo.write("testing-conventions.toml", &config_toml(80));
     let base = baseline(&repo);

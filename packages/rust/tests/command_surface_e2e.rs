@@ -38,8 +38,6 @@ fn help_does_not_list_check() {
 
 #[test]
 fn no_subcommand_exits_zero_with_the_banner_alone() {
-    // `check` shared this dispatch arm, so pin what a bare invocation does: the
-    // version banner on stderr, nothing on stdout, exit 0.
     let (code, stdout, stderr) = cli(&[]);
     assert_eq!(code, 0);
     assert_eq!(stdout, "", "a bare run writes nothing to stdout");

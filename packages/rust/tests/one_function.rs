@@ -39,8 +39,6 @@ fn exit_with_config(language: &str, fixture_name: &str, config_name: &str) -> i3
     run(argv).expect("a readable tree should not error")
 }
 
-// Python
-
 #[test]
 fn python_red_exits_nonzero() {
     assert_eq!(exit("python", "python/red"), 1);
@@ -91,8 +89,6 @@ fn python_raised_still_flags_a_function_over_its_configured_threshold() {
         1
     );
 }
-
-// TypeScript
 
 #[test]
 fn typescript_red_exits_nonzero() {
@@ -145,13 +141,8 @@ fn typescript_raised_still_flags_a_function_over_its_configured_threshold() {
     );
 }
 
-// Rust
-
 #[test]
 fn rust_is_off_until_a_config_opts_in() {
-    // The red fixture holds two substantial functions. Python and TypeScript fail on it
-    // zero-config; Rust reports nothing, because a Rust file is a module and grouping
-    // free functions in one is the language's own unit of organization.
     assert_eq!(exit("rust", "rust/red"), 0);
 }
 
@@ -170,7 +161,6 @@ fn rust_clean_exits_zero() {
 
 #[test]
 fn rust_raised_is_unjudged_without_a_config() {
-    // Same asymmetry: no `[rust]` table, so there is no threshold to be over.
     assert_eq!(exit("rust", "rust/raised"), 0);
 }
 

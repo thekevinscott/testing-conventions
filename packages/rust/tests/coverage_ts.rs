@@ -47,8 +47,6 @@ fn above_passes_the_mid_floor() {
 
 #[test]
 fn below_fails_the_mid_floor_on_branches() {
-    // `below` has 100% lines but only ~66% branches; the mid floor's branch
-    // threshold (75) is what fails it — the whole point of measuring branches.
     let outcome = measure_typescript(&codebase("below").join("src"), MID, &[]).unwrap();
     assert!(
         matches!(&outcome, Outcome::Fail(message) if message.contains("branches")),
@@ -58,10 +56,6 @@ fn below_fails_the_mid_floor_on_branches() {
 
 #[test]
 fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
-    // `exempt_cov` sits below 100 only because of shim.ts (its `launch` is never
-    // exercised); omitting it — the `coverage`-rule exemption the CLI resolves
-    // from config — leaves core.ts, fully covered, to clear 100. Without the
-    // exemption this codebase fails the floor.
     assert_eq!(
         measure_typescript(&codebase("exempt_cov"), FULL, &["shim.ts".to_string()]).unwrap(),
         Outcome::Pass
@@ -70,9 +64,6 @@ fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
 
 #[test]
 fn a_missing_toolchain_fails_clean_without_downloading() {
-    // No `node_modules`: the coverage arm must surface a clear error via `npx
-    // --no-install` and never silently fetch vitest. Parity with the cosmic-ray /
-    // cargo-llvm-cov arms, which invoke their binary directly and fail clean when absent.
     let dir = std::env::temp_dir().join(format!("tc-ts-cov-notoolchain-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let result = measure_typescript(&dir, MID, &[]);
@@ -87,8 +78,6 @@ fn a_missing_toolchain_fails_clean_without_downloading() {
 
 #[test]
 fn a_suite_that_cannot_run_is_an_error_not_a_silent_pass() {
-    // An empty directory has no test files; vitest exits non-zero, so measuring it
-    // must error rather than report a vacuous pass.
     let empty = std::env::temp_dir().join(format!("tc-ts-empty-{}", std::process::id()));
     std::fs::create_dir_all(&empty).unwrap();
     let result = measure_typescript(&empty, MID, &[]);
@@ -98,13 +87,6 @@ fn a_suite_that_cannot_run_is_an_error_not_a_silent_pass() {
 
 #[test]
 fn a_package_root_vitest_config_governs_a_src_scan() {
-    // The standard package layout — `{package.json, vitest.config.ts, src/**, tests/**}`,
-    // scanned at `src/` — where the package-root config is load-bearing: its setup file is
-    // the only thing that covers `src/boot.ts`, and the `tests/` tier fails loudly if the
-    // run ever collects it. Pins the anchoring answer the docs state: vitest resolves the
-    // package-root config with its own upward search from the scan path (as pytest does),
-    // config-file-relative paths (the setup file) resolve beside the config, and discovery
-    // and measurement stay scoped to the scan path.
     assert_eq!(
         measure_typescript(&codebase("pkg_config").join("src"), FULL, &[]).unwrap(),
         Outcome::Pass
@@ -113,13 +95,6 @@ fn a_package_root_vitest_config_governs_a_src_scan() {
 
 #[test]
 fn consumer_coverage_thresholds_neither_decide_nor_rewrite() {
-    // A consumer config's own `coverage.thresholds` must not decide the gate's outcome,
-    // and `autoUpdate` must never rewrite the consumer's file during a gate run. The
-    // staged package pins both at once: its config demands `lines: 99` with `autoUpdate`
-    // while its sources sit at ~66% — above the gate's configured floor, below the
-    // consumer's own. The gate's floor is the only floor (Pass), and the config file is
-    // left byte-identical. Staged into a temp copy so the vitest run never touches a
-    // committed fixture.
     let staged = std::env::temp_dir().join(format!("tc-ts-cov-thresholds-{}", std::process::id()));
     let src = staged.join("src");
     std::fs::create_dir_all(&src).unwrap();
@@ -138,8 +113,6 @@ fn consumer_coverage_thresholds_neither_decide_nor_rewrite() {
         "import { defineConfig } from 'vitest/config';\n\nexport default defineConfig({\n  test: {\n    setupFiles: ['./vitest.setup.ts'],\n    coverage: {\n      thresholds: { lines: 99, autoUpdate: true },\n    },\n  },\n});\n",
     )
     .unwrap();
-    // Uncovered source drags the measurement below the consumer's 99 (and keeps it above
-    // the gate's floor below).
     std::fs::write(
         src.join("extra.ts"),
         "export function unused(n: number): string {\n  if (n > 0) return 'positive';\n  return 'other';\n}\n",
@@ -177,12 +150,6 @@ fn consumer_coverage_thresholds_neither_decide_nor_rewrite() {
 
 #[test]
 fn a_package_root_config_file_is_not_counted_as_uncovered_source() {
-    // `full_with_config/` is fully tested (identical to `full/`) but also
-    // carries its own `vitest.config.ts` — the shape a per-package monorepo
-    // `uses:` call produces (`path` names the whole package root, not just
-    // `src/`). vitest's own default excludes already keep config files out of
-    // the coverage denominator; the rule must not clobber those defaults with
-    // its own `--coverage.exclude` flags.
     assert_eq!(
         measure_typescript(&codebase("full_with_config"), FULL, &[]).unwrap(),
         Outcome::Pass

@@ -23,9 +23,6 @@ impl TempRepo {
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
-        // Throwaway repos never sign — keep the suite hermetic regardless of the
-        // machine's global `commit.gpgsign`, now that `attest` inherits it instead
-        // of forcing it off.
         git(&root, &["config", "commit.gpgsign", "false"]);
         std::fs::write(root.join("README.md"), "seed\n").unwrap();
         git(&root, &["add", "."]);
@@ -93,21 +90,17 @@ fn attest_records_the_run_writes_the_receipt_and_commits_it() {
 
     let att = attest(&repo.0, "true").expect("attest should succeed");
 
-    // Records the run against the current code commit and branch.
     assert_eq!(att.command, "true");
     assert_eq!(att.exit_code, 0);
     assert_eq!(att.commit, code_commit);
     assert_eq!(att.branch, BRANCH);
 
-    // Writes the branch's receipt, and the on-disk contents match the return.
     let path = repo.0.join(RECEIPT);
     assert!(path.is_file(), "the receipt should be written");
     let on_disk: Attestation =
         serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(on_disk, att);
 
-    // Commits it on top: HEAD advanced and its parent is the code commit, so the
-    // receipt rides as the commit naming the code beneath it.
     let new_head = repo.head();
     assert_ne!(new_head, code_commit, "attest should create a commit");
     assert_eq!(
@@ -129,9 +122,6 @@ fn attest_runs_the_command() {
 
 #[test]
 fn attest_reports_a_failing_run_and_writes_no_receipt() {
-    // A receipt is a passing run's record, so a failing command produces none:
-    // the caller reads the failure off the returned exit code, and the tree is
-    // exactly as it was.
     let repo = TempRepo::new();
     let code_commit = repo.head();
 
@@ -152,9 +142,6 @@ fn attest_reports_a_failing_run_and_writes_no_receipt() {
 
 #[test]
 fn attest_leaves_the_branchs_earlier_receipt_intact_when_the_command_fails() {
-    // A failing re-attest returns before the write, so it does not overwrite the
-    // receipt an earlier passing run committed — a failure costs the branch
-    // nothing it had already earned.
     let repo = TempRepo::new();
     attest(&repo.0, "true").expect("the passing attest should succeed");
     let recorded = std::fs::read_to_string(repo.0.join(RECEIPT)).unwrap();
@@ -172,7 +159,6 @@ fn attest_leaves_the_branchs_earlier_receipt_intact_when_the_command_fails() {
 
 #[test]
 fn attest_runs_the_command_even_when_it_fails() {
-    // Skipping the receipt is not skipping the run: the command still executes.
     let repo = TempRepo::new();
     attest(&repo.0, "echo ran > marker; exit 1").expect("attest itself should still succeed");
     assert!(
@@ -183,11 +169,6 @@ fn attest_runs_the_command_even_when_it_fails() {
 
 #[test]
 fn attest_leaves_the_retired_single_file_attestation_alone() {
-    // Collecting it deleted a file in the same commit that adds this branch's
-    // receipt — the same delete/add pairing rename detection turns into a
-    // rename, so two branches upgrading in parallel renamed the legacy file to
-    // two names and conflicted. It is inert where it sits: never read as a
-    // receipt, never counted as scoped source. Sweeping it is the repo's call.
     let repo = TempRepo::new();
     std::fs::write(repo.0.join("e2e-attestation.json"), "{}\n").unwrap();
     git(&repo.0, &["add", "e2e-attestation.json"]);
@@ -214,7 +195,6 @@ fn attest_leaves_the_retired_single_file_attestation_alone() {
 
 #[test]
 fn attest_errors_outside_a_git_repo() {
-    // No git repo → no HEAD to attest against → a clear error, not a panic.
     let dir = std::env::temp_dir().join(format!(
         "tc-e2e-attest-nogit-{}-{}",
         std::process::id(),
@@ -231,12 +211,6 @@ fn attest_errors_outside_a_git_repo() {
 
 #[test]
 fn attest_honors_repo_commit_signing() {
-    // The nudge targets locked-down repos — exactly the ones whose branch
-    // protection requires *verified* signatures. So `attest` must honor the repo's
-    // `commit.gpgsign` instead of forcing it off: an unsigned receipt commit
-    // can't land there. With signing required but unsatisfiable, honoring the
-    // policy means the commit (and so `attest`) fails loudly; a forced
-    // `commit.gpgsign=false` instead skips signing and wrongly succeeds.
     let repo = TempRepo::new();
     require_unsatisfiable_signing(&repo.0);
 
@@ -251,11 +225,6 @@ fn attest_honors_repo_commit_signing() {
 
 #[test]
 fn attest_leaves_another_branchs_receipt_in_place() {
-    // Deleting a sibling's receipt pairs the delete with this branch's add, and
-    // git's rename detection turns that pair into a rename whenever the two
-    // receipts look alike — which they do, because the `command` field is
-    // usually byte-identical across a repo's branches. Two branches off one
-    // parent then rename the same source and the merge conflicts.
     let repo = TempRepo::new();
     let foreign = repo.0.join(RECEIPTS_DIR).join("some-other-branch.json");
     std::fs::create_dir_all(foreign.parent().unwrap()).unwrap();
@@ -288,6 +257,5 @@ fn attest_leaves_another_branchs_receipt_in_place() {
 
 #[test]
 fn receipts_dir_is_the_public_location() {
-    // The committed path is the public contract scripts rely on.
     assert_eq!(RECEIPTS_DIR, "e2e-attestations");
 }

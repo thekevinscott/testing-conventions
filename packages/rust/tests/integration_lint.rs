@@ -79,7 +79,6 @@ fn monkeypatch_clean_exits_zero() {
 
 #[test]
 fn monkeypatch_waived_exits_zero() {
-    // Same monkeypatch use as the red fixture, but the file is waived in the config.
     assert_eq!(
         lint_exit_with_config(
             "monkeypatch/waived",
@@ -135,7 +134,6 @@ fn inline_patch_clean_exits_zero() {
 
 #[test]
 fn inline_patch_waived_exits_zero() {
-    // Same inline `with patch(...)` as the red fixture, but the file is waived.
     assert_eq!(
         lint_exit_with_config(
             "inline_patch/waived",
@@ -205,7 +203,6 @@ fn environ_clean_exits_zero() {
 
 #[test]
 fn environ_waived_exits_zero() {
-    // Same os.environ mutation as the red fixture, but the file is waived.
     assert_eq!(
         lint_exit_with_config("environ/waived", "environ/waived/testing-conventions.toml"),
         0
@@ -239,7 +236,6 @@ fn constant_patch_red_exits_nonzero() {
 
 #[test]
 fn constant_patch_waived_exits_zero() {
-    // Same patch as the red fixture, but the file is waived in the config.
     assert_eq!(
         lint_exit_with_config(
             "constant_patch/waived",
@@ -285,7 +281,6 @@ fn first_party_patch_clean_exits_zero() {
 
 #[test]
 fn first_party_patch_waived_exits_zero() {
-    // Same first-party patch as the red fixture, but the file is waived in the config.
     assert_eq!(
         lint_exit_with_config(
             "no_first_party_patch/waived",
@@ -297,9 +292,6 @@ fn first_party_patch_waived_exits_zero() {
 
 #[test]
 fn legacy_test_prefix_is_not_scanned() {
-    // A unit test is `*_test.py` and a legacy `test_*.py` is ordinary source. The
-    // integration lints must agree: this `test_widget.py` carries a
-    // `no-monkeypatch` violation, but it is source — so nothing is reported.
     let violations =
         find_violations(fixture("legacy_prefix")).expect("walking a readable tree should succeed");
     assert!(
@@ -316,7 +308,6 @@ fn legacy_test_prefix_exits_zero() {
 
 #[test]
 fn integration_lint_requires_language() {
-    // Omitting `--language` is a usage error, never a silent `python` run.
     let err = run_cli(&["integration", "lint", "src"]).expect_err("--language is required");
     let clap_err = err
         .downcast_ref::<clap::Error>()
@@ -326,10 +317,6 @@ fn integration_lint_requires_language() {
         clap::error::ErrorKind::MissingRequiredArgument
     );
 }
-
-// The suite tiers derive from the package root — the nearest `pyproject.toml` at
-// or above the scanned `path` — so a call whose `path` is the package's source
-// directory still lints the sibling `tests/integration/` and `tests/e2e/` suites.
 
 #[test]
 fn tier_layout_integration_suite_is_linted_from_a_src_scan() {
@@ -343,8 +330,6 @@ fn tier_layout_e2e_suite_is_linted_from_a_src_scan() {
 
 #[test]
 fn tier_layout_test_outside_a_standard_tier_is_flagged() {
-    // `tests/loose_test.py` sits under the package's `tests/` but in neither
-    // `tests/integration/` nor `tests/e2e/` — the `unknown-tier` violation.
     assert_eq!(lint_exit("tier_layout/unknown_tier/src"), 1);
 }
 

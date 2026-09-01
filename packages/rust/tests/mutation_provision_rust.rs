@@ -18,13 +18,11 @@ fn unit_mutation_exit() -> i32 {
 
 #[test]
 fn provisions_the_engine_and_reuses_it() {
-    // First run provisions cargo-mutants (no ambient engine); the clean crate clears the gate.
     assert_eq!(
         unit_mutation_exit(),
         0,
         "the tool should provision cargo-mutants and run the gate"
     );
-    // Second run finds the provisioned binary in the cache and reuses it — same clean result.
     assert_eq!(
         unit_mutation_exit(),
         0,

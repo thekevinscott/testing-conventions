@@ -23,8 +23,6 @@ impl TempRepo {
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
-        // Throwaway repos never sign — keep the suite hermetic regardless of the
-        // machine's global `commit.gpgsign`.
         git(&root, &["config", "commit.gpgsign", "false"]);
         std::fs::write(root.join("README.md"), "seed\n").unwrap();
         git(&root, &["add", "."]);
@@ -74,8 +72,6 @@ fn rev_parse(dir: &Path, rev: &str) -> String {
     String::from_utf8(out.stdout).unwrap().trim().to_string()
 }
 
-// --- without --base: receipt presence, discovered at `path` ---
-
 #[test]
 fn verify_passes_on_a_committed_receipt() {
     let repo = TempRepo::new();
@@ -97,8 +93,6 @@ fn verify_fails_when_no_receipt_is_present() {
 
 #[test]
 fn verify_presence_is_indifferent_to_later_code_commits() {
-    // No base means no branch diff to read: a receipt stays a receipt however
-    // much the tree moves afterward.
     let repo = TempRepo::new();
     attest(&repo.0, "true").expect("attest should succeed");
     repo.commit_code("widget.rs", "pub fn widget() {}\n");
@@ -114,15 +108,11 @@ fn verify_scopes_discovery_to_a_package_subdirectory() {
     let package = repo.0.join("packages/widget");
     std::fs::create_dir_all(&package).unwrap();
     repo.commit_code("packages/widget/widget.rs", "pub fn widget() {}\n");
-    // Attest inside the subdirectory: the receipt is written and committed
-    // relative to `package`, not the repo root.
     attest(&package, "true").expect("attest should succeed");
     assert_eq!(
         verify(&package).expect("verify should succeed"),
         Verification::Fresh,
     );
-    // The repo root itself carries no receipts — verifying it is Missing,
-    // proving discovery is scoped to the given directory, not the checkout root.
     assert_eq!(
         verify(&repo.0).expect("verify should succeed"),
         Verification::Missing,
@@ -140,12 +130,8 @@ fn verify_scopes_missing_to_a_package_subdirectory() {
     );
 }
 
-// --- entry-point equivalences ---
-
 #[test]
 fn verify_scoped_with_scope_equal_to_repo_matches_verify() {
-    // `verify_scoped(repo, repo)` is `verify`'s exact definition — a direct
-    // regression guard that the two stay in sync.
     let repo = TempRepo::new();
     attest(&repo.0, "true").expect("attest should succeed");
     assert_eq!(
@@ -156,8 +142,6 @@ fn verify_scoped_with_scope_equal_to_repo_matches_verify() {
 
 #[test]
 fn verify_extra_scoped_with_no_extra_roots_matches_verify_since() {
-    // No extra roots (and no excludes) is byte-identical to `verify_since` — a
-    // package declaring nothing scopes the diff to `--scope` alone.
     let repo = TempRepo::new();
     let package = repo.0.join("packages/widget");
     std::fs::create_dir_all(package.join("src")).unwrap();
@@ -176,13 +160,8 @@ fn verify_extra_scoped_with_no_extra_roots_matches_verify_since() {
     );
 }
 
-// --- with --base: the branch's own diff decides (library surface; the full
-// --- matrix is pinned in e2e_receipts.rs) ---
-
 #[test]
 fn verify_since_passes_when_the_branch_left_the_scoped_source_untouched() {
-    // The unrelated-PR case: the branch touches a *different* package, so it
-    // owes the scoped package no decision — however old its receipt is.
     let repo = TempRepo::new();
     let package = repo.0.join("packages/widget");
     std::fs::create_dir_all(package.join("src")).unwrap();
@@ -239,16 +218,8 @@ fn verify_since_passes_when_the_branch_attested_its_scoped_change() {
     );
 }
 
-// --- extra scopes: a shared source tree beside the package joins the scoped
-// --- diff, with feature-gated subtrees carved back out ---
-
 #[test]
 fn verify_extra_scoped_flags_a_change_under_an_extra_root() {
-    // The dirsql shape: a binding package whose e2e artifact is compiled from a
-    // shared core in a *sibling* tree. A core-only PR leaves the binding's own
-    // diff empty — so `--base` alone would pass it — yet the binding's e2e is
-    // exactly what the change puts at risk. Declaring the core as an extra
-    // scope makes the change owe the binding a decision.
     let repo = TempRepo::new();
     let package = repo.0.join("packages/python");
     std::fs::create_dir_all(package.join("src")).unwrap();
@@ -256,11 +227,8 @@ fn verify_extra_scoped_flags_a_change_under_an_extra_root() {
     repo.commit_code("packages/rust/src/core.rs", "pub fn core() {}\n");
     attest(&package, "true").expect("attest should succeed");
     let base = rev_parse(&repo.0, "HEAD");
-    // The PR touches only the shared core — outside the binding's own subtree.
     repo.commit_code("packages/rust/src/core.rs", "pub fn core() { /* v2 */ }\n");
 
-    // Sanity: without the extra root, the binding's own diff is empty and the
-    // branch passes — exactly the gap the extra scope closes.
     assert_eq!(
         verify_since(&package, &package, Some(&base)).unwrap(),
         Verification::Fresh,
@@ -296,9 +264,6 @@ fn verify_extra_scoped_passes_once_the_extra_root_change_is_attested() {
 
 #[test]
 fn verify_extra_scoped_ignores_a_change_under_an_excluded_subtree() {
-    // The feature-gated carve-out: `packages/rust/src/cli` is compiled out of the
-    // binding, so a cli-only core change owes it nothing, even though cli lives
-    // under the declared extra root.
     let repo = TempRepo::new();
     let package = repo.0.join("packages/python");
     std::fs::create_dir_all(package.join("src")).unwrap();
@@ -319,8 +284,6 @@ fn verify_extra_scoped_ignores_a_change_under_an_excluded_subtree() {
         "a change only under an excluded subtree owes no decision",
     );
 }
-
-// --- the `run()` CLI surface ---
 
 /// `testing-conventions e2e verify …` exit code, dispatched in-process.
 fn e2e_verify_cli(path: &Path, flags: &[(&str, &str)]) -> anyhow::Result<i32> {
@@ -367,10 +330,6 @@ fn cli_verify_with_path_argument_fails_when_missing() {
 
 #[test]
 fn cli_verify_with_no_argument_defaults_to_the_current_directory() {
-    // `run()` dispatches in-process, so cwd here really is the test binary's own
-    // working directory (the crate root) — asserting that the no-arg form still
-    // parses and dispatches is the regression this locks down; the crate root
-    // carries no receipts, so the outcome is `1` (Missing).
     let argv: Vec<OsString> = vec!["testing-conventions".into(), "e2e".into(), "verify".into()];
     let code = run(argv).expect("`e2e verify` with no argument should still dispatch");
     assert_eq!(code, 1);
@@ -378,9 +337,6 @@ fn cli_verify_with_no_argument_defaults_to_the_current_directory() {
 
 #[test]
 fn cli_verify_with_base_and_scope_ignores_a_change_outside_the_scope() {
-    // The reusable e2e-verify job's shape: `e2e verify <path> --scope <dir>
-    // --base <ref>`. A commit touching only the package's `tests/` — outside the
-    // caller's scoped `src/` — owes no decision.
     let repo = TempRepo::new();
     let package = repo.0.join("packages/widget");
     std::fs::create_dir_all(package.join("src")).unwrap();
@@ -478,10 +434,6 @@ fn cli_verify_with_extra_scope_passes_on_an_excluded_change() {
     );
 }
 
-// --- #391: a `--scope` (or `--extra-scope`) that resolves to no tracked path is
-// rejected loudly instead of silently diffing nothing — a diff over nothing is
-// always empty, so a branch that changed real source would pass forever.
-
 #[test]
 fn verify_since_errors_on_a_scope_below_path_that_matches_no_tracked_path() {
     let repo = TempRepo::new();
@@ -524,9 +476,6 @@ fn verify_since_errors_on_a_scope_outside_the_repo() {
 
 #[test]
 fn verify_extra_scoped_errors_on_an_extra_root_that_matches_no_tracked_path() {
-    // A typo'd `--extra-scope` (the shared core's path misspelled) would silently
-    // drop out of the scoped diff, so a core change never owes the binding a
-    // decision — it must error instead.
     let repo = TempRepo::new();
     let package = repo.0.join("packages/python");
     std::fs::create_dir_all(package.join("src")).unwrap();
@@ -534,8 +483,6 @@ fn verify_extra_scoped_errors_on_an_extra_root_that_matches_no_tracked_path() {
     attest(&package, "true").expect("attest should succeed");
     let base = rev_parse(&repo.0, "HEAD");
 
-    // `packages/rust/src` is never created — a repo-root-relative root matching
-    // no tracked path.
     let extra = [PathBuf::from("packages/rust/src")];
     let err = verify_extra_scoped(&package, &package, Some(&base), &extra, &[])
         .expect_err("an --extra-scope matching no tracked path must error");
@@ -547,8 +494,6 @@ fn verify_extra_scoped_errors_on_an_extra_root_that_matches_no_tracked_path() {
 
 #[test]
 fn verify_since_still_fails_for_a_valid_descendant_scope_with_no_receipt() {
-    // Guard the other direction: validation must not over-reject. A real
-    // descendant scope whose source the branch changed still demands a receipt.
     let repo = TempRepo::new();
     let package = repo.0.join("packages/widget");
     std::fs::create_dir_all(package.join("src")).unwrap();

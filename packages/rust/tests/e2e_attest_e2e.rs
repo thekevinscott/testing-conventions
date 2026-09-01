@@ -21,9 +21,6 @@ impl TempRepo {
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
-        // Throwaway repos never sign — keep the suite hermetic regardless of the
-        // machine's global `commit.gpgsign`, now that `attest` inherits it instead
-        // of forcing it off.
         git(&root, &["config", "commit.gpgsign", "false"]);
         std::fs::write(root.join("README.md"), "seed\n").unwrap();
         git(&root, &["add", "."]);
@@ -117,8 +114,6 @@ fn attest_exits_zero_and_commits_the_receipt() {
 
 #[test]
 fn attest_propagates_the_commands_exit_code_and_commits_nothing() {
-    // The failure a caller must see: a red e2e run exits red, and leaves no
-    // committed receipt to push as a passing one.
     let repo = TempRepo::new();
     let code_commit = repo.head();
 
@@ -138,12 +133,6 @@ fn attest_propagates_the_commands_exit_code_and_commits_nothing() {
 
 #[test]
 fn attest_commits_only_an_add_and_keeps_another_branchs_receipt() {
-    // The shape of the commit is the whole fix: a delete paired with this
-    // branch's add is what git's rename detection turns into a rename, and two
-    // branches off one parent renaming the same source is an unresolvable
-    // rename/rename conflict. A pure add has nothing to pair with.
-    // Both deletes `attest` used to make are seeded: a sibling branch's receipt
-    // and the retired single-file attestation.
     let repo = TempRepo::new();
     let foreign = repo.0.join("e2e-attestations/some-other-branch.json");
     std::fs::create_dir_all(foreign.parent().unwrap()).unwrap();
@@ -188,10 +177,6 @@ fn attest_commits_only_an_add_and_keeps_another_branchs_receipt() {
 
 #[test]
 fn attest_fails_when_required_signing_cannot_be_satisfied() {
-    // E2E mirror of the integration check: a repo that requires signed commits but
-    // whose signer is unsatisfiable. Honoring `commit.gpgsign` (no forced-off) means
-    // the receipt commit is attempted and fails, so the binary exits non-zero —
-    // rather than silently committing unsigned and exiting 0.
     let repo = TempRepo::new();
     require_unsatisfiable_signing(&repo.0);
 

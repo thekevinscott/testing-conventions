@@ -29,9 +29,6 @@ fn stderr(output: &Output) -> String {
 
 #[test]
 fn an_uncalled_function_fails_a_functions_floor() {
-    // `funcs`'s `triple` is never called: functions coverage is 2/3 while lines
-    // clear the low line floor, so the functions floor is the failing metric —
-    // a threshold shortfall, never a config error.
     let out = run("funcs", "rust_functions_full.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
     assert!(
@@ -43,20 +40,14 @@ fn an_uncalled_function_fails_a_functions_floor() {
 
 #[test]
 fn the_same_functions_coverage_clears_a_lower_floor() {
-    // 2/3 functions covered clears a 60 floor — the floor is a real,
-    // configurable knob.
     let out = run("funcs", "rust_functions_mid.toml");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
 }
 
 #[test]
 fn the_branch_floor_gates_the_measured_branches() {
-    // `branchy`'s inline test takes one of the branch's two outcomes: branch
-    // coverage is 50%, so a 100 floor fails on the measured number while a 50
-    // floor clears — the floor is a real, configurable knob. One test drives
-    // both runs sequentially: the fixture's pinned nightly is auto-installed by
-    // rustup on first use, and two tests hitting that first install
-    // concurrently race and corrupt each other's downloads.
+    // One test drives both runs: rustup installs the fixture's pinned nightly on first use,
+    // and two tests racing that install corrupt each other's downloads.
     let out = run("branchy", "rust_branch_full.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
     assert!(
@@ -71,9 +62,6 @@ fn the_branch_floor_gates_the_measured_branches() {
 
 #[test]
 fn a_branch_floor_on_a_stable_toolchain_names_the_nightly_requirement() {
-    // `below` carries no toolchain pin, so the run uses the repo's stable
-    // toolchain, where `--branch` cannot instrument — the run errors and the
-    // message names the nightly requirement instead of reporting a floor pass.
     let out = run("below", "rust_branch_full.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
     assert!(

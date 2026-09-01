@@ -29,19 +29,12 @@ fn stderr(output: &Output) -> String {
 
 #[test]
 fn a_covered_feature_gated_module_clears_the_floor() {
-    // `gated`'s `boost` module is fully covered by its inline test; with the
-    // `boost` feature enabled from config, the whole crate is measured and the
-    // 100 floor passes.
     let out = run("gated", "rust_features_full.toml");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
 }
 
 #[test]
 fn an_untested_feature_gated_module_fails_the_floor() {
-    // `gated_untested`'s `boost` module carries no tests; with the feature
-    // enabled from config, its uncovered regions and lines are measured and the
-    // 100 floor fails — the floor's verdict, so the failure is a threshold
-    // shortfall, never a config or invocation error.
     let out = run("gated_untested", "rust_features_full.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
     assert!(

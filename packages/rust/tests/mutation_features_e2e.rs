@@ -11,9 +11,6 @@ fn fixtures() -> PathBuf {
 
 #[test]
 fn a_feature_gated_module_with_killing_tests_passes_the_gate() {
-    // Every mutant in `gated_killed` — the plain `core` and the feature-gated
-    // `boost` — is caught by its colocated test once the `boost` feature is
-    // enabled from config, so the crate clears the gate.
     let status = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "rust", "--config"])
         .arg(fixtures().join("rust_features.toml"))
@@ -25,13 +22,6 @@ fn a_feature_gated_module_with_killing_tests_passes_the_gate() {
 
 #[test]
 fn a_feature_gated_integration_test_target_builds_and_the_gate_passes() {
-    // `gated_ws/member` is a workspace-member crate whose *integration* test names the
-    // feature-gated module — the reported consumer layout. cargo builds a crate's test
-    // targets before running them, so the feature has to reach the build phase: a
-    // selection that lands only on `cargo test` leaves the unmutated baseline
-    // uncompilable, and cargo-mutants judges nothing. With the feature enabled the
-    // integration test builds and kills every mutant of the gated module, so the crate
-    // clears the gate with a non-zero tested count.
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "rust", "--config"])
         .arg(fixtures().join("rust_features.toml"))
@@ -53,10 +43,6 @@ fn a_feature_gated_integration_test_target_builds_and_the_gate_passes() {
 
 #[test]
 fn a_baseline_that_cannot_build_fails_loudly() {
-    // The same crate scanned with no feature list: `tests/boost.rs` names an item that is
-    // compiled out, the unmutated baseline never builds, and no mutant is judged. The run
-    // fails and says so — a `0 mutant(s) tested` pass would read exactly like an
-    // all-killed one.
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "rust"])
         .arg(fixtures().join("rust").join("gated_ws").join("member"))

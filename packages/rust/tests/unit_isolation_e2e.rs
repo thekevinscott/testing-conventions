@@ -29,7 +29,6 @@ fn clean_exits_zero() {
     assert_eq!(isolation_exit("clean"), 0);
 }
 
-// typed `vi.mock`
 #[test]
 fn untyped_red_exits_nonzero() {
     assert_eq!(isolation_exit("untyped_mock/red"), 1);
@@ -40,14 +39,11 @@ fn untyped_clean_exits_zero() {
     assert_eq!(isolation_exit("untyped_mock/clean"), 0);
 }
 
-// Vitest options-object mock (`{ spy: true }`) — not a factory, must pass.
 #[test]
 fn spy_option_clean_exits_zero() {
     assert_eq!(isolation_exit("untyped_mock/spy_clean"), 0);
 }
 
-// #393: a `.js` import mocked bare (and the inverse) resolves to the same module, so
-// the collaborator is mocked and the tree passes.
 #[test]
 fn ext_normalize_clean_exits_zero() {
     assert_eq!(isolation_exit("ext_normalize/clean"), 0);
@@ -55,7 +51,5 @@ fn ext_normalize_clean_exits_zero() {
 
 #[test]
 fn tier_layout_suites_are_not_unit_subjects() {
-    // `<package root>/tests/` belongs to the suite tiers; the unit-suite
-    // isolation rule reports nothing there.
     assert_eq!(isolation_exit("tier_layout"), 0);
 }

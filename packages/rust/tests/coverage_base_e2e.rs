@@ -184,8 +184,6 @@ def test_widget():
 
 #[test]
 fn a_lower_configured_floor_lets_the_same_diff_pass() {
-    // The behavior change: the 75% diff that fails the default floor passes once
-    // the configured floor is 70 — the floor is the single source of truth.
     let repo = TempRepo::new("floor70");
     repo.write(
         "testing-conventions.toml",
@@ -205,8 +203,6 @@ fn a_lower_configured_floor_lets_the_same_diff_pass() {
 
 #[test]
 fn a_tiny_below_floor_diff_still_exits_nonzero() {
-    // No small-diff carve-out: a single untested helper (50% on a two-line
-    // diff) fails the default floor.
     let repo = TempRepo::new("tiny");
     let base = baseline(&repo);
     repo.write(
@@ -224,11 +220,6 @@ fn a_tiny_below_floor_diff_still_exits_nonzero() {
 
 #[test]
 fn a_plus_plus_line_keeps_the_uncovered_change_in_scope() {
-    // #392: an added line `++ 1` renders as `+++ 1` in the unified diff. It must be
-    // read as hunk body, not as a `+++` file header — otherwise the file's later added
-    // lines (here an untested `never_run`) are diverted to a bogus key, dropped from
-    // scoping, and the below-floor change passes as a false green. With the fix, the
-    // uncovered `return 999` stays in scope and the diff fails the default 100 floor.
     let repo = TempRepo::new("plusplus");
     repo.write("pyproject.toml", PYPROJECT);
     repo.write("src/calc.py", "def calc(n):\n    return n\n");

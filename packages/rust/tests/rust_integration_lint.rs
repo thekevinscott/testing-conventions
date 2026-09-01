@@ -56,7 +56,6 @@ fn clean_exits_zero() {
 
 #[test]
 fn waived_first_party_double_exits_zero() {
-    // The first-party double in `waived/` is lifted by its testing-conventions.toml.
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),
         "integration".into(),
@@ -72,8 +71,5 @@ fn waived_first_party_double_exits_zero() {
 
 #[test]
 fn tier_layout_tests_crate_is_linted_from_a_src_scan() {
-    // The integration suite derives from the crate root — the nearest
-    // `Cargo.toml` at or above the scanned `path` — so scanning `src/` still
-    // lints the crate's `tests/` directory (cargo's own suite layout).
     assert_eq!(lint_exit("derived/src"), 1);
 }

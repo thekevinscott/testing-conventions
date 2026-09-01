@@ -51,8 +51,6 @@ fn stdout(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).expect("stdout should be UTF-8")
 }
 
-// Python
-
 #[test]
 fn python_red_exits_nonzero() {
     assert_eq!(code(&run("python", "python/red")), 1);
@@ -141,8 +139,6 @@ fn python_waived_exits_zero() {
     );
 }
 
-// TypeScript
-
 #[test]
 fn typescript_red_exits_nonzero() {
     assert_eq!(code(&run("typescript", "typescript/red")), 1);
@@ -211,8 +207,6 @@ fn typescript_waived_exits_zero() {
         0
     );
 }
-
-// Rust
 
 #[test]
 fn rust_is_off_until_a_config_opts_in() {

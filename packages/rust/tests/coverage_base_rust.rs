@@ -213,8 +213,6 @@ fn baseline(repo: &TempRepo) -> String {
 
 #[test]
 fn rust_a_diff_below_the_floor_fails() {
-    // The core red case: the known-ratio diff (regions/lines 50%) is below an 80
-    // floor, so `--base` fails it — even though the whole tree is still well covered.
     let repo = TempRepo::new("below");
     let base = baseline(&repo);
     repo.write("src/lib.rs", WIDGET_RS_UNCOVERED);
@@ -228,9 +226,6 @@ fn rust_a_diff_below_the_floor_fails() {
 
 #[test]
 fn rust_the_same_diff_clears_a_lower_floor() {
-    // The behavior change from the implicit-100% patch-coverage: the SAME diff, with
-    // its uncovered arm, PASSES once the configured floor is 40 — the changed lines
-    // are judged against the number you set, not against 100%.
     let repo = TempRepo::new("clears");
     let base = baseline(&repo);
     repo.write("src/lib.rs", WIDGET_RS_UNCOVERED);
@@ -245,8 +240,6 @@ fn rust_the_same_diff_clears_a_lower_floor() {
 
 #[test]
 fn rust_a_fully_covered_change_passes() {
-    // Editing a line the suite already exercises keeps the diff at 100% → any floor
-    // is met.
     let repo = TempRepo::new("covered");
     let base = baseline(&repo);
     repo.write("src/lib.rs", WIDGET_RS_COVERED_EDIT);
@@ -257,9 +250,6 @@ fn rust_a_fully_covered_change_passes() {
 
 #[test]
 fn rust_a_tiny_below_floor_diff_is_not_exempted() {
-    // There is no small-diff carve-out. A single untested helper
-    // (a brand-new module the suite never exercises → 0% on its few lines) fails the
-    // 80 floor just like a large diff would.
     let repo = TempRepo::new("tiny");
     let base = baseline(&repo);
     repo.write("src/lib.rs", &format!("{WIDGET_RS}pub mod lonely;\n"));
@@ -274,8 +264,6 @@ fn rust_a_tiny_below_floor_diff_is_not_exempted() {
 
 #[test]
 fn rust_a_change_touching_no_rust_passes() {
-    // A diff with no `.rs` source has no changed line to measure — vacuously passes
-    // (the suite isn't even run), at any floor.
     let repo = TempRepo::new("no-rs");
     repo.write("src/lib.rs", WIDGET_RS);
     repo.write("README.md", "# project\n");
@@ -289,7 +277,6 @@ fn rust_a_change_touching_no_rust_passes() {
 
 #[test]
 fn rust_an_unknown_base_ref_is_an_error() {
-    // A base that can't be resolved must surface, never silently pass as "clean".
     let repo = TempRepo::new("bad-base");
     let _ = baseline(&repo);
     assert!(
@@ -308,9 +295,6 @@ fn rust_an_unknown_base_ref_is_an_error() {
 
 #[test]
 fn rust_cli_exits_nonzero_on_a_below_floor_diff() {
-    // The case commits an 80 `[rust.coverage]` table — a known floor the diff is
-    // calibrated to, not the zero-config default (`lines = 100`, regions off); the
-    // known-ratio diff (regions/lines 50%) is below it → exit 1.
     let repo = TempRepo::new("cli-red");
     repo.write("testing-conventions.toml", &config_toml(80));
     let base = baseline(&repo);
@@ -339,9 +323,6 @@ fn rust_cli_exits_zero_when_the_diff_clears_the_floor() {
 
 #[test]
 fn rust_cli_a_lower_configured_floor_lets_the_same_diff_pass() {
-    // A `[rust.coverage]` table at 40 re-scopes the floor: the known-ratio diff that
-    // fails an 80 floor now passes — the floor is the single source of truth, whole-
-    // tree or diff. The config is committed so the measurement is deterministic.
     let repo = TempRepo::new("cli-floor40");
     repo.write("testing-conventions.toml", &config_toml(40));
     let base = baseline(&repo);
@@ -356,8 +337,6 @@ fn rust_cli_a_lower_configured_floor_lets_the_same_diff_pass() {
 
 #[test]
 fn rust_cli_a_docs_only_diff_passes() {
-    // A diff that touches no Rust source passes at any configured floor — the suite
-    // isn't run, so the changed (non-Rust) lines are vacuously covered.
     let repo = TempRepo::new("cli-docs");
     repo.write("testing-conventions.toml", &config_toml(80));
     repo.write("src/lib.rs", WIDGET_RS);
@@ -375,9 +354,6 @@ fn rust_cli_a_docs_only_diff_passes() {
 
 #[test]
 fn rust_a_coverage_exemption_lifts_a_below_floor_change() {
-    // A `coverage` exemption drops a file from the run, so its changed lines drop out
-    // of the diff ratios — the same waiver the whole-tree floor honors. The
-    // config carries both the 80 floor and the exemption.
     let repo = TempRepo::new("exempt");
     repo.write(
         "testing-conventions.toml",
@@ -393,7 +369,6 @@ fn rust_a_coverage_exemption_lifts_a_below_floor_change() {
     repo.write("src/shim.rs", "pub fn shim() -> i64 {\n    1\n}\n");
     repo.commit("edit the untested launcher");
 
-    // Below the floor with the floor-only config (no exemption)…
     let floor_only = TempRepo::new("exempt-floor-only");
     floor_only.write("testing-conventions.toml", &config_toml(80));
     floor_only.write("src/lib.rs", &format!("{WIDGET_RS}pub mod shim;\n"));
@@ -413,7 +388,6 @@ fn rust_a_coverage_exemption_lifts_a_below_floor_change() {
         "the untested shim edit is below the 80 floor without the exemption"
     );
 
-    // …and lifted by the `coverage` exemption.
     assert_eq!(
         run_coverage_base(&repo, &base, Some("testing-conventions.toml")).unwrap(),
         0,

@@ -1,0 +1,7 @@
+{
+  "command": "echo 'no-op: this branch adds two markdown fragments under packages/node and changes nothing else there. The behavior change is in .github/workflows/testing-conventions.yml, outside the package, and package.json publishes dist/ only, so no e2e contract of the npm launcher moved.'",
+  "ran_at": 1788225876,
+  "exit_code": 0,
+  "commit": "d51d7da21ce826db09114463c2095ff9eb091492",
+  "branch": "fix/node-engine-in-every-cli-job"
+}

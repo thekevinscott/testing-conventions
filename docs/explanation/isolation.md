@@ -92,19 +92,25 @@ The integration suite's side: first-party code runs for real.
 
 - **TypeScript** — `no-first-party-mock`: a `vi.mock()` / `vi.doMock()` of a first-party module.
   Mocking `stripe` or `node:fs` is fine; mocking `../src/ledger` is the violation.
-- **Python** — `no-first-party-patch`: a `patch(...)` whose string target is the dist's own
-  package. Patching `requests.post` or `subprocess.run` is fine; patching `ourpkg.ledger.record`
-  is the violation. Four hygiene lints ride along, keeping the *mechanism* of mocking disciplined:
-  `no-monkeypatch` (use `unittest.mock` in a fixture, so patches are declared, not sprinkled),
-  `no-inline-patch` (a patch lives in a fixture, not a test body), `no-environ-mutation` (set env
-  via `patch.dict(os.environ, ...)`, so it's restored), and `no-constant-patch` (inject config
-  explicitly instead of patching a module global).
+- **Python** — `no-first-party-patch`: a `patch(...)`, `patch.object(...)`, or `patch.dict(...)`
+  whose target is the dist's own package. A string target is read directly; an object target is
+  resolved through the file's imports — after `from myproject import ledger`,
+  `patch.object(ledger, "record")` names `myproject.ledger.record`. Patching `requests.post` or
+  `subprocess.run` is fine; patching `ourpkg.ledger.record` is the violation. Four hygiene lints
+  ride along, keeping the *mechanism* of mocking disciplined: `no-monkeypatch` (use
+  `unittest.mock` in a fixture, so patches are declared, not sprinkled), `no-inline-patch` (a
+  patch lives in a fixture, not a test body), `no-environ-mutation` (set env via
+  `patch.dict(os.environ, ...)`, so it's restored), and `no-constant-patch` (inject config
+  explicitly instead of patching a module global — `patch("ourpkg.cfg.CACHE_DIR")` and
+  `patch.object(cfg, "CACHE_DIR")` are the same patch).
 - **Rust** — `no-first-party-double`: a `#[double]` (mockall_double) of the crate under test or a
   `path` dependency. Only external crates and `std` may be doubled.
 <!-- #endregion integration-lint-flags -->
 
-A non-literal target (`vi.mock(name)`, `patch(target)`) can't be classified deterministically and
-is left alone — the checks are deterministic first.
+A target that resists static reading is left alone — the checks are deterministic first.
+`vi.mock(name)` and `patch(target)` hold the target in a variable, and a `patch.object` /
+`patch.dict` base bound by no import (`patch.object(get_mod(), "x")`, a local variable, a fixture
+argument) resolves to no module, so neither is classified.
 
 ## When a lint fires on a real design constraint
 

@@ -1,16 +1,3 @@
-//! E2E tests for the Rust packaging slice: drive the built CLI binary
-//! against pre-built `cargo package` **crate tarball** fixtures (`.crate`) and
-//! assert the exit code. Rule (README "Packaging"): inline `#[cfg(test)]` units
-//! compile out of the consumer artifact for free, so the source tarball must not
-//! ship the crate-root `tests/` directory. `widget-0.1.0.crate` leaks
-//! `tests/integration.rs`; `clean-0.1.0.crate` (a crate with
-//! `exclude = ["tests/**"]`) does not.
-//!
-//! These start red: `--language rust` isn't a value the `packaging` command
-//! accepts yet (so the binary errors at argument parsing), and `.crate` isn't a
-//! recognized archive. They go green once the Rust language plus the
-//! `.crate` / `tests/`-directory handling land.
-
 use std::path::PathBuf;
 use std::process::Command;
 

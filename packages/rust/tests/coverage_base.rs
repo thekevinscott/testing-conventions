@@ -1,21 +1,3 @@
-//! Integration tests for diff-scoped coverage — `unit coverage --base`.
-//!
-//! Folds the old `unit patch-coverage` into the coverage floor: with `--base`, the
-//! SAME configured floor is measured over the `<base>...HEAD` diff (the changed
-//! lines) instead of the whole tree. Unlike the implicit-100% patch-coverage it
-//! replaces, a changed line is judged against the configured floor — a diff that
-//! clears it passes even with an uncovered line, and one below it fails however
-//! small the diff (no small-diff carve-out).
-//!
-//! Each test builds a throwaway git repo (the codebases are the fixtures) and
-//! runs REAL coverage.py over it via the SDK
-//! (`patch_coverage::measure`) and the CLI (`run`). Requires `coverage` + `pytest`
-//! + `git` on PATH.
-//!
-//! The default repo is the prescribed consumer package layout — `{pyproject.toml,
-//! src/**}` scanned at `<repo>/src`. The `--base` diff is still computed over the
-//! whole repo; the scan path handed to the SDK/CLI is `src/`.
-
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;

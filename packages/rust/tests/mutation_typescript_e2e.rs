@@ -1,22 +1,3 @@
-//! E2E tests for the TypeScript mutation rule: drive the built CLI binary
-//! end-to-end (no mocks) against the fixture projects and assert the exit code.
-//!
-//! The binary spawns the bundled Node mutation adapter; in production the npm
-//! launcher appends its path as `--ts-mutation-adapter`, so these tests pass the freshly-built
-//! adapter ([`common::ts_adapter`]) the same way on each invocation. The fixtures are
-//! **runner-only** (vitest): the tool bundles and drives Stryker; the project provides only its
-//! own test runner. Requires the built node adapter and the fixtures' vitest (`npm ci` in
-//! `tests/fixtures/unit_mutation/typescript`).
-//!
-//! The gate is **on by default and binary** — parity with the Rust arm: an un-exempted
-//! surviving mutant fails the run, and the only way to pass with a survivor present is a
-//! reason-required `mutation` exemption. The default fixtures are the prescribed consumer
-//! package layout — `{package.json, tsconfig.json, src/**, tests/**}`, scanned at `src/`,
-//! whose source imports `../package.json`: `killed` (every mutant caught) and `survivors` (a
-//! coverage-passing but assertion-light suite whose mutants all survive). The flat, no-manifest
-//! shape is the `loose_*` special case. Each test runs against its own staged copy so the
-//! parallel Stryker runs never collide in a shared project dir.
-
 mod common;
 
 use std::path::{Path, PathBuf};

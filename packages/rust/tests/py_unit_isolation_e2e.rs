@@ -1,6 +1,3 @@
-//! E2E tests for the Python unit-isolation check: drive the built
-//! CLI binary end-to-end (no mocks) against the fixtures and assert the exit code.
-
 use std::path::PathBuf;
 use std::process::Command;
 

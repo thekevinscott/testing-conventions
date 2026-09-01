@@ -1,21 +1,3 @@
-//! Integration tests for the commit-scoped `co-change` check, folded into
-//! `unit colocated-test --base`.
-//!
-//! When a source file is **modified** (e.g. a function removed) or **deleted** in
-//! a `<base>...HEAD` diff, its colocated test (the pairing — `foo.py` →
-//! `foo_test.py`, `foo.ts` → `foo.test.ts`) must change in the same diff;
-//! `stale_sources` returns the sources whose test went stale, and
-//! `unit colocated-test --base` turns a non-empty result into a non-zero exit on
-//! top of the tree-wide presence check. *Added* source files are not subjects
-//! (new code is the coverage floor's job), a test file is never a subject, an
-//! empty/comment-only file holds no logic, and a `co-change`-exempt source needn't
-//! co-change. A modification counts when it changes the code the compiler sees:
-//! the merge-base and HEAD forms are compared with comments and formatting
-//! whitespace normalized away.
-//!
-//! Each test builds a throwaway git repo (per the guardrail: red cases — a
-//! changed source with no test change — and clean cases).
-
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

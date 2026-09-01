@@ -1,12 +1,3 @@
-//! Integration tests for line-scoped exemptions in the config schema.
-//!
-//! Today an exemption is file-scoped: `[[<lang>.exempt]] rules = ["coverage"]` lifts a
-//! rule for an *entire* file. An optional `lines` key narrows a
-//! `coverage` / `mutation` exemption to the exact lines it covers, so a single stubborn
-//! line (an equivalent mutant, a cross-version import shim) no longer forces the whole
-//! module past the gate. This pins the loader half of that contract through real
-//! fixture files: a `lines` list parses, and the schema's self-guard rejects the misuse.
-
 use std::path::PathBuf;
 
 use testing_conventions::config::{load_config, LineSpec, Rule};

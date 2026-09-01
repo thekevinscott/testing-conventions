@@ -1,6 +1,3 @@
-//! E2E tests for `unit one-function-per-file`: drive the built CLI binary
-//! against the fixture trees and assert the exit code and the reported message.
-
 use std::path::PathBuf;
 use std::process::{Command, Output};
 

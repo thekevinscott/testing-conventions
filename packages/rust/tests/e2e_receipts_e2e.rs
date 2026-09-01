@@ -1,14 +1,3 @@
-//! E2E tests for the branch-keyed e2e receipt contract: drive the built CLI
-//! binary in a throwaway git repo (no mocks).
-//!
-//! `e2e attest` writes the branch's receipt under `e2e-attestations/` and exits
-//! `0`; `e2e verify --base` passes a branch whose diff answers the nudge with a
-//! receipt, stays green across later pushes, and fails a scoped change with no
-//! receipt, naming `attest` as the fix.
-//!
-//! These start red against the single-file, exact-match implementation in
-//! `src/e2e.rs` and go green once the receipt contract is implemented.
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};

@@ -1,14 +1,3 @@
-//! Integration tests for `e2e verify`.
-//!
-//! `verify` confirms a committed receipt answers the branch's e2e nudge: with
-//! `--base`, a branch whose content diff leaves the scoped source untouched
-//! owes no decision, and one that changed it passes when its diff adds or
-//! updates a receipt; without `--base`, receipt presence is the check. The
-//! branch-diff semantics themselves are pinned in `e2e_receipts.rs`; this file
-//! covers the discovery scoping (a package subdirectory), the `run()` CLI
-//! surface (`path`, `--scope`, `--base`, `--extra-scope`, `--exclude`), the
-//! entry-point equivalences, and the #391 loud-scope-validation contract.
-
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;

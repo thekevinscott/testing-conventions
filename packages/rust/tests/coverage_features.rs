@@ -1,11 +1,3 @@
-//! Integration tests for cargo-feature passthrough in the config: a
-//! `[rust] features` list is part of the schema, accepted by the loader's
-//! self-guard alongside `coverage` and `exempt`.
-//!
-//! Red until feature passthrough lands: today the config self-guard
-//! (`deny_unknown_fields`) rejects the `features` key, so loading these
-//! configs errors instead of parsing.
-
 use std::path::PathBuf;
 
 use testing_conventions::config::load_config;

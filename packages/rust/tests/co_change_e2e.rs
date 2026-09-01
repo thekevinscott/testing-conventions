@@ -1,9 +1,3 @@
-//! E2E tests for the commit-scoped `co-change` check, folded into
-//! `unit colocated-test --base`: drive the built CLI binary as a real
-//! subprocess against throwaway git repos and assert the exit code (and, for the
-//! red case, the named offender). Complements the in-process integration tests in
-//! `co_change.rs`.
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};

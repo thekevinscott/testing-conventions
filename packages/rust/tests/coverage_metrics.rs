@@ -1,11 +1,3 @@
-//! Integration tests for the `functions` and `branch` floors on the Rust
-//! coverage config: both keys are part of the `[rust].coverage` schema,
-//! accepted by the loader's self-guard alongside `regions` and `lines`.
-//!
-//! Red until the floors land: today the config self-guard
-//! (`deny_unknown_fields`) rejects both keys, so loading these configs errors
-//! instead of parsing.
-
 use std::path::PathBuf;
 
 use testing_conventions::config::load_config;

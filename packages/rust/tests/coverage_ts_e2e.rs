@@ -1,8 +1,3 @@
-//! E2E tests for the TypeScript coverage rule: drive the built CLI binary
-//! end-to-end (no mocks) against the fixture codebases and assert the exit code.
-//! Requires Node with the fixtures' vitest toolchain installed (see the suite's
-//! `package.json`).
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 

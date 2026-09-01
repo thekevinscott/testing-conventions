@@ -1,15 +1,3 @@
-//! Integration tests for the branch-keyed e2e receipt contract.
-//!
-//! `attest` writes one receipt per branch under `e2e-attestations/` — keyed by a
-//! sanitized lowercase slug of the branch name — and leaves every other
-//! branch's receipt where it is. `verify` asks two content
-//! questions of the branch's diff: an untouched scoped source owes nothing, and a
-//! changed one is answered by a receipt added or updated in that same diff. No
-//! commit SHAs are compared, so one receipt covers the branch.
-//!
-//! These start red against the single-file, exact-match implementation in
-//! `src/e2e.rs` and go green once the receipt contract is implemented.
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};

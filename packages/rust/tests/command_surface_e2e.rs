@@ -1,11 +1,3 @@
-//! E2E tests for the CLI's command surface: drive the built binary and assert what a
-//! consumer sees. `check` was listed in `--help` and exited `0` without running a
-//! rule; a consumer who called it read that as a passing check.
-//!
-//! The integration suite (`command_surface.rs`) asserts the same surface through the
-//! library; these prove it at the process boundary — exit code, stderr, and the help
-//! text a consumer actually reads.
-
 use std::process::Command;
 
 /// Run the built binary with `args`, returning its exit code, stdout, and stderr.

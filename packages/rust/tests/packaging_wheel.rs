@@ -1,11 +1,3 @@
-//! Integration tests for the Python packaging slice: exercise the
-//! `packaging::inspect` library API over the pre-built **wheel** fixtures. The
-//! rule (README "Packaging"): test files must never ship in the built artifact.
-//!
-//! The e2e suite (`packaging_wheel_e2e.rs`) drives the same wheels through the
-//! built binary; this checks the library contract — `inspect` unpacks the wheel
-//! and reports offenders relative to the artifact root.
-
 use std::path::PathBuf;
 
 use testing_conventions::packaging;

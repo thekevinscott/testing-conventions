@@ -1,13 +1,3 @@
-//! Integration tests for the Rust packaging slice: exercise the
-//! `packaging::inspect` library API over pre-built `cargo package` **crate
-//! tarball** fixtures (`.crate`). Rule (README "Packaging"): the source tarball
-//! must not ship the crate-root `tests/` directory.
-//!
-//! The e2e suite (`packaging_crate_e2e.rs`) drives the same crates through the
-//! built binary; this checks the library contract — `inspect` unpacks the
-//! `.crate` (a gzipped tar) and the `tests/` directory pattern flags files under
-//! the crate-root `tests/`.
-
 use std::path::PathBuf;
 
 use testing_conventions::packaging;

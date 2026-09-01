@@ -1,8 +1,3 @@
-//! E2E tests for `e2e attest`: drive the built CLI binary in a
-//! throwaway git repo (no mocks) and assert it runs the command, commits the
-//! branch's receipt on a pass, and propagates the command's own exit code —
-//! so a wrapping `just` recipe or CI step reads a failing run as a failure.
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};

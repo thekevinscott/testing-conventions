@@ -1,13 +1,3 @@
-//! Integration tests for the Rust coverage rule.
-//!
-//! These run REAL `cargo llvm-cov` over the fixture crates via the SDK
-//! (`coverage::measure_rust`) and assert pass/fail. Per the guardrail the
-//! *crates themselves* are the fixtures: `above` (every region and line
-//! exercised by colocated inline tests) clears a 100 floor, `below` (one branch
-//! arm left uncovered) fails 100 but clears a lower floor, and `exempt_cov`
-//! clears 100 only once its untested shim is omitted by a `coverage` exemption.
-//! Requires `cargo-llvm-cov`.
-
 use std::path::PathBuf;
 
 use testing_conventions::coverage::{measure_rust, Outcome, RustThresholds};

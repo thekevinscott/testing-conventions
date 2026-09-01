@@ -1,28 +1,3 @@
-//! Integration tests for the TypeScript mutation rule.
-//!
-//! These run REAL Stryker over the fixture projects via the SDK
-//! ([`mutation::measure_typescript`]) — which spawns the bundled Node adapter — and
-//! assert the surviving-mutant set, the TS parallel of the Rust vertical. The
-//! *projects themselves* are the fixtures: `killed` (every mutant caught by an
-//! asserting test) reports no survivors, and `survivors` (an assertion-light test that runs
-//! the code but pins nothing) reports several — the gap mutation testing exposes that
-//! coverage can't.
-//!
-//! The default fixtures are the prescribed consumer package layout —
-//! `{package.json, tsconfig.json, src/**, tests/**}`, scanned at `src/`, whose source imports
-//! `../package.json`. Rooting Stryker's sandbox at the package root is what lets that upward
-//! import resolve; the gate mutates only `src/` and judges mutants by the colocated suite alone
-//! (the `tests/` tier fails loudly if ever run). The flat, no-manifest shape is the `loose_*`
-//! special case.
-//!
-//! The fixtures are **runner-only**: they install just vitest. That the gate still runs
-//! Stryker over them proves the tool bundles and drives the engine; the
-//! project provides only its own test runner. Each test runs against its own staged copy
-//! (vitest `node_modules` symlinked) so the parallel in-place Stryker runs never collide, and
-//! passes the freshly-built adapter path ([`common::ts_adapter`]) straight to the rule.
-//! Requires the built node adapter and the fixtures' vitest (`npm ci` in
-//! `tests/fixtures/unit_mutation/typescript`).
-
 mod common;
 
 use common::{expect_tested, ts_adapter, Staged};

@@ -1,12 +1,3 @@
-//! Integration tests for the Python coverage rule.
-//!
-//! These run REAL coverage.py over the fixture codebases via the SDK
-//! (`coverage::measure`) and assert pass/fail. Per the guardrail the
-//! *codebases themselves* are the fixtures: `full` (100% branch) clears a 100
-//! floor, `above_85` (~86%) fails 100, `below_85` (~71%) fails 85. Each is the
-//! prescribed consumer package layout — `{pyproject.toml, src/**}` scanned at
-//! `src/`. Requires `coverage` + `pytest` on PATH.
-
 use std::path::PathBuf;
 
 use testing_conventions::coverage::{measure, Outcome, Thresholds};

@@ -1,12 +1,3 @@
-//! Integration tests for the TypeScript packaging slice: exercise the
-//! `packaging::inspect` library API over the pre-built `npm pack` **tarball**
-//! fixtures (`.tgz`). Rule (README "Packaging"): test files must never ship in
-//! the built artifact.
-//!
-//! The e2e suite (`packaging_npm_e2e.rs`) drives the same tarballs through the
-//! built binary; this checks the library contract — `inspect` unpacks the
-//! gzipped tar and reports offenders relative to the artifact root.
-
 use std::path::PathBuf;
 
 use testing_conventions::packaging;

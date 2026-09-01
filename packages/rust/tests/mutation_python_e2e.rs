@@ -1,18 +1,3 @@
-//! E2E tests for the Python mutation rule: drive the built CLI binary
-//! end-to-end (no mocks) against the fixture projects and assert the exit code. The binary
-//! spawns the bundled Python adapter (`python3 -m testing_conventions.mutation.main`), which
-//! drives cosmic-ray in-process. Requires a `python3` with cosmic-ray + pytest installed and
-//! the source package importable (`PYTHONPATH=packages/python/python`).
-//!
-//! The gate is **on by default and binary** — parity with the Rust and TypeScript arms:
-//! an un-exempted surviving mutant fails the run, and the only way to pass with a
-//! survivor present is a reason-required `mutation` exemption. The default fixtures are the
-//! prescribed consumer package layout — `{pyproject.toml, src/**, tests/**}`, scanned at
-//! `src/`: `killed` (every mutant caught) and `survivors` (a coverage-passing but
-//! assertion-light suite whose mutants all survive). The flat, no-manifest shape is the
-//! `loose_*` special case. Each test runs against its own staged copy so the parallel runs
-//! never collide in a shared project dir.
-
 mod common;
 
 use std::path::{Path, PathBuf};

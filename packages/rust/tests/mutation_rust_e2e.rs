@@ -1,13 +1,3 @@
-//! E2E tests for the Rust mutation rule: drive the built CLI binary
-//! end-to-end (no mocks) against the fixture crates and assert the exit code.
-//! Requires only a cargo toolchain — the tool provisions cargo-mutants itself.
-//!
-//! The gate is **on by default and binary**: an un-exempted surviving mutant fails the
-//! run, and the only way to pass with a survivor present is a reason-required
-//! `mutation` exemption. The fixtures are the standard pair: `killed` (every mutant
-//! caught) and `survivors` (a coverage-passing but assertion-light suite whose mutants
-//! all survive).
-
 mod common;
 
 use std::path::PathBuf;

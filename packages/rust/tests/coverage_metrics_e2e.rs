@@ -1,22 +1,3 @@
-//! E2E tests for the `functions` and `branch` floors on `unit coverage
-//! --language rust`: drive the built CLI binary end-to-end (no mocks)
-//! against the fixture crates and assert the exit code and message.
-//!
-//! `[rust].coverage` takes two more opt-in floors alongside `regions`:
-//! **`functions`** gates the export's functions total (stable toolchain), and
-//! **`branch`** gates the branches total — the run adds `--branch`, which needs
-//! a nightly toolchain (the `branchy` fixture pins one via its own
-//! `rust-toolchain.toml`; on a stable toolchain the run fails with the nightly
-//! requirement named). Both floors are the verdict of a measured run, so a
-//! shortfall is a threshold message, never a config or invocation error.
-//!
-//! Red until the floors land: today both keys are rejected by the config
-//! self-guard, so every one of these exits non-zero with an "unknown field"
-//! error rather than the floor behavior asserted here. Requires
-//! `cargo-llvm-cov`; the branch tests fetch the fixture's pinned nightly via
-//! rustup on first run, and the stable-toolchain test assumes the repo's own
-//! toolchain is stable (as in CI).
-
 use std::path::PathBuf;
 use std::process::{Command, Output};
 

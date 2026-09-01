@@ -1,14 +1,3 @@
-//! Integration tests for the unit `colocated-test` check.
-//!
-//! A source file must have a *colocated* test named after it: `foo.py` →
-//! `foo_test.py`, `foo-bar.ts` → `foo-bar.test.ts`. `missing_unit_tests`
-//! returns the source files missing their twin; the `unit colocated-test`
-//! subcommand turns a non-empty result into a non-zero exit.
-//!
-//! Empty/comment-only files are never subjects (no logic to test), and a file
-//! listed in the config `exempt` table is a deliberate, reason-required
-//! omission. A stale exempt entry (path that no longer exists) is an error.
-
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

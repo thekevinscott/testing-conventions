@@ -1,17 +1,3 @@
-//! Integration tests for cargo-feature passthrough in `unit mutation --language rust`,
-//! at the measurement boundary ([`measure_rust`]) with the real engine.
-//!
-//! A `[rust] features` list names the cargo features the mutation run enables. cargo
-//! builds the crate's test targets **before** it runs them, so a feature that reaches
-//! only the test phase leaves the unmutated baseline build broken for any crate whose
-//! integration test names a `#[cfg(feature = …)]` item: cargo-mutants stops at
-//! `cargo build failed in an unmutated tree` and judges nothing. The fixture is the
-//! reported layout — a workspace-member crate whose `tests/boost.rs` uses the gated
-//! module — and the feature has to reach every cargo invocation for it to build.
-//!
-//! Requires a cargo toolchain — the tool provisions cargo-mutants itself; the run builds
-//! the crate from scratch, so it's slow.
-
 mod common;
 
 use std::collections::BTreeMap;

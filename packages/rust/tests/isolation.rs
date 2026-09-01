@@ -1,9 +1,3 @@
-//! Integration tests for the Rust `unit lint` rule. Two detectors: D1
-//! flags a call out of an inline `#[cfg(test)]` module's own module
-//! (`no-out-of-module-call`); D2 flags a foreign `use` import
-//! (`no-out-of-module-import`). Each ships a red fixture (every out-of-module
-//! form, must be flagged) and a clean fixture (must pass).
-
 use std::ffi::OsString;
 use std::path::PathBuf;
 

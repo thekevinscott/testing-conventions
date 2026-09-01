@@ -1,15 +1,3 @@
-//! E2E tests for cargo-feature passthrough in `unit mutation --language rust`:
-//! drive the built CLI binary end-to-end (no mocks) against the
-//! feature-gated fixture crate and assert the exit code.
-//!
-//! A `[rust] features` list names the cargo features the mutation run enables
-//! (forwarded to cargo-mutants' build/test invocations), so mutants of
-//! `#[cfg(feature = …)]` code are compiled and exercised by the gated module's
-//! own tests. Without the feature enabled the module is compiled out: its tests
-//! never run, and its mutants survive unexercised.
-//!
-//! Requires only a cargo toolchain — the tool provisions cargo-mutants itself.
-
 mod common;
 
 use std::path::PathBuf;

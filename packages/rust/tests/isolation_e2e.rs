@@ -1,6 +1,3 @@
-//! E2E tests for the Rust `unit lint` rule: drive the built CLI binary
-//! against the fixture crates and assert the exit code.
-
 use std::path::PathBuf;
 use std::process::Command;
 

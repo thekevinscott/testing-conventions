@@ -1,8 +1,3 @@
-//! Integration tests for the TypeScript unit-isolation check
-//! (`unmocked-collaborator`). The rule ships a red fixture (an un-mocked
-//! collaborator — must be flagged) and a clean fixture (every collaborator
-//! mocked — must pass).
-
 use std::ffi::OsString;
 use std::path::PathBuf;
 

@@ -1,8 +1,3 @@
-//! E2E tests for the unknown-config-key upgrade path: drive the built CLI binary
-//! (no mocks) with a config carrying a key the schema doesn't know, and assert the
-//! run fails naming the key and pointing at `MIGRATIONS.md` — the record of every
-//! key a release renamed or removed, alongside its replacement.
-
 use std::path::PathBuf;
 use std::process::{Command, Output};
 

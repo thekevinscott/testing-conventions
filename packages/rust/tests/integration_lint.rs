@@ -1,6 +1,3 @@
-//! Integration tests for the Python integration-test lints. Each lint ships a
-//! red fixture (a violation — must be reported) and a clean fixture (must pass).
-
 use std::ffi::OsString;
 use std::path::PathBuf;
 

@@ -1,10 +1,3 @@
-//! Integration tests for the `unit one-function-per-file` rule: a file holds at
-//! most one module-scope function whose body runs longer than the configured
-//! `max_lines`. Each language ships a red fixture (two substantial functions in
-//! one file), a clean fixture (one substantial function beside trivia, methods,
-//! nested functions, and test files), a `raised` fixture that only passes with a
-//! higher threshold, and a `waived` fixture lifted by an exemption.
-
 use std::ffi::OsString;
 use std::path::PathBuf;
 

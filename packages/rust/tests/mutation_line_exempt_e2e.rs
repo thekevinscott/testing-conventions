@@ -1,20 +1,3 @@
-//! E2E tests for line-scoped mutation exemptions: drive the built CLI binary
-//! end-to-end (no mocks) against the `loose_survivors` / `loose_killed` fixtures and assert
-//! the exit code and message.
-//!
-//! A `[[<lang>.exempt]]` entry with a `lines` list lifts only the surviving mutants on
-//! those lines — not every survivor in the file — with a determinism guard: a listed
-//! line whose mutants were all caught (no survivor) is a hard error, and a survivor on
-//! an *unlisted* line still fails the gate. Line-scoped exemption is orthogonal to package
-//! layout, so these run against the flat `loose_*` fixtures whose survivors sit on fixed
-//! lines: `loose_survivors` (assertion-light, every mutant survives) and `loose_killed`
-//! (every mutant caught).
-//!
-//! Red until line-scoped exemptions land: today the `lines` key is rejected by the
-//! config self-guard, so each of these exits with an "unknown field" error rather than
-//! the line-scoped behavior asserted here. Requires `cargo-mutants` (Rust), the built node
-//! adapter + the fixtures' vitest (TypeScript), and cosmic-ray + pytest (Python).
-
 mod common;
 
 use std::path::{Path, PathBuf};

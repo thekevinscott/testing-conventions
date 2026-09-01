@@ -1,12 +1,3 @@
-//! E2E tests for diff-scoped TypeScript coverage — `unit coverage --language
-//! typescript --base`: drive the built CLI binary as a real subprocess
-//! against throwaway git repos and assert the exit code (and, for a red case, the
-//! failure on stderr). Complements the in-process integration tests in
-//! `coverage_base_ts.rs`. The default repo is the prescribed consumer package layout
-//! — `{package.json, src/**}` scanned at `<repo>/src`. Requires `git` + a Node
-//! toolchain with vitest installed; the repo symlinks the fixtures' `node_modules` so
-//! `npx vitest` resolves.
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};

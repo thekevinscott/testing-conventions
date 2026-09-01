@@ -1,12 +1,3 @@
-//! Integration tests for `e2e attest`.
-//!
-//! `attest` reads HEAD and the checked-out branch, runs the given command, and
-//! — when the command passes — commits the branch's receipt under
-//! `e2e-attestations/`. Each test builds a throwaway git repo with one seed
-//! commit on a work branch, runs `attest`, and asserts it recorded the run: the
-//! clean case writes and commits the receipt, and a failing command reports the
-//! failure while leaving the receipts untouched.
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};

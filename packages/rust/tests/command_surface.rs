@@ -1,13 +1,3 @@
-//! Integration tests for the CLI's command surface: every subcommand the binary
-//! exposes runs a rule and can fail. The `check` umbrella never did — it parsed and
-//! returned `Ok(0)` from the same arm as a bare invocation, so it reported a pass no
-//! rule had produced.
-//!
-//! These exercise the library contract — the clap tree (`command()`) and the
-//! dispatcher (`run()`) — against the bare invocation that shares `check`'s old arm,
-//! so removing one cannot silently take the other with it. The e2e suite
-//! (`command_surface_e2e.rs`) drives the same surface through the built binary.
-
 use testing_conventions::{command, run};
 
 #[test]

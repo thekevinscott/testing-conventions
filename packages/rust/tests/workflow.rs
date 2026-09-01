@@ -1,12 +1,3 @@
-//! Integration tests for the workflow guard: exercise the library API over
-//! fixture workflow files. The guard: the reusable workflow's `testing-conventions`
-//! invocations must name subcommands the binary still exposes, so a rename like
-//! `unit location` → `unit colocated-test` can't strand the `@v0` path.
-//!
-//! The e2e suite (`workflow_e2e.rs`) drives the same fixtures through the built
-//! binary; this checks the library contract directly, against the binary's own
-//! command tree (`testing_conventions::command()`).
-
 use std::path::PathBuf;
 
 use testing_conventions::{command, workflow};

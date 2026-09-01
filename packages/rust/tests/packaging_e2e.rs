@@ -1,12 +1,3 @@
-//! E2E tests for the packaging rule's foundation: drive the built CLI
-//! binary against fixture "artifact" trees and assert the exit code. The rule
-//! (README "Packaging"): test files must never ship in a built artifact. Each
-//! fixture stands in for an unpacked built artifact (a wheel, a `dist/`).
-//!
-//! These start red — the `packaging` command does not exist yet, so the binary
-//! exits with a usage error rather than `1`/`0` — and go green once the command
-//! and the scanner land.
-
 use std::path::PathBuf;
 use std::process::Command;
 

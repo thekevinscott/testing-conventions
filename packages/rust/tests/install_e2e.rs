@@ -1,11 +1,3 @@
-//! E2E tests for `install`: drive the built CLI binary with
-//! no mocks and assert the block it writes points only at pages that exist —
-//! the docs site root and the machine-readable contract (`llms.txt`), with the
-//! removed CLI guide page unlinked.
-//!
-//! Starts red against the template that still links the removed `guide/cli`
-//! page and goes green once the template drops it.
-
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;

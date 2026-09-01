@@ -1,8 +1,3 @@
-//! Integration tests for the Python unit-isolation check
-//! (`unmocked-collaborator`). The rule ships a red fixture (an imported,
-//! un-mocked first-party collaborator — must be flagged) and a clean fixture
-//! (the canonical patched-by-string form — must pass).
-
 use std::ffi::OsString;
 use std::path::PathBuf;
 

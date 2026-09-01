@@ -61,6 +61,14 @@ package-root config the run depends on, plus a `tests/` tier that fails loudly i
 collects it (`tests/integration/tiers.*` asserts it is never reached). Rust's crate layout forces
 the package shape already; the parity bar is met by giving Python and TypeScript the same default.
 
+The TS mutation fixtures add `config_include` on top of that: the same package shape plus the
+package-root `vitest.config.ts` a consumer writes, whose `include` (`src/**/*.test.ts`) is
+relative to the root vitest resolves the config at. Scanned at `src/`, it pins that narrowing the
+run to the scan path leaves vitest's root alone — a scoping mechanism that moves the root instead
+re-resolves the pattern to `src/src/**`, finds nothing, and the run dies on `No tests were
+executed`. The fixtures without a config cannot catch that, since vitest's default `include` is
+root-agnostic.
+
 ### Fixture comments are input
 
 A comment inside a fixture is data the gates read: line-scoped exemptions pin `lines` to fixed

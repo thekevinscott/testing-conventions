@@ -46,6 +46,29 @@ fn survivors_are_reported() {
 }
 
 #[test]
+fn a_package_root_relative_vitest_include_still_reaches_the_colocated_suite() {
+    let package = Staged::configured("config_include");
+    let (count, survivors) = expect_tested(
+        measure_typescript(
+            &package.path().join("src"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &ts_adapter(),
+        )
+        .expect("the colocated suite judges the mutants"),
+    );
+    assert!(
+        count > 0,
+        "the config's `include` resolves against the package root, so the suite runs"
+    );
+    assert!(
+        survivors.is_empty(),
+        "every mutant should be caught; got {survivors:?}"
+    );
+}
+
+#[test]
 fn a_loose_tree_with_no_manifest_reports_root_relative_survivors() {
     let project = Staged::loose("loose_survivors");
     let (_, survivors) = expect_tested(

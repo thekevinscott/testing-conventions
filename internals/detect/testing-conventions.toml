@@ -1,0 +1,5 @@
+# 19 is the lowest `unit one-function-per-file` threshold this module passes today: `main` runs 19
+# lines and `compute_outputs` runs 55, so only `compute_outputs` sits above the bar and holds the
+# file alone. Walk it down as the module splits.
+[python]
+one_function_per_file = { max_lines = 19 }

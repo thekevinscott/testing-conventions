@@ -16,9 +16,6 @@ on:
         default: ''
 
 jobs:
-  # Preflight gate for first-publish prerequisites. Fails fast with an
-  # actionable error before the reusable workflow runs, so a misconfigured
-  # release does not produce confusing 404s deep in the publish step.
   preflight:
     runs-on: ubuntu-latest
     steps:
@@ -41,29 +38,13 @@ jobs:
       contents: write
       id-token: write
     with:
-      # Empty on push events (normal change detection); set via
-      # workflow_dispatch to force a specific package/version set.
       release_packages: ${{ inputs.release_packages }}
-    # No `secrets:` block: every registry authenticates through OIDC, and
-    # `id-token: write` above is the whole credential surface. The reusable
-    # workflow gates its crates.io and npm OIDC exchanges on the caller's
-    # token being empty, so forwarding a secret here is what selects the
-    # classic long-lived-token path instead. Both names are past their
-    # bootstrap publish, which is the one release Trusted Publishing cannot
-    # serve. See docs/internals/repo.md, "Release credentials".
+    # No `secrets:` block: the reusable workflow gates its crates.io and npm OIDC exchanges
+    # on the caller's token being empty, so forwarding a secret here selects the classic
+    # long-lived-token path. See docs/internals/repo.md, "Release credentials".
 
-  # PyPI upload runs in the caller's workflow context. Required because
-  # PyPI Trusted Publishers can't validate OIDC tokens minted from a
-  # cross-repo reusable workflow (pypi/warehouse#11096).
-  #
-  # The gate is publish-time, not plan-time. `pypi_pending` is 'true' only
-  # when the engine reached the PyPI package and handed this job its upload;
-  # it is 'false' when the version is already live. `has_pypi` reports that
-  # the planned matrix held pypi rows, which is also true when a cascaded
-  # rebuild (a `packages/rust/**` edit is in the Python package's globs)
-  # produced wheels for a version PyPI already has — uploading those earns a
-  # `400 File already exists`. `!cancelled()` lets a pending upload proceed
-  # when an unrelated registry failed; the registries are independent. See
+  # PyPI Trusted Publishers reject an OIDC token minted from a cross-repo reusable workflow
+  # (pypi/warehouse#11096), so the upload runs here, in the caller's context. See
   # docs/internals/repo.md, "The delegated PyPI upload".
   pypi-publish:
     needs: release
@@ -73,15 +54,9 @@ jobs:
     permissions:
       id-token: write
     steps:
-      # bin/abi3 maturin wheels are Python-version-independent (py3-none),
-      # but the build matrix fans across every Python version, so each
-      # platform emits N byte-equivalent wheels across N artifacts. Pulling
-      # them with `merge-multiple: true` points the identical filenames at
-      # one path and the parallel extraction races -> torn write -> twine
-      # `BadZipFile: Bad magic number`. Stage each artifact in its own dir,
-      # then copy a single copy of each distribution into dist/ (first-wins;
-      # the duplicates are the same wheel). Root cause is upstream: piot
-      # should not fan a version-independent wheel across Python versions.
+      # `merge-multiple: true` points the matrix's byte-identical py3-none wheels at one path and
+      # the parallel extraction races — a torn write, then twine `BadZipFile: Bad magic number`.
+      # Stage each artifact separately, then copy one copy of each distribution into dist/.
       - name: Download sdist + wheel artifacts (no merge)
         uses: actions/download-artifact@v8
         with:
@@ -106,18 +81,9 @@ jobs:
           echo "dist/ contents:"; ls -l dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
 
-  # Cuts the git tag for what the job above uploaded. The release job tags
-  # crates.io and npm as it publishes them, but a PyPI package is only handed
-  # over at that point, so its tag follows the upload and is read from
-  # registry truth: the version PyPI reports as live gets the tag. Leaving it
-  # out is what let a published version stay untagged, and an untagged version
-  # is one the next run's plan recomputes and hands over a second time.
+  # The release job leaves a delegated PyPI package untagged, so its tag follows the upload.
   pypi-tag:
     needs: pypi-publish
     uses: thekevinscott/putitoutthere/.github/workflows/pypi-tag.yml@v0
     permissions:
       contents: write
-
-  # The moving major tag `@v0` is advanced by a dedicated, publish-gated workflow
-  # (`.github/workflows/move-major-tag.yml`, #235), not inline here — so the tag move is a
-  # named, single-responsibility step and `release.yml` stays only about publishing.

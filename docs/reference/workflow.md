@@ -22,7 +22,7 @@ jobs:
 
 | Input                | Default                    | Description |
 | -------------------- | -------------------------- | ----------- |
-| `languages`          | `''` (auto-detect)         | A restriction on auto-detection: empty runs every supported language with sources present under `source`; a JSON array (`python`, `typescript`, `rust`) narrows the run to those named. Rust is detected as a crate: a `Cargo.toml` **with** `.rs` sources under `source`. |
+| `languages`          | `''` (auto-detect)         | A restriction on auto-detection: empty runs every supported language with sources present under `source`; a JSON array (`python`, `typescript`, `rust`) narrows the run to those named. It is a JSON string rather than a list because `workflow_call` inputs have no list type, and the matrix reads it back with `fromJSON`. A language with no sources under `source` is dropped from the matrix and skipped, never failed. Rust is detected as a crate: a `Cargo.toml` **with** `.rs` sources under `source`. |
 | `source`             | `src`                      | The scan root — the directory scanned recursively for sources, and the only scoping mechanism (see [Scoping and exemptions](../explanation/scoping)). |
 | `config`             | `testing-conventions.toml` | The [config file](./config) supplying floors and exemptions. Discovery order: an explicit non-default value is used verbatim; otherwise a `testing-conventions.toml` at the derived [package root](../monorepo) wins if present, else the repo-root default. Absent (no file at any of those locations) means every check runs on its default. |
 | `base`               | `origin/main`              | Base ref for the diff-scoped `--base` jobs, diffed as `<base>...HEAD`. The diff-scoped jobs run on `pull_request` only. |
@@ -30,7 +30,25 @@ jobs:
 | `rust_toolchain`     | `false`                    | An [escape hatch](../monorepo#escape-hatches): `true` forces a stable Rust toolchain, with build caching (the cargo registry, and `target/` at the derived workspace-aware location — the workspace root's `target/` for a crate that's a workspace member, else the package root's own, keyed off `Cargo.lock`), in the suite-executing jobs before the derived [`build_command`](./config#build-command) runs. `unit coverage` / changed-line coverage / `unit mutation` already auto-provision it when the package root's manifest declares a Rust-compiling build (a `Cargo.toml`, a maturin backend, a napi key — detect's `provision_rust`); set this by hand only for a build the manifest doesn't express. The `rust` matrix arm always carries its own toolchain. |
 | `packaging_artifact` | `''`                       | Name of an uploaded build artifact holding built distributions; when set, the packaging check downloads and inspects it as-is, building nothing. When empty, the packaging job derives the distribution build from the package's own manifest (`uv build` / `<pm> pack` / `cargo package`), runs it, and scans what it wrote — or, when the manifest can't state a build, scans a conventional `dist/` already committed at the derived package root (`.` for a single-package repo — see [Adopt on a monorepo](../monorepo)). An artifact holding no recognized distribution fails the job. |
 | `run_e2e`            | `false`                    | Forces the `e2e verify` job on. It is already on when committed receipts (`e2e-attestations/`) are present at the package root. The job is diff-scoped (`--base`), so it runs on `pull_request` only; it needs full history. |
-| `gates`              | `''` (all applicable)      | An [escape hatch](../monorepo#escape-hatches): a JSON array naming which checks run (`colocated-test`, `one-function-per-file`, `unit-lint`, `unit-coverage`, `mutation`, `integration-lint`, `packaging`, `e2e-verify`), for the rare package where one genuinely cannot run. Empty runs every applicable check. A named check's diff-scoped variant rides with it, and the allowlist is authoritative even when `run_e2e` / `packaging_artifact` is set. |
+| `gates`              | `''` (all applicable)      | An [escape hatch](../monorepo#escape-hatches): a JSON array naming which checks run (`colocated-test`, `one-function-per-file`, `unit-lint`, `unit-coverage`, `mutation`, `integration-lint`, `packaging`, `e2e-verify`), for the rare package where one genuinely cannot run. Empty runs every applicable check. Naming a check opts it in; it still applies its own conditions (language presence, the `pull_request` event, a discoverable dist or attestation). A named check's diff-scoped variant rides with it, and the allowlist is authoritative even when `run_e2e` / `packaging_artifact` is set. |
+
+To build the distribution yourself and have the packaging check scan what you produced, upload it
+and name the artifact:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: uv build
+      - uses: actions/upload-artifact@v7
+        with: { name: dist, path: dist/ }
+  conventions:
+    needs: build
+    uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0
+    with:
+      packaging_artifact: dist
+```
 
 ## The checks and when they run
 

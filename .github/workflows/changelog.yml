@@ -13,23 +13,18 @@ concurrency:
 
 jobs:
   enforce:
-    # The job name is the check-run name branch protection references, so it stays as written
-    # even though the gate now requires fragments rather than an edit to the two files. Renaming
-    # it is a branch-protection change, which cannot land atomically with a PR.
+    # This job name is the check-run name branch protection references; renaming it is a
+    # branch-protection change that cannot land atomically with a PR.
     name: CHANGELOG + MIGRATIONS touched
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
-          # The gate diffs base...head, so it needs both commits, not a shallow tip.
+          # The gate diffs base...head, so it needs both commits rather than a shallow tip.
           fetch-depth: 0
 
       - uses: astral-sh/setup-uv@v7
 
-      # The logic — which paths are package source, which are frozen stubs or fragments or tests,
-      # and the raw-body `skip-changelog:` scan — lives in the colocated-tested `tc-checks
-      # changelog-gate` command, per AGENTS.md "Logic lives in scripts, not workflow YAML". The
-      # SHAs are CLI arguments, never an env side-channel.
       - name: Every changed package adds a changelog and a migration fragment
         run: >-
           uv run --project internals/checks tc-checks changelog-gate

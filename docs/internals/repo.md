@@ -120,6 +120,33 @@ package's own manifest instead.
   `needs.detect.outputs.build_command` before the suite and the packaging job runs it before the
   pack, replacing the removed `build_command` *workflow input*.
 
+Alongside the package-root set, detect emits one **language set per gate** — the JSON arrays each
+matrix reads back with `fromJSON`, kept separate so a future per-gate language divergence needs no
+workflow change:
+
+- **`languages`** — the requested python/typescript languages with sources under `source`; the
+  co-change (`*-changed`) matrix. Rust units are inline, so a sibling test cannot go stale.
+- **`colocated_test_languages`**, **`integration_lint_languages`**, **`isolation_languages`**,
+  **`static_languages`**, **`one_function_languages`** — the same set plus rust. The five static
+  gates run as steps of one `static` job fanned out over `static_languages`; an unconfigured rust
+  tree reports `one-function-per-file` is off and passes, so rust rides that set too.
+- **`coverage_languages`**, **`mutation_languages`** — present python/typescript, plus rust
+  whenever a crate is present. Rust coverage is zero-config (`lines = 100` by default), and all
+  three mutation arms are at parity, so the two sets are identical today.
+
+It also emits two presence flags the packaging and e2e-verify jobs gate on — **`packaging_dist`**
+(a built distribution is discoverable at `package_root`) and **`e2e_attestation`** (committed
+receipts sit in `e2e-attestations/` there) — so both gates run by default and skip, never fail,
+when absent.
+
+**`cargo_target_dir`** (#410) is the workspace-aware Rust build-cache location: the workspace
+root's `target/` for a workspace-member crate, else the package root's own. cargo resolves the
+target directory at the workspace root regardless of the invoking directory, so a cache keyed on
+`package_root` alone would archive and restore a directory cargo never writes to.
+
+Each language-set output spends one release absent, exactly as `ts_pnpm_version` describes above,
+so the workflow's matrix expressions carry a `|| <older set>` fallback until `@v0` advances.
+
 These are the primitive the four gate fixes (#278–#281) consume; deriving them is out of scope
 for what those jobs *do* with them (installing, building, discovering `dist/`, discovering
 e2e receipts) — see each issue for its own gate-specific wiring.
@@ -141,6 +168,28 @@ newline ends the file-command line early, and the value's remaining lines are pa
 rendering is exercised in isolation, not only through a full action run.
 
 ## Self-test and the `@v0` path
+
+`testing-conventions-selftest.yml` smoke-tests the reusable workflow end to end, so a regression in
+its *wiring* — a renamed input, a broken invocation, a dropped toolchain step — surfaces here rather
+than in a consumer repo. Rule *logic* is covered by the Rust e2e suites (`coverage_e2e.rs`,
+`coverage_ts_e2e.rs`, …); this covers the workflow that drives it.
+
+Its jobs follow a three-name convention, and a rule earns as many of the three as it has surface:
+
+- **`<rule>-wired`** — a `tc-checks` static assertion over the workflow file, so it tracks the
+  wiring regardless of what the published binary ships.
+- **`<rule>-clean`** — a passing fixture driven through a real `uses:` call of the reusable
+  workflow; the whole call must pass, which also proves the fixture is clean for every *other* gate
+  it gets fanned over.
+- **`<rule>-red`** — a violating fixture driven through the CLI directly, asserting a non-zero exit.
+  The red path cannot ride a `uses:` call, because a failing call fails the whole run.
+
+The fixtures live under `.github/selftest/`, and the `-red` jobs drive the hermetic binary
+(`./hermetic-cli/testing-conventions`) rather than npm-latest (#379, below). Two fixture trees are
+worth knowing about: `.github/selftest/monorepo/` carries no manifest or lockfile at its own root,
+the per-package-lockfile shape the package-root derivation runs against, and
+`.github/selftest/packaging-package-root/` is generated — regenerate it with `python
+.github/selftest/packaging-package-root/make_fixtures.py`.
 
 The reusable workflow (`.github/workflows/testing-conventions.yml`) drives the **published** tool — its `detect` step pins `…/actions/detect@v0`, and each rule job runs `npx testing-conventions` (no version → latest on npm). The self-test (`testing-conventions-selftest.yml`) calls that reusable workflow. So a change to *detection* (which rules fan out) or *rule behavior* does **not** take effect in the self-test — or for any consumer — until a release **moves `@v0`** to the new commit and publishes the package.
 
@@ -323,6 +372,25 @@ own setup instructions already name as the end state.
 
 The observability half is upstream: the truncated error line is
 [putitoutthere#651](https://github.com/thekevinscott/putitoutthere/issues/651).
+
+## Bootstrapping a new npm package name
+
+npm trusted publishing binds to an already-published package, so the first publish of a new name
+needs a classic token. `.github/workflows/bootstrap-npm.yml` is that one-shot path: it publishes a
+`0.0.0-bootstrap` stub, after which the release workflow publishes real versions over it via OIDC.
+
+1. Create an npm token and set it as the repo secret `NPM_TOKEN`. The token must bypass 2FA for
+   writes, or `npm publish` fails with `EOTP: This operation requires a one-time password`. A
+   classic Automation token bypasses 2FA by definition; a granular token defaults to "Require 2FA",
+   so enable its "Bypass 2FA" option explicitly when creating it.
+2. `gh workflow run bootstrap-npm.yml -f packages="name1,name2,..."`.
+3. Once the stubs land, register Trusted Publishers on each package's npm settings page, pointing at
+   this repo, `release.yml`, and the `pypi` environment.
+4. Delete the `NPM_TOKEN` secret.
+5. Re-trigger Release; the engine publishes real versions over the bootstrap stubs via OIDC.
+
+The workflow can be deleted once every `testing-conventions` and `@testing-conventions/*` name
+exists on the registry.
 
 ## The delegated PyPI upload
 

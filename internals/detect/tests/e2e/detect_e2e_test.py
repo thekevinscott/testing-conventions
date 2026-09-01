@@ -9,6 +9,7 @@ measured-coverage path; the env is set with `patch.dict` and the working directo
 the fixture.
 """
 import os
+import re
 import runpy
 from pathlib import Path
 from unittest.mock import patch
@@ -18,6 +19,8 @@ import pytest
 import detect
 
 SCRIPT = Path(__file__).resolve().parents[2] / "src" / "detect.py"
+REPO_ROOT = Path(__file__).resolve().parents[4]
+ACTION_YML = REPO_ROOT / ".github" / "actions" / "detect" / "action.yml"
 
 
 @pytest.fixture
@@ -96,6 +99,31 @@ def _parse_output_file(text):
         else:
             i += 1  # blank/trailing line
     return result
+
+
+def _declared_outputs():
+    """The composite action's `outputs:` block, as `name -> value expression`.
+
+    `action.yml` is a hand-maintained manifest with a fixed two-space shape, read here with the
+    stdlib: `detect.py` is stdlib-only by contract (`docs/internals/repo.md`, "The scan's
+    invocation is an external contract"), and its test package carries pytest as its one
+    dev-dependency.
+    """
+    lines = ACTION_YML.read_text().split("\n")
+    start = lines.index("outputs:") + 1
+    declared, name = {}, None
+    for line in lines[start:]:
+        if line and not line.startswith(" "):  # the next top-level key ends the block
+            break
+        header = re.match(r"^  ([A-Za-z_][A-Za-z0-9_]*):", line)
+        if header:
+            name = header.group(1)
+            declared[name] = ""
+            continue
+        value = re.match(r"^    value: (.*)$", line)
+        if value and name is not None:
+            declared[name] = value.group(1).strip()
+    return declared
 
 
 def test_e2e_explicit_python(run_detect):
@@ -1094,3 +1122,22 @@ def test_published_outputs_when_a_version_is_pinned(run_detect):
         caller_repository="thekevinscott/testing-conventions", version="0.3.0"
     )
     assert outputs["cli_command"] == ""
+
+
+def test_every_emitted_output_is_declared_by_the_composite_action(run_detect):
+    # A composite action forwards only the outputs its manifest declares, so an output the
+    # script writes to GITHUB_OUTPUT but `action.yml` omits reaches the caller as the empty
+    # string — and an expression with a `||` fallback silently takes the fallback arm, with a
+    # green run and no signal. The two sets are one contract, asserted here as a set so the
+    # next output is covered on the day it is added rather than by a fresh one-off assertion.
+    emitted = set(run_detect())
+    assert emitted == set(_declared_outputs())
+
+
+def test_every_declared_output_forwards_the_scan_step_of_the_same_name(run_detect):
+    # The other half of that contract: a declaration wired to the wrong step output — a typo,
+    # or a name left behind by a rename — forwards the empty string exactly like a missing one.
+    declared = _declared_outputs()
+    assert declared  # the block parsed; an empty dict would pass the loop vacuously
+    for name, value in declared.items():
+        assert value == "${{ steps.scan.outputs." + name + " }}"

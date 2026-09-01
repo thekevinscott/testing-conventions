@@ -10,6 +10,7 @@ on:
       - 'packages/python/**'
       - 'internals/checks/**'
       - 'internals/move-major-tag/**'
+      - 'internals/detect/**'
       - '.github/workflows/dogfood.yml'
       - '.github/workflows/testing-conventions.yml'
   push:
@@ -87,5 +88,10 @@ jobs:
       version: ${{ inputs.version }}
       source: internals/move-major-tag/src
 
-  # internals/detect is gated by its own pytest workflow instead: its colocated unit tests alone
-  # sit below the coverage floor.
+  detect:
+    name: Shipped reusable workflow over the detect action's package
+    needs: [build-cli]
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      version: ${{ inputs.version }}
+      source: internals/detect/src

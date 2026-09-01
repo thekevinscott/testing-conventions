@@ -8,9 +8,6 @@ use testing_conventions::co_change::stale_sources;
 use testing_conventions::colocated_test::Language;
 use testing_conventions::run;
 
-/// A throwaway git repo, removed on drop. Starts with no commits; a test writes
-/// a baseline, `commit`s it, captures `head()` as the `base`, then mutates and
-/// commits the "after" so `<base>...HEAD` is the change under test.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -29,19 +26,16 @@ impl TempRepo {
         TempRepo(root)
     }
 
-    /// Write `contents` to `rel`, creating parent directories.
     fn write(&self, rel: &str, contents: &str) {
         let path = self.0.join(rel);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, contents).unwrap();
     }
 
-    /// Delete `rel` from the working tree.
     fn remove(&self, rel: &str) {
         std::fs::remove_file(self.0.join(rel)).unwrap();
     }
 
-    /// Stage everything and commit, advancing HEAD.
     fn commit(&self, message: &str) {
         git(&self.0, &["add", "-A"]);
         git(
@@ -50,7 +44,6 @@ impl TempRepo {
         );
     }
 
-    /// The current HEAD SHA — captured as the `base` before mutating.
     fn head(&self) -> String {
         let out = Command::new("git")
             .args(["rev-parse", "HEAD"])
@@ -88,9 +81,7 @@ fn stale(repo: &TempRepo, base: &str, language: Language) -> Vec<String> {
 }
 
 /// Result of `unit colocated-test <repo> --language <lang> --base <base> [--config
-/// <repo>/<config>]`, run in-process. The commit-scoped co-change check
-/// rides on `colocated-test`'s opt-in `--base` flag (presence + co-change), so
-/// these cases drive that command.
+/// <repo>/<config>]`, run in-process.
 fn run_co_change(
     repo: &TempRepo,
     language: &str,
@@ -114,9 +105,8 @@ fn run_co_change(
     run(argv)
 }
 
-/// Result of `unit colocated-test <repo> --language <lang>` with **no** `--base`:
-/// the presence-only scope. `--base` is opt-in, so this ignores a
-/// stale-but-present source that the `--base` form flags.
+/// Result of `unit colocated-test <repo> --language <lang>` with no `--base` — the
+/// presence-only scope.
 fn run_colocated_presence(repo: &TempRepo, language: &str) -> anyhow::Result<i32> {
     run([
         OsString::from("testing-conventions"),

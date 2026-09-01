@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use testing_conventions::colocated_test::{missing_inline_tests, missing_unit_tests, Language};
 use testing_conventions::run;
 
-/// Absolute path to a fixture tree under `tests/fixtures/colocated_test/`.
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/colocated_test")
@@ -32,7 +31,6 @@ fn orphans_with(root: &Path, language: Language, exempt: &BTreeSet<String>) -> V
         .collect()
 }
 
-/// A `BTreeSet` of exempt relative paths.
 fn exempt(paths: &[&str]) -> BTreeSet<String> {
     paths.iter().map(|p| p.to_string()).collect()
 }
@@ -56,7 +54,6 @@ fn unit_colocated_test_run(fixture_name: &str, language: &str) -> anyhow::Result
     run(argv)
 }
 
-/// Exit code of `unit colocated-test` over `fixture_name`.
 fn unit_colocated_test_exit(fixture_name: &str, language: &str) -> i32 {
     unit_colocated_test_run(fixture_name, language).expect("a readable tree should not error")
 }

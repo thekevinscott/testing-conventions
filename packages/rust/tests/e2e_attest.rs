@@ -4,11 +4,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use testing_conventions::e2e::{attest, Attestation, RECEIPTS_DIR};
 
-/// The work branch every test attests on, and its receipt's committed path.
 const BRANCH: &str = "work";
 const RECEIPT: &str = "e2e-attestations/work.json";
 
-/// A throwaway git repo with one seed commit on branch `work`, removed on drop.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -64,12 +62,6 @@ fn rev_parse(dir: &Path, rev: &str) -> String {
     String::from_utf8(out.stdout).unwrap().trim().to_string()
 }
 
-/// Configure `repo` to require signed commits, but point signing at a program
-/// that does not exist — so any *attempted* signature fails. This lets a test
-/// prove `attest` honors the repo's `commit.gpgsign` without a working signer
-/// (a real signature isn't what's under test, and isn't portably available
-/// here): honoring the policy means the commit is *attempted* and fails, rather
-/// than silently skipped.
 fn require_unsatisfiable_signing(repo: &Path) {
     git(repo, &["config", "gpg.format", "ssh"]);
     git(

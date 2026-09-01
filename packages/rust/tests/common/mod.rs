@@ -25,9 +25,8 @@ pub const ENGINE_NOT_RUN: &str = "unit mutation: no mutatable changed lines — 
 pub const NOTHING_TESTED: &str = "unit mutation: the engine found no mutants to test";
 
 /// The `<n>` from a passing run's counted success line — `unit mutation: no surviving
-/// mutants — every mutation was caught (<n> mutant(s) tested)`. Panics (failing the
-/// calling test) when stdout carries no such line or the line deviates from that exact
-/// shape, so the assertion pins the full message format, not a substring.
+/// mutants — every mutation was caught (<n> mutant(s) tested)`. Panics unless stdout
+/// carries that exact line, so the assertion pins the full message format.
 pub fn tested_count(stdout: &str) -> u64 {
     const PREFIX: &str = "unit mutation: no surviving mutants — every mutation was caught (";
     const SUFFIX: &str = " mutant(s) tested)";
@@ -42,10 +41,7 @@ pub fn tested_count(stdout: &str) -> u64 {
 }
 
 /// The freshly-built TypeScript mutation adapter (`packages/node/dist/mutation/main.js`),
-/// which the rule spawns for the TS arm. `CARGO_MANIFEST_DIR` is `packages/rust`,
-/// so the sibling node package is one level up. Requires the node package to be built
-/// (`npm run build` in `packages/node`, deps installed) — the Rust CI integration job does
-/// both before the suite runs.
+/// which the rule spawns for the TS arm.
 pub fn ts_adapter() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../node/dist/mutation/main.js")
 }
@@ -55,13 +51,8 @@ pub fn ts_adapter() -> PathBuf {
 pub struct Staged(PathBuf);
 
 impl Staged {
-    /// Stage a TypeScript fixture (`killed` / `survivors`) in the default gate-fixture shape:
-    /// the prescribed consumer package layout `{package.json, tsconfig.json, src/**, tests/**}`,
-    /// whose `src/` imports `../package.json`. The package-level `tsconfig.json` is what a real
-    /// consumer TS package carries, and its presence is what activates Stryker's ts-config
-    /// machinery. The staged path is the **package root**; the mutation tests scan its `src/`
-    /// subdirectory. The runner-only `node_modules` (vitest) is symlinked in — Stryker itself is
-    /// bundled with and driven by the Node adapter, so the project supplies only its test runner.
+    /// Stage a TypeScript fixture (`killed` / `survivors`) in the default package layout. The
+    /// package-level `tsconfig.json` activates Stryker's ts-config machinery.
     pub fn new(project: &str) -> Self {
         Self::stage(
             "typescript",
@@ -77,10 +68,8 @@ impl Staged {
         )
     }
 
-    /// Stage a **loose** TypeScript fixture (`loose_killed` / `loose_survivors`): the flat,
-    /// no-manifest special case — loose scripts (`index.ts`, `index.test.ts`) and a
-    /// `stryker.conf.json`, with sources at the scanned root. The staged path is both package
-    /// root and scan path.
+    /// Stage a loose TypeScript fixture (`loose_killed` / `loose_survivors`): the flat,
+    /// no-manifest case, where the staged path is both package root and scan path.
     pub fn loose(project: &str) -> Self {
         Self::stage(
             "typescript",
@@ -90,9 +79,7 @@ impl Staged {
         )
     }
 
-    /// Stage a Python fixture (`killed` / `survivors`) in the default gate-fixture shape:
-    /// `{pyproject.toml, src/**, tests/**}`, scanned at `src/`. cosmic-ray and pytest resolve
-    /// from the ambient install, so there's no `node_modules` to link.
+    /// Stage a Python fixture (`killed` / `survivors`) in the default package layout.
     pub fn python(project: &str) -> Self {
         Self::stage(
             "python",
@@ -107,9 +94,8 @@ impl Staged {
         )
     }
 
-    /// Stage a **loose** Python fixture (`loose_killed` / `loose_survivors`): the flat,
-    /// no-manifest special case — loose scripts (`calc.py`, `calc_test.py`) with sources at the
-    /// scanned root. The staged path is both package root and scan path.
+    /// Stage a loose Python fixture (`loose_killed` / `loose_survivors`): the flat,
+    /// no-manifest case, where the staged path is both package root and scan path.
     pub fn python_loose(project: &str) -> Self {
         Self::stage("python", project, &["calc.py", "calc_test.py"], false)
     }
@@ -142,7 +128,6 @@ impl Staged {
         Staged(dst)
     }
 
-    /// The staged project's root.
     pub fn path(&self) -> &Path {
         &self.0
     }
@@ -157,9 +142,6 @@ impl Drop for Staged {
     }
 }
 
-/// A throwaway git repo for the diff-scoped (`--base`) e2e runs, removed on drop. The
-/// caller writes files, commits a baseline, and commits the change under test; the two
-/// heads bound the `<base>...HEAD` diff the CLI is pointed at.
 pub struct GitRepo(PathBuf);
 
 impl GitRepo {
@@ -192,7 +174,6 @@ impl GitRepo {
         );
     }
 
-    /// The current `HEAD` commit id — captured after the baseline commit to serve as `--base`.
     pub fn head(&self) -> String {
         let out = std::process::Command::new("git")
             .args(["rev-parse", "HEAD"])
@@ -203,7 +184,6 @@ impl GitRepo {
         String::from_utf8(out.stdout).unwrap().trim().to_string()
     }
 
-    /// The repo's root directory.
     pub fn path(&self) -> &Path {
         &self.0
     }
@@ -224,15 +204,8 @@ impl Drop for GitRepo {
     }
 }
 
-/// An isolated install of the **packed** npm package: `npm pack` over `packages/node`, the
-/// tarball installed into a throwaway prefix. The resulting `node_modules` holds the
-/// package's declared dependency closure and nothing from this repo's dev tree — the
-/// topology `npx -y testing-conventions` runs in production, where a devDependency (e.g.
-/// `typescript`) is absent from every resolution path. The repo's own suites run the
-/// adapter from `packages/node`'s dev tree, where pnpm's hoisted devDependencies mask a
-/// missing-declared-dependency bug; resolving the adapter from this install is what
-/// surfaces it. Requires the node package built (`pnpm run build` in `packages/node`) and
-/// registry access for the dependency install. Removed on drop.
+/// An isolated install of the packed npm package — the resolution topology `npx -y
+/// testing-conventions` runs in production. See `docs/internals/rust/testing.md`.
 pub struct PublishedInstall(PathBuf);
 
 impl PublishedInstall {

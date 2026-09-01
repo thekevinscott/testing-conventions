@@ -7,23 +7,16 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use common::{expect_tested, ts_adapter};
 use testing_conventions::mutation::{measure_typescript, Measurement};
 
-/// The default package: `package.json` at the repo root, sources under `src/`, `src/index.ts`
-/// reading the manifest one level above the scan path — the standard layout the gate is
-/// pointed at as `<repo>/src`.
 const PACKAGE_JSON: &str = "{ \"name\": \"tc-base\", \"private\": true, \"version\": \"1.2.3\" }\n";
 
-/// A baseline whose `add` and `VERSION` are fully pinned by their tests — no survivors.
 const BASELINE: &str = "import pkg from '../package.json';\n\nexport const VERSION: string = pkg.version;\n\nexport function add(a: number, b: number): number {\n  return a + b;\n}\n";
 
-/// The change under test: a new `isPositive` whose test runs it but asserts nothing, so
-/// every mutant on the added lines survives. `add` and `VERSION` are untouched.
 const WITH_SURVIVOR: &str = "import pkg from '../package.json';\n\nexport const VERSION: string = pkg.version;\n\nexport function add(a: number, b: number): number {\n  return a + b;\n}\n\nexport function isPositive(n: number): boolean {\n  return n > 0;\n}\n";
 
 const BASELINE_TEST: &str = "import { it, expect } from 'vitest';\nimport { add, VERSION } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\nit('pins the manifest version', () => {\n  expect(VERSION).toBe('1.2.3');\n});\n";
 
 const WITH_SURVIVOR_TEST: &str = "import { it, expect } from 'vitest';\nimport { add, isPositive, VERSION } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\nit('pins the manifest version', () => {\n  expect(VERSION).toBe('1.2.3');\n});\nit('runs isPositive but asserts nothing', () => {\n  expect(typeof isPositive(1)).toBe('boolean');\n});\n";
 
-/// The loose special case: flat scripts at the repo root with a `stryker.conf.json`, no manifest.
 const LOOSE_BASELINE: &str =
     "export function add(a: number, b: number): number {\n  return a + b;\n}\n";
 
@@ -44,17 +37,12 @@ fn toolchain_node_modules() -> PathBuf {
 struct TempRepo(PathBuf);
 
 impl TempRepo {
-    /// The default repo: the upward-import package (`package.json` at the repo root, sources
-    /// under `src/`, no Stryker config — the diff-scoped run supplies its own mutate ranges).
-    /// The scan path handed to the rule is `<repo>/src`.
     fn new(slug: &str) -> Self {
         let repo = Self::init(slug);
         repo.write("package.json", PACKAGE_JSON);
         repo
     }
 
-    /// The loose special case: flat scripts at the repo root with a `stryker.conf.json`, no
-    /// manifest. The scan path is the repo root.
     fn loose(slug: &str) -> Self {
         let repo = Self::init(slug);
         repo.write("stryker.conf.json", STRYKER_CONF);

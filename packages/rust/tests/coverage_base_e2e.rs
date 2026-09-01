@@ -2,8 +2,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// A throwaway git repo, removed on drop. A test writes a baseline, `commit`s it,
-/// captures `head()` as the `base`, then mutates and commits the "after".
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -83,8 +81,6 @@ fn coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> (i32, Str
     )
 }
 
-/// The package root: anchors pytest's rootdir at `<repo>` so the colocated suite
-/// under `src/` resolves its `from widget import ...` when coverage runs at `<repo>/src`.
 const PYPROJECT: &str = "[tool.pytest.ini_options]\n";
 
 const WIDGET_PY: &str = r#"def widget(n):
@@ -100,8 +96,6 @@ def test_widget():
     assert widget(-1) == "neg"
 "#;
 
-/// After: a covered and an uncovered one-line helper → 75% covered on the diff
-/// (see `coverage_base.rs`).
 const WIDGET_PY_75: &str = r#"def widget(n):
     if n > 0:
         return "pos"

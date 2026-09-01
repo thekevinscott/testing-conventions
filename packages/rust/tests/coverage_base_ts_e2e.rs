@@ -2,23 +2,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// The fixtures' installed vitest toolchain — symlinked into each throwaway repo
-/// so `npx vitest` resolves it via Node's parent lookup without a per-test install.
 fn fixtures_node_modules() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/unit_coverage/typescript/node_modules")
 }
 
-/// A minimal package manifest at the repo root — the marker of the default package
-/// layout. Its presence, not its contents, makes the tree package-shaped; the sources
-/// live under `src/`.
 const PACKAGE_JSON: &str =
     "{ \"name\": \"tc-cov-base\", \"private\": true, \"version\": \"1.0.0\" }\n";
 
-/// A throwaway git repo, removed on drop. The default layout — a `package.json` at the
-/// repo root with sources under `src/`. A test writes a baseline, `commit`s it,
-/// captures `head()` as the `base`, then mutates and commits the "after".
-/// `node_modules` is symlinked to the fixtures' install so vitest resolves.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -41,7 +32,6 @@ impl TempRepo {
         repo
     }
 
-    /// The scan path handed to the CLI: `<repo>/src`, the package's source root.
     fn src(&self) -> PathBuf {
         self.0.join("src")
     }
@@ -124,9 +114,6 @@ test('widget', () => {
 });
 "#;
 
-/// After: a covered and an uncovered one-line helper → the diff (new lines 5-12)
-/// lands at functions 50% / statements 66.67% / branches 100% (see
-/// `coverage_base_ts.rs`), so its minimum metric is below the default floor.
 const WIDGET_TS_75: &str = r#"export function widget(n: number): string {
   if (n > 0) return 'pos';
   return 'neg';

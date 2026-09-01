@@ -2,10 +2,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// A throwaway cargo crate in a git repo, removed on drop. A test writes a baseline,
-/// `commit`s it, captures `head()` as the `base`, then mutates and commits the
-/// "after". The crate carries its own `[workspace]` so `cargo llvm-cov` measures it
-/// in isolation.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -90,9 +86,6 @@ fn coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> (i32, Str
 const CARGO_TOML: &str =
     "[package]\nname = \"tc_cov_base_rust_e2e\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n";
 
-/// A `[rust.coverage]` config at the given uniform floor — committed so the
-/// measurement pins a known floor, not the zero-config default (`lines = 100`,
-/// regions off).
 fn config_toml(level: u8) -> String {
     format!("[rust.coverage]\nregions = {level}\nlines = {level}\n")
 }
@@ -117,9 +110,6 @@ mod tests {
 }
 "#;
 
-/// After: an `else if n == -42` arm the suite never exercises → the diff (new lines
-/// 4-5) lands at regions 50% / lines 50% (see `coverage_base_rust.rs`), so it is
-/// below an 80 floor and clears a 40 floor.
 const WIDGET_RS_UNCOVERED: &str = r#"pub fn widget(n: i64) -> &'static str {
     if n > 0 {
         "pos"

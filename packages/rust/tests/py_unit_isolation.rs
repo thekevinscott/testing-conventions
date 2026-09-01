@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use testing_conventions::lint::find_unit_isolation_violations;
 use testing_conventions::run;
 
-/// Absolute path to a fixture tree under `tests/fixtures/unit_isolation/python/`.
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/unit_isolation/python")

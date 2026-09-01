@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use testing_conventions::run;
 
-/// Absolute path to a fixture tree under `tests/fixtures/one_function/`.
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/one_function")

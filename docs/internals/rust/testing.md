@@ -61,6 +61,27 @@ package-root config the run depends on, plus a `tests/` tier that fails loudly i
 collects it (`tests/integration/tiers.*` asserts it is never reached). Rust's crate layout forces
 the package shape already; the parity bar is met by giving Python and TypeScript the same default.
 
+## Diff-scoped fixture calibration
+
+Each `--base` suite judges a diff against a floor, so its fixture pair is calibrated to a **known**
+ratio and the tests bracket that ratio from both sides. The SDK-path cases pass the floor directly;
+the CLI-path cases commit a `testing-conventions.toml` carrying it, so the run measures against the
+calibrated bracket rather than the zero-config default (for Rust, `lines = 100` with regions off).
+
+| Suite | The "after" commit | Measured on the diff, against the real engine | Brackets |
+| --- | --- | --- | --- |
+| `coverage_base*.rs` (Python) | appends `covered`, which the test calls, and `uncovered`, which it doesn't | 3 of 4 executable lines → **75%** | 70 clears, 85 fails |
+| `coverage_base_rust*.rs` | inserts an `else if n == -42` arm the baseline test never exercises | the arm's condition is still evaluated on fall-through and its body never runs → regions **50%**, lines **50%** | 40 clears, 80 fails |
+| `coverage_base_ts*.rs` | appends `covered` and `uncovered` one-liners | functions 1/2 = **50%**, statements and lines 4/6 = **66.67%**, branches **100%** | 40 clears, 80 fails |
+
+The Rust fixture crate carries its own `[workspace]` table, so `cargo llvm-cov` measures it in
+isolation instead of walking up into the repo's workspace; a fixture placed *inside* a workspace
+omits the table, which is what makes it a member.
+
+The mutation `--base` fixtures are calibrated by construction rather than by ratio: the baseline is
+fully pinned by its test, and the "after" adds a function whose test runs it and asserts nothing, so
+every mutant on the added lines survives.
+
 ## Running the suite locally
 
 `cargo test --lib` runs on the toolchain alone — the inline unit tests parse in-process. The
@@ -96,3 +117,9 @@ machine whose global git config turns signing on. `attest` itself inherits the r
 `commit.gpgsign` rather than forcing it off — the `e2e_attest*` suites set it back to `true`
 against an unsatisfiable signer to pin that — so the fixture's setting is what keeps every
 *other* commit in the suite hermetic.
+
+`mutation_typescript_published*.rs` resolves the adapter from an isolated install of the **packed**
+npm package (`common::PublishedInstall`) instead of from `packages/node`'s dev tree. That install's
+`node_modules` holds the package's declared dependency closure alone, which is the resolution
+topology `npx -y testing-conventions` runs in; pnpm hoists devDependencies in the dev tree, so a
+missing-declared-dependency bug stays hidden there and surfaces here.

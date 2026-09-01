@@ -6,8 +6,6 @@ use testing_conventions::co_change::stale_sources;
 use testing_conventions::colocated_test::Language;
 use testing_conventions::patch_coverage::changed_lines;
 
-/// A throwaway git repo, removed on drop. A test writes a baseline, `commit`s it,
-/// captures `head()` as the `base`, then mutates and commits the "after".
 struct TempRepo(PathBuf);
 
 impl TempRepo {

@@ -2,11 +2,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// Where the branch-keyed receipts live, relative to the package root. Spelled
-/// out here rather than imported: the committed path is the public contract.
 const RECEIPTS_DIR: &str = "e2e-attestations";
 
-/// A throwaway git repo with one seed commit on branch `base`, removed on drop.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -58,7 +55,6 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// Run the built binary with `args` in `repo`, returning (exit code, stdout+stderr).
 fn run(repo: &Path, args: &[&str]) -> (i32, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(args)
@@ -73,11 +69,8 @@ fn run(repo: &Path, args: &[&str]) -> (i32, String) {
     (out.status.code().expect("an exit code"), text)
 }
 
-/// Run the built binary with `args` in `repo`, returning (exit code, stdout).
-/// `e2e slug` is read by command substitution — scripts locate a receipt at
-/// `e2e-attestations/$(testing-conventions e2e slug).json` — so its contract is
-/// stdout alone, and asserting it merged with stderr would pin diagnostics the
-/// substitution never sees.
+/// `e2e slug` is read by command substitution, so its contract is stdout alone —
+/// merging stderr in would pin diagnostics the substitution never sees.
 fn run_stdout(repo: &Path, args: &[&str]) -> (i32, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(args)

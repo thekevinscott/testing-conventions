@@ -6,9 +6,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use testing_conventions::coverage::{Outcome, Thresholds};
 use testing_conventions::{patch_coverage, run};
 
-/// A throwaway git repo, removed on drop. A test writes a baseline source + its
-/// colocated test, `commit`s it, captures `head()` as the `base`, then mutates and
-/// commits the "after" so `<base>...HEAD` is the change under test.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -27,14 +24,12 @@ impl TempRepo {
         TempRepo(root)
     }
 
-    /// Write `contents` to `rel`, creating parent directories.
     fn write(&self, rel: &str, contents: &str) {
         let path = self.0.join(rel);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, contents).unwrap();
     }
 
-    /// Stage everything and commit, advancing HEAD.
     fn commit(&self, message: &str) {
         git(&self.0, &["add", "-A"]);
         git(
@@ -43,7 +38,6 @@ impl TempRepo {
         );
     }
 
-    /// The current HEAD SHA — captured as the `base` before mutating.
     fn head(&self) -> String {
         let out = Command::new("git")
             .args(["rev-parse", "HEAD"])
@@ -106,12 +100,8 @@ fn run_coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> anyho
     run(argv)
 }
 
-/// The package root: anchors pytest's rootdir at `<repo>` so the colocated suite
-/// under `src/` resolves its `from widget import ...` when coverage runs at the scan
-/// path `<repo>/src`.
 const PYPROJECT: &str = "[tool.pytest.ini_options]\n";
 
-/// Baseline: `widget` is fully covered (both branches taken) by `WIDGET_TEST_PY`.
 const WIDGET_PY: &str = r#"def widget(n):
     if n > 0:
         return "pos"
@@ -125,11 +115,6 @@ def test_widget():
     assert widget(-1) == "neg"
 "#;
 
-/// After: appends two one-line functions — `covered` (the test calls it) and
-/// `uncovered` (it doesn't). Four new *executable* lines: each `def` runs at
-/// import, `covered`'s `return` runs, `uncovered`'s never does → 3 / 4 = **75%**
-/// covered on the diff (the appended blanks aren't executable). So the same diff
-/// clears a 70 floor but fails an 85 floor.
 const WIDGET_PY_75: &str = r#"def widget(n):
     if n > 0:
         return "pos"
@@ -155,8 +140,6 @@ def test_covered():
     assert covered() == 1
 "#;
 
-/// Writes the fully-covered baseline in the default package layout —
-/// `{pyproject.toml, src/**}` — and returns its commit as the base ref.
 fn baseline(repo: &TempRepo) -> String {
     repo.write("pyproject.toml", PYPROJECT);
     repo.write("src/widget.py", WIDGET_PY);

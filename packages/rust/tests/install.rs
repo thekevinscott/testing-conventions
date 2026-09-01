@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use testing_conventions::agents::install;
 
-/// A throwaway directory for the managed file, removed on drop.
 struct TempDir(PathBuf);
 
 impl TempDir {

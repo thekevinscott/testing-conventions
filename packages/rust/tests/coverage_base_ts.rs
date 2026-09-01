@@ -6,24 +6,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use testing_conventions::coverage::{Outcome, TypeScriptThresholds};
 use testing_conventions::{patch_coverage, run};
 
-/// The fixtures' installed vitest toolchain — symlinked into each throwaway repo
-/// so `npx vitest` resolves it via Node's parent lookup without a per-test install.
 fn fixtures_node_modules() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/unit_coverage/typescript/node_modules")
 }
 
-/// A minimal package manifest at the repo root — the marker of the default package
-/// layout. Its presence, not its contents, makes the tree package-shaped; the sources
-/// live under `src/`.
 const PACKAGE_JSON: &str =
     "{ \"name\": \"tc-cov-base\", \"private\": true, \"version\": \"1.0.0\" }\n";
 
-/// A throwaway git repo, removed on drop. The default layout — a `package.json` at the
-/// repo root with sources under `src/`. A test writes a baseline source + its colocated
-/// test, `commit`s it, captures `head()` as the `base`, then mutates and commits the
-/// "after" so `<base>...HEAD` is the change under test. `node_modules` is symlinked to
-/// the fixtures' install so vitest resolves.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -46,19 +36,16 @@ impl TempRepo {
         repo
     }
 
-    /// The scan path handed to the rule: `<repo>/src`, the package's source root.
     fn src(&self) -> PathBuf {
         self.0.join("src")
     }
 
-    /// Write `contents` to `rel`, creating parent directories.
     fn write(&self, rel: &str, contents: &str) {
         let path = self.0.join(rel);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, contents).unwrap();
     }
 
-    /// Stage everything and commit, advancing HEAD.
     fn commit(&self, message: &str) {
         git(&self.0, &["add", "-A"]);
         git(
@@ -67,7 +54,6 @@ impl TempRepo {
         );
     }
 
-    /// The current HEAD SHA — captured as the `base` before mutating.
     fn head(&self) -> String {
         let out = Command::new("git")
             .args(["rev-parse", "HEAD"])
@@ -94,9 +80,6 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// A uniform floor across all four metrics — the bracket the known-ratio diff is
-/// judged against (its minimum metric is 50%, so an 80 floor fails and a 40 floor
-/// clears).
 fn floors(level: u8) -> TypeScriptThresholds {
     TypeScriptThresholds {
         lines: level,
@@ -139,7 +122,6 @@ fn run_coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> anyho
     run(argv)
 }
 
-/// Baseline: `widget` is fully covered (both branches taken) by `WIDGET_TEST_TS`.
 const WIDGET_TS: &str = r#"export function widget(n: number): string {
   if (n > 0) return 'pos';
   return 'neg';
@@ -155,15 +137,6 @@ test('widget', () => {
 });
 "#;
 
-/// After: appends two one-line functions — `covered` (the test calls it) and
-/// `uncovered` (it doesn't). The diff adds new lines 5-12; restricted to them the
-/// four metrics land at a known shape (verified against real vitest):
-///   - functions: `covered` (line 6) is called, `uncovered` (line 10) isn't → 1/2 = **50%**
-///   - statements / lines: the `covered` body + braces run, `uncovered`'s don't → 4/6 = **66.67%**
-///   - branches: the only branch arm in the diff is `covered`'s, taken → **100%**
-///
-/// So the minimum metric is 50%: the same diff fails an 80 floor (functions 50,
-/// lines/statements 66.67 all below) and clears a 40 floor.
 const WIDGET_TS_75: &str = r#"export function widget(n: number): string {
   if (n > 0) return 'pos';
   return 'neg';
@@ -191,8 +164,6 @@ test('covered', () => {
 });
 "#;
 
-/// Writes the fully-covered baseline + its test under `src/` and returns its commit as
-/// the base.
 fn baseline(repo: &TempRepo) -> String {
     repo.write("src/widget.ts", WIDGET_TS);
     repo.write("src/widget.test.ts", WIDGET_TEST_TS);

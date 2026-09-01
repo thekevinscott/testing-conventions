@@ -55,7 +55,7 @@ outputs:
     description: 'true when a conventional dist/ holding a built distribution is discoverable at the derived package_root (#280).'
     value: ${{ steps.scan.outputs.packaging_dist }}
   e2e_attestation:
-    description: 'true when a committed e2e-attestation.json sits at the checkout root.'
+    description: 'true when committed e2e receipts sit at the derived package_root: a .json under e2e-attestations/, or the legacy single e2e-attestation.json.'
     value: ${{ steps.scan.outputs.e2e_attestation }}
   package_root:
     description: 'The derived package root (#277): the nearest directory at-or-above `path` holding a package.json / pyproject.toml / Cargo.toml, else the checkout root (`.`).'

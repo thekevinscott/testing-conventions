@@ -22,7 +22,7 @@ name: Dogfood
 #                   to begin with. Rust uses inline `#[cfg(test)]`, out of scope for the
 #                   file-based rule.
 #   e2e-verify    — dogfoods the e2e attestation nudge (#71): packages/node carries a
-#                   tests/e2e suite and a committed e2e-attestation.json, and CI runs
+#                   tests/e2e suite and committed receipts under e2e-attestations/, and CI runs
 #                   the reusable workflow's own `e2e-verify` job, scoped to `packages/node`
 #                   via `source` — the in-repo whole-hog proof for this gate (#281). Before
 #                   #281 this had to be a bespoke job (build the CLI from source, `cd

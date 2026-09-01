@@ -6,7 +6,18 @@ asserted against the propagated exception's `.message`.
 """
 from checks.hermetic_wired.cli import GUARD, REUSABLE_WORKFLOW, cli
 
-WIRED = f"""
+ENV_LINE = "          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}\n"
+
+
+def fallback_step(gate, wired=True):
+    """A `steps:` list item running the `${CLI_COMMAND:-` fallback, with or without its env line."""
+    env = "        env:\n" + ENV_LINE if wired else ""
+    run = f'        run: ${{CLI_COMMAND:-npx -y "testing-conventions"}} unit {gate}\n'
+    return f"      - name: Check {gate}\n" + env + run
+
+
+WIRED = (
+    f"""
 jobs:
   detect:
     steps:
@@ -18,8 +29,12 @@ jobs:
   unit-lint:
     steps:
       - uses: ./.github/actions/download-hermetic-cli
-      - run: ${{CLI_COMMAND:-npx -y "testing-conventions"}} unit lint
 """
+    + fallback_step("lint")
+    + fallback_step("colocated-test")
+)
+
+UNWIRED_STEP = WIRED.replace(fallback_step("colocated-test"), fallback_step("colocated-test", wired=False))
 
 UNWIRED = "jobs:\n  detect:\n    steps:\n      - uses: thekevinscott/testing-conventions/.github/actions/detect@v0\n"
 
@@ -167,3 +182,56 @@ def test_declares_the_workflow_argument_and_variadic_callers():
     assert workflow.default == REUSABLE_WORKFLOW
     assert callers.name == "callers"
     assert callers.nargs == -1
+
+
+def test_raises_when_one_of_two_fallback_steps_lacks_its_own_cli_command_env(tmp_path):
+    workflow = _write(tmp_path, "wf.yml", UNWIRED_STEP)
+    caller = _write(tmp_path, "caller.yml", CALLER_WIRED)
+    try:
+        cli.callback(workflow=workflow, callers=(caller,))
+    except Exception as error:  # noqa: BLE001
+        assert "Check colocated-test" in error.message
+        assert "Check lint" not in error.message
+        assert "published" in error.message
+    else:
+        raise AssertionError("a step running the fallback without its own CLI_COMMAND env must raise")
+
+
+def test_the_file_wide_fallback_needle_survives_a_single_unwired_step(tmp_path):
+    # Every step still carries the `${CLI_COMMAND:-` text, so a file-wide substring check cannot
+    # tell one unwired step from none.
+    assert "${CLI_COMMAND:-" in UNWIRED_STEP
+    workflow = _write(tmp_path, "wf.yml", UNWIRED_STEP)
+    caller = _write(tmp_path, "caller.yml", CALLER_WIRED)
+    try:
+        cli.callback(workflow=workflow, callers=(caller,))
+    except Exception as error:  # noqa: BLE001
+        assert "Check colocated-test" in error.message
+    else:
+        raise AssertionError("an intact file-wide needle must not mask a single unwired step")
+
+
+def test_raises_when_a_step_sets_cli_command_from_something_other_than_detect(tmp_path):
+    hardcoded = WIRED.replace(ENV_LINE, "          CLI_COMMAND: ./hermetic-cli/testing-conventions\n", 1)
+    workflow = _write(tmp_path, "wf.yml", hardcoded)
+    caller = _write(tmp_path, "caller.yml", CALLER_WIRED)
+    try:
+        cli.callback(workflow=workflow, callers=(caller,))
+    except Exception as error:  # noqa: BLE001
+        assert "Check lint" in error.message
+    else:
+        raise AssertionError("a CLI_COMMAND env not read from detect must raise")
+
+
+def test_a_neighbouring_steps_env_does_not_satisfy_an_unwired_step(tmp_path):
+    # The wired `lint` step sits directly above the unwired one, so a scan running forward from
+    # the fallback line instead of bounding each step would find the neighbour's env line.
+    trailing_job = "  packaging:\n    steps:\n      - run: echo hi\n"
+    workflow = _write(tmp_path, "wf.yml", UNWIRED_STEP + trailing_job)
+    caller = _write(tmp_path, "caller.yml", CALLER_WIRED)
+    try:
+        cli.callback(workflow=workflow, callers=(caller,))
+    except Exception as error:  # noqa: BLE001
+        assert "Check colocated-test" in error.message
+    else:
+        raise AssertionError("a neighbour's env line must not satisfy an unwired step")

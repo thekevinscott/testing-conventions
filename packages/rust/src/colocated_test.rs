@@ -1,17 +1,4 @@
 //! The unit `colocated-test` check.
-//!
-//! Convention (README "Colocated Test"; `internals/*/testing.md`): a source
-//! file is unit-tested by a *colocated* test named after it — `foo.py` →
-//! `foo_test.py` (Python), `foo-bar.ts` → `foo-bar.test.ts` (TypeScript).
-//! [`missing_unit_tests`] walks a tree for a [`Language`] and returns every
-//! source file with no such sibling — an "orphan". Test files are what the
-//! check looks *for*, never subjects.
-//!
-//! Two things are not orphans even without a colocated test: a file
-//! that holds no code (empty or comment-only — e.g. a bare `__init__.py`), which
-//! is not a subject at all, and a file listed in the config `exempt` table,
-//! which is a deliberate, reason-required omission. Everything else must be
-//! tested — there is no automatic name- or shape-based exemption.
 
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
@@ -47,9 +34,6 @@ impl Language {
             Language::TypeScript => {
                 has_extension(path, &["ts", "tsx", "mts", "cts"]) && !is_declaration(path)
             }
-            // Rust uses [`missing_inline_tests`] (inline `#[cfg(test)]` presence),
-            // not this file-pairing walk, so nothing is tracked here and `is_test`
-            // / `has_code` / `expected_test_path` are never reached for Rust.
             Language::Rust => false,
         }
     }
@@ -69,9 +53,7 @@ impl Language {
         }
     }
 
-    /// `true` when `path` is test *support* — not a unit under test, but not a
-    /// subject either. Python's `conftest.py` (pytest fixtures) is the only such
-    /// file: there is no `conftest_test.py`, and it is never a coverage subject.
+    /// `true` when `path` is test *support* — Python's `conftest.py`, never a subject.
     pub(crate) fn is_support(self, path: &Path) -> bool {
         match self {
             Language::Python => file_name_of(path) == "conftest.py",
@@ -79,10 +61,8 @@ impl Language {
         }
     }
 
-    /// `true` when `source` (the file's contents) holds at least one line of
-    /// code — anything beyond blank lines and comments. An empty or comment-only
-    /// file (e.g. a bare `__init__.py`) carries no logic, so it is never a
-    /// unit-test subject and needs no exemption.
+    /// `true` when `source` holds at least one line of code — anything beyond blank
+    /// lines and comments.
     pub(crate) fn has_code(self, source: &str) -> bool {
         match self {
             Language::Python => python_has_code(source),
@@ -91,18 +71,9 @@ impl Language {
         }
     }
 
-    /// `true` when `source` (the contents of the file at `path`) declares behavior a
-    /// unit test can exercise, so the file is a subject of the colocated-test rules.
-    ///
-    /// Two shapes carry no behavior. A file that holds no code — empty or comment-only,
-    /// e.g. a bare `__init__.py` — has no logic ([`Self::has_code`]). A TypeScript
-    /// type-only module erases to zero runtime JavaScript, exactly like a `.d.ts` file
-    /// ([`crate::ts::is_type_only_module`]). Neither needs a colocated test, and neither
-    /// needs an exemption to say so.
-    ///
-    /// Presence and the commit-scoped co-change check both decide subjecthood here, so
-    /// they cannot disagree about what has behavior — a type-only module that presence
-    /// skips is not a co-change subject either.
+    /// `true` when `source` at `path` declares behavior a unit test can exercise. Presence
+    /// and the commit-scoped co-change check both decide subjecthood here, so they cannot
+    /// disagree about what has behavior.
     pub(crate) fn is_subject(self, source: &str, path: &Path) -> bool {
         if !self.has_code(source) {
             return false;
@@ -114,20 +85,13 @@ impl Language {
     }
 
     /// `true` when `base` and `head` — the file at `path` before and after an edit — hold
-    /// the same code once comments and formatting whitespace are normalized away.
-    ///
-    /// The commit-scoped co-change check reads this to tell an edit the compiler sees from
-    /// one it doesn't: rewording a comment, adding a blank line, and stripping trailing
-    /// whitespace leave the two sides equal, while a docstring, a string literal, a
-    /// template literal, and Python block structure are code. Content that fails to parse
-    /// on either side is **not** equal, so an unreadable file is held to its colocated test
-    /// rather than skipped.
+    /// the same code once comments and formatting whitespace are normalized away. Content
+    /// that fails to parse on either side is **not** equal.
     pub(crate) fn same_code(self, base: &str, head: &str, path: &Path) -> bool {
         match self {
             Language::Python => python_same_code(base, head),
             Language::TypeScript => crate::ts::same_code(base, head, path),
-            // Unreachable for Rust (co-change rejects `--language rust`, and nothing is
-            // tracked here); the conservative answer keeps any caller that arrives flagged.
+            // Unreachable for Rust; `false` keeps any caller that arrives flagged.
             Language::Rust => false,
         }
     }
@@ -145,16 +109,9 @@ impl Language {
     }
 }
 
-/// Walk `root` recursively and return every source file (for `language`) that
-/// has no colocated unit test, sorted for deterministic output.
-///
-/// A file that is itself a test is never a subject; an empty/comment-only file
-/// holds no logic and is never a subject; a file whose `root`-relative path is
-/// in `exempt` is a deliberate, reason-required omission. Every other source
-/// file must have its colocated test sibling. `exempt` holds the
-/// `colocated-test`-rule paths resolved from config
-/// ([`crate::config::resolve_exempt`]). Returns an
-/// error if the tree under `root` cannot be read.
+/// Every source file under `root` (for `language`) with no colocated unit test, sorted.
+/// `exempt` holds the rule's `root`-relative paths resolved from config
+/// ([`crate::config::resolve_exempt`]).
 pub fn missing_unit_tests(
     root: impl AsRef<Path>,
     language: Language,
@@ -163,9 +120,7 @@ pub fn missing_unit_tests(
     let root = root.as_ref();
     let mut files = Vec::new();
     collect_files(root, language, &mut files)?;
-    // `<package root>/tests/` belongs to the suite tiers (integration / e2e),
-    // so nothing under it is a colocated-unit subject. Rust's walk already
-    // skips `tests/` (an integration-crate directory in cargo's own layout).
+    // `<package root>/tests/` belongs to the suite tiers, so nothing under it is a subject.
     let manifest = match language {
         Language::Python => Some("pyproject.toml"),
         Language::TypeScript => Some("package.json"),
@@ -175,22 +130,17 @@ pub fn missing_unit_tests(
         files.retain(|file| !file.starts_with(&tests));
     }
 
-    // Every tracked path we found, so a subject's expected twin is a lookup
-    // rather than a second pass over the filesystem.
     let present: HashSet<&Path> = files.iter().map(PathBuf::as_path).collect();
 
     let mut orphans: Vec<PathBuf> = Vec::new();
     for source in &files {
-        // A test file and a support file (Python `conftest.py`) are never subjects.
         if language.is_test(source) || language.is_support(source) {
             continue;
         }
         if present.contains(language.expected_test_path(source).as_path()) {
             continue;
         }
-        // No colocated test. A file with no behavior — empty/comment-only, or a
-        // type-only TypeScript module — is not a subject; read only now, for the
-        // handful of files that lack a twin, to find out.
+        // Read only for a file that lacks a twin, so the common case costs no file read.
         let contents = std::fs::read_to_string(source)
             .with_context(|| format!("reading source file `{}`", source.display()))?;
         if !language.is_subject(&contents, source) {
@@ -227,17 +177,9 @@ pub(crate) fn collect_files(dir: &Path, language: Language, out: &mut Vec<PathBu
     Ok(())
 }
 
-/// Walk `root` for Rust source files and return every one that defines testable
-/// behavior — a function with a body, outside any `#[cfg(test)]` module — but
-/// carries no inline `#[cfg(test)]` module, sorted for deterministic output.
-///
-/// The Rust arm of the colocated-test rule: Rust units are inline
-/// `#[cfg(test)]` modules, so "colocated" means a test module in the *same file*,
-/// not a sibling file. A file with no testable function (only `mod` / `use`
-/// declarations, types, or constants) is not a subject; integration crates under
-/// `tests/` (and `benches/` / `examples/`) are not unit sources and are skipped; a
-/// file whose `root`-relative path is in `exempt` is a deliberate, reason-required
-/// omission. Errors if the tree can't be read or a file can't be parsed.
+/// Every Rust source file under `root` that defines testable behavior — a function with a
+/// body, outside any `#[cfg(test)]` module — but carries no inline `#[cfg(test)]` module,
+/// sorted. `exempt` holds the rule's `root`-relative paths resolved from config.
 pub fn missing_inline_tests(
     root: impl AsRef<Path>,
     exempt: &BTreeSet<String>,
@@ -255,7 +197,6 @@ pub fn missing_inline_tests(
             .map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
         let mut visitor = PresenceVisitor::default();
         visitor.visit_file(&ast);
-        // No behavior to test → not a subject; an inline `#[cfg(test)]` module → covered.
         if !visitor.has_testable_fn || visitor.has_test_module {
             continue;
         }
@@ -273,12 +214,8 @@ pub fn missing_inline_tests(
     Ok(orphans)
 }
 
-/// Recursively collect `*.rs` unit-source files under `dir` into `out`, skipping
-/// the non-unit trees — `tests/` (integration crates), `benches/`, `examples/`,
-/// `target/` — and the `build.rs` build script. Inline `#[cfg(test)]` tests live in
-/// the library/binary source, so only those files are presence subjects. Shared with
-/// the unit-isolation scan ([`crate::isolation::find_violations`]), which walks the
-/// same unit source.
+/// Recursively collect `*.rs` unit-source files under `dir` into `out`, skipping the
+/// non-unit trees — `tests/`, `benches/`, `examples/`, `target/` — and `build.rs`.
 pub(crate) fn collect_rust_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
@@ -301,11 +238,8 @@ pub(crate) fn collect_rust_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> R
     Ok(())
 }
 
-/// Walks a parsed Rust file to answer two questions for the inline-`#[cfg(test)]`
-/// presence rule: does the file define testable behavior — a function with a
-/// body outside any `#[cfg(test)]` module — and does it carry an inline
-/// `#[cfg(test)]` module? `test_depth` tracks nesting inside test modules so the
-/// test functions themselves never count as subjects.
+/// Answers, for a parsed Rust file, whether it defines testable behavior outside any
+/// `#[cfg(test)]` module and whether it carries an inline `#[cfg(test)]` module.
 #[derive(Default)]
 struct PresenceVisitor {
     test_depth: usize,
@@ -327,8 +261,6 @@ impl<'ast> Visit<'ast> for PresenceVisitor {
     }
 
     fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
-        // A free `fn` with a body is testable behavior — unless it is itself
-        // `#[cfg(test)]`-gated (test-only code, not a shipping subject).
         if self.test_depth == 0 && !crate::isolation::has_cfg_test(&node.attrs) {
             self.has_testable_fn = true;
         }
@@ -343,8 +275,6 @@ impl<'ast> Visit<'ast> for PresenceVisitor {
     }
 
     fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
-        // Only a default method (with a body) is behavior to test; a bare signature
-        // is not.
         if self.test_depth == 0 && node.default.is_some() {
             self.has_testable_fn = true;
         }
@@ -359,15 +289,13 @@ fn has_extension(path: &Path, extensions: &[&str]) -> bool {
         .is_some_and(|ext| extensions.contains(&ext))
 }
 
-/// `true` for a TypeScript declaration file (`*.d.ts` / `*.d.mts` / `*.d.cts`) —
-/// no runtime code, so never a unit-test subject.
+/// `true` for a TypeScript declaration file (`*.d.ts` / `*.d.mts` / `*.d.cts`).
 fn is_declaration(path: &Path) -> bool {
     let name = file_name_of(path);
     name.ends_with(".d.ts") || name.ends_with(".d.mts") || name.ends_with(".d.cts")
 }
 
-/// `true` when any line of Python `source` is neither blank nor a `#` comment. A
-/// module docstring counts as code (it is non-comment content).
+/// `true` when any line of Python `source` is neither blank nor a `#` comment.
 fn python_has_code(source: &str) -> bool {
     source.lines().any(|line| {
         let trimmed = line.trim_start();
@@ -375,13 +303,9 @@ fn python_has_code(source: &str) -> bool {
     })
 }
 
-/// `true` when Python `base` and `head` tokenize identically — the comparison
-/// [`Language::same_code`] makes for Python.
-///
-/// `Tok::Comment` and `Tok::NonLogicalNewline` exist only under the parser's `full-lexer`
-/// feature, which this crate leaves off, so a comment and a blank line never reach a token
-/// and need no filtering here. `Indent` / `Dedent` do, which is why moving a statement into
-/// the block above it is a code change.
+/// `true` when Python `base` and `head` tokenize identically. Comments and blank lines
+/// never reach a token — the parser's `full-lexer` feature is off — while `Indent` /
+/// `Dedent` do, so re-indenting a statement is a code change.
 fn python_same_code(base: &str, head: &str) -> bool {
     match (python_tokens(base), python_tokens(head)) {
         (Some(base), Some(head)) => base == head,
@@ -400,9 +324,8 @@ fn python_tokens(source: &str) -> Option<Vec<Tok>> {
     Some(tokens)
 }
 
-/// `true` when TypeScript `source` holds anything beyond whitespace and comments
-/// (`//` line, `/* … */` block). Any other character — including the start of a
-/// string literal — counts as code.
+/// `true` when TypeScript `source` holds anything beyond whitespace and `//` / `/* … */`
+/// comments. Any other character — including a string literal's quote — counts as code.
 fn typescript_has_code(source: &str) -> bool {
     let mut chars = source.chars().peekable();
     while let Some(c) = chars.next() {
@@ -472,12 +395,10 @@ mod tests {
 
     #[test]
     fn python_conftest_is_support_not_a_subject() {
-        // conftest.py holds pytest fixtures — support, never a subject.
         assert!(Language::Python.is_support(Path::new("conftest.py")));
         assert!(Language::Python.is_support(Path::new("pkg/conftest.py")));
         assert!(!Language::Python.is_support(Path::new("widget.py")));
         assert!(!Language::Python.is_support(Path::new("widget_test.py")));
-        // Support is Python-only; TypeScript/Rust have no conftest concept.
         assert!(!Language::TypeScript.is_support(Path::new("conftest.ts")));
     }
 
@@ -548,7 +469,6 @@ mod tests {
     fn python_real_content_counts_as_code() {
         assert!(Language::Python.has_code("x = 1\n"));
         assert!(Language::Python.has_code("# header\nimport os\n"));
-        // A docstring is non-comment content, so it counts.
         assert!(Language::Python.has_code("\"\"\"Package docstring.\"\"\"\n"));
     }
 
@@ -564,16 +484,12 @@ mod tests {
     fn typescript_real_content_counts_as_code() {
         assert!(Language::TypeScript.has_code("export const x = 1;\n"));
         assert!(Language::TypeScript.has_code("// note\nexport * from './a';\n"));
-        // A string literal (even one that looks comment-ish) is code.
         assert!(Language::TypeScript.has_code("const s = '// not a comment';\n"));
-        // A lone division slash is code, not a comment.
         assert!(Language::TypeScript.has_code("const r = a / b;\n"));
     }
 
     #[test]
     fn typescript_subject_skips_type_only_modules() {
-        // The shared predicate presence and co-change both read: a module whose top
-        // level is exclusively type declarations has no behavior to test.
         let ts = Path::new("aliases.ts");
         assert!(!Language::TypeScript.is_subject("export type Alias = string;\n", ts));
         assert!(!Language::TypeScript.is_subject("export interface Shape { kind: string }\n", ts));
@@ -584,18 +500,14 @@ mod tests {
     fn typescript_subject_keeps_anything_with_runtime_behavior() {
         let ts = Path::new("widget.ts");
         assert!(Language::TypeScript.is_subject("export const x = 1;\n", ts));
-        // One runtime declaration alongside the types makes the module a subject again.
         assert!(Language::TypeScript
             .is_subject("export type Alias = string;\nexport const x = 1;\n", ts));
-        // Empty and comment-only files are non-subjects before the type check runs.
         assert!(!Language::TypeScript.is_subject("", ts));
         assert!(!Language::TypeScript.is_subject("// nothing here\n", ts));
     }
 
     #[test]
     fn python_subject_is_decided_by_code_alone() {
-        // Python has no type-only module shape — a `TypedDict` or alias emits runtime
-        // code — so the predicate reduces to `has_code` there.
         let py = Path::new("widget.py");
         assert!(Language::Python.is_subject("x = 1\n", py));
         assert!(Language::Python.is_subject("Alias = str\n", py));
@@ -607,7 +519,6 @@ mod tests {
     #[test]
     fn python_same_code_ignores_comments_and_formatting() {
         let py = Path::new("widget.py");
-        // A comment reworded, and a comment removed outright.
         assert!(Language::Python.same_code(
             "# widget helpers\ndef widget():\n    return 1\n",
             "# widget utilities\ndef widget():\n    return 1\n",
@@ -618,7 +529,6 @@ mod tests {
             PY_WIDGET,
             py
         ));
-        // A blank line, and trailing whitespace.
         assert!(Language::Python.same_code(PY_WIDGET, "def widget():\n\n    return 1\n", py));
         assert!(Language::Python.same_code("def widget():   \n    return 1   \n", PY_WIDGET, py));
     }
@@ -627,7 +537,6 @@ mod tests {
     fn python_same_code_sees_every_edit_the_interpreter_sees() {
         let py = Path::new("widget.py");
         assert!(!Language::Python.same_code(PY_WIDGET, "def widget():\n    return 2\n", py));
-        // A docstring is a string expression, not a comment.
         assert!(!Language::Python.same_code(
             "\"\"\"Widget helpers.\"\"\"\ndef widget():\n    return 1\n",
             "\"\"\"Widget utilities.\"\"\"\ndef widget():\n    return 1\n",
@@ -638,7 +547,6 @@ mod tests {
             "def widget():\n    return \"two\"\n",
             py
         ));
-        // Indentation that moves a statement into the block above it.
         assert!(!Language::Python.same_code(
             "def widget(flag):\n    if flag:\n        count = 1\n    return count\n",
             "def widget(flag):\n    if flag:\n        count = 1\n        return count\n",
@@ -649,13 +557,11 @@ mod tests {
     #[test]
     fn python_same_code_holds_unparseable_content_apart() {
         let py = Path::new("widget.py");
-        // An unterminated `(` stops the lexer…
         assert!(!Language::Python.same_code(
             "def widget(:\n    return 1\n",
             "# note\ndef widget(:\n    return 1\n",
             py
         ));
-        // …while this lexes cleanly and only the grammar rejects it, on either side.
         assert!(!Language::Python.same_code(
             "def widget() return 1\n",
             "# note\ndef widget() return 1\n",
@@ -667,8 +573,6 @@ mod tests {
 
     #[test]
     fn typescript_same_code_reads_the_emitted_module() {
-        // The TypeScript arm answers through the parser, so a comment reword is equal and
-        // a value change is not.
         let ts = Path::new("widget.ts");
         assert!(Language::TypeScript.same_code(
             "// widget factory\nexport const widget = () => 1;\n",
@@ -684,15 +588,11 @@ mod tests {
 
     #[test]
     fn rust_same_code_never_answers_equal() {
-        // Co-change rejects `--language rust`, so nothing reaches this arm; the
-        // conservative answer keeps any caller that arrives flagged.
         assert!(!Language::Rust.same_code("fn f() {}\n", "fn f() {}\n", Path::new("lib.rs")));
     }
 
     #[test]
     fn rust_has_no_file_based_colocated_convention() {
-        // Rust units are inline `#[cfg(test)]`; the file-based check tracks
-        // nothing and the command guards `--language rust` upstream.
         assert!(!Language::Rust.tracks(Path::new("lib.rs")));
         assert!(!Language::Rust.is_test(Path::new("lib_test.rs")));
         assert!(!Language::Rust.has_code("fn main() {}\n"));
@@ -702,8 +602,7 @@ mod tests {
         );
     }
 
-    /// `(has_testable_fn, has_test_module)` for a Rust source snippet — the two
-    /// signals the inline-`#[cfg(test)]` presence rule decides on.
+    /// `(has_testable_fn, has_test_module)` for a Rust source snippet.
     fn presence(src: &str) -> (bool, bool) {
         let ast = syn::parse_file(src).expect("snippet parses");
         let mut visitor = PresenceVisitor::default();
@@ -757,8 +656,6 @@ mod tests {
 
     #[test]
     fn rust_presence_test_module_functions_are_not_subjects() {
-        // Only a test module: its functions are at test depth, so the file has no
-        // shipping subject and needs no further inline test.
         assert_eq!(
             presence("#[cfg(test)]\nmod tests { fn helper() {} #[test] fn t() {} }\n"),
             (false, true)
@@ -767,8 +664,6 @@ mod tests {
 
     #[test]
     fn rust_presence_cfg_test_gated_free_fn_is_not_a_subject() {
-        // A directly `#[cfg(test)]`-gated free fn is test-only code, not a subject,
-        // and is not a `#[cfg(test)] mod`.
         assert_eq!(
             presence("#[cfg(test)]\nfn only_in_tests() {}\n"),
             (false, false)

@@ -105,7 +105,9 @@ script and Cargo's `build.rs` compile during dependency install.
 
 `version` is empty by default, so each job resolves `testing-conventions` to the newest release
 its node satisfies. Every job that invokes the CLI provisions node 24 to match the package's
-`engines.node`, so that is the newest release outright.
+`engines.node`, so that is the newest release outright. Each job resolves it from a runner-owned
+temp prefix, so the version it runs comes from the registry and this input, and a
+`testing-conventions` entry in your own manifest is free to differ.
 The packument that resolution reads is served by `registry.npmjs.org` with `cache-control: public,
 max-age=300`, so a version becomes visible at a given CDN edge over the five minutes after it is
 published. A run starting inside that window resolves the version before it and reports whatever
@@ -114,8 +116,8 @@ that build concludes.
 The window is the registry's, and it closes on its own. Three things that look like levers over it
 are not:
 
-- **`npx --prefer-online`** asks for behavior the run already has. npm resolves a bare-name spec
-  with `preferOnline` set — `libnpmexec`'s `getManifest` — so every `npx testing-conventions` is
+- **`--prefer-online`** asks for behavior the run already has. npm resolves a bare-name spec
+  with `preferOnline` set — `libnpmexec`'s `getManifest` — so every `npm exec` of the CLI is
   already revalidating.
 - **Clearing the npm cache** operates on a store that is already empty. GitHub-hosted runners are
   ephemeral, and this workflow's `setup-node` steps request no `cache:`, so a job's `~/.npm` starts

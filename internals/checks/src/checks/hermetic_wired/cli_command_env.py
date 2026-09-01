@@ -2,7 +2,7 @@
 per step rather than file-wide.
 
 `CLI_COMMAND` is a step-local `env:` value: a step running the fallback without its own
-`CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}` line expands to the published npx binary
+`CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}` line expands to the published binary
 while every other step still carries the fallback text, so a file-wide substring check reads nine
 wired steps out of ten as fully wired.
 """
@@ -38,6 +38,6 @@ def step_name(block: str) -> str:
 
 
 def unwired_steps(text: str) -> list[str]:
-    """Names of the steps running the npx fallback without their own `CLI_COMMAND` env line."""
+    """Names of the steps running the fallback without their own `CLI_COMMAND` env line."""
     running = [block for block in step_blocks(text) if FALLBACK in block]
     return [step_name(block) for block in running if ENV_VALUE not in block]

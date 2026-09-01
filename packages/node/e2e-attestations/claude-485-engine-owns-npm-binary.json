@@ -1,7 +1,0 @@
-{
-  "command": "pnpm --config.minimum-release-age=0 run test:e2e",
-  "ran_at": 1787261758,
-  "exit_code": 0,
-  "commit": "06541458730f329778f077c8f25009cd46d022a5",
-  "branch": "claude/485-engine-owns-npm-binary"
-}

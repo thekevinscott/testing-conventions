@@ -15,7 +15,7 @@ exist:
 - a local (`./.github/actions/detect`) detect step alongside the published `@v0` one;
 - a `cli_command` detect output;
 - the `${CLI_COMMAND:-` fallback (transition-safe: an old `@v0` detect emits no `cli_command`,
-  and the consumer path must stay byte-for-byte today's npx line), with its `CLI_COMMAND` env
+  and the consumer path must stay today's published-CLI line), with its `CLI_COMMAND` env
   line present in each step that runs it — the value is step-local, so a step missing the line
   expands to the published binary while the file-wide fallback text survives on its neighbours;
 - a `hermetic-cli` artifact download, via the shared `./.github/actions/download-hermetic-cli`
@@ -78,7 +78,7 @@ def cli(workflow: str, callers: tuple[str, ...]) -> None:
     if "cli_command:" not in text:
         missing.append("a `cli_command` detect output")
     if "${CLI_COMMAND:-" not in text:
-        missing.append("the `${CLI_COMMAND:-` npx fallback")
+        missing.append("the `${CLI_COMMAND:-` published-CLI fallback")
     if "uses: ./.github/actions/download-hermetic-cli" not in text:
         missing.append("a `hermetic-cli` artifact download (./.github/actions/download-hermetic-cli)")
     if missing:
@@ -91,7 +91,7 @@ def cli(workflow: str, callers: tuple[str, ...]) -> None:
     unwired_fallback = unwired_steps(text)
     if unwired_fallback:
         raise CheckFailed(
-            "the reusable workflow runs the `${CLI_COMMAND:-` npx fallback in "
+            "the reusable workflow runs the `${CLI_COMMAND:-` published-CLI fallback in "
             + ", ".join(unwired_fallback)
             + " with no `CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}` in that step's "
             "own `env:` — `CLI_COMMAND` is step-local, so those steps expand to the published "

@@ -131,5 +131,6 @@ against an unsatisfiable signer to pin that — so the fixture's setting is what
 `mutation_typescript_published*.rs` resolves the adapter from an isolated install of the **packed**
 npm package (`common::PublishedInstall`) instead of from `packages/node`'s dev tree. That install's
 `node_modules` holds the package's declared dependency closure alone, which is the resolution
-topology `npx -y testing-conventions` runs in; pnpm hoists devDependencies in the dev tree, so a
+topology the workflow's `npm exec -- testing-conventions` runs in; pnpm hoists devDependencies in
+the dev tree, so a
 missing-declared-dependency bug stays hidden there and surfaces here.

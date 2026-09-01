@@ -134,7 +134,6 @@ const WIDGET_PY_TEST: &str =
 
 #[test]
 fn python_modified_source_without_its_test_is_stale() {
-    // The core red case: widget.py changes, widget_test.py does not.
     let repo = TempRepo::new("py-mod");
     repo.write("widget.py", WIDGET_PY);
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -149,7 +148,6 @@ fn python_modified_source_without_its_test_is_stale() {
 
 #[test]
 fn python_modified_source_with_its_test_is_clean() {
-    // Changing both source and its colocated test is exactly what the rule wants.
     let repo = TempRepo::new("py-mod-clean");
     repo.write("widget.py", WIDGET_PY);
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -185,7 +183,6 @@ fn python_nested_source_is_reported_with_its_relative_path() {
 
 #[test]
 fn python_deleted_source_without_deleting_its_test_is_stale() {
-    // A removal that leaves the test behind — the stale orphan this rule targets.
     let repo = TempRepo::new("py-del");
     repo.write("widget.py", WIDGET_PY);
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -215,9 +212,6 @@ fn python_deleting_source_and_test_together_is_clean() {
 
 #[test]
 fn python_deleting_a_barrel_without_a_test_is_clean() {
-    // A package barrel (`__init__.py`) has no colocated test, so deleting it can
-    // never bring `__init___test.py` into the diff — it must not be flagged.
-    // The base tree, not HEAD, decides: the barrel had no sibling test to orphan.
     let repo = TempRepo::new("py-del-barrel");
     repo.write(
         "cli/interpret/__init__.py",
@@ -236,11 +230,6 @@ fn python_deleting_a_barrel_without_a_test_is_clean() {
 
 #[test]
 fn python_deleting_an_exempt_barrel_passes_base_after_dropping_its_entry() {
-    // The bug: an exempt barrel was undeletable under `--base`. Keeping its
-    // `colocated-test` exempt entry made the stale-exempt scan reject it (gone in
-    // HEAD); dropping the entry — the documented move — made co-change flag the
-    // deletion. With co-change pairing against the base tree, deleting the barrel
-    // *and* its now-stale entry passes both presence and co-change in one run.
     let repo = TempRepo::new("py-del-exempt-barrel");
     repo.write(
         "testing-conventions.toml",
@@ -268,8 +257,6 @@ fn python_deleting_an_exempt_barrel_passes_base_after_dropping_its_entry() {
 
 #[test]
 fn python_added_source_is_not_a_subject() {
-    // Brand-new code is the coverage floor's concern, not co-change's; a new
-    // source with no colocated test is not flagged here.
     let repo = TempRepo::new("py-add");
     repo.write("widget.py", WIDGET_PY);
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -284,7 +271,6 @@ fn python_added_source_is_not_a_subject() {
 
 #[test]
 fn python_modifying_only_the_test_is_allowed() {
-    // A test file is never a co-change subject — tightening a test on its own is fine.
     let repo = TempRepo::new("py-test-only");
     repo.write("widget.py", WIDGET_PY);
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -302,8 +288,6 @@ fn python_modifying_only_the_test_is_allowed() {
 
 #[test]
 fn python_modified_empty_file_is_not_a_subject() {
-    // An empty / comment-only file carries no logic, so editing it needs no test
-    // co-change — consistent with the colocated-test rule.
     let repo = TempRepo::new("py-empty");
     repo.write("pkg/__init__.py", "");
     repo.write("widget.py", WIDGET_PY);
@@ -321,8 +305,6 @@ const WIDGET_PY_COMMENTED: &str = "# widget helpers\ndef widget():\n    return 1
 
 #[test]
 fn python_comment_only_edit_is_not_a_subject() {
-    // Rewording a `#` comment leaves the compiler the same program, so the colocated
-    // test still pins the behavior the file has.
     let repo = TempRepo::new("py-comment-only");
     repo.write("widget.py", WIDGET_PY_COMMENTED);
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -340,7 +322,6 @@ fn python_comment_only_edit_is_not_a_subject() {
 
 #[test]
 fn python_removing_a_comment_is_not_a_subject() {
-    // Deleting a comment outright is the same edit as rewording one.
     let repo = TempRepo::new("py-comment-gone");
     repo.write("widget.py", WIDGET_PY_COMMENTED);
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -355,7 +336,6 @@ fn python_removing_a_comment_is_not_a_subject() {
 
 #[test]
 fn python_blank_line_only_edit_is_not_a_subject() {
-    // A blank line is a non-logical newline: the token stream is unchanged.
     let repo = TempRepo::new("py-blank-line");
     repo.write("widget.py", WIDGET_PY);
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -370,7 +350,6 @@ fn python_blank_line_only_edit_is_not_a_subject() {
 
 #[test]
 fn python_trailing_whitespace_only_edit_is_not_a_subject() {
-    // Trailing spaces reach no token, so a whitespace sweep needs no test change.
     let repo = TempRepo::new("py-trailing-ws");
     repo.write("widget.py", "def widget():   \n    return 1   \n");
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -385,8 +364,6 @@ fn python_trailing_whitespace_only_edit_is_not_a_subject() {
 
 #[test]
 fn python_comment_edit_carrying_a_code_change_is_stale() {
-    // The code half decides: a comment riding along with a real edit is still a
-    // modification the test must follow.
     let repo = TempRepo::new("py-comment-plus-code");
     repo.write("widget.py", WIDGET_PY_COMMENTED);
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -404,7 +381,6 @@ fn python_comment_edit_carrying_a_code_change_is_stale() {
 
 #[test]
 fn python_docstring_edit_is_stale() {
-    // A docstring is a string expression the interpreter keeps — code, not a comment.
     let repo = TempRepo::new("py-docstring");
     repo.write(
         "widget.py",
@@ -425,7 +401,6 @@ fn python_docstring_edit_is_stale() {
 
 #[test]
 fn python_string_literal_edit_is_stale() {
-    // Text inside a string is a value the code returns.
     let repo = TempRepo::new("py-string");
     repo.write("widget.py", "def widget():\n    return \"one\"\n");
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -440,8 +415,6 @@ fn python_string_literal_edit_is_stale() {
 
 #[test]
 fn python_indentation_change_is_stale() {
-    // Indentation carries block structure: moving a statement into the branch above
-    // it changes what runs.
     let repo = TempRepo::new("py-indent");
     repo.write(
         "widget.py",
@@ -462,8 +435,6 @@ fn python_indentation_change_is_stale() {
 
 #[test]
 fn python_comment_edit_in_unparseable_source_is_stale() {
-    // Content that fails to parse is held to its test as written: an unreadable file
-    // gets the strict answer, never a silent skip.
     let repo = TempRepo::new("py-unparseable");
     repo.write("widget.py", "def widget(:\n    return 1\n");
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -478,9 +449,6 @@ fn python_comment_edit_in_unparseable_source_is_stale() {
 
 #[test]
 fn python_comment_only_edit_compares_against_the_merge_base() {
-    // The base side of the comparison is the merge base, matching the `<base>...HEAD`
-    // diff: trunk moving on with its own code change leaves this branch's edit a
-    // comment reword.
     let repo = TempRepo::new("py-merge-base");
     repo.write("widget.py", WIDGET_PY_COMMENTED);
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -511,7 +479,6 @@ fn python_comment_only_edit_compares_against_the_merge_base() {
 
 #[test]
 fn python_conftest_is_not_a_subject() {
-    // conftest.py is pytest support, never a colocated-test subject.
     let repo = TempRepo::new("py-conftest");
     repo.write("conftest.py", "import pytest\n");
     repo.write("widget.py", WIDGET_PY);
@@ -560,8 +527,6 @@ fn python_subcommand_exits_zero_when_every_change_co_changes() {
 
 #[test]
 fn python_a_co_change_exemption_lifts_a_stale_source() {
-    // cli.py has its colocated test (so presence is satisfied), but a change edits
-    // cli.py and leaves cli_test.py — stale under `--base`, unless waived.
     let repo = TempRepo::new("py-exempt");
     repo.write(
         "testing-conventions.toml",
@@ -579,9 +544,7 @@ fn python_a_co_change_exemption_lifts_a_stale_source() {
     repo.write("cli.py", "def main():\n    return 1\n");
     repo.commit("edit the launcher, leave its test");
 
-    // Stale with no config…
     assert_eq!(run_co_change(&repo, "python", &base, None).unwrap(), 1);
-    // …and lifted by the `co-change` exemption.
     assert_eq!(
         run_co_change(&repo, "python", &base, Some("testing-conventions.toml")).unwrap(),
         0
@@ -590,7 +553,6 @@ fn python_a_co_change_exemption_lifts_a_stale_source() {
 
 #[test]
 fn a_stale_exempt_entry_is_an_error() {
-    // The exempt list can't silently rot: a path that names no file is rejected.
     let repo = TempRepo::new("py-stale-exempt");
     repo.write(
         "testing-conventions.toml",
@@ -646,8 +608,6 @@ fn typescript_modified_source_with_its_test_is_clean() {
 
 #[test]
 fn typescript_deleting_a_barrel_without_a_test_is_clean() {
-    // A `index.ts` re-export barrel has no colocated test — deleting it can't bring
-    // `index.test.ts` into the diff, so it must not be flagged.
     let repo = TempRepo::new("ts-del-barrel");
     repo.write("cli/interpret/index.ts", "export * from './widget';\n");
     repo.write(
@@ -673,9 +633,6 @@ const TS_WIDGET_TEST: &str =
 
 #[test]
 fn typescript_modified_type_only_module_is_not_a_subject() {
-    // A type-only module erases to zero runtime JavaScript, so presence skips it as a
-    // non-subject. Co-change reads the same predicate: editing one is not a stale-test
-    // risk, and there is no colocated test it could ever co-change with.
     let repo = TempRepo::new("ts-type-only");
     repo.write("widget.ts", TS_WIDGET);
     repo.write("widget.test.ts", TS_WIDGET_TEST);
@@ -694,8 +651,6 @@ fn typescript_modified_type_only_module_is_not_a_subject() {
 
 #[test]
 fn typescript_modified_module_mixing_types_and_runtime_is_a_subject() {
-    // The skip is for modules that are *exclusively* types. One runtime declaration
-    // alongside them is behavior, so the module stays a co-change subject.
     let repo = TempRepo::new("ts-mixed");
     repo.write("mixed.ts", "export type Alias = string;\n");
     repo.write(
@@ -716,8 +671,6 @@ fn typescript_modified_module_mixing_types_and_runtime_is_a_subject() {
 
 #[test]
 fn typescript_modified_runtime_module_without_a_colocated_test_is_still_stale() {
-    // Skipping type-only modules must not silence the rule for a runtime module that
-    // has no colocated test — the change it exists to catch.
     let repo = TempRepo::new("ts-loose");
     repo.write("loose.ts", "export const loose = () => 1;\n");
     repo.commit("base");
@@ -731,8 +684,6 @@ fn typescript_modified_runtime_module_without_a_colocated_test_is_still_stale() 
 
 #[test]
 fn typescript_deleting_a_type_only_module_is_clean() {
-    // The delete arm already pairs against the base tree, so a type-only module with
-    // no sibling test deletes cleanly. Pinned so the modify-arm fix can't disturb it.
     let repo = TempRepo::new("ts-del-type-only");
     repo.write("widget.ts", TS_WIDGET);
     repo.write("widget.test.ts", TS_WIDGET_TEST);
@@ -750,7 +701,6 @@ const TS_WIDGET_COMMENTED: &str = "// widget factory\nexport const widget = () =
 
 #[test]
 fn typescript_line_comment_only_edit_is_not_a_subject() {
-    // Rewording a `//` comment leaves the emitted JavaScript identical.
     let repo = TempRepo::new("ts-comment-only");
     repo.write("widget.ts", TS_WIDGET_COMMENTED);
     repo.write("widget.test.ts", TS_WIDGET_TEST);
@@ -768,8 +718,6 @@ fn typescript_line_comment_only_edit_is_not_a_subject() {
 
 #[test]
 fn typescript_removing_a_block_comment_is_not_a_subject() {
-    // A `/* … */` block carries no runtime code, so deleting one changes nothing the
-    // colocated test could pin.
     let repo = TempRepo::new("ts-block-comment");
     repo.write(
         "widget.ts",
@@ -818,7 +766,6 @@ fn typescript_comment_edit_carrying_a_code_change_is_stale() {
 
 #[test]
 fn typescript_template_literal_edit_is_stale() {
-    // Text inside a template literal is a value the module produces.
     let repo = TempRepo::new("ts-template");
     repo.write("widget.ts", "export const widget = () => `one`;\n");
     repo.write("widget.test.ts", TS_WIDGET_TEST);
@@ -847,7 +794,6 @@ fn typescript_string_literal_edit_is_stale() {
 
 #[test]
 fn typescript_comment_edit_in_unparseable_source_is_stale() {
-    // Content that fails to parse is held to its test as written.
     let repo = TempRepo::new("ts-unparseable");
     repo.write("widget.ts", "export const widget = (() => 1;\n");
     repo.write("widget.test.ts", TS_WIDGET_TEST);
@@ -865,7 +811,6 @@ fn typescript_comment_edit_in_unparseable_source_is_stale() {
 
 #[test]
 fn an_unknown_base_ref_is_an_error() {
-    // A base that can't be resolved must surface, never silently pass as "clean".
     let repo = TempRepo::new("bad-base");
     repo.write("widget.py", WIDGET_PY);
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -879,9 +824,6 @@ fn an_unknown_base_ref_is_an_error() {
 
 #[test]
 fn co_change_rejects_rust() {
-    // Rust units are inline `#[cfg(test)]` in the same file, so a sibling test
-    // can't go stale — `--base --language rust` is rejected (presence without
-    // `--base` still supports Rust).
     let repo = TempRepo::new("rust-reject");
     repo.write("lib.rs", "pub fn f() {}\n");
     repo.commit("base");
@@ -893,9 +835,6 @@ fn co_change_rejects_rust() {
 
 #[test]
 fn base_adds_co_change_on_top_of_presence() {
-    // The defining merge: with every source paired on disk, editing a source and
-    // leaving its test is stale under `--base` (the co-change scope) — yet clean
-    // without it, since presence alone sees both files still present.
     let repo = TempRepo::new("base-additive");
     repo.write("widget.py", WIDGET_PY);
     repo.write("widget_test.py", WIDGET_PY_TEST);
@@ -904,24 +843,18 @@ fn base_adds_co_change_on_top_of_presence() {
     repo.write("widget.py", "def widget():\n    return 2\n");
     repo.commit("edit the source only");
 
-    // Stale under `--base`…
     assert_eq!(run_co_change(&repo, "python", &base, None).unwrap(), 1);
-    // …but presence-only (no `--base`) passes: the test still exists on disk.
     assert_eq!(run_colocated_presence(&repo, "python").unwrap(), 0);
 }
 
 #[test]
 fn base_still_enforces_tree_wide_presence() {
-    // `--base` *adds* co-change; it doesn't drop presence. An orphan source (no
-    // colocated test at all) is flagged even when the diff co-changes cleanly —
-    // you can't slip an orphan past `--base` by leaving it untouched.
     let repo = TempRepo::new("base-presence");
     repo.write("widget.py", WIDGET_PY);
     repo.write("widget_test.py", WIDGET_PY_TEST);
     repo.write("orphan.py", "def orphan():\n    return 9\n");
     repo.commit("base");
     let base = repo.head();
-    // A co-change-clean edit: the source and its test move together.
     repo.write("widget.py", "def widget():\n    return 2\n");
     repo.write(
         "widget_test.py",
@@ -929,6 +862,5 @@ fn base_still_enforces_tree_wide_presence() {
     );
     repo.commit("edit widget and its test together");
 
-    // Co-change is clean, but presence still flags the untouched orphan.
     assert_eq!(run_co_change(&repo, "python", &base, None).unwrap(), 1);
 }

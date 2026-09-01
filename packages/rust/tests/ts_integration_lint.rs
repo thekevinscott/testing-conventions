@@ -29,7 +29,6 @@ fn lint_exit(fixture_name: &str) -> i32 {
 fn red_flags_first_party_mocks() {
     let violations = find_integration_violations(fixture("no_first_party_mock/red"))
         .expect("walking a readable tree should succeed");
-    // Both red files mock a first-party module — one via `vi.mock`, one via `vi.doMock`.
     assert_eq!(violations.len(), 2, "got: {violations:?}");
     assert!(violations.iter().all(|v| v.rule == "no-first-party-mock"));
     assert!(
@@ -66,10 +65,6 @@ fn clean_exits_zero() {
     assert_eq!(lint_exit("no_first_party_mock/clean"), 0);
 }
 
-// The suite tiers derive from the package root — the nearest `package.json` at
-// or above the scanned `path` — so a call whose `path` is the package's source
-// directory still lints the sibling `tests/integration/` and `tests/e2e/` suites.
-
 #[test]
 fn tier_layout_integration_suite_is_linted_from_a_src_scan() {
     assert_eq!(lint_exit("tier_layout/red/src"), 1);
@@ -77,7 +72,5 @@ fn tier_layout_integration_suite_is_linted_from_a_src_scan() {
 
 #[test]
 fn tier_layout_test_outside_a_standard_tier_is_flagged() {
-    // `tests/loose.test.ts` sits under the package's `tests/` but in neither
-    // `tests/integration/` nor `tests/e2e/` — the `unknown-tier` violation.
     assert_eq!(lint_exit("tier_layout/unknown_tier/src"), 1);
 }

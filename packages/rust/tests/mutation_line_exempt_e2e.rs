@@ -36,8 +36,6 @@ fn stderr(output: &Output) -> String {
 
 #[test]
 fn rust_exempting_the_survivor_line_passes() {
-    // Line 7 (`n > 0`) is where every mutant survives; lifting just that line clears
-    // the gate.
     let out = run(
         "rust",
         &fixtures().join("rust").join("survivors"),
@@ -48,7 +46,6 @@ fn rust_exempting_the_survivor_line_passes() {
 
 #[test]
 fn rust_over_exempting_a_caught_line_is_a_hard_error() {
-    // In the killed crate line 6's mutants are all caught, so listing it is rejected.
     let out = run(
         "rust",
         &fixtures().join("rust").join("killed"),
@@ -64,7 +61,6 @@ fn rust_over_exempting_a_caught_line_is_a_hard_error() {
 
 #[test]
 fn typescript_exempting_both_survivor_lines_passes() {
-    // Lines 2 and 6 carry the survivors; lifting both clears the gate.
     let project = Staged::loose("loose_survivors");
     let out = run("typescript", project.path(), "lines_mut_ts_ok.toml");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
@@ -72,7 +68,6 @@ fn typescript_exempting_both_survivor_lines_passes() {
 
 #[test]
 fn typescript_under_listing_still_fails() {
-    // Exempting only line 6 leaves line 2's survivor unexplained, so the gate fails.
     let project = Staged::loose("loose_survivors");
     let out = run("typescript", project.path(), "lines_mut_ts_under.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
@@ -85,7 +80,6 @@ fn typescript_under_listing_still_fails() {
 
 #[test]
 fn typescript_over_exempting_a_caught_line_is_a_hard_error() {
-    // In the killed project line 2's mutants are all caught, so listing it is rejected.
     let project = Staged::loose("loose_killed");
     let out = run("typescript", project.path(), "lines_mut_ts_over.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));
@@ -98,7 +92,6 @@ fn typescript_over_exempting_a_caught_line_is_a_hard_error() {
 
 #[test]
 fn python_exempting_both_survivor_lines_passes() {
-    // Lines 2 and 6 carry the survivors; lifting both clears the gate.
     let project = Staged::python_loose("loose_survivors");
     let out = run("python", project.path(), "lines_mut_py_ok.toml");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
@@ -106,7 +99,6 @@ fn python_exempting_both_survivor_lines_passes() {
 
 #[test]
 fn python_over_exempting_a_caught_line_is_a_hard_error() {
-    // In the killed project line 2's mutants are all caught, so listing it is rejected.
     let project = Staged::python_loose("loose_killed");
     let out = run("python", project.path(), "lines_mut_py_over.toml");
     assert_eq!(code(&out), 1, "stderr: {}", stderr(&out));

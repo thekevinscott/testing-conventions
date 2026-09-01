@@ -23,8 +23,6 @@ fn check_is_rejected_as_an_unknown_subcommand() {
 
 #[test]
 fn no_subcommand_still_exits_zero() {
-    // `check` and the no-subcommand path shared one dispatch arm, so this pins the
-    // survivor: a bare invocation still parses and returns 0.
     assert_eq!(run(["testing-conventions"]).unwrap(), 0);
 }
 

@@ -87,9 +87,6 @@ fn clean_exits_zero() {
 
 #[test]
 fn cfg_not_test_module_is_not_linted_as_test_code() {
-    // A `#[cfg(not(test))]` module compiles in non-test builds — it is production
-    // code, not a unit test — so its first-party cross-module call must not be
-    // flagged. Treating `not(test)` as a test module is a false red.
     let violations = find_violations(fixture("unit/cfg_not_test"))
         .expect("walking a readable tree should succeed");
     assert!(
@@ -166,7 +163,6 @@ fn imports_clean_exits_zero() {
 
 #[test]
 fn isolation_requires_language() {
-    // Omitting `--language` is a usage error, never a silent run.
     let err =
         run(["testing-conventions", "unit", "lint", "src"]).expect_err("--language is required");
     let clap_err = err
@@ -195,7 +191,6 @@ fn iso_exit_config(fixture_name: &str, config_rel: &str) -> i32 {
 
 #[test]
 fn waived_out_of_module_call_exits_zero() {
-    // The out-of-module call in `unit/waived` is lifted by its testing-conventions.toml.
     assert_eq!(
         iso_exit_config("unit/waived", "unit/waived/testing-conventions.toml"),
         0
@@ -204,7 +199,6 @@ fn waived_out_of_module_call_exits_zero() {
 
 #[test]
 fn stale_exempt_entry_errors() {
-    // A stale exempt path must make the run error, not silently pass.
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),
         "unit".into(),
@@ -221,14 +215,8 @@ fn stale_exempt_entry_errors() {
     );
 }
 
-// ---- #393: the source walk skips tests/ and target/ ----------------------
-
 #[test]
 fn local_build_crate_neither_aborts_nor_false_flags() {
-    // A locally-built crate carries `target/` (built artifacts) and `tests/fixtures/`
-    // (an intentionally-broken `.rs` plus a `#[cfg(test)]` module that reaches out of
-    // module). The unit-isolation walk scans only the crate's own unit source, so it
-    // neither aborts on the unparsable fixture nor false-flags the non-unit trees.
     let violations = find_violations(fixture("unit/local_build"))
         .expect("a locally-built crate must not abort the rule on a tests/ or target/ file");
     assert!(

@@ -29,13 +29,11 @@ fn clean_exits_zero() {
     assert_eq!(iso_exit("unit/clean"), 0);
 }
 
-// `#[cfg(not(test))]` is production code, not a unit test.
 #[test]
 fn cfg_not_test_exits_zero() {
     assert_eq!(iso_exit("unit/cfg_not_test"), 0);
 }
 
-// D2: foreign imports
 #[test]
 fn imports_red_exits_nonzero() {
     assert_eq!(iso_exit("imports/red"), 1);
@@ -46,14 +44,11 @@ fn imports_clean_exits_zero() {
     assert_eq!(iso_exit("imports/clean"), 0);
 }
 
-// #393: a locally-built crate (with target/ and a broken tests/fixtures/ file) neither
-// aborts the rule nor false-flags — the walk skips tests/ and target/.
 #[test]
 fn local_build_exits_zero() {
     assert_eq!(iso_exit("unit/local_build"), 0);
 }
 
-// waivers
 #[test]
 fn waived_exits_zero() {
     let code = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))

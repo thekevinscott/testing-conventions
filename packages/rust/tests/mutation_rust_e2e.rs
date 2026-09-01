@@ -26,9 +26,6 @@ fn unit_mutation_exit(crate_name: &str, config: Option<&str>) -> i32 {
 
 #[test]
 fn killed_crate_passes_and_states_the_tested_count() {
-    // Every mutant is caught, so the crate clears the gate — and the success line states
-    // how many mutants the engine judged, the evidence telling this pass apart from an
-    // engine-skipped one.
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "rust"])
         .arg(fixtures().join("rust").join("killed"))
@@ -49,10 +46,6 @@ fn killed_crate_passes_and_states_the_tested_count() {
 
 #[test]
 fn a_diff_without_crate_changes_reports_the_engine_not_run() {
-    // The diff touches nothing under the crate (only a top-level note), so the run is
-    // skipped — and the output says the engine never ran, distinct from the all-killed
-    // success, keeping the vacuous pass visible in the job log. The exit code stays 0:
-    // an empty diff owes no run.
     let repo = GitRepo::new("rust-vacuous");
     repo.write(
         "crate/Cargo.toml",
@@ -93,11 +86,6 @@ fn a_diff_without_crate_changes_reports_the_engine_not_run() {
 
 #[test]
 fn a_source_change_without_mutant_sites_reports_nothing_tested() {
-    // The diff touches Rust source, but only a const's value — no function body — so
-    // the engine runs and produces no mutants to judge. The pass states exactly that,
-    // never the all-caught line: a zero-mutant run claiming "every mutation was caught"
-    // reads the same as a filter that silently dropped real mutants. The const sits
-    // after the test module so the changed line borders no mutatable function.
     let repo = GitRepo::new("rust-no-sites");
     repo.write(
         "crate/Cargo.toml",
@@ -139,11 +127,6 @@ fn a_source_change_without_mutant_sites_reports_nothing_tested() {
 
 #[test]
 fn base_states_a_nonzero_count_for_a_caught_change_in_a_workspace_member_crate() {
-    // The crate is a workspace member and the change adds a fully-tested function, so
-    // every mutant on the changed lines is caught — and the success line proves the
-    // engine tested the member's mutants by stating a non-zero count. A rebase
-    // regression that filtered every mutant out would report a zero-mutant run instead
-    // of this counted pass.
     let repo = GitRepo::new("rust-member-caught");
     repo.write(
         "Cargo.toml",
@@ -186,12 +169,6 @@ fn base_states_a_nonzero_count_for_a_caught_change_in_a_workspace_member_crate()
 
 #[test]
 fn base_fails_on_a_survivor_in_a_workspace_member_crate() {
-    // The crate is a member of a cargo workspace rooted at the repo root — a monorepo
-    // consumer's layout. The changed lines add an assertion-light function, so the
-    // diff-scoped gate goes red and names the survivor by its scan-path-relative file:
-    // cargo-mutants addresses files relative to the workspace root, and a run that
-    // never rebases the diff filters every mutant out and passes with `0 mutant(s)
-    // tested` — a false green.
     let repo = GitRepo::new("rust-workspace-member");
     repo.write(
         "Cargo.toml",
@@ -234,16 +211,11 @@ fn base_fails_on_a_survivor_in_a_workspace_member_crate() {
 
 #[test]
 fn survivors_fail_the_gate_by_default() {
-    // The gate is on by default and binary: an un-exempted surviving mutant fails the
-    // run, no config required.
     assert_eq!(unit_mutation_exit("survivors", None), 1);
 }
 
 #[test]
 fn an_exempted_survivor_passes_the_gate() {
-    // The survivor's file carries a `mutation` exemption, so the gate clears it (an
-    // equivalent / deliberately-defensive mutation, lifted with a reason) — the only
-    // way to pass with a survivor present.
     assert_eq!(
         unit_mutation_exit("survivors", Some("mutation_exempt.toml")),
         0

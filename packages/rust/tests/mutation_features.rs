@@ -37,10 +37,6 @@ fn a_feature_gated_integration_test_target_builds_and_kills_its_mutants() {
 
 #[test]
 fn a_baseline_that_cannot_build_is_an_error_not_a_vacuous_pass() {
-    // The same crate with the feature left off: `tests/boost.rs` names an item that is
-    // compiled out, so the unmutated baseline never builds and no mutant is judged. That
-    // is a hard error — reporting it as a `Tested { count: 0 }` pass would read exactly
-    // like an all-killed run.
     let err = measure_rust(&member(), &[], &BTreeMap::new(), None, &[])
         .expect_err("a baseline that cannot build fails the measurement");
     assert!(

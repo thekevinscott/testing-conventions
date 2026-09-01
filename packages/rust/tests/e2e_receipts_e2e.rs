@@ -21,8 +21,6 @@ impl TempRepo {
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
-        // Throwaway repos never sign — keep the suite hermetic regardless of the
-        // machine's global `commit.gpgsign`.
         git(&root, &["config", "commit.gpgsign", "false"]);
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::write(root.join("src/lib.rs"), "pub fn seed() {}\n").unwrap();
@@ -136,8 +134,6 @@ fn verify_base_passes_a_branch_whose_diff_carries_a_receipt() {
 
 #[test]
 fn attest_then_later_pushes_stay_green() {
-    // The full loop: attest once, keep working, verify still passes — one
-    // decision covers the branch.
     let repo = TempRepo::new();
     repo.branch("feature/code");
     repo.commit_file("src/lib.rs", "pub fn changed() {}\n", "code");
@@ -152,8 +148,6 @@ fn attest_then_later_pushes_stay_green() {
 
 #[test]
 fn slug_prints_the_standardized_name_for_an_argument() {
-    // The filename derivation is public: scripts locate a branch's receipt at
-    // `e2e-attestations/$(testing-conventions e2e slug <branch>).json`.
     let repo = TempRepo::new();
     let (code, text) = run_stdout(&repo.0, &["e2e", "slug", "Feature/One"]);
     assert_eq!(code, 0);

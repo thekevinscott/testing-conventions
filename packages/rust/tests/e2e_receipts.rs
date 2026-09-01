@@ -23,15 +23,12 @@ impl TempRepo {
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
-        // Throwaway repos never sign — keep the suite hermetic regardless of the
-        // machine's global `commit.gpgsign`.
         git(&root, &["config", "commit.gpgsign", "false"]);
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::write(root.join("src/lib.rs"), "pub fn seed() {}\n").unwrap();
         std::fs::write(root.join("README.md"), "seed\n").unwrap();
         git(&root, &["add", "."]);
         git(&root, &["commit", "-q", "-m", "seed"]);
-        // A stable name for the seed tip, whatever the default branch is called.
         git(&root, &["branch", "base"]);
         TempRepo(root)
     }
@@ -99,8 +96,6 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-// --- attest: one branch-keyed receipt, siblings untouched ---
-
 #[test]
 fn attest_writes_a_branch_keyed_receipt_and_no_single_file() {
     let repo = TempRepo::new();
@@ -121,7 +116,6 @@ fn attest_writes_a_branch_keyed_receipt_and_no_single_file() {
         "the filename is the sanitized branch slug"
     );
 
-    // The receipt records the branch and the run.
     let receipt: serde_json::Value = serde_json::from_str(
         &std::fs::read_to_string(repo.0.join(RECEIPTS_DIR).join(name)).unwrap(),
     )
@@ -131,18 +125,13 @@ fn attest_writes_a_branch_keyed_receipt_and_no_single_file() {
     assert_eq!(receipt["exit_code"], 0);
     assert_eq!(receipt["commit"], code_commit.as_str());
 
-    // Committed on top of the attested code commit.
     let new_head = repo.head();
     assert_ne!(new_head, code_commit, "attest commits the receipt");
 }
 
 #[test]
 fn attest_filenames_are_portable_for_any_branch_name() {
-    // Slashes, unicode, and length all sanitize to a portable filename; the raw
-    // name lives inside the receipt.
     let repo = TempRepo::new();
-    // Long enough to exercise truncation, short enough that git itself can
-    // store the ref (a ref's final path segment is one filesystem filename).
     let long = format!("wip/Émil's{}", "x".repeat(150));
     repo.branch(&long);
 
@@ -189,9 +178,6 @@ fn attest_overwrites_its_own_receipt_in_place() {
 
 #[test]
 fn attest_keeps_receipts_other_branches_left_behind() {
-    // Add-only. A delete paired with this branch's add is what git's rename
-    // detection turns into a rename, and two branches off one parent renaming
-    // the same source is an unresolvable rename/rename conflict.
     let repo = TempRepo::new();
     repo.commit_receipt("merged-branch-0123abcd45");
     repo.branch("feature/two");
@@ -208,15 +194,11 @@ fn attest_keeps_receipts_other_branches_left_behind() {
 
 #[test]
 fn attest_errors_on_a_detached_head() {
-    // The receipt is keyed by branch; with no branch checked out there is
-    // nothing to key it by, and the error names the fix.
     let repo = TempRepo::new();
     git(&repo.0, &["checkout", "-q", "--detach"]);
     let result = attest(&repo.0, "true");
     assert!(result.is_err(), "attest on a detached HEAD should error");
 }
-
-// --- verify --base: two content questions of the branch's diff ---
 
 #[test]
 fn verify_base_passes_when_the_branch_leaves_scoped_source_untouched() {
@@ -260,8 +242,6 @@ fn verify_base_passes_on_a_receipt_added_by_the_branch() {
 
 #[test]
 fn verify_base_stays_fresh_after_further_scoped_pushes() {
-    // One decision covers the branch: pushing more scoped commits after the
-    // receipt does not re-demand it.
     let repo = TempRepo::new();
     repo.branch("feature/code");
     repo.commit_file("src/lib.rs", "pub fn changed() {}\n", "code");
@@ -273,8 +253,6 @@ fn verify_base_stays_fresh_after_further_scoped_pushes() {
 
 #[test]
 fn verify_base_passes_on_a_receipt_updated_by_the_branch() {
-    // A receipt inherited from the merge base counts only when this branch
-    // updates it — and an update is as good as an add.
     let repo = TempRepo::new();
     repo.commit_receipt("feature-code-abcd012345");
     git(&repo.0, &["branch", "-f", "base"]);
@@ -291,7 +269,6 @@ fn verify_base_passes_on_a_receipt_updated_by_the_branch() {
 
 #[test]
 fn verify_base_ignores_a_receipt_inherited_from_the_merge_base() {
-    // A receipt that predates the branch answered someone else's nudge.
     let repo = TempRepo::new();
     repo.commit_receipt("earlier-branch-abcd012345");
     git(&repo.0, &["branch", "-f", "base"]);
@@ -306,7 +283,6 @@ fn verify_base_ignores_a_receipt_inherited_from_the_merge_base() {
 
 #[test]
 fn verify_base_does_not_count_a_receipt_deletion() {
-    // Sweeping a merged branch's receipt by hand is hygiene, not a decision.
     let repo = TempRepo::new();
     repo.commit_receipt("merged-branch-abcd012345");
     git(&repo.0, &["branch", "-f", "base"]);
@@ -330,8 +306,6 @@ fn verify_base_does_not_count_a_receipt_deletion() {
 
 #[test]
 fn verify_base_receipt_only_branch_passes() {
-    // Receipts are not scoped source: a branch that only adds its receipt has
-    // changed nothing that owes a decision.
     let repo = TempRepo::new();
     repo.branch("feature/attest-only");
     repo.commit_receipt("feature-attest-only-abcd012345");
@@ -341,8 +315,6 @@ fn verify_base_receipt_only_branch_passes() {
 
 #[test]
 fn verify_base_ignores_the_legacy_single_file_attestation() {
-    // The retired `e2e-attestation.json` is neither a receipt nor scoped source:
-    // it never answers the nudge, and deleting it owes nothing.
     let repo = TempRepo::new();
     repo.branch("feature/code");
     repo.commit_file("src/lib.rs", "pub fn changed() {}\n", "code");
@@ -377,8 +349,6 @@ fn verify_base_ignores_the_legacy_single_file_attestation() {
 
 #[test]
 fn verify_base_extra_scope_change_owes_a_decision_answered_by_a_receipt() {
-    // A shared tree beside the package joins the scoped diff (#333): a change
-    // there puts the question to the branch, and the branch's receipt answers it.
     let repo = TempRepo::new();
     repo.commit_file("core/src/lib.rs", "pub fn core() {}\n", "core seed");
     std::fs::create_dir_all(repo.0.join("packages/binding")).unwrap();
@@ -418,12 +388,8 @@ fn verify_base_extra_scope_change_owes_a_decision_answered_by_a_receipt() {
     );
 }
 
-// --- verify without --base: receipt presence ---
-
 #[test]
 fn verify_without_base_passes_on_a_committed_receipt() {
-    // With no branch diff to read, presence is the check — later code commits
-    // do not stale a receipt.
     let repo = TempRepo::new();
     repo.commit_receipt("some-branch-abcd012345");
     repo.commit_file("src/lib.rs", "pub fn changed() {}\n", "code after receipt");

@@ -31,7 +31,6 @@ fn lint_exit_with_config(codebase: &str, config: &str) -> i32 {
         .expect("the process should exit with a code")
 }
 
-// R1: forbid `monkeypatch`
 #[test]
 fn monkeypatch_red_exits_nonzero() {
     assert_eq!(lint_exit("monkeypatch/red"), 1);
@@ -44,7 +43,6 @@ fn monkeypatch_clean_exits_zero() {
 
 #[test]
 fn monkeypatch_waived_exits_zero() {
-    // Same monkeypatch use as the red fixture, but the file is waived in the config.
     assert_eq!(
         lint_exit_with_config(
             "monkeypatch/waived",
@@ -54,7 +52,6 @@ fn monkeypatch_waived_exits_zero() {
     );
 }
 
-// R2: patches must live in fixtures, not inline
 #[test]
 fn inline_patch_red_exits_nonzero() {
     assert_eq!(lint_exit("inline_patch/red"), 1);
@@ -67,7 +64,6 @@ fn inline_patch_clean_exits_zero() {
 
 #[test]
 fn inline_patch_waived_exits_zero() {
-    // Same inline `with patch(...)` as the red fixture, but the file is waived.
     assert_eq!(
         lint_exit_with_config(
             "inline_patch/waived",
@@ -77,7 +73,6 @@ fn inline_patch_waived_exits_zero() {
     );
 }
 
-// R3: env via patch.dict(os.environ, …)
 #[test]
 fn environ_red_exits_nonzero() {
     assert_eq!(lint_exit("environ/red"), 1);
@@ -90,14 +85,12 @@ fn environ_clean_exits_zero() {
 
 #[test]
 fn environ_waived_exits_zero() {
-    // Same os.environ mutation as the red fixture, but the file is waived.
     assert_eq!(
         lint_exit_with_config("environ/waived", "environ/waived/testing-conventions.toml"),
         0
     );
 }
 
-// R4: don't patch module-global config constants (waivable)
 #[test]
 fn constant_patch_red_exits_nonzero() {
     assert_eq!(lint_exit("constant_patch/red"), 1);
@@ -114,13 +107,11 @@ fn constant_patch_waived_exits_zero() {
     );
 }
 
-// A legacy `test_*.py` is source (not scanned), so the tree is clean
 #[test]
 fn legacy_test_prefix_exits_zero() {
     assert_eq!(lint_exit("legacy_prefix"), 0);
 }
 
-// Integration isolation: no first-party patch
 #[test]
 fn first_party_patch_red_exits_nonzero() {
     assert_eq!(lint_exit("no_first_party_patch/red"), 1);
@@ -141,9 +132,6 @@ fn first_party_patch_waived_exits_zero() {
         0
     );
 }
-
-// The suite tiers derive from the package root, so the binary scanning the
-// package's source directory still lints the sibling suites.
 
 #[test]
 fn tier_layout_integration_suite_is_linted_from_a_src_scan() {

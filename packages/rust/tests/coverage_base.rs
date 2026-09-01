@@ -167,8 +167,6 @@ fn baseline(repo: &TempRepo) -> String {
 
 #[test]
 fn a_diff_below_the_floor_fails() {
-    // The core red case: the 75%-covered diff is below the 85 floor under test,
-    // so `--base` fails it — even though the whole tree is still well covered.
     let repo = TempRepo::new("below");
     let base = baseline(&repo);
     repo.write("src/widget.py", WIDGET_PY_75);
@@ -183,9 +181,6 @@ fn a_diff_below_the_floor_fails() {
 
 #[test]
 fn the_same_diff_clears_a_lower_floor() {
-    // The behavior change from the implicit-100% patch-coverage: the SAME diff,
-    // with its one uncovered line, PASSES once the configured floor is 70 — the
-    // changed lines are judged against the number you set, not against 100%.
     let repo = TempRepo::new("clears");
     let base = baseline(&repo);
     repo.write("src/widget.py", WIDGET_PY_75);
@@ -201,8 +196,6 @@ fn the_same_diff_clears_a_lower_floor() {
 
 #[test]
 fn a_fully_covered_change_passes() {
-    // Editing a line the suite already exercises keeps the diff at 100% → any
-    // floor is met.
     let repo = TempRepo::new("covered");
     let base = baseline(&repo);
     repo.write(
@@ -230,9 +223,6 @@ def test_widget():
 
 #[test]
 fn a_tiny_below_floor_diff_is_not_exempted() {
-    // There is no small-diff carve-out. A two-line diff (a
-    // single untested helper: the `def` runs at import, its `return` never does →
-    // 50%) fails the 85 floor just like a large one would.
     let repo = TempRepo::new("tiny");
     let base = baseline(&repo);
     repo.write(
@@ -249,8 +239,6 @@ fn a_tiny_below_floor_diff_is_not_exempted() {
 
 #[test]
 fn a_change_touching_no_python_passes() {
-    // A diff with no `.py` source has no changed line to measure — vacuously
-    // passes (the suite isn't even run), at any floor.
     let repo = TempRepo::new("no-py");
     repo.write("pyproject.toml", PYPROJECT);
     repo.write("src/widget.py", WIDGET_PY);
@@ -266,7 +254,6 @@ fn a_change_touching_no_python_passes() {
 
 #[test]
 fn an_unknown_base_ref_is_an_error() {
-    // A base that can't be resolved must surface, never silently pass as "clean".
     let repo = TempRepo::new("bad-base");
     let _ = baseline(&repo);
     assert!(
@@ -287,11 +274,6 @@ fn an_unknown_base_ref_is_an_error() {
 
 #[test]
 fn a_plus_plus_line_keeps_the_uncovered_change_in_scope() {
-    // #392: a `++ 1` line renders as `+++ 1` in the diff and was consumed by the
-    // `+++` file-header branch, diverting the file's later added lines (an untested
-    // `never_run`) to a bogus key — dropping them from the ratio, so a below-floor
-    // change passed vacuously. The uncovered `return 999` must stay in scope, failing
-    // the 100 floor.
     let repo = TempRepo::new("plusplus");
     repo.write("pyproject.toml", PYPROJECT);
     repo.write("src/calc.py", "def calc(n):\n    return n\n");
@@ -315,8 +297,6 @@ fn a_plus_plus_line_keeps_the_uncovered_change_in_scope() {
 
 #[test]
 fn cli_exits_nonzero_on_a_below_floor_diff() {
-    // No config, so the diff is judged against the default Python floor (now 100);
-    // the 75% diff is below it → exit 1.
     let repo = TempRepo::new("cli-red");
     let base = baseline(&repo);
     repo.write("src/widget.py", WIDGET_PY_75);
@@ -355,9 +335,6 @@ def test_widget():
 
 #[test]
 fn cli_a_lower_configured_floor_lets_the_same_diff_pass() {
-    // A `[python.coverage] fail_under = 70` config re-scopes the floor: the 75%
-    // diff that fails the default floor now passes — the floor is the single source
-    // of truth, whole-tree or diff.
     let repo = TempRepo::new("cli-floor70");
     repo.write(
         "testing-conventions.toml",
@@ -376,8 +353,6 @@ fn cli_a_lower_configured_floor_lets_the_same_diff_pass() {
 
 #[test]
 fn a_coverage_exemption_lifts_a_below_floor_change() {
-    // A line-scoped `coverage` exemption lifts the shim's changed lines from the
-    // diff ratio — the same waiver the whole-tree floor honors, now line-scoped.
     let repo = TempRepo::new("exempt");
     repo.write(
         "testing-conventions.toml",
@@ -385,13 +360,10 @@ fn a_coverage_exemption_lifts_a_below_floor_change() {
          lines = [\"1-3\"]\nreason = \"thin launcher; logic lives in tested modules\"\n",
     );
     let base = baseline(&repo);
-    // The exemption `path` is scan-path-relative, so `shim.py` addresses `src/shim.py`.
     repo.write("src/shim.py", "def shim():\n    return 0\n    # noqa\n");
     repo.commit("add an untested launcher");
 
-    // Flagged with no config…
     assert_eq!(run_coverage_base(&repo, &base, None).unwrap(), 1);
-    // …and lifted by the `coverage` exemption.
     assert_eq!(
         run_coverage_base(&repo, &base, Some("testing-conventions.toml")).unwrap(),
         0

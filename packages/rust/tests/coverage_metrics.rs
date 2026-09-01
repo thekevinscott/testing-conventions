@@ -8,8 +8,6 @@ fn fixtures() -> PathBuf {
 
 #[test]
 fn a_functions_floor_is_part_of_the_config_schema() {
-    // `[rust] coverage = { lines = 50, functions = 100 }` parses — the loader's
-    // self-guard knows the key — and carries the floor.
     let config = load_config(fixtures().join("rust_functions_full.toml"))
         .expect("the `functions` floor should parse");
     let coverage = config
@@ -24,8 +22,6 @@ fn a_functions_floor_is_part_of_the_config_schema() {
 
 #[test]
 fn a_branch_floor_is_part_of_the_config_schema() {
-    // `[rust] coverage = { lines = 50, branch = 100 }` parses — the loader's
-    // self-guard knows the key — and carries the floor.
     let config = load_config(fixtures().join("rust_branch_full.toml"))
         .expect("the `branch` floor should parse");
     let coverage = config

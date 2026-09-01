@@ -54,9 +54,6 @@ fn install_points_at_the_docs_root_and_the_machine_readable_contract() {
 
 #[test]
 fn reinstall_replaces_a_stale_block_carrying_the_removed_link() {
-    // A consumer whose AGENTS.md holds a block written before the docs
-    // reorganization: re-running `install` refreshes the owned region to the
-    // current pointers and touches nothing outside the markers.
     let dir = TempDir::new();
     let stale = format!(
         "# My project\n\nHouse rules stay.\n\n\
@@ -86,11 +83,6 @@ fn reinstall_replaces_a_stale_block_carrying_the_removed_link() {
 
 #[test]
 fn install_refuses_a_begin_marker_with_no_end_marker() {
-    // A block whose end marker was deleted (or fenced in a quote) leaves an orphaned
-    // begin marker. Appending a fresh block would then bracket the orphaned begin and
-    // the new end, so the *next* run replaces everything between them — silently
-    // deleting all user prose in that span. install refuses instead, leaving the file
-    // byte-for-byte intact so the consumer can restore the marker.
     let dir = TempDir::new();
     let damaged = "# My project\n\n\
          <!-- testing-conventions:begin v1 hash=000000000000 -->\n\

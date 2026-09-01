@@ -136,7 +136,6 @@ impl Staged {
                 .unwrap_or_else(|e| panic!("copy fixture {lang}/{project}/{file}: {e}"));
         }
         if link_node_modules {
-            // Symlink (not copy) the shared install — concurrent read-only resolution is safe.
             std::os::unix::fs::symlink(fixtures.join("node_modules"), dst.join("node_modules"))
                 .expect("symlink node_modules");
         }

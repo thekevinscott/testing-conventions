@@ -99,9 +99,6 @@ fn git(dir: &Path, args: &[&str]) {
 
 #[test]
 fn base_scopes_the_run_to_the_changed_lines() {
-    // The default package layout — `{pyproject.toml, src/**}`, scanned at `<repo>/src` with
-    // `--base` on a diff that touches source. The changed modules address the sources under the
-    // scan path, and the survivors come back scan-path-relative.
     let repo = TempRepo::new("survivor");
     repo.write("src/calc.py", BASELINE);
     repo.write("src/calc_test.py", BASELINE_TEST);
@@ -120,8 +117,6 @@ fn base_scopes_the_run_to_the_changed_lines() {
         )
         .expect("cosmic-ray runs"),
     );
-    // The added `is_positive` (lines 5-6) is in the diff and assertion-light, so its
-    // mutants survive; `add` (lines 1-2) is unchanged, so it's filtered out.
     assert!(
         count >= survivors.len(),
         "every survivor was judged, so the count covers them"
@@ -138,7 +133,6 @@ fn base_scopes_the_run_to_the_changed_lines() {
 
 #[test]
 fn a_loose_tree_base_scopes_the_run_to_the_changed_lines() {
-    // The loose special case: flat scripts at the repo root, no manifest, scanned at the root.
     let repo = TempRepo::loose("survivor");
     repo.write("calc.py", BASELINE);
     repo.write("calc_test.py", BASELINE_TEST);
@@ -157,8 +151,6 @@ fn a_loose_tree_base_scopes_the_run_to_the_changed_lines() {
         )
         .expect("cosmic-ray runs"),
     );
-    // The added `is_positive` (lines 5-6) is in the diff and assertion-light, so its
-    // mutants survive; `add` (lines 1-2) is unchanged, so it's filtered out.
     assert!(
         count >= survivors.len(),
         "every survivor was judged, so the count covers them"
@@ -175,9 +167,6 @@ fn a_loose_tree_base_scopes_the_run_to_the_changed_lines() {
 
 #[test]
 fn base_with_no_mutatable_changed_files_reports_the_engine_not_run() {
-    // The only change on the diff is to a test file, which is never mutated — so the
-    // diff scopes to nothing, the run is skipped entirely (no cosmic-ray), and the
-    // measurement says so, telling this pass apart from an all-killed run.
     let repo = TempRepo::new("notests");
     repo.write("src/calc.py", BASELINE);
     repo.write("src/calc_test.py", BASELINE_TEST);

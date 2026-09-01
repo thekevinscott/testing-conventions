@@ -39,9 +39,6 @@ fn help_stdout() -> String {
 
 #[test]
 fn help_does_not_list_the_private_workflow_command() {
-    // `workflow` is the private drift guard: it must not be listed as a command
-    // in `--help`. `clean_workflow_exits_zero` above proves it still runs when invoked
-    // explicitly (hidden, not removed).
     let help = help_stdout();
     assert!(
         !help

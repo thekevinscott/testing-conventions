@@ -202,8 +202,6 @@ fn baseline(repo: &TempRepo) -> String {
 
 #[test]
 fn ts_a_diff_below_the_floor_fails() {
-    // The core red case: the known-ratio diff (min metric 50%) is below an 80 floor,
-    // so `--base` fails it — even though the whole tree is still well covered.
     let repo = TempRepo::new("below");
     let base = baseline(&repo);
     repo.write("src/widget.ts", WIDGET_TS_75);
@@ -218,9 +216,6 @@ fn ts_a_diff_below_the_floor_fails() {
 
 #[test]
 fn ts_the_same_diff_clears_a_lower_floor() {
-    // The behavior change from the implicit-100% patch-coverage: the SAME diff, with
-    // its uncovered helper, PASSES once the configured floor is 40 — the changed
-    // lines are judged against the number you set, not against 100%.
     let repo = TempRepo::new("clears");
     let base = baseline(&repo);
     repo.write("src/widget.ts", WIDGET_TS_75);
@@ -236,8 +231,6 @@ fn ts_the_same_diff_clears_a_lower_floor() {
 
 #[test]
 fn ts_a_fully_covered_change_passes() {
-    // Editing a line the suite already exercises keeps the diff at 100% → any floor
-    // is met.
     let repo = TempRepo::new("covered");
     let base = baseline(&repo);
     repo.write(
@@ -267,9 +260,6 @@ test('widget', () => {
 
 #[test]
 fn ts_a_tiny_below_floor_diff_is_not_exempted() {
-    // There is no small-diff carve-out. A single untested helper
-    // (a brand-new file the suite never imports → 0% on its few lines) fails the 80
-    // floor just like a large diff would.
     let repo = TempRepo::new("tiny");
     let base = baseline(&repo);
     repo.write(
@@ -286,8 +276,6 @@ fn ts_a_tiny_below_floor_diff_is_not_exempted() {
 
 #[test]
 fn ts_a_change_touching_no_typescript_passes() {
-    // A diff with no TypeScript source has no changed line to measure — vacuously
-    // passes (the suite isn't even run), at any floor.
     let repo = TempRepo::new("no-ts");
     repo.write("src/widget.ts", WIDGET_TS);
     repo.write("src/widget.test.ts", WIDGET_TEST_TS);
@@ -302,7 +290,6 @@ fn ts_a_change_touching_no_typescript_passes() {
 
 #[test]
 fn ts_an_unknown_base_ref_is_an_error() {
-    // A base that can't be resolved must surface, never silently pass as "clean".
     let repo = TempRepo::new("bad-base");
     let _ = baseline(&repo);
     assert!(
@@ -320,9 +307,6 @@ fn ts_an_unknown_base_ref_is_an_error() {
 
 #[test]
 fn ts_cli_exits_nonzero_on_a_below_floor_diff() {
-    // No config, so the diff is judged against the default TypeScript floors — now all
-    // four at 100; the known-ratio diff (functions 50%, statements 66.67%) is
-    // below them → exit 1.
     let repo = TempRepo::new("cli-red");
     let base = baseline(&repo);
     repo.write("src/widget.ts", WIDGET_TS_75);
@@ -363,10 +347,6 @@ test('widget', () => {
 
 #[test]
 fn ts_cli_a_lower_configured_floor_lets_the_same_diff_pass() {
-    // A `[typescript.coverage]` table with all four floors at 40 re-scopes the floor:
-    // the known-ratio diff that fails the default floor now passes — the floor is the
-    // single source of truth, whole-tree or diff. The config is committed so the
-    // measurement is deterministic.
     let repo = TempRepo::new("cli-floor40");
     repo.write(
         "testing-conventions.toml",
@@ -385,8 +365,6 @@ fn ts_cli_a_lower_configured_floor_lets_the_same_diff_pass() {
 
 #[test]
 fn ts_a_coverage_exemption_lifts_a_below_floor_change() {
-    // A `coverage` exemption excludes a file from the run, so its changed lines drop
-    // out of the diff ratios — the same waiver the whole-tree floor honors.
     let repo = TempRepo::new("exempt");
     repo.write(
         "testing-conventions.toml",
@@ -408,9 +386,7 @@ fn ts_a_coverage_exemption_lifts_a_below_floor_change() {
     );
     repo.commit("edit the untested launcher");
 
-    // Below the floor with no config…
     assert_eq!(run_coverage_base(&repo, &base, None).unwrap(), 1);
-    // …and lifted by the `coverage` exemption.
     assert_eq!(
         run_coverage_base(&repo, &base, Some("testing-conventions.toml")).unwrap(),
         0

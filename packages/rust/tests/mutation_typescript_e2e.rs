@@ -30,9 +30,6 @@ fn unit_mutation_exit(project: &Path, config: Option<&str>) -> i32 {
 
 #[test]
 fn run_without_the_adapter_arg_fails_clean() {
-    // The npm launcher appends `--ts-mutation-adapter`; run directly without it, the TS arm
-    // must fail (exit 1) with a clear error naming the argument — never guess at a Node entry
-    // on disk.
     let project = Staged::new("survivors");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "typescript"])
@@ -53,13 +50,6 @@ fn run_without_the_adapter_arg_fails_clean() {
 
 #[test]
 fn a_relative_scan_path_runs_from_the_package_root() {
-    // `tiers::package_root` walks `scan_root.ancestors()`, which ends at `""` for a
-    // **relative** scan path such as `src` — `Path::new("").join("package.json")` resolves
-    // against the cwd, so the walk stops there and returns an empty path. The adapter then
-    // ran with `Command::current_dir("")`, which fails with ENOENT and was reported as
-    // "is `node` installed?". The reusable workflow passes `SCAN_PATH: src`, so every
-    // TypeScript consumer of the mutation gate hit this. Every other test here passes an
-    // absolute staged path, which is why it shipped.
     let project = Staged::new("killed");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .current_dir(project.path())
@@ -83,9 +73,6 @@ fn a_relative_scan_path_runs_from_the_package_root() {
 
 #[test]
 fn a_broken_adapter_path_fails_clean() {
-    // The argument points at a Node entry that doesn't exist (node can't find the module):
-    // the run must fail (exit 1) with the adapter's captured output surfaced, not hang or
-    // pass. Covers the non-zero-exit path of the adapter spawn.
     let project = Staged::new("survivors");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "typescript"])
@@ -108,9 +95,6 @@ fn a_broken_adapter_path_fails_clean() {
 
 #[test]
 fn killed_project_passes_and_states_the_tested_count() {
-    // Every mutant is caught, so the project clears the gate — and the success line
-    // states how many mutants the engine judged, the evidence telling this pass apart
-    // from an engine-skipped one. The default package layout is scanned at `src/`.
     let package = Staged::new("killed");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "typescript"])
@@ -134,9 +118,6 @@ fn killed_project_passes_and_states_the_tested_count() {
 
 #[test]
 fn a_diff_with_no_mutatable_changed_lines_reports_the_engine_not_run() {
-    // Only a test file changes on the diff, so the run is skipped — and the output says
-    // the engine never ran, distinct from the all-killed success, keeping the vacuous
-    // pass visible in the job log. The exit code stays 0: an empty diff owes no run.
     let repo = GitRepo::new("ts-vacuous");
     repo.write(
         "index.ts",
@@ -181,10 +162,6 @@ fn a_diff_with_no_mutatable_changed_lines_reports_the_engine_not_run() {
 
 #[test]
 fn survivors_fail_the_gate_by_default() {
-    // The gate is on by default and binary: an un-exempted surviving mutant fails the run, no
-    // config required. The default `{package.json, src/**}` layout is scanned at `src/`, the
-    // run rooted at the package root so the upward `../package.json` import resolves, and the
-    // survivors are listed scan-path-relative.
     let package = Staged::new("survivors");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "typescript"])
@@ -207,17 +184,12 @@ fn survivors_fail_the_gate_by_default() {
 
 #[test]
 fn a_loose_tree_fails_the_gate_on_survivors() {
-    // The loose special case: flat scripts, no manifest, scanned at the root. The gate still
-    // runs Stryker in place there and fails on the un-exempted survivor.
     let project = Staged::loose("loose_survivors");
     assert_eq!(unit_mutation_exit(project.path(), None), 1);
 }
 
 #[test]
 fn an_exempted_survivor_passes_the_gate() {
-    // The survivor's file carries a `mutation` exemption, so the gate clears it (an
-    // equivalent / deliberately-defensive mutation, lifted with a reason) — the only
-    // way to pass with a survivor present.
     let package = Staged::new("survivors");
     assert_eq!(
         unit_mutation_exit(&package.path().join("src"), Some("mutation_exempt_ts.toml")),

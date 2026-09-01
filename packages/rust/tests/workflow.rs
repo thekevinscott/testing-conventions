@@ -19,10 +19,6 @@ fn clean_workflow_has_no_violations() {
 
 #[test]
 fn a_package_install_line_is_not_flagged_as_an_invocation() {
-    // `pip install testing-conventions pytest` names the tool as a dependency, not a
-    // subcommand invocation; only the real `unit lint` call is validated. Under the
-    // old command-position-blind extraction the install line's trailing `pytest` read
-    // as a subcommand and tripped `no-unknown-subcommand`.
     let violations = workflow::check(fixture("install_line"), &command()).unwrap();
     assert!(
         violations.is_empty(),
@@ -33,7 +29,6 @@ fn a_package_install_line_is_not_flagged_as_an_invocation() {
 #[test]
 fn red_flags_the_renamed_subcommand() {
     let violations = workflow::check(fixture("red"), &command()).unwrap();
-    // `unit location` (renamed to `unit colocated-test`) is on line 9.
     assert!(
         violations
             .iter()
@@ -45,7 +40,6 @@ fn red_flags_the_renamed_subcommand() {
 #[test]
 fn red_flags_the_old_flat_form() {
     let violations = workflow::check(fixture("red"), &command()).unwrap();
-    // The old flat `unit-location` is gone entirely; it sits on line 11.
     assert!(
         violations
             .iter()
@@ -66,8 +60,6 @@ fn red_flags_every_stranded_invocation() {
 
 #[test]
 fn invocations_are_extracted_from_the_shell() {
-    // Extraction is the implemented half: it finds the calls — version pin, flags,
-    // and all — regardless of whether the subcommand still exists.
     let found = workflow::invocations(fixture("red")).unwrap();
     assert_eq!(found.len(), 2);
     assert_eq!(found[0].args.first().map(String::as_str), Some("unit"));
@@ -75,8 +67,6 @@ fn invocations_are_extracted_from_the_shell() {
 
 #[test]
 fn workflow_command_is_hidden_from_help() {
-    // The `workflow` guard is private: it stays in the binary (the drift guard needs
-    // the in-process command tree) but must not appear in `--help`. Hidden, not removed.
     let cli = command();
     let workflow_cmd = cli
         .get_subcommands()

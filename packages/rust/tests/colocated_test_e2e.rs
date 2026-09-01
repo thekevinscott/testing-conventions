@@ -21,24 +21,16 @@ fn unit_colocated_test_exit(fixture: &str, language: &str) -> i32 {
 
 #[test]
 fn config_exemptions_clear_the_tree() {
-    // python_exempt's config exempts cli.py + pkg/__init__.py, so the binary
-    // reports no orphans.
     assert_eq!(unit_colocated_test_exit("python_exempt", "python"), 0);
 }
 
 #[test]
 fn a_blank_reason_exemption_makes_the_binary_error() {
-    // bad_exempt's config carries an exemption with an empty `reason`. The binary
-    // must reject it on load (exit 1), never silently accept a reasonless
-    // omission — every exemption must say why.
     assert_eq!(unit_colocated_test_exit("bad_exempt", "python"), 1);
 }
 
 #[test]
 fn conftest_is_not_an_orphan() {
-    // python_conftest holds a conftest.py (pytest fixtures) beside a paired
-    // source/test. conftest.py is support, never a subject, so the binary reports
-    // no orphans and exits zero.
     assert_eq!(unit_colocated_test_exit("python_conftest", "python"), 0);
 }
 
@@ -63,13 +55,11 @@ fn unit_colocated_test_output(fixture: &str, language: &str) -> (i32, String) {
 
 #[test]
 fn rust_clean_tree_exits_zero() {
-    // Every source module with behavior carries an inline `#[cfg(test)]` module.
     assert_eq!(unit_colocated_test_exit("rust/clean", "rust"), 0);
 }
 
 #[test]
 fn rust_red_tree_flags_the_untested_module() {
-    // `src/untested.rs` has a function but no inline `#[cfg(test)]` module.
     let (code, stderr) = unit_colocated_test_output("rust/red", "rust");
     assert_eq!(
         code, 1,
@@ -83,8 +73,6 @@ fn rust_red_tree_flags_the_untested_module() {
 
 #[test]
 fn rust_cfg_not_test_module_is_flagged() {
-    // #390: `#[cfg(not(test))]` is production code, not a test module. `src/gated.rs`
-    // has behavior and only a `not(test)` module, so the binary flags it as an orphan.
     let (code, stderr) = unit_colocated_test_output("rust/cfg_not_test", "rust");
     assert_eq!(
         code, 1,
@@ -98,8 +86,6 @@ fn rust_cfg_not_test_module_is_flagged() {
 
 #[test]
 fn python_suite_helpers_are_not_colocated_subjects() {
-    // Suite support under `<package root>/tests/` belongs to the suite tiers —
-    // never a subject of the colocated-unit rule.
     assert_eq!(unit_colocated_test_exit("python_tiers", "python"), 0);
 }
 
@@ -113,10 +99,6 @@ fn typescript_suite_helpers_are_not_colocated_subjects() {
 
 #[test]
 fn type_only_typescript_modules_do_not_fail_the_run() {
-    // The type_only fixture holds type-only `.ts` modules (`shape.ts`, `aliases.ts`)
-    // with no colocated test and no exemption, beside one paired runtime module. A
-    // type-only module has no behavior to test, so the run finds no orphan and exits
-    // zero — the nine hand-written exemptions in putitoutthere#479 become unnecessary.
     let (code, stderr) = unit_colocated_test_output("typescript/type_only", "typescript");
     assert_eq!(
         code, 0,
@@ -126,8 +108,6 @@ fn type_only_typescript_modules_do_not_fail_the_run() {
 
 #[test]
 fn a_mixed_type_and_runtime_module_still_fails_the_run() {
-    // The boundary, end to end: `mixed.ts` carries runtime code alongside a type, so
-    // it stays a subject and the run exits non-zero naming it.
     let (code, stderr) = unit_colocated_test_output("typescript/type_only_mixed", "typescript");
     assert_eq!(
         code, 1,

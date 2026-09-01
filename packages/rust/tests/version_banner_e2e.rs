@@ -32,8 +32,6 @@ fn a_successful_run_names_its_version() {
 
 #[test]
 fn an_unrecognized_subcommand_still_names_its_version() {
-    // The stale-binary signature: an old build rejects a flag a newer workflow
-    // passes. The banner precedes parsing so this run still says which build refused.
     let (code, _, stderr) = cli(&["unit", "no-such-rule"]);
     assert_ne!(code, 0);
     assert!(
@@ -44,7 +42,6 @@ fn an_unrecognized_subcommand_still_names_its_version() {
 
 #[test]
 fn the_banner_stays_off_stdout() {
-    // `e2e slug` writes a bare slug a caller reads; the banner must not join it.
     let (_, stdout, _) = cli(&["e2e", "slug", "--branch", "work"]);
     assert!(
         !stdout.contains("testing-conventions "),

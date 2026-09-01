@@ -17,8 +17,6 @@ impl TempRepo {
         git(&root, &["init", "-q"]);
         git(&root, &["config", "user.email", "test@example.com"]);
         git(&root, &["config", "user.name", "Test"]);
-        // Throwaway repos never sign — keep the suite hermetic regardless of the
-        // machine's global `commit.gpgsign`.
         git(&root, &["config", "commit.gpgsign", "false"]);
         std::fs::write(root.join("README.md"), "seed\n").unwrap();
         git(&root, &["add", "."]);
@@ -111,11 +109,9 @@ fn verify_with_path_argument_reads_the_package_receipts() {
     let (code, _) = run_cli(&package, &["e2e", "attest", "true"]);
     assert_eq!(code, 0);
 
-    // Verified from the repo root, with the package as the path argument.
     let (code, text) = run_cli(&repo.0, &["e2e", "verify", "packages/widget"]);
     assert_eq!(code, 0, "the package's receipt should pass: {text}");
 
-    // The repo root itself carries no receipts.
     let (code, _) = run_cli(&repo.0, &["e2e", "verify"]);
     assert_eq!(code, 1, "discovery is scoped to the path argument");
 }
@@ -170,7 +166,6 @@ fn verify_with_base_demands_a_receipt_for_a_scoped_change() {
         "the failure names the fix: {text}"
     );
 
-    // Attest on the branch and the same call passes.
     let (code, _) = run_cli(&package, &["e2e", "attest", "true"]);
     assert_eq!(code, 0);
     let (code, text) = run_cli(
@@ -247,8 +242,6 @@ fn verify_with_extra_scope_exits_zero_on_an_excluded_change() {
 
 #[test]
 fn verify_with_a_scope_matching_no_tracked_path_errors_loudly() {
-    // #391: a typo'd scope must be a loud error naming the bad scope, never a
-    // silent pass over an empty diff.
     let repo = TempRepo::new();
     let package = repo.0.join("packages/widget");
     std::fs::create_dir_all(package.join("src")).unwrap();

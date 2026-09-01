@@ -212,9 +212,6 @@ test('widget', () => {
 
 #[test]
 fn ts_a_lower_configured_floor_lets_the_same_diff_pass() {
-    // The behavior change: the diff that fails the default floor passes once the
-    // configured floors are 40 — the floor is the single source of truth. The config
-    // is committed so the measurement is deterministic.
     let repo = TempRepo::new("floor40");
     repo.write(
         "testing-conventions.toml",
@@ -234,8 +231,6 @@ fn ts_a_lower_configured_floor_lets_the_same_diff_pass() {
 
 #[test]
 fn ts_a_tiny_below_floor_diff_still_exits_nonzero() {
-    // No small-diff carve-out: a single untested helper (a brand-new file the
-    // suite never imports → 0% on its lines) fails the default floor.
     let repo = TempRepo::new("tiny");
     let base = baseline(&repo);
     repo.write(

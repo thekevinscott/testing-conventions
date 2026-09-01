@@ -34,27 +34,16 @@ fn below_exits_zero_against_a_lower_floor() {
 
 #[test]
 fn padded_exits_nonzero_against_a_100_floor() {
-    // `padded`'s `shift` unit is covered only by its integration test; the floor
-    // measures the unit suite alone, so the crate fails 100 end-to-end.
     assert_eq!(unit_coverage_exit("padded", "rust_full.toml"), 1);
 }
 
 #[test]
 fn exempt_cov_exits_zero_with_the_shim_exempted() {
-    // The config exempts src/shim.rs from coverage, so the built binary omits it
-    // from the denominator (via `--ignore-filename-regex`) and clears the 100
-    // floor end-to-end.
     assert_eq!(
         unit_coverage_exit("exempt_cov", "rust_full_exempt_shim.toml"),
         0
     );
 }
-
-// Zero-config: a `--config` pointing at a file that doesn't exist falls
-// back to the default Rust floor — the same way a brand-new crate with no
-// `testing-conventions.toml` runs. That default is `lines = 100` with `regions`
-// opt-in, so a fully-covered crate clears it while a below-floor crate
-// fails — Rust no longer errors out demanding an explicit `[rust].coverage` table.
 
 #[test]
 fn above_exits_zero_with_no_config_via_the_default_floor() {
@@ -63,7 +52,5 @@ fn above_exits_zero_with_no_config_via_the_default_floor() {
 
 #[test]
 fn below_exits_nonzero_with_no_config_via_the_default_floor() {
-    // `below` leaves the `else` arm's line uncovered, so it fails the 100 line
-    // default even though `regions` isn't part of the zero-config floor.
     assert_eq!(unit_coverage_exit("below", "no-such-config.toml"), 1);
 }

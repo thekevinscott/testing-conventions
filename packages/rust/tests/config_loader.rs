@@ -90,13 +90,9 @@ fn errors_on_a_missing_file() {
 
 #[test]
 fn loads_exemptions_with_optional_coverage() {
-    // `exempt.toml` declares exemptions but no coverage thresholds — both keys
-    // are optional.
     let config = load_config(fixture("exempt.toml")).expect("an exempt-only config should load");
     let python = config.python.expect("[python] table present");
     assert!(python.coverage.is_none(), "coverage is optional");
-    // A whole-file presence exemption and a separate line-scoped coverage exemption for
-    // the same file — `coverage` requires `lines`, so the two can't share one entry.
     assert_eq!(python.exempt.len(), 2);
     assert_eq!(python.exempt[0].path, "src/cli.py");
     assert_eq!(python.exempt[0].rules, vec![Rule::ColocatedTest]);
@@ -114,7 +110,6 @@ fn loads_exemptions_with_optional_coverage() {
 
 #[test]
 fn rejects_an_exemption_without_a_reason_self_guard() {
-    // The reason is required — a reasonless exemption can never be a silent pass.
     assert!(
         load_config(fixture("exempt_no_reason.toml")).is_err(),
         "an exemption missing its reason must be rejected (self-guard)"
@@ -123,8 +118,6 @@ fn rejects_an_exemption_without_a_reason_self_guard() {
 
 #[test]
 fn rejects_an_exemption_with_a_blank_reason_self_guard() {
-    // Distinct from a *missing* reason: the `reason` key is present but blank.
-    // The loader's validation step must still reject it on load.
     assert!(
         load_config(fixture("exempt_empty_reason.toml")).is_err(),
         "an exemption with a blank reason must be rejected (self-guard)"
@@ -133,9 +126,6 @@ fn rejects_an_exemption_with_a_blank_reason_self_guard() {
 
 #[test]
 fn loads_a_python_build_command_with_a_reason() {
-    // `[python].build_command` (plus a required `reason`) is a valid config key. The
-    // binary never runs it — detect derives it and the workflow's jobs do — but the schema
-    // must accept it, since `deny_unknown_fields` otherwise rejects a consumer's config.
     let config = load_config(fixture("python_build_command.toml"))
         .expect("a [python].build_command with a reason should load");
     let python = config.python.expect("[python] table present");
@@ -148,8 +138,6 @@ fn loads_a_python_build_command_with_a_reason() {
 
 #[test]
 fn a_python_build_command_with_no_reason_loads() {
-    // `build_command` needs no reason — it supplies a necessary build fact rather than
-    // waiving a check, so a bare command (reason absent or blank) loads.
     assert!(
         load_config(fixture("python_build_command_no_reason.toml")).is_ok(),
         "a [python].build_command with no reason must load (reason is optional)"
@@ -162,15 +150,10 @@ fn a_python_build_command_with_no_reason_loads() {
 
 #[test]
 fn loads_a_typescript_build_command_with_a_reason() {
-    // `build_command` generalizes from `[python]`-only to all three language tables — a
-    // necessary build declaration for a build the manifest structurally can't express (npm defines
-    // no standard build command; the TS compile-before-pack is a project-specific script `pnpm
-    // pack` doesn't run).
     let config = load_config(fixture("typescript_build_command.toml"))
         .expect("a [typescript].build_command must load once the schema generalizes");
     let ts = config.typescript.expect("[typescript] table present");
     assert_eq!(ts.build_command.as_deref(), Some("pnpm build"));
-    // An optional reason note is retained when present, but never required.
     assert!(
         !ts.reason.trim().is_empty(),
         "the reason note survives when present"
@@ -179,7 +162,6 @@ fn loads_a_typescript_build_command_with_a_reason() {
 
 #[test]
 fn loads_a_rust_build_command_with_a_reason() {
-    // The same generalization for `[rust]`.
     let config = load_config(fixture("rust_build_command.toml"))
         .expect("a [rust].build_command with a reason must load once the schema generalizes");
     let rust = config.rust.expect("[rust] table present");
@@ -192,8 +174,6 @@ fn loads_a_rust_build_command_with_a_reason() {
 
 #[test]
 fn a_typescript_build_command_with_a_blank_reason_loads() {
-    // The reason is optional in every language: a bare `[typescript].build_command` (blank reason)
-    // loads — naming the build is a necessary fact, not a waiver to justify.
     assert!(
         load_config(fixture("typescript_build_command_blank_reason.toml")).is_ok(),
         "a [typescript].build_command with a blank reason must load (reason is optional)"
@@ -202,10 +182,6 @@ fn a_typescript_build_command_with_a_blank_reason_loads() {
 
 #[test]
 fn loads_an_e2e_extra_scope_and_exclude_table() {
-    // `[e2e].extra_scope` / `exclude` are valid config keys. The binary never uses them —
-    // detect renders them into repeated `--extra-scope`/`--exclude` arguments the e2e-verify job
-    // appends — but the schema must accept the table, since `deny_unknown_fields` otherwise
-    // rejects a consumer's config (exactly like `[python].build_command`).
     let config = load_config(fixture("e2e_extra_scope.toml"))
         .expect("an [e2e] extra_scope/exclude config must load (the schema must accept the table)");
     let e2e = config.e2e.expect("[e2e] table present");
@@ -218,8 +194,6 @@ fn loads_an_e2e_extra_scope_and_exclude_table() {
 
 #[test]
 fn e2e_table_keys_are_optional() {
-    // Both keys default to empty, so an `[e2e]` table setting just one (or neither) loads — the
-    // zero-config shape a package that declares only extra_scope, or only exclude, produces.
     let config = load_config(fixture("e2e_extra_scope_only.toml"))
         .expect("an [e2e] table with only extra_scope should load");
     let e2e = config.e2e.expect("[e2e] table present");
@@ -229,8 +203,6 @@ fn e2e_table_keys_are_optional() {
 
 #[test]
 fn rejects_an_unknown_e2e_key_self_guard() {
-    // `deny_unknown_fields` still guards the table — a typo'd key inside `[e2e]` is rejected,
-    // not silently accepted.
     assert!(
         load_config(fixture("e2e_unknown_key.toml")).is_err(),
         "an unknown key under [e2e] must be rejected (self-guard)"
@@ -239,8 +211,6 @@ fn rejects_an_unknown_e2e_key_self_guard() {
 
 #[test]
 fn partial_coverage_tables_inherit_defaults() {
-    // Each table sets only one field; the rest fall back to the language's default
-    // floor.
     let config = load_config(fixture("partial_coverage.toml"))
         .expect("a partial coverage table should load, filling defaults");
     assert_eq!(
@@ -276,7 +246,6 @@ fn partial_coverage_tables_inherit_defaults() {
 
 #[test]
 fn an_unknown_field_in_a_coverage_table_still_errors() {
-    // Field defaults fill *missing* keys; a typo'd key is still rejected.
     assert!(
         load_config(fixture("unknown_coverage_field.toml")).is_err(),
         "an unknown key inside a coverage table must still be rejected"
@@ -285,9 +254,6 @@ fn an_unknown_field_in_a_coverage_table_still_errors() {
 
 #[test]
 fn an_unknown_key_error_points_at_migrations() {
-    // The upgrade path rides the rejection: a stale key after a release rename/removal is
-    // indistinguishable from a typo at parse time, so the error hands the reader the record
-    // of renamed/removed keys alongside serde's expected-field list.
     let err =
         load_config(fixture("unknown_key.toml")).expect_err("an unknown key must be rejected");
     let chain = format!("{err:#}");
@@ -317,7 +283,6 @@ fn one_function_per_file_thresholds_are_per_language_and_default_to_one() {
         config.one_function_threshold(Language::TypeScript),
         Some(20)
     );
-    // No `[rust]` table at all: Rust is off, not defaulted — the documented asymmetry.
     assert_eq!(config.one_function_threshold(Language::Rust), None);
 }
 
@@ -343,6 +308,5 @@ fn one_function_per_file_is_a_waivable_rule_id() {
         Some(Rule::OneFunctionPerFile)
     );
     assert_eq!(Rule::OneFunctionPerFile.id(), "one-function-per-file");
-    // Whole-file, like every other lint: a `lines` list may not scope it.
     assert!(!Rule::OneFunctionPerFile.is_line_scopable());
 }

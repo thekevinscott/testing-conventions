@@ -1,0 +1,7 @@
+{
+  "command": "echo 'no-op: under packages/node this branch adds only two markdown fragments. The behavior change is in .github/workflows/testing-conventions.yml and internals/checks, outside the package, and package.json publishes dist/ only, so no e2e contract of the npm launcher moved.'",
+  "ran_at": 1788300923,
+  "exit_code": 0,
+  "commit": "8bc7a9e218f8671724bea4c07b3825723d2b7713",
+  "branch": "fix/547-cli-isolated-from-consumer-node-modules"
+}

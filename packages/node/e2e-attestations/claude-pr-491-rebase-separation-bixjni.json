@@ -1,7 +1,0 @@
-{
-  "command": "echo 'no-op: this branch changes only markdown under packages/node — the CHANGELOG/MIGRATIONS freeze banners and two fragment-directory READMEs. No runtime code, and package.json publishes dist/ only, so no e2e contract can have moved.'",
-  "ran_at": 1788091530,
-  "exit_code": 0,
-  "commit": "3e8c7add0816253ab841e08ba1b08816d579b1de",
-  "branch": "claude/pr-491-rebase-separation-bixjni"
-}

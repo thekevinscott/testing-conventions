@@ -1,7 +1,0 @@
-{
-  "command": "pnpm run test:e2e",
-  "ran_at": 1785534227,
-  "exit_code": 0,
-  "commit": "2bb445e60d07f8b7ff61eb2112d73aaea6cc6825",
-  "branch": "claude/473-attest-add-only"
-}

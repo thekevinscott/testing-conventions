@@ -178,8 +178,7 @@ jobs:
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
-      # Rust provisioning comes first: `uv sync` or an npm `prepare` script may itself compile a
-      # Rust core, so cargo must be on PATH before the language-env steps below run.
+      # cargo must be on PATH first: `uv sync` or an npm `prepare` may itself compile a Rust core.
       - if: matrix.language == 'rust'
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -202,8 +201,7 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      # The testing-conventions wheel is named last: the subcommand-drift guard reads a trailing
-      # token as an install argument, not an invocation.
+      # The testing-conventions wheel is named last: the drift guard reads a trailing token as an install argument.
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
@@ -271,8 +269,7 @@ jobs:
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
-      # Rust provisioning comes first: `uv sync` or an npm `prepare` script may itself compile a
-      # Rust core, so cargo must be on PATH before the language-env steps below run.
+      # cargo must be on PATH first: `uv sync` or an npm `prepare` may itself compile a Rust core.
       - if: matrix.language == 'rust'
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -295,8 +292,7 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      # The testing-conventions wheel is named last: the subcommand-drift guard reads a trailing
-      # token as an install argument, not an invocation.
+      # The testing-conventions wheel is named last: the drift guard reads a trailing token as an install argument.
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
@@ -365,8 +361,7 @@ jobs:
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
-      # Cargo comes first: a maturin/PyO3 build triggered by `uv sync` needs it on PATH before
-      # the language-env steps below run.
+      # cargo must be on PATH first: a maturin/PyO3 build triggered by `uv sync` needs it.
       - if: (inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') && matrix.language != 'rust'
         uses: dtolnay/rust-toolchain@stable
       - if: inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true'
@@ -380,8 +375,7 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      # The testing-conventions wheel is named last: the subcommand-drift guard reads a trailing
-      # token as an install argument, not an invocation.
+      # The testing-conventions wheel is named last: the drift guard reads a trailing token as an install argument.
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
@@ -492,8 +486,7 @@ jobs:
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
-      # Rust provisioning comes first: `uv build` or an npm `prepack` may itself compile a Rust
-      # core, and `cargo package` needs cargo directly.
+      # cargo must be on PATH first: `cargo package` needs it, and `uv build`/`prepack` may compile a Rust core.
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_build != '' && (needs.detect.outputs.packaging_language == 'rust' || inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') }}
         uses: dtolnay/rust-toolchain@stable
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_build != '' && (needs.detect.outputs.packaging_language == 'rust' || inputs.rust_toolchain || needs.detect.outputs.provision_rust == 'true') }}

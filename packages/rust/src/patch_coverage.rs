@@ -1,36 +1,6 @@
-//! Diff-scoped coverage floor.
-//!
-//! Enforces the README Coverage rule over the lines a diff touches: where
-//! [`crate::coverage`] measures the *whole* suite against the configured floor,
-//! the `measure*` functions here measure that same floor over only the
-//! lines `<base>...HEAD` added or modified — `covered ÷ total-changed-executable`,
-//! against the thresholds `unit coverage` enforces whole-tree. `unit coverage
-//! --base` routes here, so a diff that clears the configured floor passes even with
-//! an uncovered changed line, and one below it fails no matter how small.
-//!
-//! Two inputs are combined:
-//!   - the **diff** — [`changed_lines`] runs `git diff --unified=0 <base>...HEAD`
-//!     and returns the new-side line numbers each file gained. This diff machinery
-//!     is language-agnostic, shared by all three arms.
-//!   - the **coverage** — per the language. Python ([`measure`]) reads coverage.py's
-//!     per-file lines and branch arcs ([`crate::coverage::measure_patch_report`]),
-//!     restricting the `percent_covered` ratio to the changed lines
-//!     ([`evaluate_patch`]). TypeScript ([`measure_typescript`]) reduces vitest's v8
-//!     export to the four per-metric counts
-//!     ([`crate::coverage::measure_patch_typescript_detail`]) and Rust
-//!     ([`measure_rust`]) reduces `cargo llvm-cov`'s export to the per-region counts
-//!     ([`crate::coverage::measure_patch_rust_detail`]); each metric's ratio is then
-//!     restricted to the changed lines ([`evaluate_patch_typescript`] /
-//!     [`evaluate_patch_rust`]). Either way, non-executable changed lines (comments,
-//!     blanks) and `coverage`-exempt files have nothing to cover and drop out of the
-//!     ratio.
-//!
-//! Relationship to the commit-scoped co-change rule ([`crate::co_change`]):
-//! co-change enforces that a changed source and its colocated *test* move
-//! together; the diff-scoped floor enforces that the changed *lines* are actually
-//! exercised. They are complementary, not overlapping — co-change can pass (the
-//! test file changed) while the floor fails (the change isn't covered), and
-//! vice versa.
+//! Diff-scoped coverage floor: the thresholds `unit coverage` enforces whole-tree,
+//! measured over only the lines `<base>...HEAD` added or modified. Each language pairs
+//! a `measure*` that shells out to its tool with a pure `evaluate_patch*` over the diff.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -43,20 +13,12 @@ use crate::coverage::{
 };
 
 /// TypeScript source extensions the diff-scoped floor scopes to — the set
-/// `coverage`'s `TS_INCLUDE` measures. A `.d.ts` declaration ends in `.ts` but
-/// carries no runtime code; vitest excludes it from the report, so its changed
-/// lines find nothing to cover and are skipped without a special case here.
+/// `coverage`'s `TS_INCLUDE` measures.
 const TS_EXTENSIONS: [&str; 4] = [".ts", ".tsx", ".mts", ".cts"];
 
-/// Diff-scoped Python coverage floor: measure `thresholds` over the
-/// `<base>...HEAD` changed `.py` lines instead of the whole tree. `omit` is the
-/// `coverage`-rule exemptions, as in [`crate::coverage::measure`] — an exempt file
-/// is omitted from the run, so its changed lines drop out of the ratio.
-///
-/// Scopes to `.py` sources and returns early — with no coverage run — when the diff
-/// touches none, so a PR that changes only docs or other languages doesn't pay for a
-/// measurement (and is vacuously covered). Requires coverage.py + pytest + git; an
-/// unresolvable `base` surfaces as an error rather than a silent pass.
+/// Diff-scoped Python coverage floor: measure `thresholds` over the `<base>...HEAD`
+/// changed `.py` lines instead of the whole tree. `omit` is the `coverage`-rule
+/// exemptions; an exempt file's changed lines drop out of the ratio with it.
 pub fn measure(
     root: &Path,
     base: &str,
@@ -75,12 +37,9 @@ pub fn measure(
     Ok(evaluate_patch(&changed, &files, thresholds))
 }
 
-/// Drop the line-scoped `coverage` exemptions from a `--base` diff's changed-line
-/// set, so a changed line that is line-exempt is lifted from the diff floor — the
-/// counterpart to a whole-file exemption dropping the file. The over-exemption guard is
-/// the whole-tree floor's job ([`measure_line_exempt`], the `unit coverage` job the
-/// reusable workflow runs alongside `--base`); the diff job can't classify a line its
-/// diff didn't touch, so here the exempt lines are simply removed.
+/// Drop the line-scoped `coverage` exemptions from a `--base` diff's changed-line set.
+/// The over-exemption guard belongs to the whole-tree floor ([`measure_line_exempt`]),
+/// since the diff job can't classify a line its own diff didn't touch.
 fn lift_exempt_lines(
     changed: &mut BTreeMap<String, BTreeSet<u64>>,
     exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
@@ -92,18 +51,9 @@ fn lift_exempt_lines(
     }
 }
 
-/// Pure: the configured floor measured over the changed lines. Reproduces
-/// coverage.py's `percent_covered` — (executed lines + taken branch arcs) ÷
-/// (executable lines + all branch arcs) — restricted to the lines the diff touched,
-/// so the same number `unit coverage` enforces whole-tree is judged on the diff.
-///
-/// A changed line absent from `files` (a comment or blank, a test file, or a
-/// `coverage`-exempt file omitted from the run) has nothing to cover and is skipped;
-/// when nothing executable changed, the diff is vacuously covered (`Pass`). With
-/// `branch`, a branch arc counts toward the ratio when its source line is in the diff
-/// — taken arcs as covered, untaken as missed — exactly as the whole-tree total folds
-/// branches in. No small-diff carve-out: a tiny diff below the floor fails like any
-/// other.
+/// Pure: the configured floor over the changed lines. Reproduces coverage.py's
+/// `percent_covered` — (executed lines + taken arcs) ÷ (executable lines + all arcs) —
+/// restricted to the diff; a diff in which nothing executable changed is vacuously covered.
 fn evaluate_patch(
     changed: &BTreeMap<String, BTreeSet<u64>>,
     files: &BTreeMap<String, FileCoverage>,
@@ -126,13 +76,9 @@ fn evaluate_patch(
     }
 }
 
-/// Pure: coverage.py's `percent_covered` numerator/denominator restricted to the lines
-/// in `selected` — (executed lines + taken branch arcs) over (executable lines + all
-/// branch arcs), counting only the selected lines and the arcs whose source is selected.
-/// Shared by the diff-scoped floor ([`evaluate_patch`], where `selected` is the changed
-/// lines) and the line-scoped exemption floor ([`measure_line_exempt`], where it's the
-/// measured lines minus the exempt ones). Over *every* measured line it reproduces the
-/// whole-tree total exactly.
+/// Pure: coverage.py's `percent_covered` numerator/denominator restricted to `selected`.
+/// Shared by the diff-scoped floor ([`evaluate_patch`], selected = the changed lines) and
+/// the line-scoped one ([`measure_line_exempt`], selected = measured minus exempt).
 fn python_ratio(
     selected: &BTreeMap<String, BTreeSet<u64>>,
     files: &BTreeMap<String, FileCoverage>,
@@ -171,24 +117,16 @@ fn python_ratio(
     (covered, total)
 }
 
-/// Whether a branch arc's source line (the first of its `[src, dst]` pair; `dst` may
-/// be a negative exit, which is irrelevant) falls in `lines`.
+/// Whether a branch arc's source line (the first of its `[src, dst]` pair) is in `lines`.
 fn arc_source_in(arc: &[i64], lines: &BTreeSet<u64>) -> bool {
     arc.first()
         .and_then(|&src| u64::try_from(src).ok())
         .is_some_and(|src| lines.contains(&src))
 }
 
-/// Diff-scoped TypeScript coverage floor: the four vitest metrics measured
-/// over the `<base>...HEAD` changed `.ts`/`.tsx`/`.mts`/`.cts` lines instead of the
-/// whole tree. `exclude` is the `coverage`-rule exemptions, as in
-/// [`crate::coverage::measure_typescript`] — an excluded file is left out of the
-/// run, so its changed lines drop out of the ratios.
-///
-/// Scopes to TypeScript sources and returns early — with no coverage run — when the
-/// diff touches none, so a PR that changes only docs or other languages doesn't pay
-/// for a measurement (and is vacuously covered). Requires vitest + git; an
-/// unresolvable `base` surfaces as an error rather than a silent pass.
+/// Diff-scoped TypeScript coverage floor: the four vitest metrics measured over the
+/// `<base>...HEAD` changed `.ts`/`.tsx`/`.mts`/`.cts` lines instead of the whole tree.
+/// `exclude` is the `coverage`-rule exemptions; an excluded file's lines drop out with it.
 pub fn measure_typescript(
     root: &Path,
     base: &str,
@@ -209,27 +147,9 @@ pub fn measure_typescript(
     Ok(evaluate_patch_typescript(&changed, &detail, thresholds))
 }
 
-/// Pure: the four vitest floors measured over the changed lines. Each metric's
-/// ratio is restricted to the lines the diff touched, so the same numbers
-/// `unit coverage` enforces whole-tree are judged on the diff:
-///   - **statements**: a `statementMap` entry counts when any line in its
-///     `start..=end` is a changed line; covered when its flag is set.
-///   - **lines**: a changed line counts when ≥1 statement *starts* on it; covered
-///     when ≥1 statement starting on it is covered.
-///   - **branches**: a branch arm counts when its `source_line` is a changed line;
-///     covered when its flag is set.
-///   - **functions**: a function counts when its `decl_line` is a changed line;
-///     covered when its flag is set.
-///
-/// A changed file absent from `detail` (a test file, a declaration file, or a
-/// `coverage`-exempt file left out of the run) has nothing to cover and is skipped.
-/// Each metric's percent is `100 * covered / total`, or `100` when its denominator
-/// is empty — a diff-scoped empty denominator is **vacuously satisfied**, not the
-/// "measured no code" failure the whole-tree [`coverage::evaluate_typescript`]
-/// returns (a diff may legitimately touch no branches or functions). The fail
-/// message lists every metric below its floor, matching
-/// [`coverage::evaluate_typescript`]'s. No small-diff carve-out: a tiny diff below
-/// the floor fails like any other.
+/// Pure: the four vitest floors over the changed lines. A statement counts when the diff
+/// touches any line it spans, a line when a statement *starts* on it, a branch arm and a
+/// function on their own line; an empty denominator is vacuously full, not a failure.
 fn evaluate_patch_typescript(
     changed: &BTreeMap<String, BTreeSet<u64>>,
     detail: &BTreeMap<String, coverage::TsPatchCoverage>,
@@ -245,7 +165,6 @@ fn evaluate_patch_typescript(
             continue;
         };
 
-        // Statements: count one whenever any line it spans was changed.
         for &(start, end, covered) in &cov.statements {
             if (start..=end).any(|line| lines.contains(&line)) {
                 s_tot += 1;
@@ -255,8 +174,6 @@ fn evaluate_patch_typescript(
             }
         }
 
-        // Lines: a changed line on which ≥1 statement *starts* counts; covered when
-        // ≥1 statement starting on it is covered.
         for &line in lines {
             let mut starts_here = false;
             let mut covered_here = false;
@@ -274,7 +191,6 @@ fn evaluate_patch_typescript(
             }
         }
 
-        // Branch arms: count one whenever its source line was changed.
         for &(source_line, covered) in &cov.branch_arms {
             if lines.contains(&source_line) {
                 b_tot += 1;
@@ -284,7 +200,6 @@ fn evaluate_patch_typescript(
             }
         }
 
-        // Functions: count one whenever its declaration line was changed.
         for &(decl_line, covered) in &cov.functions {
             if lines.contains(&decl_line) {
                 f_tot += 1;
@@ -295,8 +210,6 @@ fn evaluate_patch_typescript(
         }
     }
 
-    // An empty denominator is vacuously full (100%) — a diff may touch no branch or
-    // function, which is satisfied, not the whole-tree "measured no code" failure.
     let pct = |covered: u64, total: u64| {
         if total == 0 {
             100.0
@@ -328,16 +241,9 @@ fn evaluate_patch_typescript(
     }
 }
 
-/// Diff-scoped Rust coverage floor: the `cargo llvm-cov` regions/lines
-/// metrics measured over the `<base>...HEAD` changed `.rs` lines instead of the
-/// whole tree. `ignore` is the `coverage`-rule exemptions, as in
-/// [`crate::coverage::measure_rust`] — an exempt file is dropped from the run, so
-/// its changed lines drop out of the ratios.
-///
-/// Scopes to `.rs` sources and returns early — with no coverage run — when the diff
-/// touches none, so a PR that changes only docs or other languages doesn't pay for a
-/// measurement (and is vacuously covered). Requires `cargo-llvm-cov` + git; an
-/// unresolvable `base` surfaces as an error rather than a silent pass.
+/// Diff-scoped Rust coverage floor: the `cargo llvm-cov` regions/lines metrics measured
+/// over the `<base>...HEAD` changed `.rs` lines instead of the whole tree. `ignore` is the
+/// `coverage`-rule exemptions; an exempt file's lines drop out of the ratios with it.
 pub fn measure_rust(
     root: &Path,
     base: &str,
@@ -359,22 +265,9 @@ pub fn measure_rust(
     Ok(evaluate_patch_rust(&changed, &detail, thresholds))
 }
 
-/// Pure: the two `cargo llvm-cov` floors (regions, lines) measured over the changed
-/// lines. Each metric's ratio is restricted to the lines the diff touched, so the
-/// same numbers `unit coverage` enforces whole-tree are judged on the diff:
-///   - **regions**: a code region counts when any line in its `start..=end` is a
-///     changed line; covered when its flag is set.
-///   - **lines**: a changed line counts when ≥1 region covers it (`start <= line <=
-///     end`); covered when ≥1 covering region has its flag set.
-///
-/// A changed file absent from `detail` (a test-only file or a `coverage`-exempt file
-/// dropped from the run) has nothing to cover and is skipped. Each metric's percent
-/// is `100 * covered / total`, or `100` when its denominator is empty — a
-/// diff-scoped empty denominator is **vacuously satisfied**, not the "measured no
-/// code" failure the whole-tree [`coverage::evaluate_rust`] returns (a diff may
-/// legitimately touch no measured region). The fail message lists every metric below
-/// its floor, matching [`coverage::evaluate_rust`]'s. No small-diff carve-out: a tiny
-/// diff below the floor fails like any other.
+/// Pure: the two `cargo llvm-cov` floors (regions, lines) over the changed lines. A region
+/// counts when the diff touches any line it spans, a line when a region covers it; an empty
+/// denominator is vacuously full, not the whole-tree "measured no code" failure.
 fn evaluate_patch_rust(
     changed: &BTreeMap<String, BTreeSet<u64>>,
     detail: &BTreeMap<String, coverage::RustPatchCoverage>,
@@ -388,7 +281,6 @@ fn evaluate_patch_rust(
             continue;
         };
 
-        // Regions: count one whenever any line it spans was changed.
         for &(start, end, covered) in &cov.regions {
             if (start..=end).any(|line| lines.contains(&line)) {
                 r_tot += 1;
@@ -398,8 +290,6 @@ fn evaluate_patch_rust(
             }
         }
 
-        // Lines: a changed line covered by ≥1 region counts; covered when ≥1 region
-        // covering it has its flag set.
         for &line in lines {
             let mut measured = false;
             let mut covered_here = false;
@@ -418,8 +308,6 @@ fn evaluate_patch_rust(
         }
     }
 
-    // An empty denominator is vacuously full (100%) — a diff may touch no measured
-    // region, which is satisfied, not the whole-tree "measured no code" failure.
     let pct = |covered: u64, total: u64| {
         if total == 0 {
             100.0
@@ -452,21 +340,9 @@ fn evaluate_patch_rust(
     }
 }
 
-/// The new-side lines each file gained in `repo`'s `<base>...HEAD` diff, keyed by
-/// `repo`-relative path. The diff machinery shared by the TS / Rust twins.
-///
-/// `<base>...HEAD` is the merge-base diff — the changes this branch introduced
-/// (what a PR shows). `--unified=0` drops context lines so every `+` line is a
-/// real addition; `--no-renames` keeps a rename a delete + an add (the added side
-/// is held to coverage); `--relative` reports paths relative to `repo`. Returns an
-/// error if `git diff` fails (e.g. `base` names no resolvable ref).
-///
-/// The invocation is pinned against the caller's git config (#392):
-/// `-c core.quotepath=off` emits non-ASCII bytes raw instead of octal-escaping them,
-/// `--no-ext-diff` blocks a configured external differ, and forcing
-/// `--src-prefix=a/ --dst-prefix=b/` keeps the `b/` strip in [`new_side_path`] working
-/// under a custom `diff.mnemonicPrefix` / `diff.noprefix`. Any residual C-quoted path
-/// (a name with a `"`, a backslash, or a control byte) is decoded in [`new_side_path`].
+/// The new-side lines each file gained in `repo`'s `<base>...HEAD` merge-base diff, keyed
+/// by `repo`-relative path. Pinned against the caller's git config — `core.quotepath=off`,
+/// `--no-ext-diff`, forced `a/`/`b/` prefixes — so [`new_side_path`]'s `b/` strip holds.
 pub fn changed_lines(repo: &Path, base: &str) -> Result<BTreeMap<String, BTreeSet<u64>>> {
     let range = format!("{base}...HEAD");
     let output = Command::new("git")
@@ -496,17 +372,9 @@ pub fn changed_lines(repo: &Path, base: &str) -> Result<BTreeMap<String, BTreeSe
     Ok(parse_unified_diff(&String::from_utf8_lossy(&output.stdout)))
 }
 
-/// Pure: parse `git diff --unified=0` output into the new-side lines each file
-/// gained. Tracks the current file from each `+++` header and the new-side line
-/// counter from each `@@ … +c,d @@` hunk header, then records every following `+`
-/// line (a deletion `-` consumes no new-side number). A deleted file
-/// (`+++ /dev/null`) yields no entry.
-///
-/// Hunk state guards the header detection (#392): a `+++ ` / `--- ` line is a file
-/// header only *before* the first `@@` of a file's block; once inside a hunk, a `+`
-/// line — even one that renders as `+++ …` because its added content began `++ ` —
-/// is body, recorded against the current file. Each `diff --git ` line opens a new
-/// block and resets the state, so the next `+++ ` header is read as one again.
+/// Pure: parse `git diff --unified=0` output into the new-side lines each file gained.
+/// Hunk state guards header detection: a `+++ ` line is a file header only before the
+/// first `@@`; inside a hunk it is body — an added line whose content began `++ `.
 fn parse_unified_diff(diff: &str) -> BTreeMap<String, BTreeSet<u64>> {
     let mut changed: BTreeMap<String, BTreeSet<u64>> = BTreeMap::new();
     let mut current: Option<String> = None;
@@ -514,8 +382,6 @@ fn parse_unified_diff(diff: &str) -> BTreeMap<String, BTreeSet<u64>> {
     let mut in_hunk = false;
     for line in diff.lines() {
         if line.starts_with("diff --git ") {
-            // A new file's header block begins — leave hunk state so the `+++`
-            // header that follows is read as a header, not as added body.
             in_hunk = false;
             current = None;
         } else if line.starts_with("@@") {
@@ -524,27 +390,21 @@ fn parse_unified_diff(diff: &str) -> BTreeMap<String, BTreeSet<u64>> {
                 next_line = start;
             }
         } else if !in_hunk {
-            // Before the first `@@`: the only header we read is `+++`. `--- `, `index`,
-            // and mode lines carry no new-side path and are ignored.
             if let Some(header) = line.strip_prefix("+++ ") {
                 current = new_side_path(header);
             }
         } else if line.starts_with('+') {
-            // Inside a hunk: an added new-side body line — recorded against the
-            // current file and the counter advanced (a `+++ …` body line included).
             if let Some(file) = &current {
                 changed.entry(file.clone()).or_default().insert(next_line);
             }
             next_line += 1;
         }
-        // `-` (deleted), context, and metadata lines consume no new-side line.
     }
     changed
 }
 
-/// The `repo`-relative new-side path from a `+++` diff header, or `None` for a
-/// deletion (`+++ /dev/null`). Decodes a C-quoted path (#392) before stripping git's
-/// forced `b/` prefix and a trailing tab.
+/// The `repo`-relative new-side path from a `+++` diff header, or `None` for a deletion
+/// (`+++ /dev/null`). Decodes a C-quoted path before stripping git's `b/` prefix.
 fn new_side_path(header: &str) -> Option<String> {
     let raw = header
         .split('\t')
@@ -560,11 +420,9 @@ fn new_side_path(header: &str) -> Option<String> {
     Some(path.replace('\\', "/"))
 }
 
-/// Decode a git C-quoted path to its real bytes (#392). Git wraps a path containing a
-/// `"`, a backslash, or a control byte — and, with `core.quotepath` on, a high-bit
-/// byte — in double quotes and C-escapes it (`\a \b \t \n \v \f \r \" \\`, and octal
-/// `\NNN` for any other byte). An unquoted path (no surrounding quotes) is returned
-/// unchanged, so this is a no-op on the common `core.quotepath=off` output.
+/// Decode a git C-quoted path to its real bytes. Git wraps a path holding a `"`, a
+/// backslash, a control byte — or, with `core.quotepath` on, a high-bit byte — in quotes
+/// and C-escapes it. An unquoted path is returned unchanged.
 pub(crate) fn unquote_c_path(path: &str) -> String {
     let bytes = path.as_bytes();
     if bytes.len() < 2 || bytes[0] != b'"' || bytes[bytes.len() - 1] != b'"' {
@@ -581,7 +439,6 @@ pub(crate) fn unquote_c_path(path: &str) -> String {
         }
         let next = inner[i + 1];
         if (b'0'..=b'7').contains(&next) {
-            // An octal escape: up to three octal digits.
             let mut value: u32 = 0;
             let mut k = i + 1;
             while k < inner.len() && k < i + 4 && (b'0'..=b'7').contains(&inner[k]) {
@@ -616,10 +473,9 @@ fn hunk_new_start(header: &str) -> Option<u64> {
     digits.split(',').next().unwrap_or(digits).parse().ok()
 }
 
-/// Re-key a report's per-file map to `root`-relative `/`-joined paths so they match
-/// the diff's paths. coverage.py reports paths relative to where it ran (here
-/// `root`) and vitest reports absolute paths; an absolute path is stripped to
-/// `root`, a relative one left as-is.
+/// Re-key a report's per-file map to `root`-relative `/`-joined paths so they match the
+/// diff's. coverage.py reports relative to where it ran (here `root`) and vitest reports
+/// absolute; an absolute path is stripped to `root`, a relative one left as-is.
 fn relative_keys<V>(files: BTreeMap<String, V>, root: &Path) -> BTreeMap<String, V> {
     files
         .into_iter()
@@ -635,21 +491,9 @@ fn relative_keys<V>(files: BTreeMap<String, V>, root: &Path) -> BTreeMap<String,
         .collect()
 }
 
-// Line-scoped coverage exemptions.
-//
-// A `coverage` exemption with a `lines` list excuses only those lines from the floor,
-// not the whole file. No coverage tool excludes individual line *numbers* from the
-// outside (coverage.py / v8 / llvm-cov all do it through source pragmas, which this
-// tool can't write), so the floor is recomputed from the same per-file detail the
-// diff-scoped floor reads — the measured lines minus the exempt ones. A determinism
-// guard (the counterpart to the stale-path rule) keeps the list honest: every listed
-// line must be genuinely uncovered, and an unlisted uncovered line still fails.
-
-/// Diff-free Python coverage floor with line-scoped exemptions: measure
-/// `thresholds` over every measured line *except* the `exempt_lines`. `omit` is the
-/// whole-file `coverage` exemptions, as in [`crate::coverage::measure`]. Requires
-/// coverage.py + pytest. The line-exempt path runs only when `exempt_lines` is
-/// non-empty; otherwise the caller takes the unchanged tool-total path.
+/// Diff-free Python coverage floor with line-scoped exemptions: measure `thresholds` over
+/// every measured line except the `exempt_lines`. `omit` is the whole-file `coverage`
+/// exemptions. Runs only when `exempt_lines` is non-empty.
 pub fn measure_line_exempt(
     root: &Path,
     thresholds: Thresholds,
@@ -667,10 +511,8 @@ pub fn measure_line_exempt(
     Ok(floor_outcome(covered, total, thresholds.fail_under))
 }
 
-/// TypeScript twin of [`measure_line_exempt`]: the four vitest metrics measured
-/// over every measured line except the `exempt_lines`. `exclude` is the whole-file
-/// `coverage` exemptions, as in [`crate::coverage::measure_typescript`]. Requires
-/// vitest + `@vitest/coverage-v8`.
+/// TypeScript twin of [`measure_line_exempt`]: the four vitest metrics over every measured
+/// line except the `exempt_lines`. `exclude` is the whole-file `coverage` exemptions.
 pub fn measure_line_exempt_typescript(
     root: &Path,
     thresholds: TypeScriptThresholds,
@@ -689,10 +531,8 @@ pub fn measure_line_exempt_typescript(
     Ok(evaluate_patch_typescript(&line_set, &detail, thresholds))
 }
 
-/// Rust twin of [`measure_line_exempt`]: the `cargo llvm-cov` regions/lines
-/// metrics measured over every measured line except the `exempt_lines`. `ignore` is the
-/// whole-file `coverage` exemptions, as in [`crate::coverage::measure_rust`]. Requires
-/// `cargo-llvm-cov`.
+/// Rust twin of [`measure_line_exempt`]: the `cargo llvm-cov` regions/lines metrics over
+/// every measured line except the `exempt_lines`. `ignore` is the whole-file exemptions.
 pub fn measure_line_exempt_rust(
     root: &Path,
     thresholds: RustThresholds,
@@ -712,9 +552,8 @@ pub fn measure_line_exempt_rust(
     Ok(evaluate_patch_rust(&line_set, &detail, thresholds))
 }
 
-/// The whole-tree floor verdict for a recomputed `covered`/`total`, with the same
-/// message and float tolerance as the tool-total [`crate::coverage::evaluate`] — a
-/// from-detail total with the exempt lines removed is judged exactly as the tool's own.
+/// The whole-tree floor verdict for a recomputed `covered`/`total`, with the same message
+/// and float tolerance as the tool-total [`crate::coverage::evaluate`].
 fn floor_outcome(covered: u64, total: u64, fail_under: u8) -> Outcome {
     if total == 0 {
         return Outcome::Pass;
@@ -729,10 +568,8 @@ fn floor_outcome(covered: u64, total: u64, fail_under: u8) -> Outcome {
     }
 }
 
-/// The `(measured, missed)` lines for one Python file. `measured` is every executable
-/// line (executed or missing); `missed` is what the floor counts against you — the
-/// uncovered lines, plus (under branch coverage) any line that is the source of an
-/// untaken branch arc.
+/// The `(measured, missed)` lines for one Python file. `missed` is the uncovered lines,
+/// plus (under branch coverage) any line that is the source of an untaken branch arc.
 fn python_measured_missed(cov: &FileCoverage, branch: bool) -> (BTreeSet<u64>, BTreeSet<u64>) {
     let executed: BTreeSet<u64> = cov.executed_lines.iter().copied().collect();
     let missing: BTreeSet<u64> = cov.missing_lines.iter().copied().collect();
@@ -750,16 +587,11 @@ fn python_measured_missed(cov: &FileCoverage, branch: bool) -> (BTreeSet<u64>, B
     (measured, missed)
 }
 
-/// The `(measured, missed)` lines for one TypeScript file. A unit is anchored on the
-/// lines it spans — statements over `start..=end`, branch arms and function decls on
-/// their line — and `missed` is that set restricted to the uncovered units, so a line
-/// carrying any uncovered unit is exemptable.
+/// The `(measured, missed)` lines for one TypeScript file. A unit is anchored on the lines
+/// it spans, so a line carrying any uncovered unit is exemptable.
 fn ts_measured_missed(cov: &coverage::TsPatchCoverage) -> (BTreeSet<u64>, BTreeSet<u64>) {
     let mut measured = BTreeSet::new();
     let mut missed = BTreeSet::new();
-    // Each unit contributes its line(s): a statement spans `start..=end`, a branch arm
-    // and a function declaration sit on a single line. A line is `missed` when any unit
-    // on it is uncovered.
     let units = cov
         .statements
         .iter()
@@ -775,10 +607,9 @@ fn ts_measured_missed(cov: &coverage::TsPatchCoverage) -> (BTreeSet<u64>, BTreeS
     (measured, missed)
 }
 
-/// The `(measured, missed)` lines for one Rust file. `measured` is every line a code
-/// region spans; `missed` honors the enforced metrics — with `regions` on, any line in
-/// an uncovered region; with lines-only (`regions = None`), a line covered by regions
-/// but by no *covered* one.
+/// The `(measured, missed)` lines for one Rust file. `missed` honors the enforced metrics
+/// — with `regions` on, any line in an uncovered region; with lines-only, a line covered
+/// by regions but by no *covered* one.
 fn rust_measured_missed(
     cov: &coverage::RustPatchCoverage,
     thresholds: RustThresholds,
@@ -814,10 +645,9 @@ fn rust_measured_missed(
     (measured, missed)
 }
 
-/// The per-file line set the floor is measured over — every measured line minus the
-/// exempt ones — after the determinism guard. Each exempt line must be in its
-/// file's `missed` set (genuinely failing); a listed line that is covered, or carries
-/// no measured code, is a hard error so the exemption can't excuse working code.
+/// The per-file line set the floor is measured over — every measured line minus the exempt
+/// ones — after the determinism guard: each exempt line must be genuinely failing, so an
+/// exemption can't excuse working code.
 fn apply_line_exemptions(
     detail: &BTreeMap<String, (BTreeSet<u64>, BTreeSet<u64>)>,
     exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
@@ -869,8 +699,6 @@ mod tests {
 
     #[test]
     fn parses_added_lines_from_a_hunk() {
-        // `+4,2` → two added lines numbered from 4; the function context after the
-        // second `@@` is ignored.
         let diff = "diff --git a/widget.py b/widget.py\n\
                     index abc..def 100644\n\
                     --- a/widget.py\n\
@@ -896,7 +724,6 @@ mod tests {
 
     #[test]
     fn a_deletion_only_hunk_records_no_added_lines() {
-        // `+3,0` adds nothing; the `-` lines consume no new-side number.
         let diff = "diff --git a/widget.py b/widget.py\n\
                     index abc..def 100644\n\
                     --- a/widget.py\n\
@@ -922,7 +749,6 @@ mod tests {
 
     #[test]
     fn parses_multiple_files_and_a_single_line_hunk() {
-        // `+2` (no count) is one line at line 2; a nested path is kept verbatim.
         let diff = "diff --git a/a.py b/a.py\n\
                     --- a/a.py\n\
                     +++ b/a.py\n\
@@ -941,11 +767,9 @@ mod tests {
 
     #[test]
     fn a_plus_plus_body_line_is_not_a_file_header() {
-        // An added source line whose content begins `++ ` renders as `+++ …` in the
-        // unified diff (the `+` add-marker plus the `++ `). It is hunk *body*, not a
-        // `+++` file header — so it must stay attributed to `w.py` and must not divert
-        // the file's later added lines to a bogus key (which drops them from scoping —
-        // a false green). Header detection only fires before the first `@@`.
+        // An added line whose content begins `++ ` renders as `+++ …` — hunk *body*, not a
+        // `+++` file header. Read as a header it would divert the file's later added lines
+        // to a bogus key, dropping them from scoping: a false green.
         let diff = "diff --git a/w.py b/w.py\n\
                     index abc..def 100644\n\
                     --- a/w.py\n\
@@ -959,44 +783,35 @@ mod tests {
 
     #[test]
     fn new_side_path_decodes_a_c_quoted_non_ascii_path() {
-        // With `core.quotepath` on (git's default), a non-ASCII header path is
-        // C-quoted — wrapped in double quotes with octal `\NNN` byte escapes — e.g.
-        // `src/föö.py` → `"b/src/f\303\266\303\266.py"`. `new_side_path` must decode it
-        // to the real UTF-8 path so it matches the coverage report's key; left quoted,
-        // the changed lines are silently skipped (a vacuous pass).
+        // With `core.quotepath` on (git's default) a non-ASCII header path is C-quoted:
+        // `src/föö.py` → `"b/src/f\303\266\303\266.py"`. Left quoted it matches no
+        // coverage-report key, so the changed lines are silently skipped — a vacuous pass.
         assert_eq!(
             new_side_path("\"b/src/f\\303\\266\\303\\266.py\"").as_deref(),
             Some("src/föö.py")
         );
-        // An unquoted path (quotepath off) keeps working, bar the `b/` strip.
         assert_eq!(new_side_path("b/src/föö.py").as_deref(), Some("src/föö.py"));
     }
 
     #[test]
     fn unquote_c_path_decodes_octal_and_named_escapes() {
-        // Octal byte escapes reassemble UTF-8 (ö = C3 B6).
         assert_eq!(
             unquote_c_path("\"src/f\\303\\266\\303\\266.py\""),
             "src/föö.py"
         );
-        // The named escapes and the literal `\"` / `\\` each decode to their byte.
         assert_eq!(unquote_c_path("\"a\\tb\\\"c\\\\d\""), "a\tb\"c\\d");
         assert_eq!(
             unquote_c_path("\"\\a\\b\\n\\v\\f\\r\""),
             "\u{7}\u{8}\n\u{b}\u{c}\r"
         );
-        // A short octal run stops at three digits: `\1015` → byte 0o101 ('A') then '5'.
         assert_eq!(unquote_c_path("\"\\1015\""), "A5");
     }
 
     #[test]
     fn unquote_c_path_leaves_an_unquoted_path_unchanged() {
-        // The common `core.quotepath=off` case: no surrounding quotes → returned as-is.
         assert_eq!(unquote_c_path("src/föö.py"), "src/föö.py");
-        // A lone `"` (not a wrapping pair) and the empty string are left alone.
         assert_eq!(unquote_c_path("\""), "\"");
         assert_eq!(unquote_c_path(""), "");
-        // A trailing lone backslash inside the quotes is emitted literally.
         assert_eq!(unquote_c_path("\"a\\\""), "a\\");
     }
 
@@ -1031,7 +846,6 @@ mod tests {
 
     #[test]
     fn patch_below_floor_fails_and_names_the_percent() {
-        // 3 of 4 changed executable lines covered → 75% < 85.
         let files = BTreeMap::from([("w.py".to_string(), cov(&[1, 2, 3], &[4], &[], &[]))]);
         let out = evaluate_patch(&changed(&[("w.py", &[1, 2, 3, 4])]), &files, FLOOR_85);
         assert!(
@@ -1042,7 +856,6 @@ mod tests {
 
     #[test]
     fn patch_the_same_diff_clears_a_lower_floor() {
-        // 75% passes a 70 floor despite the uncovered line.
         let files = BTreeMap::from([("w.py".to_string(), cov(&[1, 2, 3], &[4], &[], &[]))]);
         let floor_70 = Thresholds {
             fail_under: 70,
@@ -1056,8 +869,6 @@ mod tests {
 
     #[test]
     fn patch_counts_branch_arcs_whose_source_is_a_changed_line() {
-        // Lines 1,2 executed (2 covered) + a taken arc out of line 2 (covered) and an
-        // untaken arc out of line 2 (missed): 3 covered of 4 → 75% < 85.
         let files = BTreeMap::from([("w.py".to_string(), cov(&[1, 2], &[], &[[2, 3]], &[[2, 4]]))]);
         let out = evaluate_patch(&changed(&[("w.py", &[1, 2])]), &files, FLOOR_85);
         assert!(
@@ -1068,7 +879,6 @@ mod tests {
 
     #[test]
     fn patch_branches_off_ignores_arcs() {
-        // Same data, branch disabled: only the two executed lines count → 100%.
         let files = BTreeMap::from([("w.py".to_string(), cov(&[1, 2], &[], &[[2, 3]], &[[2, 4]]))]);
         let no_branch = Thresholds {
             fail_under: 85,
@@ -1082,8 +892,6 @@ mod tests {
 
     #[test]
     fn patch_a_changed_file_absent_from_coverage_is_skipped() {
-        // A test file (never measured) contributes nothing; with no other executable
-        // changed line the diff is vacuously covered.
         let files = BTreeMap::from([("w.py".to_string(), cov(&[1], &[], &[], &[]))]);
         assert_eq!(
             evaluate_patch(&changed(&[("w_test.py", &[1, 2])]), &files, FLOOR_85),
@@ -1093,7 +901,6 @@ mod tests {
 
     #[test]
     fn patch_a_diff_with_no_executable_changed_lines_passes() {
-        // Changed lines are comments/blanks (in neither executed nor missing) → vacuous.
         let files = BTreeMap::from([("w.py".to_string(), cov(&[1, 2], &[], &[], &[]))]);
         assert_eq!(
             evaluate_patch(&changed(&[("w.py", &[9, 10])]), &files, FLOOR_85),
@@ -1119,8 +926,6 @@ mod tests {
 
     #[test]
     fn ts_patch_a_fully_covered_diff_passes() {
-        // Two statements on lines 1-2, both starting on their line and both covered;
-        // a covered function on line 1; a taken branch arm off line 2 → 100% all four.
         let detail = ts_detail(&[(
             "w.ts",
             TsPatchCoverage {
@@ -1137,9 +942,6 @@ mod tests {
 
     #[test]
     fn ts_patch_below_floor_fails_and_names_the_metric() {
-        // Four changed lines each carry one statement; three covered, one not →
-        // statements (and lines) 75% < 80, named; branches/functions are empty
-        // (vacuously 100) and not named.
         let detail = ts_detail(&[(
             "w.ts",
             TsPatchCoverage {
@@ -1162,7 +964,6 @@ mod tests {
 
     #[test]
     fn ts_patch_the_same_diff_clears_a_lower_floor() {
-        // The 75% diff passes a 70 floor despite the uncovered line.
         let detail = ts_detail(&[(
             "w.ts",
             TsPatchCoverage {
@@ -1185,8 +986,6 @@ mod tests {
 
     #[test]
     fn ts_patch_an_untaken_branch_arm_on_a_changed_line_fails_branches() {
-        // Line 3's statement ran (covered) but one of its two branch arms never did:
-        // branches 50% < 80, named; lines/statements are 100 (the statement is covered).
         let detail = ts_detail(&[(
             "w.ts",
             TsPatchCoverage {
@@ -1207,7 +1006,6 @@ mod tests {
 
     #[test]
     fn ts_patch_an_uncovered_function_decl_on_a_changed_line_fails_functions() {
-        // A function declared on changed line 9 was never called → functions 0% < 80.
         let detail = ts_detail(&[(
             "w.ts",
             TsPatchCoverage {
@@ -1225,8 +1023,6 @@ mod tests {
 
     #[test]
     fn ts_patch_a_changed_file_absent_from_coverage_is_skipped() {
-        // A test file (never measured) contributes nothing; with no other changed
-        // executable line the diff is vacuously covered.
         let detail = ts_detail(&[(
             "w.ts",
             TsPatchCoverage {
@@ -1243,8 +1039,6 @@ mod tests {
 
     #[test]
     fn ts_patch_a_comment_only_diff_passes() {
-        // The changed lines carry no statement/branch/function (a comment or blank) →
-        // every denominator empty → vacuously covered.
         let detail = ts_detail(&[(
             "w.ts",
             TsPatchCoverage {
@@ -1261,7 +1055,6 @@ mod tests {
 
     #[test]
     fn ts_patch_an_empty_diff_passes() {
-        // No changed lines at all → vacuously covered at any floor.
         assert_eq!(
             evaluate_patch_typescript(&changed(&[]), &BTreeMap::new(), TS_FLOOR_80),
             Outcome::Pass
@@ -1270,9 +1063,6 @@ mod tests {
 
     #[test]
     fn ts_patch_a_multiline_statement_counts_when_any_of_its_lines_changed() {
-        // A statement spanning lines 3-5 that never ran; only line 4 is in the diff →
-        // it still counts (and is uncovered) → statements 0% < 80. No statement
-        // *starts* on line 4, so lines has an empty denominator (vacuously 100).
         let detail = ts_detail(&[(
             "w.ts",
             TsPatchCoverage {
@@ -1307,8 +1097,6 @@ mod tests {
 
     #[test]
     fn rust_patch_a_fully_covered_diff_passes() {
-        // Two single-line code regions on lines 1-2, both covered → regions and lines
-        // both 100%.
         let detail = rust_detail(&[(
             "w.rs",
             RustPatchCoverage {
@@ -1323,8 +1111,6 @@ mod tests {
 
     #[test]
     fn rust_patch_below_floor_fails_and_names_the_metrics() {
-        // Four single-line regions on lines 1-4; three covered, one not → regions (and
-        // lines) 75% < 80, both named.
         let detail = rust_detail(&[(
             "w.rs",
             RustPatchCoverage {
@@ -1342,7 +1128,6 @@ mod tests {
 
     #[test]
     fn rust_patch_the_same_diff_clears_a_lower_floor() {
-        // The 75% diff passes a 70 floor despite the uncovered region.
         let detail = rust_detail(&[(
             "w.rs",
             RustPatchCoverage {
@@ -1363,10 +1148,6 @@ mod tests {
 
     #[test]
     fn rust_patch_skips_the_region_check_when_regions_is_opt_out() {
-        // The zero-config default sets `regions: None`, so the diff-scoped floor
-        // enforces lines only: a diff whose changed lines are all covered passes even
-        // though one of its regions is uncovered (lines 1-4 are each covered by ≥1
-        // region, but region 4 is not).
         let detail = rust_detail(&[(
             "w.rs",
             RustPatchCoverage {
@@ -1387,8 +1168,6 @@ mod tests {
 
     #[test]
     fn rust_patch_an_uncovered_region_on_a_changed_line_fails_both_metrics() {
-        // A single uncovered region on changed line 5 → regions 0% and lines 0%, both
-        // below the floor.
         let detail = rust_detail(&[(
             "w.rs",
             RustPatchCoverage {
@@ -1405,8 +1184,6 @@ mod tests {
 
     #[test]
     fn rust_patch_a_changed_file_absent_from_coverage_is_skipped() {
-        // A test-only file (never measured) contributes nothing; with no other changed
-        // measured line the diff is vacuously covered.
         let detail = rust_detail(&[(
             "w.rs",
             RustPatchCoverage {
@@ -1421,8 +1198,6 @@ mod tests {
 
     #[test]
     fn rust_patch_a_comment_only_diff_passes() {
-        // The changed lines (9-10) carry no region (a comment or blank) → both
-        // denominators empty → vacuously covered.
         let detail = rust_detail(&[(
             "w.rs",
             RustPatchCoverage {
@@ -1437,7 +1212,6 @@ mod tests {
 
     #[test]
     fn rust_patch_an_empty_diff_passes() {
-        // No changed lines at all → vacuously covered at any floor.
         assert_eq!(
             evaluate_patch_rust(&changed(&[]), &BTreeMap::new(), RUST_FLOOR_80),
             Outcome::Pass
@@ -1446,9 +1220,6 @@ mod tests {
 
     #[test]
     fn rust_patch_a_multiline_region_counts_when_any_of_its_lines_changed() {
-        // A region spanning lines 3-5 that never ran; only line 4 is in the diff → it
-        // still counts for both metrics (the region spans line 4, so line 4 is a
-        // measured-but-uncovered line) → regions 0% and lines 0% < 80.
         let detail = rust_detail(&[(
             "w.rs",
             RustPatchCoverage {
@@ -1465,10 +1236,6 @@ mod tests {
 
     #[test]
     fn rust_patch_a_line_covered_by_any_region_is_covered() {
-        // Two overlapping regions span changed line 4 — one uncovered, one covered.
-        // For the lines metric the line is covered (≥1 covering region's flag is set);
-        // for regions, one of the two counts as covered → regions 50% (< 80, fails) but
-        // lines 100% (≥ 80, not named).
         let detail = rust_detail(&[(
             "w.rs",
             RustPatchCoverage {
@@ -1492,14 +1259,10 @@ mod tests {
 
     #[test]
     fn python_measured_missed_reads_lines_and_branch_sources() {
-        // shim.py's shape: line 1 executed (the `def`), lines 2-4 the never-run body,
-        // a missing branch out of line 2. measured = every executable line; missed =
-        // the uncovered lines plus the branch source.
         let full = cov(&[1], &[2, 3, 4], &[], &[[2, 3], [2, 4]]);
         let (measured, missed) = python_measured_missed(&full, true);
         assert_eq!(measured, [1, 2, 3, 4].into_iter().collect());
         assert_eq!(missed, [2, 3, 4].into_iter().collect());
-        // With branch coverage off, a partial-branch source isn't a miss on its own.
         let partial = cov(&[5], &[], &[], &[[5, 6]]);
         let (_, missed_no_branch) = python_measured_missed(&partial, false);
         assert!(missed_no_branch.is_empty());
@@ -1509,8 +1272,6 @@ mod tests {
 
     #[test]
     fn ts_measured_missed_anchors_units_on_their_lines() {
-        // A covered statement on line 1, an uncovered one spanning 3-4, an uncovered
-        // branch arm on 1, an uncovered function decl on 6.
         let cov = coverage::TsPatchCoverage {
             statements: vec![(1, 1, true), (3, 4, false)],
             branch_arms: vec![(1, false)],
@@ -1518,13 +1279,11 @@ mod tests {
         };
         let (measured, missed) = ts_measured_missed(&cov);
         assert_eq!(measured, [1, 3, 4, 6].into_iter().collect());
-        // Line 1 is missed via its uncovered branch arm even though its statement ran.
         assert_eq!(missed, [1, 3, 4, 6].into_iter().collect());
     }
 
     #[test]
     fn rust_measured_missed_honors_the_enforced_metrics() {
-        // An uncovered region on lines 5-6 and a covered one on line 1.
         let cov = coverage::RustPatchCoverage {
             regions: vec![(1, 1, true), (5, 6, false)],
         };
@@ -1537,8 +1296,6 @@ mod tests {
         let (measured, missed) = rust_measured_missed(&cov, with_regions);
         assert_eq!(measured, [1, 5, 6].into_iter().collect());
         assert_eq!(missed, [5, 6].into_iter().collect());
-        // Lines-only: a line covered by ≥1 covered region isn't a miss; an uncovered
-        // region with no covering one still is.
         let lines_only = RustThresholds {
             regions: None,
             lines: 100,
@@ -1551,7 +1308,6 @@ mod tests {
 
     #[test]
     fn apply_line_exemptions_drops_listed_misses_from_the_line_set() {
-        // shim measured {1,2,3,4}, missed {2,3,4}; exempting 2-4 leaves {1}.
         let detail = BTreeMap::from([(
             "shim.py".to_string(),
             (
@@ -1565,7 +1321,6 @@ mod tests {
 
     #[test]
     fn apply_line_exemptions_rejects_a_covered_listed_line() {
-        // Line 1 is measured but not missed (it's covered) — over-exemption is an error.
         let detail = BTreeMap::from([(
             "shim.py".to_string(),
             (
@@ -1582,7 +1337,6 @@ mod tests {
 
     #[test]
     fn apply_line_exemptions_rejects_an_unmeasured_listed_line() {
-        // A line not measured at all (a comment) can't be exempted either.
         let detail = BTreeMap::from([(
             "w.py".to_string(),
             (
@@ -1602,15 +1356,11 @@ mod tests {
             matches!(&out, Outcome::Fail(m) if m == "coverage 87.50% is below the required 100%"),
             "got: {out:?}"
         );
-        // An all-exempt file leaves nothing to measure — vacuously a pass.
         assert_eq!(floor_outcome(0, 0, 100), Outcome::Pass);
     }
 
     #[test]
     fn lift_exempt_lines_removes_exempt_lines_from_the_diff() {
-        // The `--base` path drops a changed line that is line-exempt (lines 2-3 here),
-        // leaving the rest of the diff to be judged; an exemption for an untouched file
-        // is a no-op.
         let mut changed = changed(&[("shim.py", &[1, 2, 3, 4]), ("core.py", &[5])]);
         lift_exempt_lines(
             &mut changed,

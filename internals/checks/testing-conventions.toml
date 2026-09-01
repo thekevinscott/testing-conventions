@@ -1,53 +1,5 @@
-# Repo-only checks package config (#321). Coverage/lint floors stay at the zero-config
-# defaults (branch coverage on, fail_under = 100); only config.py is exempted.
-#
-# 11 is the lowest `unit one-function-per-file` threshold this tree passes today: a check module is
-# a `cli` callback beside the small pure decision it wraps, and the longest of those decisions runs
-# 11 lines. Walk it down as the modules split.
-[python]
-one_function_per_file = { max_lines = 11 }
-
-# checks/config.py holds nothing but shared string constants — the workflow paths every check
-# imports and the detect fixture expected-outputs the detect-package-root checks assert against
-# (the "re-export barrel" exemption case the README names). It has no behavior, so it carries no
-# colocated test of its own; with no test to hold, there is likewise no test to co-change:
-[[python.exempt]]
-path = "checks/config.py"
-rules = ["colocated-test", "co-change"]
-reason = "constants-only module: shared workflow-path literals and detect fixture expected-outputs, imported by every check; no logic to unit-test (a colocated test could only re-assert the same string), so no colocated test exists to co-change when a constant is edited — a changed fixture constant is caught by the detect-package-root evaluate tests that hardcode it, a changed path literal by the e2e suite"
-
-[[python.exempt]]
-path = "checks/config.py"
-rules = ["mutation"]
-lines = ["4-5"]
-reason = "path-string constants; a mutated literal is observable only through a real file read, which lives in the out-of-scope e2e suite (CliRunner over the real workflow), so no in-scope unit test can kill it"
-
-# build_hermetic_cli/cli.py:40-41 (#356) is the thin callback that threads this check's own
-# hardcoded production constants (COMMANDS: real `cargo build --release` / `pnpm install` /
-# `pnpm run build` invocations; BINARY/NODE_DIST: real repo-relative paths) into
-# checks.utils.build_hermetic_cli.stage_hermetic_cli. stage_hermetic_cli's own orchestration
-# (the run=/root= injection seams, every branch: build failure, signal death, missing/existing
-# stage dirs, dist merge) is exhaustively covered in isolation by
-# checks/utils/build_hermetic_cli_test.py — see run_checks / isolation_red.cli for the identical
-# split. These two lines specifically cannot be driven the same way isolation_red.cli's one line
-# is (a real `true`/`false` swapped in via a genuine trailing CLI argument, #328): COMMANDS has no
-# such override — it's three distinct real commands with different cwds, not a single command a
-# CLI-level substitution could stand in for — so driving `cli.callback()` for real here means
-# spawning an actual multi-minute cargo+pnpm build against this repo's real source, out of scope
-# for a colocated unit test (and exactly the operation the tested stage_hermetic_cli already
-# exercises against fakes). Re-adding root=/run= parameters to `cli` itself to make this
-# injectable was tried and rejected on review (#377): that reintroduces a bespoke testing seam on
-# the public click signature, the exact smell the utils-module split was meant to remove.
-# Injection was tried and correctly rejected; mocking stage_hermetic_cli (or COMMANDS) would only
-# assert this file calls a mock, not that it wires the real constants correctly. The real
-# composition is exercised on every CI run by the `build-cli` job (tc-checks build-hermetic-cli,
-# .github/actions/build-hermetic-cli/action.yml) — a stronger real-world exercise than a mocked
-# CliRunner e2e test.
-[[python.exempt]]
-path = "checks/build_hermetic_cli/cli.py"
-rules = ["coverage", "mutation"]
-lines = ["40-41"]
-reason = "thin callback threading this check's own hardcoded production constants (real cargo/pnpm commands, real repo-relative paths) into the exhaustively-tested stage_hermetic_cli; driving it for real here means spawning an actual multi-minute build, out of scope for a colocated unit test, and no CLI-level override exists the way isolation_red.cli's trailing command argument substitutes a cheap true/false for run_checks' CHECKS — COMMANDS is three distinct real commands with different cwds, not a single command a substitution could stand in for. Re-adding root=/run= injection to cli() itself was tried and rejected on review as a bespoke seam on the public click signature; the real composition is exercised for real on every CI run by the build-cli job."
+# Repo-only checks package config. Coverage/lint floors stay at the zero-config defaults
+# (branch coverage on, fail_under = 100). One exemption remains, argued below.
 
 # job_block.py:50 (#356) computes each job's end boundary as
 # `headers[i + 1].start() if i + 1 < len(headers) else len(text)`, with `i` bound only by
@@ -71,33 +23,3 @@ path = "checks/utils/job_block.py"
 rules = ["mutation"]
 lines = ["50"]
 reason = "i + 1 < len(headers) on job_block.py:50: i is bound only by enumerate(headers), so i + 1 can never exceed len(headers) on any reachable execution, making the NotEq mutant (i + 1 != len(headers)) behaviorally identical to < for every input — and the IsNot mutant additionally equivalent via CPython's small-int interning (job counts are always far below 256). Neither is killable without fabricating an unreachable i, which would test a contract this function doesn't have. The sibling Add_LShift mutant on the same line is a real gap, killed by asserting on the first job's own block boundary."
-
-# verify_release.py:150, :156 (#357) are the two subprocess boundary calls — the `_run_text` /
-# `_run_bytes` helpers every git/gh operation routes through. The `capture_output=True` / `text=True`
-# flags are the mutation-survivors: their effect is entirely inside `subprocess.run` (stdout captured
-# and decoded), so an *injected* `run` fake — the only way to test this repo-only helper, since its
-# `gh` boundary can't be run for real in CI — cannot observe them being flipped; the fake returns its
-# canned stdout regardless. Killing them would mean building a fake that re-implements subprocess.run's
-# capture/text contract, i.e. testing the standard library, not this code. Everything else in the
-# helpers is killed for real: the nonzero-exit raise (`if result.returncode:`, via signal/exit tests),
-# and every parse and decision downstream. This is the `build_hermetic_cli` case — a boundary CI can't
-# exercise — which is why the helper lives here (exemptions available) rather than as a loose script.
-[[python.exempt]]
-path = "checks/utils/verify_release.py"
-rules = ["mutation"]
-lines = ["150", "156"]
-reason = "capture_output=True / text=True on the two subprocess boundary calls (_run_text/_run_bytes): their effect lives inside subprocess.run, unobservable through the injected `run` fake this repo-only helper is tested with (its gh boundary can't run for real in CI), so flipping them changes nothing a fake can see — killing them would test subprocess.run's own capture/text contract, not this code. The returncode raise and all parsing/decisions are killed for real; this is the build_hermetic_cli boundary-exemption case."
-
-# verify_release/cli.py:29, :35-42, :50-57 (#357) are the three thin subcommand callbacks — each
-# threads its argument into the exhaustively-tested checks.utils.verify_release (resolve_version /
-# check_layout+missing_paths / verify_suites+failed_suites) and echoes or raises. Driving a callback
-# for real means real git/gh (resolve tags, archive a commit, dispatch+poll workflow runs); the
-# decisions they wrap (which paths are missing, which suites failed) are unit-tested in
-# checks/utils/verify_release_test.py against an injected boundary. This is exactly the
-# build_hermetic_cli.cli split: the utils module carries the logic and the coverage, the click glue is
-# exempted.
-[[python.exempt]]
-path = "checks/verify_release/cli.py"
-rules = ["coverage", "mutation"]
-lines = ["29", "35-38", "46-50"]
-reason = "thin subcommand glue threading each argument into the exhaustively-tested checks.utils.verify_release and echoing/raising; driving a callback for real means real git/gh (resolve tags, archive a commit, dispatch+poll runs), and the decisions they wrap are unit-tested against an injected boundary — the build_hermetic_cli.cli split, logic+coverage in utils, click glue exempted."

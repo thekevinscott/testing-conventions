@@ -139,13 +139,13 @@ def _ensure_ok(result, argv: list[str]) -> None:
 
 
 def _run_text(run, argv: list[str]) -> str:
-    result = run(argv, capture_output=True, text=True)  # boundary flags: exempt (mutation) — see testing-conventions.toml
+    result = run(argv, capture_output=True, text=True)
     _ensure_ok(result, argv)
     return result.stdout
 
 
 def _run_bytes(run, argv: list[str], **extra) -> bytes:
-    result = run(argv, capture_output=True, **extra)  # boundary flag: exempt (mutation) — see testing-conventions.toml
+    result = run(argv, capture_output=True, **extra)
     _ensure_ok(result, argv)
     return result.stdout
 

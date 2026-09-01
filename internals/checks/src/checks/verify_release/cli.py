@@ -3,9 +3,9 @@
 Backs the `tc-checks verify-release` group: the three steps `move-major-tag.yml` runs before
 advancing `@v0` — resolve the just-published version, check the remote `detect`-action fetch
 layout at the release commit, and dispatch + poll the version-pinned self-test + dogfood suites.
-Each subcommand is a thin wrapper over `checks.utils.verify_release`, where every decision and
-parse is unit-tested against an injected git/gh boundary; the wrappers themselves are the
-exempted glue (like `build_hermetic_cli.cli`), so a real run drives real git/gh.
+Each subcommand threads its argument into `checks.utils.verify_release` and then raises or
+echoes; `cli_test.py` drives those callbacks against a patched `vr`, so only a real run
+reaches real git/gh.
 
 A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
 untested prose and exposed to the GitHub Actions `${{ }}` templating trap.

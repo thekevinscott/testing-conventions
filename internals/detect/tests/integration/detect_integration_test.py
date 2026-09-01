@@ -81,10 +81,6 @@ def test_rust_crate_routes_into_the_with_rust_sets(fs):
 
 
 def test_rust_crate_enters_the_colocated_test_matrix(fs):
-    # #274: the CLI ships the rust presence arm (inline `#[cfg(test)]`, #40), so the
-    # whole-tree colocated-test job fans out over rust too. Co-change stays on the
-    # file-paired `languages` set — rust units are inline, so a sibling test can't
-    # go stale.
     fs["rust_crate"] = True
     out = detect.compute_outputs('["rust"]', scan_root="/repo")
     assert out["colocated_test_languages"] == '["rust"]'
@@ -99,9 +95,6 @@ def test_colocated_test_matrix_lists_rust_after_the_file_paired_languages(fs):
 
 
 def test_static_languages_is_the_rust_inclusive_union(fs):
-    # #410: the `static` job's matrix — the five static gates run as its steps — fans out over its
-    # own `static_languages` set (the file-paired languages plus rust), named apart from the
-    # colocated/isolation/integration sets so a future per-set divergence needs no workflow change.
     fs["python"] = True
     fs["rust_crate"] = True
     out = detect.compute_outputs("", scan_root="/repo")
@@ -114,9 +107,6 @@ def test_static_languages_empty_when_nothing_is_present(fs):
 
 
 def test_one_function_languages_is_the_rust_inclusive_union(fs):
-    # The one-function-per-file step runs for every language the scan finds, rust included: the
-    # rule is capability-identical in all three, and an unconfigured rust tree reports "not
-    # enabled" and passes, so the matrix carries it rather than the workflow filtering it out.
     fs["python"] = True
     fs["rust_crate"] = True
     out = detect.compute_outputs("", scan_root="/repo")
@@ -164,9 +154,6 @@ def test_packaging_dist_and_attestation_absent(fs):
     assert out["e2e_attestation"] == "false"
 
 
-# --- #280: packaging_dist is looked for at the derived package root, not the checkout root ---
-
-
 def test_packaging_dist_found_at_the_derived_package_root(fs):
     fs["package_root"] = Path("/repo/packages/x")
     fs["dist"] = True
@@ -195,8 +182,6 @@ def test_monorepo_outputs_wired_from_the_package_root(fs):
 
 
 def test_ts_pnpm_version_is_emitted_from_the_package_root(fs):
-    # The version `pnpm/action-setup` receives: the consumer's own `packageManager` pin echoed
-    # back when it names pnpm, the floor otherwise (#475).
     fs["ts_pnpm_version"] = "10.33.0"
     out = detect.compute_outputs("", scan_root="/repo/src", repo_root="/repo")
     assert out["ts_pnpm_version"] == "10.33.0"
@@ -214,13 +199,7 @@ def test_config_output_is_wired_from_derive_config(fs):
     assert out["config"] == "packages/ts/testing-conventions.toml"
 
 
-# --- #289: the [python].build_command escape hatch is emitted as an output ---
-
-
 def test_build_command_output_wired_from_derive_build_command(fs):
-    # compute_outputs emits a `build_command` output wired straight from `derive_build_command`
-    # (which reads the package's own testing-conventions.toml, discovered at the package root like
-    # `config`). The workflow's suite-executing jobs read it instead of the removed input.
     fs["build_command"] = "uv run maturin develop"
     out = detect.compute_outputs("", scan_root="/repo")
     assert out["build_command"] == "uv run maturin develop"
@@ -231,13 +210,7 @@ def test_build_command_output_empty_by_default(fs):
     assert out["build_command"] == ""
 
 
-# --- #335: the derived packaging build + its provisioning language are emitted as outputs ---
-
-
 def test_packaging_build_output_wired_from_derive_packaging(fs):
-    # compute_outputs emits `packaging_build` straight from `derive_packaging`, and
-    # `packaging_language` from the primary language when a build was derived — so the packaging
-    # job provisions the toolchain and builds the distribution before scanning.
     fs["primary"] = "python"
     fs["packaging_build"] = "uv build"
     out = detect.compute_outputs("", scan_root="/repo")
@@ -246,17 +219,11 @@ def test_packaging_build_output_wired_from_derive_packaging(fs):
 
 
 def test_packaging_language_is_empty_when_no_build_was_derived(fs):
-    # A package whose manifest can't state a build (`derive_packaging` returns "") reports no
-    # packaging language either, so the job provisions nothing and falls back to a committed dist.
     fs["primary"] = "python"
     fs["packaging_build"] = ""
     out = detect.compute_outputs("", scan_root="/repo")
     assert out["packaging_build"] == ""
     assert out["packaging_language"] == ""
-
-
-# --- #333: the [e2e] extra_scope / exclude roots are emitted as outputs, wired straight from
-# their derive functions (which read the package's own discovered config, like build_command) ---
 
 
 def test_e2e_extra_scope_output_wired_from_derive(fs):
@@ -278,8 +245,6 @@ def test_e2e_extra_scope_and_exclude_empty_by_default(fs):
 
 
 def test_attestation_is_looked_up_at_the_package_root_not_the_repo_root(fs):
-    # #281: `has_attestation` is called with `package_root`, not the checkout root — the
-    # fixture's `has_attestation` records every root it receives, proving the wiring.
     fs["package_root"] = Path("/repo/packages/x")
     fs["attestation"] = True
     out = detect.compute_outputs("", scan_root="/repo/packages/x/src", repo_root="/repo")

@@ -42,8 +42,6 @@ def test_package_manager_from_field_empty_is_none():
 
 
 def test_pnpm_version_pin_echoes_a_packagemanager_pin():
-    # The action throws unless `version` is string-equal to the pin, so echoing it back is the
-    # only non-empty value it accepts — and it installs exactly what deferring would.
     assert detect._pnpm_version_pin("pnpm@10.33.0") == "10.33.0"
 
 
@@ -52,15 +50,11 @@ def test_pnpm_version_pin_echoes_a_pin_that_already_satisfies_the_floor():
 
 
 def test_pnpm_version_pin_keeps_build_metadata_in_an_echoed_pin():
-    # Corepack pins carry a `+sha512...` suffix. It has to survive intact: the equality check is
-    # against the raw remainder, and the deferred path installs that same raw string.
     pin = "11.11.0+sha512.abc123"
     assert detect._pnpm_version_pin(f"pnpm@{pin}") == pin
 
 
 def test_pnpm_version_pin_is_never_empty_for_a_pnpm_pin():
-    # Empty is reserved for "this detect predates the output" — the reusable workflow falls back
-    # on it, so a real answer must never look like one.
     assert detect._pnpm_version_pin("pnpm@10.33.0") != ""
 
 
@@ -69,8 +63,6 @@ def test_pnpm_version_pin_falls_back_to_the_floor_with_no_field():
 
 
 def test_pnpm_version_pin_falls_back_to_the_floor_for_another_manager():
-    # `action-setup` only conflicts on a pnpm pin; an npm consumer skips the step
-    # entirely, so the floor is the honest answer rather than an empty string.
     assert detect._pnpm_version_pin("npm@10.0.0") == detect.PNPM_FLOOR
 
 
@@ -138,9 +130,6 @@ def test_render_github_output_writes_single_line_values_as_name_equals_value():
 
 
 def test_render_github_output_round_trips_a_multiline_value():
-    # A multi-line value (a legal TOML `"""…"""` build_command) must round-trip through
-    # GITHUB_OUTPUT via the heredoc `name<<EOF` form; a raw `name=value` line would let
-    # the embedded newline split it into a bogus second output.
     outputs = {
         "build_command": "cp a.tmpl a.py\ncp b.tmpl b.py",
         "languages": '["python"]',

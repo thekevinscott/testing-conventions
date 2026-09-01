@@ -1,13 +1,3 @@
-//! Integration tests for the config schema + loader.
-//!
-//! These pin the contract from the README's "Configuration" section: one config
-//! file is read into the in-memory `Config`, and the self-guard rejects a config
-//! that fails its own validation (unknown keys, malformed TOML) rather than
-//! silently accepting it.
-//!
-//! Per the guardrail, the loader ships a clean fixture (`valid.toml`, must
-//! load) and red fixtures (`unknown_key.toml` / `malformed.toml`, must fail).
-
 use std::path::PathBuf;
 
 use testing_conventions::colocated_test::Language;

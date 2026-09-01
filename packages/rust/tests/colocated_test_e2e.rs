@@ -1,8 +1,3 @@
-//! E2E tests for `unit colocated-test` exemptions: drive the built CLI
-//! binary end-to-end (a real subprocess) against fixture trees and their configs,
-//! and assert the exit code. Complements the in-process integration tests in
-//! `colocated_test.rs`.
-
 use std::path::PathBuf;
 use std::process::Command;
 

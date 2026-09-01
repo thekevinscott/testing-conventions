@@ -1,8 +1,3 @@
-//! Integration tests for the Rust `integration lint` rule —
-//! `no-first-party-double`: a `tests/` integration crate runs first-party code for
-//! real, so doubling a first-party item with `#[double]` is a violation. Ships a
-//! red fixture (must be flagged) and a clean fixture (must pass).
-
 use std::ffi::OsString;
 use std::path::PathBuf;
 

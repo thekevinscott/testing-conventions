@@ -1,7 +1,3 @@
-//! E2E tests for the Rust coverage rule: drive the built CLI binary
-//! end-to-end (no mocks) against the fixture crates and assert the exit code.
-//! Requires `cargo-llvm-cov`.
-
 use std::path::PathBuf;
 use std::process::Command;
 

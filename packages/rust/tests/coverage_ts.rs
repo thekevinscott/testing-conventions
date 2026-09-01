@@ -1,16 +1,3 @@
-//! Integration tests for the TypeScript coverage rule.
-//!
-//! These run REAL vitest over the fixture codebases via the SDK
-//! (`coverage::measure_typescript`) and assert pass/fail. Per the guardrail
-//! the *codebases themselves* are the fixtures, in the prescribed consumer package
-//! layout `{package.json, src/**}` scanned at `src/`: `full` (100% on all four
-//! metrics) clears a 100 floor, `above` (~83% lines / 87% branches) fails 100 but
-//! clears a mid floor, `below` (100% lines but only ~66% branches) fails the mid
-//! floor on branches — the branch floor catching what line coverage misses. The
-//! flat, no-manifest shape is the named special case (`exempt_cov`,
-//! `full_with_config`). Requires Node with the fixtures' vitest toolchain installed
-//! (see the suite's `package.json`).
-
 use std::path::PathBuf;
 
 use testing_conventions::coverage::{measure_typescript, Outcome, TypeScriptThresholds};

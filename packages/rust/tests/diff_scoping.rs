@@ -1,19 +1,3 @@
-//! Integration tests for the shared diff/path-scoping machinery (#392): the
-//! `<base>...HEAD` diff parser that backs changed-line coverage AND TypeScript /
-//! Python mutation (both consume [`patch_coverage::changed_lines`]), plus the
-//! co-change name-status walk ([`co_change::stale_sources`]).
-//!
-//! Two defects both dropped changed files from scoping — a false green:
-//!   1. an added body line beginning `++ ` renders as `+++ …` and was consumed by
-//!      the `+++` file-header branch, diverting the file's later added lines to a
-//!      bogus key;
-//!   2. a git-quoted / non-ASCII path (default `core.quotepath=on`) never matched a
-//!      report key (coverage) or read back as a file (co-change).
-//!
-//! Each test builds a throwaway git repo under **default** git config (the reported
-//! bug's condition — no `core.quotepath=off`) and drives the real `git diff`.
-//! Requires `git` on PATH.
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};

@@ -1,9 +1,3 @@
-//! E2E tests for `e2e verify`: drive the built CLI binary in a throwaway git
-//! repo (no mocks) and assert the exit codes and the actionable failure hint.
-//! The branch-diff semantics are pinned end-to-end in `e2e_receipts_e2e.rs`;
-//! this file covers presence (no `--base`), the `path` argument, the caller
-//! `--scope`, the `--extra-scope`/`--exclude` pair, and the #391 loud error.
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};

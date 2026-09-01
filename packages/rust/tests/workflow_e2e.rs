@@ -1,11 +1,3 @@
-//! E2E tests for the workflow guard: drive the built CLI binary against the
-//! fixture workflows and assert the exit code. The guard: a `testing-conventions`
-//! invocation in a workflow must name a subcommand the binary still exposes, so a
-//! rename can't strand the `@v0` consumption path.
-//!
-//! These start red — the skeleton's `workflow` command reports nothing, so the red
-//! fixture exits `0` instead of `1` — and go green once detection lands.
-
 use std::path::PathBuf;
 use std::process::Command;
 

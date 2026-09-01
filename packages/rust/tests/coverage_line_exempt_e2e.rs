@@ -1,19 +1,3 @@
-//! E2E tests for line-scoped coverage exemptions: drive the built CLI binary
-//! end-to-end (no mocks) against the `exempt_cov` fixtures and assert the exit code
-//! and message.
-//!
-//! A `[[<lang>.exempt]]` entry with a `lines` list excuses only those lines from the
-//! coverage floor — not the whole file — with a determinism guard: a listed line that
-//! is actually covered (or carries no measured code) is a hard error, and a *missing*
-//! uncovered line still fails the floor. The fixtures are the standard `exempt_cov`
-//! codebases (a fully-covered `core` plus an uncovered launcher `shim`), now lifted at
-//! line granularity instead of whole-file.
-//!
-//! Red until line-scoped exemptions land: today the `lines` key is rejected by the
-//! config self-guard, so every one of these exits non-zero with an "unknown field"
-//! error rather than the line-scoped behavior asserted here. Requires `coverage` +
-//! `pytest` (Python), `cargo-llvm-cov` (Rust), and the vitest toolchain (TypeScript).
-
 use std::path::PathBuf;
 use std::process::{Command, Output};
 

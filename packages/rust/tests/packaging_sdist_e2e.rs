@@ -1,13 +1,3 @@
-//! E2E tests for the Python sdist coverage slice: drive the built CLI
-//! binary against pre-built Python **sdist** fixtures (`.tar.gz`) and assert the
-//! exit code. Rule (README "Packaging"): test files must never ship in the built
-//! artifact — here a Python source distribution.
-//!
-//! Unlike the wheel and npm-tarball slices, this has **no red phase**:
-//! a sdist is a `.tar.gz`, which `inspect` already unpacks, and the Python
-//! glob `*_test.py` already applies — so these pass on the current binary. They
-//! lock the Python-sdist case in so a later change can't silently regress it.
-
 use std::path::PathBuf;
 use std::process::Command;
 

@@ -60,3 +60,33 @@ green: a source under `src/` that imports a package-level file (`../package.json
 package-root config the run depends on, plus a `tests/` tier that fails loudly if the gate ever
 collects it (`tests/integration/tiers.*` asserts it is never reached). Rust's crate layout forces
 the package shape already; the parity bar is met by giving Python and TypeScript the same default.
+
+## Running the suite locally
+
+`cargo test --lib` runs on the toolchain alone — the inline unit tests parse in-process. The
+suites under `packages/rust/tests/` shell out to real engines, so each needs its engine present
+before it can pass. `rust.yml`'s `integration` job provisions the full set; locally, provision
+the rows you intend to run.
+
+| Suite | Provide |
+| --- | --- |
+| `coverage.rs`, `coverage_e2e.rs`, `coverage_base.rs`, `coverage_base_e2e.rs` | `coverage` + `pytest` on `PATH` |
+| `coverage_rust*.rs`, `coverage_base_rust*.rs`, `coverage_metrics*.rs`, `coverage_features*.rs` | `cargo-llvm-cov`. The `branch` floor's fixture pins its own nightly, which rustup fetches on first run; the stable-toolchain case assumes the repo's own toolchain is stable, as in CI |
+| `coverage_ts*.rs`, `coverage_base_ts*.rs` | Node, plus `npm ci` in `packages/rust/tests/fixtures/unit_coverage/typescript` |
+| `mutation_rust*.rs`, `mutation_base_rust.rs`, `mutation_features*.rs`, `mutation_provision_rust.rs` | a cargo toolchain — the tool provisions cargo-mutants itself, into `~/.cache/testing-conventions` |
+| `mutation_python*.rs`, `mutation_base_py.rs` | a `python3` carrying cosmic-ray + pytest, with `PYTHONPATH=packages/python/python` so the bundled adapter imports from source |
+| `mutation_typescript.rs`, `mutation_typescript_e2e.rs`, `mutation_base_ts.rs` | `pnpm run build` in `packages/node` for the adapter, plus `npm ci` in `packages/rust/tests/fixtures/unit_mutation/typescript` |
+| `mutation_typescript_published*.rs` | the row above, plus registry access for the isolated install of the packed npm package |
+| `coverage_line_exempt_e2e.rs`, `mutation_line_exempt_e2e.rs` | the union of the coverage / mutation rows they span |
+| `co_change*.rs`, `diff_scoping.rs`, `e2e_*.rs`, every `--base` suite | `git` |
+
+The engines write into the project directory — Stryker and cosmic-ray both mutate in place, and
+Stryker keeps its backup under `.stryker-tmp` — so the mutation suites stage each fixture into a
+unique temp directory (`tests/common/mod.rs`, with TypeScript's runner-only `node_modules`
+symlinked rather than copied). That keeps the committed fixtures pristine and keeps the parallel
+nextest binaries from colliding in a shared project dir.
+
+The TypeScript arm drives the bundled Node adapter: the rule spawns
+`packages/node/dist/mutation-cli.js`, whose path it receives explicitly — the integration tests
+hand `common::ts_adapter` to the SDK call, the e2e tests pass it to the spawned binary as
+`--ts-mutation-adapter`, and in production the npm launcher appends the same flag.

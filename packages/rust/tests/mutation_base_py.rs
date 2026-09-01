@@ -1,21 +1,3 @@
-//! Integration test for diff-scoped Python mutation — `unit mutation --language python
-//! --base`.
-//!
-//! cosmic-ray has no native git-diff mode, so the run is scoped to the changed `.py` files
-//! (passed to the adapter as `--module`) and the survivors are filtered to the
-//! `<base>...HEAD` changed lines in the core (line granularity, matching cargo-mutants'
-//! `--in-diff` and the Stryker `--mutate` ranges of the other arms). Builds a throwaway
-//! Python project in a git repo (the codebase is the fixture): a
-//! fully-tested baseline, then a commit that adds an assertion-light function. The diff
-//! scopes the run to the added lines, whose mutants survive — while the unchanged,
-//! well-tested `add` isn't reported.
-//!
-//! The default repo is the prescribed consumer package layout — `{pyproject.toml, src/**}`,
-//! scanned at `<repo>/src` — so the diff-scoped run mutates only `src/` the same way the
-//! whole-tree gate does. The flat, no-manifest shape is the `loose` special case. Requires
-//! `git` and a `python3` with cosmic-ray + pytest installed and the source package importable
-//! (`PYTHONPATH=packages/python/python`).
-
 mod common;
 
 use std::path::{Path, PathBuf};

@@ -1,12 +1,3 @@
-//! E2E test for the Rust mutation arm's engine provisioning.
-//!
-//! The consumer installs nothing and never names cargo-mutants: the tool provisions the
-//! engine itself on first use — a pinned `cargo install` into its own cache directory —
-//! and drives the binary from there. This drives the built CLI over the `killed` fixture
-//! with **no ambient cargo-mutants** (CI no longer installs one), asserting the run clears
-//! the gate, and runs it a second time to assert the provisioning is reused (idempotent —
-//! the cached binary is invoked, not reinstalled). Requires only a cargo toolchain.
-
 use std::path::PathBuf;
 use std::process::Command;
 

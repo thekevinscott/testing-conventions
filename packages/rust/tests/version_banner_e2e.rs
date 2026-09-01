@@ -1,7 +1,3 @@
-//! E2E tests for the version banner: drive the built binary and assert every
-//! run names the version that ran. CI resolves this binary from npm's `latest`,
-//! so the log line is the only record of which build a job actually got.
-
 use std::process::Command;
 
 /// Run the built binary with `args`, returning its exit code, stdout, and stderr.

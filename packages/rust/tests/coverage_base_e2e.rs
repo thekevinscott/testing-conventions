@@ -1,16 +1,3 @@
-//! E2E tests for diff-scoped coverage — `unit coverage --base`: drive the
-//! built CLI binary as a real subprocess against throwaway git repos and assert
-//! the exit code (and, for a red case, the failure on stderr). Complements the
-//! in-process integration tests in `coverage_base.rs`. Requires `coverage` +
-//! `pytest` + `git` on PATH.
-//!
-//! The default repo is the prescribed consumer package layout — `{pyproject.toml,
-//! src/**}` scanned at `<repo>/src`; the `--base` diff is computed over the whole repo.
-//!
-//! Starts red against the stub in `src/patch_coverage.rs` (the diff-scoped ratio
-//! reports Pass) and goes green once the ratio-vs-floor measurement is
-//! implemented.
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};

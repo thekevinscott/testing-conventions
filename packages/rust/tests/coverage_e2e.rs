@@ -1,7 +1,3 @@
-//! E2E tests for the Python coverage rule: drive the built CLI binary
-//! end-to-end (no mocks) against the fixture codebases and assert the exit code.
-//! Requires `coverage` + `pytest` on PATH.
-
 use std::path::PathBuf;
 use std::process::Command;
 

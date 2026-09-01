@@ -1,18 +1,3 @@
-//! E2E tests for cargo-feature passthrough in `unit coverage --language rust`:
-//! drive the built CLI binary end-to-end (no mocks) against the
-//! feature-gated fixture crates and assert the exit code and message.
-//!
-//! A `[rust] features` list names the cargo features the coverage run enables
-//! (`cargo llvm-cov --features …`), so `#[cfg(feature = …)]` code is compiled
-//! and measured: covered gated code clears the floor, and untested gated code
-//! fails it — the floor gates the full configured source tree, with nothing
-//! compiled out of the denominator.
-//!
-//! Red until feature passthrough lands: today the `features` key is rejected by
-//! the config self-guard, so every one of these exits non-zero with an "unknown
-//! field" error rather than the feature-aware behavior asserted here. Requires
-//! `cargo-llvm-cov`.
-
 use std::path::PathBuf;
 use std::process::{Command, Output};
 

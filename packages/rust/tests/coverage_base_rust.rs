@@ -1,21 +1,3 @@
-//! Integration tests for diff-scoped Rust coverage — `unit coverage --language
-//! rust --base`.
-//!
-//! The Rust twin of `coverage_base.rs` / `coverage_base_ts.rs`: with `--base`, the
-//! SAME configured `cargo llvm-cov` floors (regions / lines) are measured over the
-//! `<base>...HEAD` diff (the changed lines) instead of the whole tree. Unlike the
-//! implicit-100% `unit patch-coverage` it replaces, a changed line is judged against
-//! the configured floor — a diff that clears it passes even with an uncovered line,
-//! and one below it fails however small the diff (no small-diff carve-out).
-//!
-//! Each test builds a throwaway cargo crate in a git repo (the codebases are the
-//! fixtures) and runs REAL `cargo llvm-cov` over it via the SDK
-//! (`patch_coverage::measure_rust`) and the CLI (`run`). The crate carries its own
-//! `[workspace]` so `cargo llvm-cov` measures it in isolation. Rust has no
-//! zero-config default floor, so every CLI case commits a `testing-conventions.toml`
-//! with a `[rust.coverage]` table. Requires `git` + `cargo-llvm-cov` on PATH (the
-//! runs are slow — building and instrumenting each crate from scratch).
-
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;

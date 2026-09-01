@@ -1,17 +1,3 @@
-//! Shared test helper for the mutation suites.
-//!
-//! The engines write into the project dir — Stryker and cosmic-ray both mutate files in
-//! place (Stryker keeps its backup under `.stryker-tmp`) — so two runs in the same
-//! fixture would collide when cargo runs tests in parallel, and the committed fixtures
-//! would hold mutants while any run is live. [`Staged`] copies a fixture project into a unique temp dir (for
-//! TypeScript, with the runner-only `node_modules` symlinked rather than copied) so every
-//! test gets a pristine, isolated project and the committed fixtures are never written to.
-//!
-//! TypeScript also drives the bundled Node mutation adapter: the rule spawns
-//! `packages/node/dist/mutation-cli.js`, whose path it receives explicitly. The integration
-//! tests pass [`ts_adapter`] straight to [`testing_conventions::mutation::measure_typescript`];
-//! the e2e tests pass it to the spawned binary as `--ts-mutation-adapter`.
-
 // Each constructor is used by only some of the mutation test binaries.
 #![allow(dead_code)]
 

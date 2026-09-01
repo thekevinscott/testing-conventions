@@ -1,13 +1,3 @@
-//! E2E tests for diff-scoped Rust coverage — `unit coverage --language rust
-//! --base`: drive the built CLI binary as a real subprocess against
-//! throwaway cargo crates (each a git repo) and assert the exit code (and, for a red
-//! case, the failure on stderr). Complements the in-process integration tests in
-//! `coverage_base_rust.rs`. Each crate carries its own `[workspace]` so `cargo
-//! llvm-cov` measures it in isolation; every case commits a `[rust.coverage]` table
-//! to pin a known floor rather than lean on the zero-config default (`lines = 100`,
-//! regions off), which these calibrated diff cases aren't sized to. Requires `git` + `cargo-llvm-cov`
-//! on PATH (the runs are slow — building and instrumenting each crate from scratch).
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};

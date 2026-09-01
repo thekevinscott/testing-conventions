@@ -1,26 +1,3 @@
-//! Integration tests for diff-scoped TypeScript coverage — `unit coverage
-//! --language typescript --base`.
-//!
-//! The TypeScript twin of `coverage_base.rs`: with `--base`, the SAME configured
-//! vitest floors (lines / branches / functions / statements) are measured over the
-//! `<base>...HEAD` diff (the changed lines) instead of the whole tree. Unlike the
-//! implicit-100% `unit patch-coverage` it replaces, a changed line is judged
-//! against the configured floor — a diff that clears it passes even with an
-//! uncovered line, and one below it fails however small the diff (no small-diff
-//! carve-out).
-//!
-//! Each test builds a throwaway git repo (the codebases are the fixtures) and
-//! runs REAL vitest over it via the SDK
-//! (`patch_coverage::measure_typescript`) and the CLI (`run`). The default repo is
-//! the prescribed consumer package layout — `{package.json, src/**}` scanned at
-//! `<repo>/src` — so the diff-scoped run is scoped to the package the same way the
-//! whole-tree gate is. The scan path `<repo>/src` is the diff root too: git's
-//! `--relative` reports the changed `src/` lines against it, and the sources measured
-//! against them resolve from the same root. The flat, no-manifest shape is covered by
-//! the whole-tree suite. Requires `git` + a Node toolchain with vitest installed; the
-//! repo symlinks the fixtures' `node_modules` so `npx vitest` resolves (the same
-//! install `unit coverage`'s TypeScript tests use).
-
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;

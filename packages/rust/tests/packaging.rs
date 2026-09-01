@@ -1,11 +1,3 @@
-//! Integration tests for the packaging rule's foundation: exercise the
-//! `packaging::scan` library API over fixture "artifact" trees. The rule (README
-//! "Packaging"): test files must never ship in a built artifact. Each fixture
-//! stands in for an unpacked built artifact (a wheel, a `dist/`).
-//!
-//! The e2e suite (`packaging_e2e.rs`) drives the same fixtures through the built
-//! binary; this checks the library contract directly.
-
 use std::path::PathBuf;
 
 use testing_conventions::packaging;

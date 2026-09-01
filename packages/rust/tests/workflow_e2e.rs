@@ -44,6 +44,6 @@ fn help_does_not_list_the_private_workflow_command() {
         !help
             .lines()
             .any(|line| line.trim_start().starts_with("workflow")),
-        "`workflow` must not be listed in --help (#191):\n{help}"
+        "`workflow` must not be listed in --help:\n{help}"
     );
 }

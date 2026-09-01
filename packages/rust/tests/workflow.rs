@@ -74,6 +74,6 @@ fn workflow_command_is_hidden_from_help() {
         .expect("the workflow subcommand should still exist (hidden, not removed)");
     assert!(
         workflow_cmd.is_hide_set(),
-        "the private `workflow` command must be hidden from --help (#191)"
+        "the private `workflow` command must be hidden from --help"
     );
 }

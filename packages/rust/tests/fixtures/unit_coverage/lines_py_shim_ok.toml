@@ -1,4 +1,4 @@
-# Line-scoped coverage exemption (#226): only shim.py's uncovered launcher body
+# Line-scoped coverage exemption: only shim.py's uncovered launcher body
 # (lines 2-4 — line 1, the `def`, runs on import) is excused, not the whole file.
 # core.py is fully covered, so the crate clears the 100 floor with just these lines lifted.
 [python]

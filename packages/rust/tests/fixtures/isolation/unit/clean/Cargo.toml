@@ -1,4 +1,4 @@
-# Clean fixture crate for the Rust unit-isolation rule (#44). `rand` is declared
+# Clean fixture crate for the Rust unit-isolation rule. `rand` is declared
 # as a dependency but never called from a test — its presence alone is fine; only a
 # direct call out of the module is a violation. `[workspace]` isolates it from cargo.
 [package]

@@ -1,4 +1,4 @@
-"""Generate the packaging wheel fixtures for #72.
+"""Generate the packaging wheel fixtures.
 
 Two minimal wheels (a wheel is just a zip) standing in for a consumer's built
 distribution:

@@ -1,4 +1,4 @@
-# Red fixture for R3 (#51): a test deletes from os.environ.
+# Red fixture for `no-environ-mutation`: a test deletes from os.environ.
 import os
 
 

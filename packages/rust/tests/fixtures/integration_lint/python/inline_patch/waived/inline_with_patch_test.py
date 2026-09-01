@@ -1,4 +1,4 @@
-# Waived fixture for R2 (#50): identical to the red fixture (an inline
+# Waived fixture for `no-inline-patch`: identical to the red fixture (an inline
 # `with patch(...)` in a test body), but waived in the colocated
 # testing-conventions.toml — so it must be silent.
 from unittest.mock import patch

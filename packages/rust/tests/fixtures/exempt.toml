@@ -1,5 +1,5 @@
 # Exemptions only — no coverage thresholds (both keys are optional). A whole-file
-# presence exemption and a separate line-scoped coverage exemption (#226): the two
+# presence exemption and a separate line-scoped coverage exemption: the two
 # don't mix in one entry — `coverage` requires `lines`, presence rejects them.
 [[python.exempt]]
 path = "src/cli.py"

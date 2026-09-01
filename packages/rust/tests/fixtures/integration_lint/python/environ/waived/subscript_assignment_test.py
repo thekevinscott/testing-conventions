@@ -1,4 +1,4 @@
-# Waived fixture for R3 (#51): identical to the red fixture (mutates os.environ
+# Waived fixture for `no-environ-mutation`: identical to the red fixture (mutates os.environ
 # by subscript assignment), but waived in the colocated testing-conventions.toml
 # — so it must be silent.
 import os

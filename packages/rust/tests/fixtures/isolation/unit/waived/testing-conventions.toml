@@ -1,5 +1,5 @@
 # Lifts the out-of-module call in src/widget.rs — the auditable, reason-required
-# escape hatch (#32/#102). `path` is relative to the scanned root.
+# escape hatch. `path` is relative to the scanned root.
 [[rust.exempt]]
 path = "src/widget.rs"
 rules = ["no-out-of-module-call"]

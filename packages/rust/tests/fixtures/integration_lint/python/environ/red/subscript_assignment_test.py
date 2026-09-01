@@ -1,4 +1,4 @@
-# Red fixture for R3 (#51): a test mutates os.environ by subscript assignment.
+# Red fixture for `no-environ-mutation`: a test mutates os.environ by subscript assignment.
 # Set env via patch.dict(os.environ, {...}) in a fixture instead.
 import os
 

@@ -1,4 +1,4 @@
-# Clean fixture for Python unit isolation (#42): the canonical unit test. It imports
+# Clean fixture for Python unit isolation: the canonical unit test. It imports
 # only the unit under test, and mocks its collaborator by string in a fixture
 # (`patch("myproject.widget.record")`) — so no first-party collaborator is imported.
 from unittest.mock import patch

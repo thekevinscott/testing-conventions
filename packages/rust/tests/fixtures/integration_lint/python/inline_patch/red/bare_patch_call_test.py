@@ -1,4 +1,4 @@
-# Red fixture for R2 (#50): a test patches with a bare `patch(...)` call (no `with`).
+# Red fixture for `no-inline-patch`: a test patches with a bare `patch(...)` call (no `with`).
 # The patch belongs in a pytest.fixture, not the test body.
 from unittest.mock import patch
 

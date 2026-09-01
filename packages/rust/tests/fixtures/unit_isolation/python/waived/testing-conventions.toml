@@ -1,5 +1,5 @@
-# Waiver for the unit-isolation rule (#42): exempt the file from
-# `unmocked-collaborator`, with a reason (auditable, reason-required — #32/#102).
+# Waiver for the unit-isolation rule: exempt the file from
+# `unmocked-collaborator`, with a reason (auditable, reason-required).
 [[python.exempt]]
 path = "widget_test.py"
 rules = ["unmocked-collaborator"]

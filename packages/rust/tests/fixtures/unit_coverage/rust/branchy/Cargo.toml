@@ -1,4 +1,4 @@
-# `branchy` fixture for the branch floor (#267): the inline test exercises only
+# `branchy` fixture for the branch floor: the inline test exercises only
 # the high arm of `label`'s branch, so branch coverage sits at 50%. Branch
 # instrumentation needs a nightly toolchain, which the crate pins itself via
 # `rust-toolchain.toml` — the branch floor's documented requirement.

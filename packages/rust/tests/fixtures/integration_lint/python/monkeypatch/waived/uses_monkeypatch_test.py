@@ -1,4 +1,4 @@
-# Waived fixture for R1 (#49): identical to the red fixture (takes pytest's
+# Waived fixture for `no-monkeypatch`: identical to the red fixture (takes pytest's
 # `monkeypatch`), but waived in the colocated testing-conventions.toml — so it
 # must be silent.
 import os

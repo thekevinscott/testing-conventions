@@ -1,4 +1,4 @@
-# Red fixture crate for the Rust unit-isolation rule's import detector (#44, D2).
+# Red fixture crate for the Rust unit-isolation rule's import detector.
 # Parsed by `syn`, never compiled — `[workspace]` isolates it from cargo.
 [package]
 name = "iso_imports_red"

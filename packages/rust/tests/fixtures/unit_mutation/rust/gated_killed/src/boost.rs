@@ -1,7 +1,7 @@
 //! A unit compiled only under the `boost` feature, whose colocated inline test
 //! pins its behavior. The mutation run enables the feature via
 //! `[rust] features = ["boost"]`, so this module's mutants are exercised and
-//! every one is caught (#266).
+//! every one is caught.
 
 /// Difference of two integers.
 pub fn sub(a: i32, b: i32) -> i32 {

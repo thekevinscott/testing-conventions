@@ -1,6 +1,6 @@
 //! A unit compiled only under the `boost` feature, fully exercised by its
 //! colocated inline test. The coverage run enables the feature via
-//! `[rust] features = ["boost"]`, so this module is measured (#266).
+//! `[rust] features = ["boost"]`, so this module is measured.
 
 /// Triple a value.
 pub fn triple(value: u8) -> u8 {

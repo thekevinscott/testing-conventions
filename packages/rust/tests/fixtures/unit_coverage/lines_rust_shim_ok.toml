@@ -1,4 +1,4 @@
-# Line-scoped coverage exemption (#226): only src/shim.rs's uncovered `launch` region
+# Line-scoped coverage exemption: only src/shim.rs's uncovered `launch` region
 # (lines 6-8) is excused, not the whole file. core.rs is fully covered, so the crate
 # clears the 100 floor with just these lines lifted.
 [rust]

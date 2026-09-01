@@ -1,4 +1,4 @@
-# Red fixture for Python unit isolation, external deps (#121, slice 3). A unit test
+# Red fixture for Python unit isolation, external deps. A unit test
 # must mock external collaborators too — a third-party package and effectful stdlib
 # imported and used for real are violations; pure stdlib is fine.
 from myproject.widget import build  # unit under test — never a collaborator

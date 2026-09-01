@@ -1,4 +1,4 @@
-# Clean fixture: per-language coverage thresholds. Must load (issue #12).
+# Clean fixture: per-language coverage thresholds. Must load.
 [python]
 coverage = { branch = true, fail_under = 100 }
 

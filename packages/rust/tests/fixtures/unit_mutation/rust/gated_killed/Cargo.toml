@@ -1,4 +1,4 @@
-# Fixture crate `mut_gated_killed` for cargo-feature passthrough (#266): `boost`
+# Fixture crate `mut_gated_killed` for cargo-feature passthrough: `boost`
 # is behind the `boost` feature, and its colocated test asserts the real result,
 # so every mutant is caught — but only when the mutation run enables the feature
 # via `[rust] features = ["boost"]`. A run that left the feature off would

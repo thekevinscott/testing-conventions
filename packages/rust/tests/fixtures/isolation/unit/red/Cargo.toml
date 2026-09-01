@@ -1,4 +1,4 @@
-# Red fixture crate for the Rust unit-isolation rule (#44). Parsed by `syn`, never
+# Red fixture crate for the Rust unit-isolation rule. Parsed by `syn`, never
 # compiled — `[workspace]` keeps cargo from absorbing it into the tool's build.
 [package]
 name = "iso_unit_red"

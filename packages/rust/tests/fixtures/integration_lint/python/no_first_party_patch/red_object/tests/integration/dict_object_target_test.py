@@ -1,4 +1,4 @@
-# Red fixture for `no-first-party-patch` (#576): `patch.dict` with an object
+# Red fixture for `no-first-party-patch`: `patch.dict` with an object
 # target. `config.registry` resolves to `myproject.config.registry` — first-party
 # state, mutated for the test's benefit instead of running for real.
 from unittest.mock import patch

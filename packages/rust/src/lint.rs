@@ -2,6 +2,7 @@
 //! arm of `unit lint`. Each test file is parsed with `rustpython_parser` and walked with a
 //! [`Visitor`]; the rules themselves are documented under `docs/reference/checks/`.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
@@ -38,6 +39,7 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
             source: &source,
             fixture_depth: 0,
             first_party: first_party.as_deref(),
+            imports: HashMap::new(),
             violations: Vec::new(),
         };
         for stmt in suite {
@@ -617,6 +619,8 @@ struct LintVisitor<'a> {
     fixture_depth: usize,
     /// The dist's own top-level package, or `None` when undiscoverable.
     first_party: Option<&'a str>,
+    /// Local name → the dotted module path its import binds, for object patch targets.
+    imports: HashMap<String, String>,
     violations: Vec<Violation>,
 }
 
@@ -676,24 +680,22 @@ impl Visitor for LintVisitor<'_> {
     }
 
     fn visit_expr_call(&mut self, node: ExprCall) {
-        let is_patch = is_patch_call(&node);
         // A fixture is the right place for a patch; a test body is not.
-        if is_patch && self.fixture_depth == 0 {
+        if is_patch_call(&node) && self.fixture_depth == 0 {
             self.report(
                 node.range,
                 "no-inline-patch",
                 "patch is called inline in a test body; move it into a `pytest.fixture`",
             );
         }
-        // Fires regardless of fixture depth — a config constant is usually patched in one.
-        if is_patch && patches_constant(&node) {
-            self.report(node.range, "no-constant-patch", CONSTANT_PATCH_MSG);
-        }
-        // Fires regardless of fixture depth, and only when the dist's package is known.
-        if is_patch {
+        // Both target rules fire regardless of fixture depth — a config constant is usually
+        // patched in one — and only on a statically resolved target.
+        if let Some(target) = patch_target(&node, &self.imports) {
+            if patches_constant(&target) {
+                self.report(node.range, "no-constant-patch", CONSTANT_PATCH_MSG);
+            }
             if let Some(pkg) = self.first_party {
-                if patch_string_target(&node).is_some_and(|target| patches_first_party(target, pkg))
-                {
+                if patches_first_party(&target, pkg) {
                     self.report(node.range, "no-first-party-patch", FIRST_PARTY_PATCH_MSG);
                 }
             }
@@ -702,6 +704,37 @@ impl Visitor for LintVisitor<'_> {
             self.report(node.range, "no-environ-mutation", ENVIRON_MUTATION_MSG);
         }
         self.generic_visit_expr_call(node);
+    }
+
+    fn visit_stmt_import(&mut self, node: StmtImport) {
+        for alias in &node.names {
+            match &alias.asname {
+                // `import X.Y as A` binds `A`; a plain `import X.Y` binds only the head `X`.
+                Some(asname) => {
+                    self.imports
+                        .insert(asname.to_string(), alias.name.to_string());
+                }
+                None => {
+                    let head = import_head(alias.name.as_str());
+                    self.imports.insert(head.to_string(), head.to_string());
+                }
+            }
+        }
+        self.generic_visit_stmt_import(node);
+    }
+
+    fn visit_stmt_import_from(&mut self, node: StmtImportFrom) {
+        // A relative import names no absolute module, so its bindings resolve nothing.
+        if relative_level(&node) == 0 {
+            if let Some(module) = &node.module {
+                for alias in &node.names {
+                    let bound = alias.asname.as_ref().unwrap_or(&alias.name);
+                    self.imports
+                        .insert(bound.to_string(), format!("{module}.{}", alias.name));
+                }
+            }
+        }
+        self.generic_visit_stmt_import_from(node);
     }
 
     // The generated `generic_visit_withitem` is a no-op, so a `with patch(...)`
@@ -753,18 +786,34 @@ fn is_fixture_decorator(decorator: &Expr) -> bool {
     }
 }
 
-/// `true` for `patch(...)` / `patch.object(...)` / `patch.dict(...)`, plain or reached
-/// through a module (`mock.patch(...)`, `unittest.mock.patch`).
-fn is_patch_call(call: &ExprCall) -> bool {
+/// The three call shapes of `unittest.mock.patch`, which name their target differently.
+enum PatchForm {
+    /// `patch("pkg.mod.attr")` — the target is the string-literal first argument.
+    Target,
+    /// `patch.object(base, "attr")` — the target is `base`'s module plus the attribute.
+    Object,
+    /// `patch.dict(base_or_string, ...)` — the target is the dict itself.
+    Dict,
+}
+
+/// The form of a `patch(...)` / `patch.object(...)` / `patch.dict(...)` call, plain or
+/// reached through a module (`mock.patch(...)`, `unittest.mock.patch`). `None` otherwise.
+fn patch_form(call: &ExprCall) -> Option<PatchForm> {
     match call.func.as_ref() {
-        Expr::Name(name) => name.id.as_str() == "patch",
-        Expr::Attribute(attr) => {
-            let name = attr.attr.as_str();
-            name == "patch"
-                || ((name == "object" || name == "dict") && attr_base_is_patch(attr.value.as_ref()))
-        }
-        _ => false,
+        Expr::Name(name) if name.id.as_str() == "patch" => Some(PatchForm::Target),
+        Expr::Attribute(attr) => match attr.attr.as_str() {
+            "patch" => Some(PatchForm::Target),
+            "object" if attr_base_is_patch(attr.value.as_ref()) => Some(PatchForm::Object),
+            "dict" if attr_base_is_patch(attr.value.as_ref()) => Some(PatchForm::Dict),
+            _ => None,
+        },
+        _ => None,
     }
+}
+
+/// `true` for any [`PatchForm`] call.
+fn is_patch_call(call: &ExprCall) -> bool {
+    patch_form(call).is_some()
 }
 
 /// `true` when an attribute's base resolves to `patch` — a `patch.object` receiver.
@@ -783,19 +832,69 @@ const FIRST_PARTY_PATCH_MSG: &str = "patches a first-party target; an integratio
 /// The string-literal first argument of a `patch(...)` call, the dotted target. `None` for
 /// a non-literal argument, which can't be classified deterministically.
 fn patch_string_target(call: &ExprCall) -> Option<&str> {
-    if let Some(Expr::Constant(constant)) = call.args.first() {
-        if let Constant::Str(target) = &constant.value {
-            return Some(target.as_str());
+    string_arg(call, 0)
+}
+
+/// The string literal at argument position `index` of a call, if that is what sits there.
+fn string_arg(call: &ExprCall, index: usize) -> Option<&str> {
+    if let Some(Expr::Constant(constant)) = call.args.get(index) {
+        if let Constant::Str(value) = &constant.value {
+            return Some(value.as_str());
         }
     }
     None
 }
 
-/// `true` when a `patch(...)` target names an UPPER_CASE constant (`"pkg.cfg.CACHE_DIR"`).
-fn patches_constant(call: &ExprCall) -> bool {
-    patch_string_target(call)
-        .and_then(|target| target.rsplit('.').next())
-        .is_some_and(is_upper_constant)
+/// The dotted segments of a plain attribute chain (`myproject.ledger` → `["myproject",
+/// "ledger"]`). `None` for a chain rooted in anything but a name.
+fn attr_chain_segments(expr: &Expr) -> Option<Vec<&str>> {
+    match expr {
+        Expr::Name(name) => Some(vec![name.id.as_str()]),
+        Expr::Attribute(attr) => {
+            let mut segments = attr_chain_segments(attr.value.as_ref())?;
+            segments.push(attr.attr.as_str());
+            Some(segments)
+        }
+        _ => None,
+    }
+}
+
+/// The dotted module path an object target names, its head replaced by the module its import
+/// binds (`ledger` → `myproject.ledger` after `from myproject import ledger`). `None` when no
+/// import binds the head — a local name has no statically known module.
+fn resolve_object_target(expr: &Expr, imports: &HashMap<String, String>) -> Option<String> {
+    let segments = attr_chain_segments(expr)?;
+    let (head, rest) = segments.split_first()?;
+    let mut target = imports.get(*head)?.clone();
+    for segment in rest {
+        target.push('.');
+        target.push_str(segment);
+    }
+    Some(target)
+}
+
+/// The dotted target a patch call names, resolved statically: the string literal for
+/// `patch(...)` (and a string-target `patch.dict`), the import-resolved first argument for
+/// the object forms. `None` when the target resists static resolution — nothing fires.
+fn patch_target(call: &ExprCall, imports: &HashMap<String, String>) -> Option<String> {
+    match patch_form(call)? {
+        PatchForm::Target => patch_string_target(call).map(str::to_owned),
+        PatchForm::Dict => patch_string_target(call)
+            .map(str::to_owned)
+            .or_else(|| resolve_object_target(call.args.first()?, imports)),
+        PatchForm::Object => {
+            let base = resolve_object_target(call.args.first()?, imports)?;
+            Some(match string_arg(call, 1) {
+                Some(attr) => format!("{base}.{attr}"),
+                None => base,
+            })
+        }
+    }
+}
+
+/// `true` when a patch target names an UPPER_CASE constant (`"pkg.cfg.CACHE_DIR"`).
+fn patches_constant(target: &str) -> bool {
+    target.rsplit('.').next().is_some_and(is_upper_constant)
 }
 
 /// `true` when patch `target`'s head segment names the first-party package `pkg`.
@@ -989,15 +1088,116 @@ mod tests {
     }
 
     #[test]
-    fn patch_string_target_only_reads_string_literals() {
+    fn patch_target_only_reads_string_literals_for_the_string_form() {
+        let imports = HashMap::new();
         let str_call = parse_call("patch(\"pkg.mod.attr\")\n");
-        assert_eq!(patch_string_target(&str_call), Some("pkg.mod.attr"));
-        let int_call = parse_call("patch(42)\n");
-        assert_eq!(patch_string_target(&int_call), None);
+        assert_eq!(
+            patch_target(&str_call, &imports).as_deref(),
+            Some("pkg.mod.attr")
+        );
+        // A name in `patch(...)` holds a string, which static resolution cannot read.
         let name_call = parse_call("patch(target)\n");
-        assert_eq!(patch_string_target(&name_call), None);
+        assert_eq!(patch_target(&name_call, &imports), None);
+        let int_call = parse_call("patch(42)\n");
+        assert_eq!(patch_target(&int_call, &imports), None);
         let empty_call = parse_call("patch()\n");
-        assert_eq!(patch_string_target(&empty_call), None);
+        assert_eq!(patch_target(&empty_call, &imports), None);
+    }
+
+    /// An import map binding the names the object-form snippets use.
+    fn object_form_imports() -> HashMap<String, String> {
+        HashMap::from([
+            ("ledger".to_string(), "myproject.ledger".to_string()),
+            ("myproject".to_string(), "myproject".to_string()),
+            ("cfg".to_string(), "myproject.cfg".to_string()),
+        ])
+    }
+
+    #[test]
+    fn patch_target_resolves_object_forms_through_imports() {
+        let imports = object_form_imports();
+        let imported_name = parse_call("patch.object(ledger, \"record\")\n");
+        assert_eq!(
+            patch_target(&imported_name, &imports).as_deref(),
+            Some("myproject.ledger.record")
+        );
+        let dotted_module = parse_call("patch.object(myproject.ledger, \"record\")\n");
+        assert_eq!(
+            patch_target(&dotted_module, &imports).as_deref(),
+            Some("myproject.ledger.record")
+        );
+        // A non-literal attribute still names the base module, enough for the first-party rule.
+        let name_attr = parse_call("patch.object(ledger, attr)\n");
+        assert_eq!(
+            patch_target(&name_attr, &imports).as_deref(),
+            Some("myproject.ledger")
+        );
+        let dict_object = parse_call("patch.dict(cfg.SETTINGS, {})\n");
+        assert_eq!(
+            patch_target(&dict_object, &imports).as_deref(),
+            Some("myproject.cfg.SETTINGS")
+        );
+        let dict_string = parse_call("patch.dict(\"pkg.cfg.FLAGS\", {})\n");
+        assert_eq!(
+            patch_target(&dict_string, &imports).as_deref(),
+            Some("pkg.cfg.FLAGS")
+        );
+    }
+
+    #[test]
+    fn patch_target_declines_a_base_bound_by_no_import() {
+        let imports = object_form_imports();
+        let call_base = parse_call("patch.object(get_mod(), \"x\")\n");
+        assert_eq!(patch_target(&call_base, &imports), None);
+        let unbound_name = parse_call("patch.object(client, \"send\")\n");
+        assert_eq!(patch_target(&unbound_name, &imports), None);
+        let empty = parse_call("patch.object()\n");
+        assert_eq!(patch_target(&empty, &imports), None);
+    }
+
+    /// The imports a [`LintVisitor`] records for `src`.
+    fn collect_imports(src: &str) -> HashMap<String, String> {
+        let suite = ast::Suite::parse(src, "t.py").expect("snippet should parse");
+        let mut visitor = LintVisitor {
+            file: Path::new("t.py"),
+            source: src,
+            fixture_depth: 0,
+            first_party: None,
+            imports: HashMap::new(),
+            violations: Vec::new(),
+        };
+        for stmt in suite {
+            visitor.visit_stmt(stmt);
+        }
+        visitor.imports
+    }
+
+    #[test]
+    fn lint_visitor_binds_imports_to_their_modules() {
+        let imports = collect_imports(
+            "import myproject.ledger\n\
+             import myproject.config as cfg\n\
+             from myproject import ledger\n\
+             from myproject import charge as ch\n\
+             from . import rel\n",
+        );
+        assert_eq!(
+            imports.get("myproject").map(String::as_str),
+            Some("myproject")
+        );
+        assert_eq!(
+            imports.get("cfg").map(String::as_str),
+            Some("myproject.config")
+        );
+        assert_eq!(
+            imports.get("ledger").map(String::as_str),
+            Some("myproject.ledger")
+        );
+        assert_eq!(
+            imports.get("ch").map(String::as_str),
+            Some("myproject.charge")
+        );
+        assert_eq!(imports.get("rel"), None);
     }
 
     /// Build a `from <source> import <symbols>` record (`source: None` → relative).

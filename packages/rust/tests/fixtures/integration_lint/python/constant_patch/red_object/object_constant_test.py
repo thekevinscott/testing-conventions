@@ -1,4 +1,4 @@
-# Red fixture for `no-constant-patch` (#576): the object form. `cfg` resolves
+# Red fixture for `no-constant-patch`: the object form. `cfg` resolves
 # through the import, so patching its UPPER_CASE attribute is the same
 # config-constant patch as `patch("myproject.cfg.CACHE_DIR", ...)`.
 import pytest

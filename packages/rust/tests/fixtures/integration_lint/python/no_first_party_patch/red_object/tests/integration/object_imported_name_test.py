@@ -1,4 +1,4 @@
-# Red fixture for `no-first-party-patch` (#576): the object form with an imported
+# Red fixture for `no-first-party-patch`: the object form with an imported
 # name. `ledger` resolves through `from myproject import ledger`, so the patch
 # targets first-party code exactly like `patch("myproject.ledger.record")`.
 from unittest.mock import patch

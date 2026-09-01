@@ -1,4 +1,4 @@
-# Clean fixture for `no-constant-patch` (#576): the object form patching a
+# Clean fixture for `no-constant-patch`: the object form patching a
 # lower-case attribute is an ordinary patch, not a config constant.
 import pytest
 from unittest.mock import patch

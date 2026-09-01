@@ -1,4 +1,4 @@
-# Red fixture for `no-first-party-patch` (#576): the object form with a dotted
+# Red fixture for `no-first-party-patch`: the object form with a dotted
 # module. `myproject.ledger` names the first-party module directly.
 import myproject.ledger
 from unittest.mock import patch

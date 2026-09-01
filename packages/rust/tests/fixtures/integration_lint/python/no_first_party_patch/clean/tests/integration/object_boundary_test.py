@@ -1,4 +1,4 @@
-# Clean fixture for `no-first-party-patch` (#576): the object form at the system
+# Clean fixture for `no-first-party-patch`: the object form at the system
 # boundary. `requests` is third-party, and a base bound by no import (a call
 # result, a fixture argument) resolves to no module and is left alone.
 from unittest.mock import patch

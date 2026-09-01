@@ -3,11 +3,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-// E2E: a consumer imports the base config by the package's public specifier
-// (`import { vitestConfig } from 'testing-conventions'`). Drive that bare
-// specifier through a real node process so the `exports` map + built `dist`
-// resolve end to end — no mocks. CI never runs this (#71 attestation); run it
-// with `npm run test:e2e`, which builds `dist` first.
+// E2E: drive the public specifier through a real node process so the `exports` map and the
+// built `dist` resolve end to end. Run it with `npm run test:e2e`, which builds `dist` first.
 const here = fileURLToPath(new URL('.', import.meta.url));
 const packageRoot = resolve(here, '../..');
 

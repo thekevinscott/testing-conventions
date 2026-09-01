@@ -1,7 +1,5 @@
-# Diff-scoped self-test fixture (#172): added fresh in the PR that wires the
-# `*-changed` jobs, so `<base>...HEAD` carries real changed lines. classify() is
-# fully exercised, so the changed lines clear the floor (`coverage --base`) and
-# the added source has its colocated test (`colocated-test --base`, which excuses
-# added files from co-change but still requires the test to be present).
+# Diff-scoped self-test fixture: classify() is fully exercised, so its changed lines clear the
+# floor under `coverage --base` and the added source carries the colocated test that
+# `colocated-test --base` requires.
 [python]
 coverage = { branch = true, fail_under = 90 }

@@ -11,13 +11,9 @@ def _result(outcome, output=""):
 
 
 def test_returns_the_observed_runtime_when_the_suite_passes(cosmic_ray):
-    # A passing baseline reports ``survived``; the check returns the clean run's wall-clock
-    # seconds (later tick minus earlier tick), which scopes every mutant's timeout. The injected
-    # clock pins the elapsed to a span where subtraction and modulo diverge (25.0 - 10.0 = 15.0,
-    # not 25.0 % 10.0 = 5.0), so the ``-`` cannot be flipped to ``%``. ``survived`` is built at
-    # runtime so it is a distinct object from the interned literal the check compares against: the
-    # comparison is equality (``!=``), not identity (``is not``), and this passing outcome returns
-    # rather than raising.
+    # The injected clock pins the elapsed span where subtraction and modulo diverge
+    # (25.0 - 10.0 = 15.0, not 5.0), so ``-`` cannot be flipped to ``%``; ``survived`` is built
+    # at runtime so an identity check in place of ``!=`` would miss it.
     survived = "".join(list("survived"))
     cosmic_ray.db.results = iter([("baseline", _result(survived))])
     ticks = iter([10.0, 25.0])
@@ -57,9 +53,8 @@ def test_raises_when_the_baseline_times_out(cosmic_ray):
 
 
 def test_raises_when_the_baseline_is_incompetent(cosmic_ray):
-    # Only ``survived`` is a pass. An ``incompetent`` baseline — abnormal for unmutated code the
-    # interpreter should accept — is untrustworthy, so it raises rather than slipping through
-    # (the old guard raised only on ``killed``).
+    # Only ``survived`` is a pass: an ``incompetent`` baseline is abnormal for unmutated code,
+    # so it raises rather than slipping through.
     cosmic_ray.db.results = iter([("baseline", _result("incompetent"))])
     with pytest.raises(RuntimeError, match="did not pass unmutated"):
         check_baseline({"module-path": ["."]})

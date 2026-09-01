@@ -1,15 +1,13 @@
 import type { MainOpts } from 'bin-shim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// The launcher's one collaborator is bin-shim's `main()`. Mock it so the behaviors bin.ts
-// owns — forwarding the binary's exit code, reporting a launch failure, and appending the TS
-// mutation adapter argument — can be driven without spawning a real binary. `vi.hoisted` makes
-// the mock available to the hoisted `vi.mock` factory; typing it keeps `.mock.calls` typed.
+// Mock bin-shim's `main()` so the launcher's behaviors run without spawning a real binary.
+// `vi.hoisted` makes the mock available to the hoisted `vi.mock` factory.
 const { main } = vi.hoisted(() => ({ main: vi.fn<(opts: MainOpts) => Promise<number>>() }));
 vi.mock('bin-shim', () => ({ main }));
 
-// Drive the launcher with a chosen argv: it reads `process.argv.slice(2)` at import time, so set
-// it, import a fresh module copy, then flush the microtask that calls `process.exit`.
+// The launcher reads `process.argv.slice(2)` at import time, so set argv, import a fresh module
+// copy, then flush the microtask that calls `process.exit`.
 async function runBin(args: string[]): Promise<void> {
   process.argv = ['node', 'index.js', ...args];
   await import('./index.js');

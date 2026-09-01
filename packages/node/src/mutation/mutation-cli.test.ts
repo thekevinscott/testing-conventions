@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { NormalizedMutant } from './to-normalized.js';
 
-// `mutationCLI`'s collaborators are `parseArgs`, `runStryker`, and `fs/promises.writeFile`; mock
-// all so the behaviors it owns — writing the JSON to a file or stdout, passing the parsed mutate
-// ranges through, and propagating a failed run — can be driven without a real mutation run.
+// Mock `parseArgs`, `runStryker`, and `fs/promises.writeFile` so the behaviors `mutationCLI`
+// owns can be driven without a real mutation run.
 const { parseArgs, runStryker, writeFile } = vi.hoisted(() => ({
   parseArgs: vi.fn<(argv: string[]) => { mutate?: string[]; out?: string; vitestDir?: string }>(),
   runStryker:

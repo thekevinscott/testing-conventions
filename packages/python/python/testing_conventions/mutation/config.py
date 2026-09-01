@@ -8,22 +8,16 @@ collect this package.
 """
 from __future__ import annotations
 
-# Test files cosmic-ray must never mutate (it would mutate the suite itself). Mirrors the
-# excludes the CLI-driven Rust arm used.
+# Test files cosmic-ray must never mutate, which would mutate the suite itself.
 EXCLUDES = ["*_test.py", "test_*.py", "conftest.py"]
 
-# The per-mutant timeout is scoped to the clean suite's observed runtime rather than a fixed
-# ceiling: a mutant whose run outlasts the clean suite by more than ``TIMEOUT_MULTIPLIER`` is
-# judged hung (an inconclusive timeout), while a suite that is merely slow earns a
-# proportionally larger budget. A fixed 30s instead timed out any suite slower than 30s — and,
-# before the baseline guard tightened, false-greened it.
+# A mutant outlasting the clean suite by more than this is judged hung. Scoping to the observed
+# runtime rather than a fixed ceiling keeps a merely-slow suite from timing out wholesale.
 TIMEOUT_MULTIPLIER = 3.0
 # A floor so a sub-second suite still gets a usable budget across process startup and jitter.
 MIN_TIMEOUT = 10.0
-# The generous ceiling the clean suite is *measured* under (the baseline run). A slow-but-
-# working suite completes within it and is measured; a hung suite hits it and fails the
-# baseline guard loudly rather than measuring forever. This bounds only the measurement — the
-# per-mutant budget is derived from the observed runtime, not from this value.
+# The ceiling the clean suite is *measured* under, so a hung suite fails the baseline guard
+# rather than measuring forever. It bounds only the measurement, never the per-mutant budget.
 MEASURE_TIMEOUT = 300.0
 
 

@@ -1,5 +1,4 @@
-//! Red: doubles the crate under test (`widget`). An integration test runs
-//! first-party code for real; mock external deps, never the library itself.
+//! Red: doubles the crate under test. An integration test runs first-party code for real.
 
 use mockall_double::double;
 

@@ -7,11 +7,9 @@ attributes off the passed objects, so it needs no ``cosmic_ray`` import.
 """
 from __future__ import annotations
 
-# cosmic-ray's ``TestOutcome`` values → the normalized ``MutantStatus`` vocabulary.
-# ``survived`` / ``killed`` map straight across; ``incompetent`` (the mutation produced code
-# the interpreter rejected — a syntax / import error, never a viable mutant) is
-# ``compile_error``. cosmic-ray has no distinct no-coverage outcome: an uncovered mutant's
-# suite still passes, so it reports ``survived``.
+# cosmic-ray's ``TestOutcome`` values to the normalized ``MutantStatus`` vocabulary.
+# ``incompetent`` means the interpreter rejected the mutation, never a viable mutant. cosmic-ray
+# has no no-coverage outcome: an uncovered mutant's suite passes, so it reports ``survived``.
 STATUS = {"survived": "survived", "killed": "killed", "incompetent": "compile_error"}
 
 

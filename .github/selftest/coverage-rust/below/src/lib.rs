@@ -1,6 +1,5 @@
-//! A unit whose colocated inline test exercises only the `>= 60` arm, so the
-//! `else` branch — its region and its line — is never executed. `cargo llvm-cov`
-//! reports under 100% regions and lines, so this crate fails a 100 floor.
+//! A unit whose colocated inline test exercises only the `>= 60` arm, so `cargo llvm-cov`
+//! reports under 100% regions and lines and the crate fails a 100 floor.
 
 /// Classify a score: `"pass"` at 60 or above, `"fail"` below.
 pub fn label(score: u8) -> &'static str {

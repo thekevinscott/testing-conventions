@@ -1,12 +1,9 @@
 name: 'Build the hermetic CLI'
 description: >-
-  Repo-only helper (#356): provisions the rust/node/uv toolchains, builds the CLI binary
-  and the TS mutation adapter from HEAD via the colocated-tested `tc-checks
-  build-hermetic-cli` (internals/checks), and uploads both as the `hermetic-cli` artifact
-  the reusable workflow's rule jobs download. Shared by every repo-only caller workflow
-  (testing-conventions-selftest.yml, dogfood.yml) so the two builds can't drift — each
-  caller's own `build-cli:` job still holds the checkout (composite actions run in the
-  context of a checkout already taken) and calls this action for everything after it.
+  Repo-only helper: provisions the rust/node/uv toolchains, builds the CLI binary and the TS
+  mutation adapter from HEAD via `tc-checks build-hermetic-cli`, and uploads both as the
+  `hermetic-cli` artifact the reusable workflow's rule jobs download. The caller's `build-cli:`
+  job holds the checkout; this action runs everything after it.
 
 runs:
   using: composite

@@ -1,7 +1,5 @@
-//! The library under test (first-party code an integration test must run for
-//! real). The inline unit test covers `compute` — the coverage arm measures the
-//! unit suite only (#265), so the crate clears the zero-config line floor on its
-//! inline tests while the integration test exercises the same code for the lint.
+//! The library under test. Its inline unit test covers `compute`, so the crate clears the
+//! zero-config line floor on the unit suite alone, which is all the coverage arm measures.
 
 pub fn compute() -> u8 {
     7

@@ -1,7 +1,6 @@
-# Clean fixture crate for the reusable workflow's `unit lint` job (#125),
-# exercising the Rust path end to end: the workflow's `detect` step must recognize
-# a crate (a `Cargo.toml` / `*.rs`) and fan the isolation job over `rust`, then the
-# rule must pass this well-isolated unit. `[workspace]` isolates it from cargo.
+# Clean fixture crate for the `unit lint` job: `detect` must recognize a crate and fan the
+# isolation job over `rust`, and the rule must pass this well-isolated unit.
+# `[workspace]` isolates it from cargo.
 [package]
 name = "iso_selftest_clean"
 version = "0.0.0"

@@ -1,5 +1,4 @@
-# Clean self-test fixture: classify() is fully exercised (every line and branch),
-# so the unit suite clears the floor and the reusable workflow's coverage job —
-# alongside its colocated-test and integration-lint jobs — must pass.
+# Clean self-test fixture: classify() is fully exercised, so the unit suite clears the floor
+# and the coverage, colocated-test, and integration-lint jobs all pass.
 [python]
 coverage = { branch = true, fail_under = 100 }

@@ -514,7 +514,19 @@ Publish-gating is necessary but not sufficient. It proves the binary published; 
 
 ## The move-major-tag helper's package (`internals/move-major-tag`)
 
-`move_major_tag.py` (the forward-only `@v0` tag-advance helper, #235) lives in its own uv package, `internals/move-major-tag` (#452), mirroring `internals/detect`: `src/move_major_tag.py` with its colocated `move_major_tag_test.py`, integration tests (the git boundary mocked) and e2e tests (a real repo with a local remote) under `tests/`, and pytest a dev-dependency pinned in the package's `uv.lock`. `move-major-tag.yml` invokes it as a plain stdlib script (`python3 internals/move-major-tag/src/move_major_tag.py`, no install step); `move-major-tag-tests.yml` runs the three-tier suite from the package's own lock. Like `internals/detect` (see below), its colocated unit test alone sits below the coverage floor, so its gate is that dedicated pytest workflow rather than a `dogfood.yml` call.
+`move_major_tag.py` (the forward-only `@v0` tag-advance helper, #235) lives in its own uv package, `internals/move-major-tag` (#452), mirroring `internals/detect`: `src/move_major_tag.py` with its colocated `move_major_tag_test.py`, integration tests (the git boundary mocked) and e2e tests (a real repo with a local remote) under `tests/`, and pytest a dev-dependency pinned in the package's `uv.lock`. `move-major-tag.yml` invokes it as a plain stdlib script (`python3 internals/move-major-tag/src/move_major_tag.py`, no install step); `move-major-tag-tests.yml` runs the three-tier suite from the package's own lock.
+
+It is dogfooded through the **shipped reusable workflow** (`dogfood.yml`, `source: internals/move-major-tag/src`) like `internals/checks` — every gate, including the coverage floor and diff-scoped mutation. `source` is the inner module dir, so the unit-tier gates recurse `src/` while the suite tiers derive from the package root. The colocated `move_major_tag_test.py` mocks one external — `subprocess.run`, through a fake that dispatches on argv and records every call — and runs the git boundary helpers and `advance` for real against it, so the unit suite alone clears the floor and the asserted argv kills the mutants on each boundary call. The package carries a
+`testing-conventions.toml` holding one line — `one_function_per_file = { max_lines = 9 }`, the
+lowest threshold the module passes today — and **no exemptions**: the unit tier reaches 100%
+line-and-branch coverage and kills all 60 whole-tree mutants. `move-major-tag-tests.yml` still runs
+the three tiers together.
+
+Two mutants on `advance` drove a change to the source rather than a test. `if action == "noop"`
+compared against a closed set of interned string literals, so the `>=` and `is` mutants were
+behaviourally identical to `==` for every value `decide` can return — equivalent mutants, killable
+only by removing the comparison. `if action in WRITING_ACTIONS` states the same decision as a
+membership test, where every comparison mutant flips an observable outcome.
 
 It was the last loose script under `.github/scripts/`, held to the conventions by `dogfood-github-helpers.yml` — a job that ran the published binary via `npx`, the n-1 skew class (#206, #351, #355) the hermetic gates exist to close. The migration emptied `.github/scripts/`, so that workflow and its `github-helpers-wired` selftest guard (#329) retired with it: no code lives under `.github/`, and no required check outside the reusable workflow's consumer path invokes an unpinned `npx testing-conventions`.
 

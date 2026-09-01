@@ -9,6 +9,7 @@ on:
       - 'packages/node/**'
       - 'packages/python/**'
       - 'internals/checks/**'
+      - 'internals/move-major-tag/**'
       - '.github/workflows/dogfood.yml'
       - '.github/workflows/testing-conventions.yml'
   push:
@@ -76,5 +77,15 @@ jobs:
       version: ${{ inputs.version }}
       source: internals/checks/src
 
-  # internals/detect and internals/move-major-tag are gated by their own pytest workflows
-  # instead: their colocated unit tests alone sit below the coverage floor.
+  move-major-tag:
+    name: Shipped reusable workflow over the move-major-tag helper
+    # `source` is the inner module dir, so the unit-tier gates recurse it while the suite tiers
+    # derive from the package root (internals/move-major-tag, where the pyproject lives).
+    needs: [build-cli]
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      version: ${{ inputs.version }}
+      source: internals/move-major-tag/src
+
+  # internals/detect is gated by its own pytest workflow instead: its colocated unit tests alone
+  # sit below the coverage floor.

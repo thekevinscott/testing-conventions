@@ -34,8 +34,10 @@ tier is flagged as `unknown-tier`; a tree with no manifest — loose scripts —
 
 <!--@include: ../../explanation/isolation.md#integration-lint-flags-->
 
-A non-literal mock target (`vi.mock(name)`, `patch(target)`) can't be classified
-deterministically and is left alone — the check is deterministic first.
+A mock target that resists static reading is left alone — the check is deterministic first.
+`vi.mock(name)` and `patch(target)` hold the target in a variable, and a `patch.object` /
+`patch.dict` base bound by no import (`patch.object(get_mod(), "x")`, a local variable, a fixture
+argument) resolves to no module, so neither is classified.
 
 ## When it runs
 
@@ -52,11 +54,11 @@ tiers derive from (e.g. `tests/integration/billing_test.py`), not the scanned `s
 | Rule | Language | Flags |
 | --- | --- | --- |
 | `no-first-party-mock` | TypeScript | a `vi.mock()` / `vi.doMock()` of a first-party module |
-| `no-first-party-patch` | Python | a `patch(...)` whose string target is the dist's own package |
+| `no-first-party-patch` | Python | a `patch(...)` / `patch.object(...)` / `patch.dict(...)` targeting the dist's own package |
 | `no-monkeypatch` | Python | mocking via `monkeypatch` instead of `unittest.mock` in a fixture |
 | `no-inline-patch` | Python | a patch in a test body instead of a fixture |
 | `no-environ-mutation` | Python | env mutated outside `patch.dict(os.environ, ...)` |
-| `no-constant-patch` | Python | patching a module global instead of injecting config |
+| `no-constant-patch` | Python | patching a module-global constant (either patch form) instead of injecting config |
 | `no-first-party-double` | Rust | a `#[double]` of the crate under test or a `path` dependency |
 | `unknown-tier` | all | a test file under `<package root>/tests/` outside a standard tier |
 

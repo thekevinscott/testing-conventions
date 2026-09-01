@@ -322,8 +322,9 @@ config-driven, never a silent ignore:
 
 ## Configuration
 
-One file drives every rule (TOML shown; native-language config files are also
-supported):
+One TOML file, `testing-conventions.toml`, drives every rule. The workflow discovers it at
+the package root, falling back to the repository root; the `config` input names it somewhere
+else:
 
 ```toml
 [python]

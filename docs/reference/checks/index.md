@@ -27,3 +27,32 @@ Each page states the facts and opens with the why; the [explanation section](/ex
 carries the same ground as discursive essays — the testing model, the unit ladder, and the design
 trade-offs behind each check. One deliberate asymmetry: the two lint checks share one essay,
 [Isolation](/explanation/isolation), because they enforce a single boundary from opposite sides.
+
+## Running a check directly
+
+The [reusable workflow](/reference/workflow) runs these subcommands for you. A repository on
+another CI system runs the same binary itself, one invocation per check per language:
+
+```sh
+testing-conventions unit colocated-test src --language python
+testing-conventions unit one-function-per-file src --language typescript
+testing-conventions unit lint src --language rust
+testing-conventions unit coverage src --language python
+testing-conventions unit mutation src --language typescript --base origin/main
+testing-conventions integration lint src --language python
+testing-conventions packaging dist --language python
+testing-conventions e2e verify . --base origin/main
+```
+
+Each check takes a path — the [`source`](/monorepo#source-vs-the-package-root) scan root, except
+`packaging` (the built artifact's root) and `e2e verify` (the package root holding the receipts) —
+and these flags:
+
+| Flag | Checks | Meaning |
+| --- | --- | --- |
+| `--language` | every check except `e2e verify` | Required: `python`, `typescript`, or `rust`. One invocation enforces one language's convention. |
+| `--config <file>` | every check except `packaging` and `e2e verify` | The [config file](/reference/config) supplying floors and exemptions, defaulting to `testing-conventions.toml` in the working directory. It is what the workflow's [`config` input](/reference/workflow#inputs) resolves to a path and passes through. Where no file exists, every check runs on its default. |
+| `--base <ref>` | `unit colocated-test`, `unit coverage`, `unit mutation`, `e2e verify` | Diffs `<base>...HEAD` and adds that check's diff-scoped behavior: the co-change check, the changed-line floor, diff-scoped mutants, the receipt question. |
+
+`e2e verify` also takes `--scope`, `--extra-scope`, and `--exclude`; [its page](./e2e-verify)
+carries them. `testing-conventions --help` prints the full command tree.

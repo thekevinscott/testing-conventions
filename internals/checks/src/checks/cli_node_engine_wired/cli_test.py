@@ -2,6 +2,7 @@
 import json
 
 from checks.cli_node_engine_wired.cli import (
+    CLI_INVOCATION,
     NODE_PACKAGE_MANIFEST,
     REUSABLE_WORKFLOW,
     cli,
@@ -115,7 +116,7 @@ def test_raises_naming_every_problem_on_an_unwired_workflow(tmp_path):
 
 def test_a_workflow_matching_no_cli_invocation_fails_rather_than_passing_vacuously(tmp_path):
     workflow = tmp_path / "wf.yml"
-    workflow.write_text(WIRED.replace('npx -y "testing-conventions', "pnpm exec testing-conventions"))
+    workflow.write_text(WIRED.replace(CLI_INVOCATION, "testing-conventions"))
     manifest = tmp_path / "package.json"
     manifest.write_text(json.dumps({"engines": {"node": ">=24"}}))
     try:

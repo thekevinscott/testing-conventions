@@ -11,7 +11,8 @@ from checks.config import NODE_PACKAGE_MANIFEST, REUSABLE_WORKFLOW
 from checks.utils.check_failed import CheckFailed
 from checks.utils.job_block import iter_job_blocks
 
-CLI_INVOCATION = 'npx -y "testing-conventions'
+# The package spec, not the `npx` prefix: the launcher around it changes, the spec is the invariant.
+CLI_INVOCATION = '"testing-conventions${VERSION:+@$VERSION}"'
 
 # Anchored on `- uses:` because a step opening that way carries no `if:`: a gated step, which
 # leaves the CLI on the runner's ambient node, must not satisfy the check.

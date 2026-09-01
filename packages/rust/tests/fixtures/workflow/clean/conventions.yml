@@ -13,4 +13,4 @@ jobs:
           --language typescript --config testing-conventions.toml src
       - run: npx -y testing-conventions integration lint --language python src
       - run: npx -y testing-conventions packaging --language python dist
-      - run: npx -y testing-conventions check
+      - run: npx -y testing-conventions install

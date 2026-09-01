@@ -345,8 +345,8 @@ mod tests {
             Vec::<String>::new()
         );
         assert_eq!(
-            tokenize("testing-conventions check  # trailing note"),
-            vec!["testing-conventions", "check"]
+            tokenize("testing-conventions install  # trailing note"),
+            vec!["testing-conventions", "install"]
         );
     }
 
@@ -409,12 +409,12 @@ mod tests {
         );
         // The real command-position forms still read as invocations.
         assert_eq!(
-            line_invocation("- run: testing-conventions check"),
-            Some(vec!["check".to_string()])
+            line_invocation("- run: testing-conventions install"),
+            Some(vec!["install".to_string()])
         );
         assert_eq!(
-            line_invocation("- run: npx -y testing-conventions check"),
-            Some(vec!["check".to_string()])
+            line_invocation("- run: npx -y testing-conventions install"),
+            Some(vec!["install".to_string()])
         );
     }
 
@@ -450,17 +450,17 @@ mod tests {
     #[test]
     fn invocations_scans_a_file_and_a_directory() {
         let tree = TempTree::new(&[
-            ("ci.yml", "- run: testing-conventions check\n"),
+            ("ci.yml", "- run: testing-conventions install\n"),
             (
                 "nested/more.yaml",
                 "- run: testing-conventions unit lint --language rust .\n",
             ),
-            ("notes.txt", "testing-conventions check\n"),
+            ("notes.txt", "testing-conventions install\n"),
         ]);
         // Directory: both workflow files, not the .txt; sorted file-then-line.
         let dir = invocations(tree.path()).unwrap();
         assert_eq!(dir.len(), 2);
-        assert_eq!(dir[0].args, vec!["check"]);
+        assert_eq!(dir[0].args, vec!["install"]);
         assert_eq!(dir[0].line, 1);
         // Single file: just that file.
         let file = invocations(tree.path().join("ci.yml")).unwrap();
@@ -523,7 +523,7 @@ mod tests {
             inv(4, &["integration", "lint", "--language", "python", "src"]),
             // A leaf's positional must not be read as a subcommand.
             inv(5, &["packaging", "--language", "python", "dist"]),
-            inv(6, &["check"]),
+            inv(6, &["install"]),
             // Flags-only and empty invocations have no subcommand to check.
             inv(7, &["--version"]),
             inv(8, &[]),

@@ -33,8 +33,6 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Check the repository against its testing-conventions config.
-    Check,
     /// Write the testing contract into the repository's agent context file:
     /// a marker-delimited, hash-versioned block in `AGENTS.md` that a
     /// coding agent reads before writing code. Idempotent — re-running
@@ -281,10 +279,9 @@ where
     eprintln!("testing-conventions {}", env!("CARGO_PKG_VERSION"));
     let cli = Cli::try_parse_from(args)?;
     match cli.command {
-        // The config-driven `check` umbrella isn't wired yet; the scaffold
-        // proves the wiring while individual rules land under their test-kind
-        // group (e.g. `unit colocated-test`).
-        Some(Command::Check) | None => Ok(0),
+        // Every rule is named explicitly, under its test-kind group (e.g. `unit
+        // colocated-test`), so a bare invocation has nothing to run.
+        None => Ok(0),
         Some(Command::Unit { rule }) => match rule {
             UnitRule::ColocatedTest {
                 path,
@@ -1101,11 +1098,6 @@ mod tests {
     #[test]
     fn no_args_returns_ok_zero() {
         assert_eq!(run(["testing-conventions"]).unwrap(), 0);
-    }
-
-    #[test]
-    fn check_returns_ok_zero() {
-        assert_eq!(run(["testing-conventions", "check"]).unwrap(), 0);
     }
 
     #[test]

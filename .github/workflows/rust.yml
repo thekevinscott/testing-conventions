@@ -52,7 +52,7 @@ jobs:
       - run: cargo test --lib
 
   integration:
-    name: Integration + e2e tests + coverage (95%)
+    name: Integration + e2e tests + coverage (96%)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -111,7 +111,9 @@ jobs:
       # nextest runs each integration-test binary in its own process in parallel; the suites shell
       # out to real subprocesses, so wall clock is dominated by those, not by compile time.
       # PYTHONPATH points the Python mutation adapter at the source package.
-      - run: cargo llvm-cov nextest --ignore-filename-regex 'main\.rs' --fail-under-lines 95
+      # The floor sits below the shipped 100 for the reason in docs/internals/repo.md, "The Rust
+      # crate's own coverage floor".
+      - run: cargo llvm-cov nextest --fail-under-lines 96
         env:
           PYTHONPATH: ${{ github.workspace }}/packages/python/python
 

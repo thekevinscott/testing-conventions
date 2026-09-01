@@ -15,7 +15,7 @@ rust-test:
     cd packages/rust && cargo test
 
 rust-cov:
-    cd packages/rust && cargo llvm-cov --ignore-filename-regex 'main\.rs' --fail-under-lines 95
+    cd packages/rust && cargo llvm-cov --fail-under-lines 96
 
 rust-build:
     cd packages/rust && cargo build --release

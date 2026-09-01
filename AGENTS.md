@@ -317,21 +317,82 @@ never by listing what the user *doesn't* have to do. No "you install nothing," "
 burden; naming it is defensive noise that makes the simple sound complicated. State the positive fact
 and stop. ("The tool drives Stryker; you provide vitest." — not "you don't have to install Stryker.")
 
+## Comments: none is best, few is acceptable, verbose is unacceptable
+
+Rank the outcomes in that order and write toward the top one.
+
+1. **No comment is the best outcome.** Well-named code needs none. Start every file at zero
+   comments and add one only to buy something from the closed list below.
+2. **A few short comments are acceptable.** A comment on the list stays. A comment off it is
+   deleted.
+3. **A verbose comment is unacceptable.** This is a failure, not a review nit — delete it, or move
+   the content to `docs/` and leave nothing behind.
+
+**The ceiling is three lines.** A comment — inline, block, docstring, or doc comment — runs to at
+most three lines. A fourth line means the explanation belongs in `docs/`: put it there, and leave at
+most a one-line pointer.
+
+**Three things justify a comment. The list is closed.** Delete anything not on it.
+
+- **A public API doc comment** (`///`, `//!`, TSDoc, docstring) — what the symbol does, in one line.
+  Document a parameter or return only where the type does not already say it.
+- **A constraint a future editor will otherwise violate** — a platform quirk, an ordering
+  requirement, a subprocess or wire-format contract, a spec the ecosystem left unnamed. Earn it by
+  **naming the breakage**: say what breaks when someone changes the line. "This is a constraint" is
+  not the test, because every comment passes it; "reordering these two steps drops the exit code"
+  is. When you cannot name the breakage in one clause, delete the comment.
+- **A suppression's reason**, where the tool requires one (`# noqa: BLE001 — …`, `#[allow(…)]`).
+
+**One explanation lives in exactly one place, and that place is `docs/`.** When the same reasoning
+would appear in two source files, it belongs in `docs/` — `docs/internals/` for repo-internal
+mechanics — and nowhere else. The second copy is **deleted**, not shortened: a trimmed duplicate is
+still a duplicate, and the copies drift apart on the next edit. Where a reader needs the pointer,
+one line naming the doc is the whole comment. (`docs/AGENTS.md`'s **Duplication is deliberate**
+licenses repetition *between docs pages*, where readers arrive from different directions. Source
+files hold no such licence.)
+
+**Three kinds are always deleted**, and all three recur in LLM-drafted code:
+
+- **Issue/PR archaeology** — `(#74)`, `issue #26`, "the red→green signal for #410". That history
+  lives in git blame.
+- **Code restatement** — paraphrasing the line it sits on.
+- **Reviewer-directed justification** — arguing to an imagined reviewer that the choice is correct.
+
+Banner dividers and decorative separators (`// -----`) go with them.
+
+**Worked example.** This comment shipped in four separate source files:
+
+```python
+# The `static` job's matrix (#410): the five static gates — colocated-test (and its
+# co-change variant), unit-lint, one-function-per-file, integration-lint — run as its
+# steps, fanned out over this rust-inclusive union. The same set the
+# colocated/isolation/integration sets already hold, under its own name so a future
+# language can diverge per set without breaking the matrix.
+"static_languages": _to_json(with_rust),
+```
+
+Five lines over a one-line fact, carrying archaeology (`#410`), restatement (`with_rust` retold as
+"this rust-inclusive union"), and reviewer-directed justification ("so a future language can
+diverge"). Corrected:
+
+```python
+"static_languages": _to_json(with_rust),
+```
+
+All four copies are deleted; `docs/internals/repo.md` carries the explanation. A comment that
+survives fits on one line, states a positive fact in the **Affirmative voice**, and names its
+breakage — the precedent is `internals/checks/src/checks/changelog_gate/git_ops.py`:
+
+```python
+# A fragment satisfies the gate only when the PR adds it, so the diff is filtered to additions.
+result = runner(["git", "diff", "--name-only", "--diff-filter=A", f"{base_sha}...{head_sha}"], ...)
+```
+
 ## Code style
 
 Internal modules in this repo are **not** underscore-prefixed — an empty `__init__.py` already says
 "nothing public here." This is our convention for *this* library's source; it is not a rule we
 impose on consumers, who name their modules however they like.
-
-A comment earns its place by saying something the code cannot. Public API doc comments (`///`,
-`//!`, TSDoc, docstrings) document the interface; a comment on non-obvious code records a constraint
-or invariant the reader needs — a platform quirk, an ordering requirement, a subprocess contract, a
-spec the ecosystem left unnamed. Everything else is noise, and three kinds recur in LLM-drafted
-code: **issue/PR archaeology** (citing `(#74)` or `issue #26` to mark when a change landed — that
-history lives in git blame, not the source), **code restatement** (paraphrasing the line it sits
-on), and **reviewer-directed justification** (arguing a choice is correct to an imagined reviewer).
-Drop all three; a retained comment states a positive fact in the **Affirmative voice**. Banner
-dividers and decorative separators (`// -----`) are noise too.
 
 ## Docs-only changes
 

@@ -125,7 +125,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
-        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit colocated-test --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+        run: ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} unit colocated-test --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
       - name: Check co-change vs ${{ inputs.base }}
         # `!cancelled()`: an earlier gate's failure must not hide this gate's result.
         if: ${{ !cancelled() && github.event_name == 'pull_request' && (inputs.gates == '' || contains(inputs.gates, '"colocated-test"')) && contains(needs.detect.outputs.languages, format('"{0}"', matrix.language)) }}
@@ -136,7 +136,7 @@ jobs:
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
-        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit colocated-test --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
+        run: ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} unit colocated-test --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
       - name: Check unit lint
         if: ${{ !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"unit-lint"')) && contains(needs.detect.outputs.isolation_languages, format('"{0}"', matrix.language)) }}
         env:
@@ -145,7 +145,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
-        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+        run: ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} unit lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
       - name: Check one function per file
         # The `|| integration_lint_languages` fallback covers a stale `@v0` detect that predates
         # `one_function_languages`; the two sets are identical.
@@ -156,7 +156,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
-        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit one-function-per-file --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+        run: ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} unit one-function-per-file --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
       - name: Lint integration tests
         if: ${{ !cancelled() && (inputs.gates == '' || contains(inputs.gates, '"integration-lint"')) && contains(needs.detect.outputs.integration_lint_languages, format('"{0}"', matrix.language)) }}
         env:
@@ -165,7 +165,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
-        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} integration lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+        run: ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} integration lint --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   unit-coverage:
     name: Unit-test coverage (${{ matrix.language }})
@@ -252,7 +252,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
-        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit coverage --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
+        run: ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} unit coverage --language "$LANGUAGE" --config "$CONFIG" "$SCAN_PATH"
 
   coverage-changed:
     name: Unit-test coverage — changed lines (${{ matrix.language }})
@@ -341,7 +341,7 @@ jobs:
           CONFIG: ${{ needs.detect.outputs.config || inputs.config }}
           BASE: ${{ inputs.base }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
-        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit coverage --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
+        run: ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} unit coverage --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH"
 
   mutation:
     name: Unit mutation — changed lines (${{ matrix.language }})
@@ -435,7 +435,7 @@ jobs:
           # `$TS_MUTATION_ADAPTER_ARGS` is deliberately unquoted: empty on the published path,
           # word-split into flag and path on the hermetic one.
           TS_MUTATION_ADAPTER_ARGS: ${{ needs.detect.outputs.ts_mutation_adapter_args }}
-        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} unit mutation --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH" $TS_MUTATION_ADAPTER_ARGS
+        run: ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} unit mutation --language "$LANGUAGE" --base "$BASE" --config "$CONFIG" "$SCAN_PATH" $TS_MUTATION_ADAPTER_ARGS
 
   e2e-verify:
     name: E2E attestation freshness (e2e verify)
@@ -467,7 +467,7 @@ jobs:
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
         # `$EXTRA_SCOPE` / `$EXCLUDE` are deliberately unquoted: empty expands to nothing, and a
         # rendered value word-splits into the repeated flags.
-        run: ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE" $EXTRA_SCOPE $EXCLUDE
+        run: ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} e2e verify "$PACKAGE_ROOT" --scope "$SCAN_PATH" --base "$BASE" $EXTRA_SCOPE $EXCLUDE
 
   packaging:
     name: Packaging (no test files in the built artifact)
@@ -556,7 +556,7 @@ jobs:
             local lang="$1"; shift
             for dist in "$@"; do
               echo "::group::packaging --language $lang $dist"
-              ${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} packaging "$dist" --language "$lang"
+              ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} packaging "$dist" --language "$lang"
               echo "::endgroup::"
               checked=$((checked + 1))
             done

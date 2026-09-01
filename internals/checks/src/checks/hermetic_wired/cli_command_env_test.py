@@ -5,15 +5,17 @@ forward from the fallback line instead of bounding each step reads the neighbour
 """
 from checks.hermetic_wired.cli_command_env import ENV_VALUE, step_blocks, step_name, unwired_steps
 
+LAUNCHER = 'npm --prefix "$RUNNER_TEMP" exec --yes --'
+
 WIRED_STEP = (
     "      - name: Check lint\n"
     "        env:\n"
     f"          {ENV_VALUE}\n"
-    "        run: ${CLI_COMMAND:-npx} unit lint\n"
+    f'        run: ${{CLI_COMMAND:-{LAUNCHER}}} unit lint\n'
 )
 BARE_STEP = (
     "      - name: Check colocated-test\n"
-    "        run: ${CLI_COMMAND:-npx} unit colocated-test\n"
+    f'        run: ${{CLI_COMMAND:-{LAUNCHER}}} unit colocated-test\n'
 )
 JOB_TAIL = "  packaging:\n    steps:\n      - run: echo hi\n"
 
@@ -35,7 +37,8 @@ def test_reads_a_steps_name():
 
 
 def test_falls_back_to_the_opening_line_of_an_unnamed_step():
-    assert step_name("      - run: ${CLI_COMMAND:-npx} unit lint\n") == "run: ${CLI_COMMAND:-npx} unit lint"
+    line = f'      - run: ${{CLI_COMMAND:-{LAUNCHER}}} unit lint\n'
+    assert step_name(line) == line.strip().removeprefix('- ')
 
 
 def test_names_only_the_fallback_step_missing_its_own_env_line():

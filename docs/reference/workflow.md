@@ -116,8 +116,8 @@ that build concludes.
 The window is the registry's, and it closes on its own. Three things that look like levers over it
 are not:
 
-- **`npx --prefer-online`** asks for behavior the run already has. npm resolves a bare-name spec
-  with `preferOnline` set — `libnpmexec`'s `getManifest` — so every `npx testing-conventions` is
+- **`--prefer-online`** asks for behavior the run already has. npm resolves a bare-name spec
+  with `preferOnline` set — `libnpmexec`'s `getManifest` — so every `npm exec` of the CLI is
   already revalidating.
 - **Clearing the npm cache** operates on a store that is already empty. GitHub-hosted runners are
   ephemeral, and this workflow's `setup-node` steps request no `cache:`, so a job's `~/.npm` starts

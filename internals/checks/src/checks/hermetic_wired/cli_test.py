@@ -7,12 +7,13 @@ asserted against the propagated exception's `.message`.
 from checks.hermetic_wired.cli import GUARD, REUSABLE_WORKFLOW, cli
 
 ENV_LINE = "          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}\n"
+LAUNCHER = 'npm --prefix "$RUNNER_TEMP" exec --yes --'
 
 
 def fallback_step(gate, wired=True):
     """A `steps:` list item running the `${CLI_COMMAND:-` fallback, with or without its env line."""
     env = "        env:\n" + ENV_LINE if wired else ""
-    run = f'        run: ${{CLI_COMMAND:-npx -y "testing-conventions"}} unit {gate}\n'
+    run = f'        run: ${{CLI_COMMAND:-{LAUNCHER} "testing-conventions"}} unit {gate}\n'
     return f"      - name: Check {gate}\n" + env + run
 
 
@@ -75,7 +76,7 @@ def test_raises_on_an_unwired_workflow(tmp_path):
         assert "the derivation guard" in error.message
         assert "a local" in error.message
         assert "a `cli_command`" in error.message
-        assert "the `${CLI_COMMAND:-` npx fallback" in error.message
+        assert "the `${CLI_COMMAND:-` published-CLI fallback" in error.message
         assert "a `hermetic-cli` artifact download" in error.message
     else:
         raise AssertionError("an unwired workflow must raise")
@@ -192,7 +193,7 @@ def test_raises_when_one_of_two_fallback_steps_lacks_its_own_cli_command_env(tmp
     except Exception as error:  # noqa: BLE001
         assert "Check colocated-test" in error.message
         assert "Check lint" not in error.message
-        assert "published" in error.message
+        assert "the `${CLI_COMMAND:-` published-CLI fallback" in error.message
     else:
         raise AssertionError("a step running the fallback without its own CLI_COMMAND env must raise")
 

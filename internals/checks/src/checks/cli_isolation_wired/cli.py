@@ -9,7 +9,7 @@ from checks.config import REUSABLE_WORKFLOW
 from checks.utils.check_failed import CheckFailed
 
 CLI_SPEC = '"testing-conventions${VERSION:+@$VERSION}"'
-ISOLATED_LAUNCHER = 'npm --prefix "$RUNNER_TEMP/testing-conventions-cli" exec --yes --'
+ISOLATED_LAUNCHER = 'npm --prefix "$RUNNER_TEMP" exec --yes --'
 
 
 def invocations(text: str) -> list[tuple[int, str]]:

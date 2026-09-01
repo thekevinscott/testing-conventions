@@ -4,11 +4,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use testing_conventions::e2e::{attest, verify, verify_extra_scoped, verify_since, Verification};
 
-/// Where the branch-keyed receipts live, relative to the package root. Spelled
-/// out here rather than imported: the committed path is the public contract.
 const RECEIPTS_DIR: &str = "e2e-attestations";
 
-/// A throwaway git repo with one seed commit on branch `base`, removed on drop.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -33,12 +30,10 @@ impl TempRepo {
         TempRepo(root)
     }
 
-    /// Check out a new branch off the current HEAD.
     fn branch(&self, name: &str) {
         git(&self.0, &["checkout", "-q", "-b", name]);
     }
 
-    /// Write `contents` to `path`, add, and commit.
     fn commit_file(&self, path: &str, contents: &str, message: &str) {
         let full = self.0.join(path);
         std::fs::create_dir_all(full.parent().unwrap()).unwrap();
@@ -47,8 +42,6 @@ impl TempRepo {
         git(&self.0, &["commit", "-q", "-m", message]);
     }
 
-    /// Commit a fixture receipt for `name` — verify's contract is the file's
-    /// location, not who wrote it.
     fn commit_receipt(&self, name: &str) {
         self.commit_file(
             &format!("{RECEIPTS_DIR}/{name}.json"),
@@ -57,7 +50,6 @@ impl TempRepo {
         );
     }
 
-    /// The receipt filenames currently on disk.
     fn receipt_names(&self) -> Vec<String> {
         let dir = self.0.join(RECEIPTS_DIR);
         let Ok(entries) = std::fs::read_dir(&dir) else {

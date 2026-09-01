@@ -2,8 +2,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// A throwaway git repo, removed on drop. A test writes a baseline, `commit`s it,
-/// captures `head()` as the `base`, then mutates and commits the "after".
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -66,9 +64,8 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// Exit code + stderr of `unit colocated-test <repo> --language <lang> --base
-/// <base> [--config <repo>/<config>]`, run as a real subprocess against the built
-/// binary. The commit-scoped co-change check rides on `--base`.
+/// Exit code + stderr of `unit colocated-test <repo> --language <lang> --base <base>
+/// [--config <repo>/<config>]`, run as a real subprocess against the built binary.
 fn co_change(repo: &TempRepo, language: &str, base: &str, config: Option<&str>) -> (i32, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
     cmd.arg("unit").arg("colocated-test").arg(&repo.0).args([

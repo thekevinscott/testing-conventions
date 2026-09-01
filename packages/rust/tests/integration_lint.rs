@@ -4,14 +4,12 @@ use std::path::PathBuf;
 use testing_conventions::lint::find_violations;
 use testing_conventions::run;
 
-/// Absolute path to a fixture tree under `tests/fixtures/integration_lint/python/`.
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/integration_lint/python")
         .join(name)
 }
 
-/// Raw result of invoking the CLI with `args` after the program name.
 fn run_cli(args: &[&str]) -> anyhow::Result<i32> {
     let argv: Vec<OsString> = std::iter::once(OsString::from("testing-conventions"))
         .chain(args.iter().copied().map(OsString::from))

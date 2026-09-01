@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-/// Absolute path to a fixture tree under `tests/fixtures/unit_isolation/typescript/`.
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/unit_isolation/typescript")

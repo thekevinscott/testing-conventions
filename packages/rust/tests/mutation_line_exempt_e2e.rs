@@ -9,9 +9,7 @@ fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unit_mutation")
 }
 
-/// Run `unit mutation --language <lang> --config <cfg> <project>` and capture output. The
-/// bundled TS adapter path is passed as `--ts-mutation-adapter` exactly as the npm launcher
-/// does (the Rust / Python arms ignore it).
+/// Run `unit mutation --language <lang> --config <cfg> <project>` and capture output.
 fn run(language: &str, project: &Path, config: &str) -> Output {
     Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", language, "--config"])

@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use testing_conventions::isolation::find_integration_violations;
 use testing_conventions::run;
 
-/// Absolute path to a fixture crate under `tests/fixtures/isolation/integration/`.
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/isolation/integration")

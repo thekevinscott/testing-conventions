@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// A throwaway git repo with one seed commit on branch `work`, removed on drop.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -64,7 +63,6 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// Run the built binary with `args` in `cwd`, returning (exit code, stdout+stderr).
 fn run_cli(cwd: &Path, args: &[&str]) -> (i32, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(args)

@@ -4,8 +4,6 @@ use std::path::PathBuf;
 use testing_conventions::run;
 use testing_conventions::ts::find_integration_violations;
 
-/// Absolute path to a fixture tree under
-/// `tests/fixtures/integration_lint/typescript/`.
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/integration_lint/typescript")

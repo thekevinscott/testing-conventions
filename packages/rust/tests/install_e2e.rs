@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// A throwaway working directory, removed on drop.
 struct TempDir(PathBuf);
 
 impl TempDir {

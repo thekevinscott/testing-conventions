@@ -7,16 +7,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use common::expect_tested;
 use testing_conventions::mutation::{measure_python, Measurement};
 
-/// The default package manifest at the repo root — pytest's upward search anchors its rootdir
-/// here, so the colocated suite under `src/` resolves `from calc import ...` against the scan
-/// path handed to the rule as `<repo>/src`.
 const PYPROJECT: &str = "[tool.pytest.ini_options]\n";
 
-/// A baseline whose `add` is fully pinned by its test — no survivors.
 const BASELINE: &str = "def add(a, b):\n    return a + b\n";
 
-/// The change under test: a new `is_positive` whose test runs it but asserts nothing,
-/// so every mutant on the added lines survives. `add` is untouched.
 const WITH_SURVIVOR: &str =
     "def add(a, b):\n    return a + b\n\n\ndef is_positive(n):\n    return n > 0\n";
 
@@ -28,16 +22,12 @@ const WITH_SURVIVOR_TEST: &str = "from calc import add, is_positive\n\n\ndef tes
 struct TempRepo(PathBuf);
 
 impl TempRepo {
-    /// The default repo: the package layout (`pyproject.toml` at the repo root, sources under
-    /// `src/`). The scan path handed to the rule is `<repo>/src`.
     fn new(slug: &str) -> Self {
         let repo = Self::init(slug);
         repo.write("pyproject.toml", PYPROJECT);
         repo
     }
 
-    /// The loose special case: flat scripts at the repo root, no manifest. The scan path is the
-    /// repo root.
     fn loose(slug: &str) -> Self {
         Self::init(slug)
     }

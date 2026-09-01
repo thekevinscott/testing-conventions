@@ -1,6 +1,5 @@
 use std::process::Command;
 
-/// Run the built binary with `args`, returning its exit code, stdout, and stderr.
 fn cli(args: &[&str]) -> (i32, String, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(args)

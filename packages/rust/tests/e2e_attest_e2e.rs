@@ -2,11 +2,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// The work branch every test attests on, and its receipt's committed path.
 const BRANCH: &str = "work";
 const RECEIPT: &str = "e2e-attestations/work.json";
 
-/// A throwaway git repo with one seed commit on branch `work`, removed on drop.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -78,10 +76,6 @@ fn attest_exit(repo: &Path, command: &str) -> i32 {
     attest_run(repo, command).0
 }
 
-/// Configure `repo` to require signed commits, but point signing at a program
-/// that does not exist — so any *attempted* signature fails. Honoring the repo's
-/// `commit.gpgsign` then means the receipt commit is attempted and fails
-/// (non-zero exit), rather than silently committed unsigned.
 fn require_unsatisfiable_signing(repo: &Path) {
     git(repo, &["config", "gpg.format", "ssh"]);
     git(

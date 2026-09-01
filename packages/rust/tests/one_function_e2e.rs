@@ -6,7 +6,6 @@ use std::process::{Command, Output};
 /// binary also writes its version banner to stderr on every run.
 const RULE: &str = "one-function-per-file";
 
-/// Absolute path to a fixture tree under `tests/fixtures/one_function/`.
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/one_function")
@@ -33,7 +32,6 @@ fn run_with_config(language: &str, fixture_name: &str, config_name: &str) -> Out
         .expect("the built binary should run")
 }
 
-/// The exit code of an `Output`.
 fn code(output: &Output) -> i32 {
     output
         .status
@@ -41,12 +39,10 @@ fn code(output: &Output) -> i32 {
         .expect("the process should exit with a code")
 }
 
-/// The stderr of an `Output`, as a string.
 fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr should be UTF-8")
 }
 
-/// The stdout of an `Output`, as a string.
 fn stdout(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).expect("stdout should be UTF-8")
 }

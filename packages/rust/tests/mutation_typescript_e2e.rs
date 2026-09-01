@@ -9,8 +9,7 @@ fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unit_mutation")
 }
 
-/// Exit code of `testing-conventions unit mutation --language typescript [--config <cfg>] <project>`,
-/// passing the bundled adapter path as `--ts-mutation-adapter`, exactly as the npm launcher does.
+/// Exit code of `testing-conventions unit mutation --language typescript [--config <cfg>] <project>`.
 fn unit_mutation_exit(project: &Path, config: Option<&str>) -> i32 {
     let mut command = Command::new(env!("CARGO_BIN_EXE_testing-conventions"));
     command

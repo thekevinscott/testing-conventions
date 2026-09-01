@@ -8,7 +8,6 @@ use testing_conventions::e2e::{
 };
 use testing_conventions::run;
 
-/// A throwaway git repo with one seed commit on branch `work`, removed on drop.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -34,7 +33,6 @@ impl TempRepo {
         TempRepo(root)
     }
 
-    /// Add and commit a code file.
     fn commit_code(&self, name: &str, contents: &str) {
         let full = self.0.join(name);
         std::fs::create_dir_all(full.parent().unwrap()).unwrap();

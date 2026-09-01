@@ -6,14 +6,12 @@ use testing_conventions::config::{
     TypeScriptConfig, TypeScriptCoverage,
 };
 
-/// Absolute path to a file under `tests/fixtures/`.
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
         .join(name)
 }
 
-/// The in-memory shape we expect `valid.toml` to parse into.
 fn expected_valid() -> Config {
     Config {
         python: Some(PythonConfig {

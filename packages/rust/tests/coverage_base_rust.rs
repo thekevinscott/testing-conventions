@@ -6,11 +6,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use testing_conventions::coverage::{Outcome, RustThresholds};
 use testing_conventions::{patch_coverage, run};
 
-/// A throwaway cargo crate in a git repo, removed on drop. `new` lays down the
-/// `Cargo.toml`; a test writes the baseline source + its inline test, `commit`s it,
-/// captures `head()` as the `base`, then mutates and commits the "after" so
-/// `<base>...HEAD` is the change under test. The crate carries its own `[workspace]`
-/// so `cargo llvm-cov` measures it in isolation.
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -31,14 +26,12 @@ impl TempRepo {
         repo
     }
 
-    /// Write `contents` to `rel`, creating parent directories.
     fn write(&self, rel: &str, contents: &str) {
         let path = self.0.join(rel);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, contents).unwrap();
     }
 
-    /// Stage everything and commit, advancing HEAD.
     fn commit(&self, message: &str) {
         git(&self.0, &["add", "-A"]);
         git(
@@ -47,7 +40,6 @@ impl TempRepo {
         );
     }
 
-    /// The current HEAD SHA — captured as the `base` before mutating.
     fn head(&self) -> String {
         let out = Command::new("git")
             .args(["rev-parse", "HEAD"])
@@ -74,8 +66,6 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// A uniform floor across both metrics — the bracket the known-ratio diff is judged
-/// against (its minimum metric is 50%, so an 80 floor fails and a 40 floor clears).
 fn floors(level: u8) -> RustThresholds {
     RustThresholds {
         regions: Some(level),
@@ -122,14 +112,10 @@ fn run_coverage_base(repo: &TempRepo, base: &str, config: Option<&str>) -> anyho
 const CARGO_TOML: &str =
     "[package]\nname = \"tc_cov_base_rust\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n";
 
-/// A `[rust.coverage]` config at the given uniform floor — committed so the CLI
-/// measures against a known floor (both metrics at `level`), not the zero-config
-/// default (`lines = 100`, regions off), which these diff cases aren't calibrated to.
 fn config_toml(level: u8) -> String {
     format!("[rust.coverage]\nregions = {level}\nlines = {level}\n")
 }
 
-/// Baseline: `widget` is fully covered (both arms exercised) by its inline test.
 const WIDGET_RS: &str = r#"pub fn widget(n: i64) -> &'static str {
     if n > 0 {
         "pos"
@@ -150,16 +136,6 @@ mod tests {
 }
 "#;
 
-/// After: inserts an `else if n == -42` arm the baseline test never exercises. The
-/// diff adds new lines 4-5; restricted to them the two metrics land at a known shape
-/// (verified against real `cargo llvm-cov`):
-///   - line 4 (`} else if n == -42 {`) — its condition region is still evaluated when
-///     falling through, so it is **covered**.
-///   - line 5 (`"answer"`) — the arm body the suite never runs → **uncovered**.
-///
-/// So of the two changed regions / two changed lines exactly one is covered: regions
-/// **50%** and lines **50%**. The same diff therefore fails an 80 floor (both 50,
-/// below) and clears a 40 floor.
 const WIDGET_RS_UNCOVERED: &str = r#"pub fn widget(n: i64) -> &'static str {
     if n > 0 {
         "pos"
@@ -182,8 +158,6 @@ mod tests {
 }
 "#;
 
-/// Rewords a covered line (`"pos"` → `"positive"`) and updates its test — the change
-/// stays fully covered (regions/lines both 100%).
 const WIDGET_RS_COVERED_EDIT: &str = r#"pub fn widget(n: i64) -> &'static str {
     if n > 0 {
         "positive"
@@ -204,7 +178,6 @@ mod tests {
 }
 "#;
 
-/// Writes the fully-covered baseline and returns its commit as the base.
 fn baseline(repo: &TempRepo) -> String {
     repo.write("src/lib.rs", WIDGET_RS);
     repo.commit("base");

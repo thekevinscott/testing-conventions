@@ -6,8 +6,6 @@ use std::path::PathBuf;
 use common::expect_tested;
 use testing_conventions::mutation::measure_rust;
 
-/// The feature-gated workspace-member fixture crate: `gated_ws/member`, whose cargo
-/// workspace root is the `gated_ws` directory above it.
 fn member() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/unit_mutation/rust/gated_ws/member")

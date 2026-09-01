@@ -10,7 +10,6 @@ use testing_conventions::mutation::{measure_rust, Measurement};
 const CARGO_TOML: &str =
     "[package]\nname = \"tc_mut_base\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n";
 
-/// A baseline whose `add` is fully pinned by its inline test — no survivors.
 const BASELINE: &str = r#"
 pub fn add(a: i32, b: i32) -> i32 {
     a + b
@@ -27,8 +26,6 @@ mod tests {
 }
 "#;
 
-/// The change under test: a new `is_positive` whose test runs it but asserts nothing,
-/// so every mutant on the added lines survives. `add` is untouched.
 const WITH_SURVIVOR: &str = r#"
 pub fn add(a: i32, b: i32) -> i32 {
     a + b
@@ -62,7 +59,6 @@ impl TempRepo {
         repo
     }
 
-    /// A git repo with no crate at its root — for placing the crate in a subdirectory.
     fn bare(slug: &str) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let root = std::env::temp_dir().join(format!(
@@ -182,8 +178,6 @@ fn base_finds_survivors_in_a_subdir_crate() {
     );
 }
 
-/// A member crate's manifest: no `[workspace]` table, so the crate belongs to the
-/// workspace rooted above it.
 const MEMBER_CARGO_TOML: &str =
     "[package]\nname = \"tc_mut_member\"\nversion = \"0.0.0\"\nedition = \"2021\"\n";
 

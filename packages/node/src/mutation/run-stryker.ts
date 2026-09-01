@@ -12,11 +12,10 @@ export interface RunStrykerOptions {
    */
   mutate?: string[];
   /**
-   * Directory vitest discovers tests in (the vitest runner's `vitest.dir`), relative to the
-   * project root — the scan path within the package, so the colocated unit suite alone judges
-   * the mutants. Omitted ⇒ vitest's configured/default discovery over the whole project.
+   * Stryker `testFiles` patterns, relative to the project root: the suites that judge the
+   * mutants. Omitted ⇒ the runner's own discovery.
    */
-  vitestDir?: string;
+  testFiles?: string[];
 }
 
 // Stryker discovers plugins relative to the *project* under test, so a consumer project never
@@ -41,7 +40,7 @@ export async function runStryker(options: RunStrykerOptions = {}): Promise<Norma
     inPlace: true,
     reporters: [],
     ...(options.mutate ? { mutate: options.mutate } : {}),
-    ...(options.vitestDir === undefined ? {} : { vitest: { dir: options.vitestDir } }),
+    ...(options.testFiles === undefined ? {} : { testFiles: options.testFiles }),
   };
   const results = await new Stryker(cliOptions).runMutationTest();
   const projectRoot = process.cwd();

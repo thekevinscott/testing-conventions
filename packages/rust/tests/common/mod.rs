@@ -68,6 +68,24 @@ impl Staged {
         )
     }
 
+    /// Stage a TypeScript fixture that carries a package-root `vitest.config.ts`
+    /// (`config_include`), whose `include` is written relative to that root.
+    pub fn configured(project: &str) -> Self {
+        Self::stage(
+            "typescript",
+            project,
+            &[
+                "package.json",
+                "tsconfig.json",
+                "vitest.config.ts",
+                "src/index.ts",
+                "src/index.test.ts",
+                "tests/integration/tiers.test.ts",
+            ],
+            true,
+        )
+    }
+
     /// Stage a loose TypeScript fixture (`loose_killed` / `loose_survivors`): the flat,
     /// no-manifest case, where the staged path is both package root and scan path.
     pub fn loose(project: &str) -> Self {

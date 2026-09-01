@@ -446,7 +446,13 @@ pub fn measure_typescript(
         }
         None => prefix.as_deref().map(scan_scoped_mutate_globs),
     };
-    let json = run_ts_adapter(&package_root, adapter, mutate.as_deref(), prefix.as_deref())?;
+    let test_files = prefix.as_deref().map(scan_scoped_test_file_globs);
+    let json = run_ts_adapter(
+        &package_root,
+        adapter,
+        mutate.as_deref(),
+        test_files.as_deref(),
+    )?;
     let mutants = to_scan_relative(parse_normalized_results(&json)?, prefix.as_deref());
     let survivors = evaluate_normalized(&mutants, exempt, exempt_lines)?;
     Ok(Measurement::Tested {
@@ -491,6 +497,13 @@ fn scan_scoped_mutate_globs(prefix: &str) -> Vec<String> {
         format!("{prefix}/**/!(*.+(s|S)pec|*.+(t|T)est).{EXTENSIONS}"),
         format!("!{prefix}/**/__tests__/**/*.{EXTENSIONS}"),
     ]
+}
+
+/// The test files under the scan path, addressed from the package root the adapter runs at.
+/// Stryker matches these against the project's input files and hands the runner that subset,
+/// so vitest stays rooted at the package root and its own `include` resolves unchanged.
+fn scan_scoped_test_file_globs(prefix: &str) -> Vec<String> {
+    vec![format!("{prefix}/**")]
 }
 
 /// Rebase package-root-relative mutant paths onto the scan path: strip the scan prefix so
@@ -545,7 +558,7 @@ fn run_ts_adapter(
     package_root: &Path,
     adapter: &Path,
     mutate: Option<&[String]>,
-    vitest_dir: Option<&str>,
+    test_files: Option<&[String]>,
 ) -> Result<String> {
     let out = AdapterOut::new();
     std::fs::create_dir_all(&out.0).context("creating the mutation adapter output dir")?;
@@ -562,8 +575,8 @@ fn run_ts_adapter(
     if let Some(specs) = mutate {
         command.arg("--mutate").arg(specs.join(","));
     }
-    if let Some(dir) = vitest_dir {
-        command.arg("--vitest-dir").arg(dir);
+    if let Some(globs) = test_files {
+        command.arg("--test-files").arg(globs.join(","));
     }
     let output = command
         .output()
@@ -1478,6 +1491,18 @@ mod tests {
                 "!src/**/__tests__/**/*.+(cjs|mjs|js|ts|mts|cts|jsx|tsx|html|vue|svelte)"
                     .to_string(),
             ]
+        );
+    }
+
+    #[test]
+    fn scan_scoped_test_file_globs_narrow_the_run_without_moving_the_runner_root() {
+        assert_eq!(
+            scan_scoped_test_file_globs("src"),
+            vec!["src/**".to_string()]
+        );
+        assert_eq!(
+            scan_scoped_test_file_globs("packages/core/src"),
+            vec!["packages/core/src/**".to_string()]
         );
     }
 

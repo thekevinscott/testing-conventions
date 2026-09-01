@@ -116,6 +116,33 @@ fn killed_project_passes_and_states_the_tested_count() {
 }
 
 #[test]
+fn a_package_root_relative_vitest_include_passes_the_gate() {
+    let package = Staged::configured("config_include");
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "typescript"])
+        .arg("--ts-mutation-adapter")
+        .arg(ts_adapter())
+        .arg(package.path().join("src"))
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("No tests were executed"),
+        "a config whose `include` is package-root-relative still finds its suite; got: {stderr}"
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "every mutant is caught; stderr: {stderr}"
+    );
+    assert!(
+        tested_count(&stdout) > 0,
+        "the engine ran, so the count is non-zero; got: {stdout}"
+    );
+}
+
+#[test]
 fn a_diff_with_no_mutatable_changed_lines_reports_the_engine_not_run() {
     let repo = GitRepo::new("ts-vacuous");
     repo.write(

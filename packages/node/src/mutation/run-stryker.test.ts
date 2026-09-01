@@ -65,19 +65,22 @@ describe('runStryker', () => {
     expect(ctorOptions[0]).toMatchObject({ testRunner: 'vitest', mutate: ['src/a.ts:2-4'] });
   });
 
-  it('passes the vitest discovery dir through as the runner option', async () => {
+  it('narrows the judging suites with testFiles, leaving the runner root alone', async () => {
     runMutationTest.mockResolvedValue([]);
 
-    await runStryker({ vitestDir: 'src' });
+    await runStryker({ testFiles: ['src/**'] });
 
-    expect(ctorOptions[0]).toMatchObject({ vitest: { dir: 'src' } });
+    expect(ctorOptions[0]).toMatchObject({ testFiles: ['src/**'] });
+    // `vitest.dir` re-roots the runner, so a config whose `include` is project-root-relative
+    // resolves against the scan path and matches nothing.
+    expect(ctorOptions[0]).not.toHaveProperty('vitest');
   });
 
-  it('omits the vitest runner option when no discovery dir is given', async () => {
+  it('omits testFiles when no patterns are given', async () => {
     runMutationTest.mockResolvedValue([]);
 
     await runStryker();
 
-    expect(ctorOptions[0]).not.toHaveProperty('vitest');
+    expect(ctorOptions[0]).not.toHaveProperty('testFiles');
   });
 });

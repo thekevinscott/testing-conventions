@@ -141,7 +141,11 @@ in your editor — a source that reaches above the scanned path (`import pkg fro
 a shared `../tsconfig`) resolves through the real tree, the package's `tsconfig.json` is read where
 it lies, and tooling resolves from the package's own `node_modules`. Mutation stays scoped to the
 scanned path, and the scanned path's colocated unit suite is what judges each mutant; the package's
-other suite tiers (`tests/`) stay out of the run. In-place mutation is built for the ephemeral CI
+other suite tiers (`tests/`) stay out of the run. The scan path narrows **which** of your test
+files judge the mutants, and your runner keeps deciding what counts as a test and where it is
+rooted — so a `vitest.config.ts` at the package root whose `include` names `src/**/*.test.ts`
+resolves that pattern against the package root, exactly as it does when you run vitest yourself.
+In-place mutation is built for the ephemeral CI
 checkout the workflow runs in; run it locally on a clean working tree, since the sources hold
 mutants while the run is live.
 

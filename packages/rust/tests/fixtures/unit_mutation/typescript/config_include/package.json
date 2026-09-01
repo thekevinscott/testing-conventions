@@ -1,0 +1,6 @@
+{
+  "name": "tc-config-include",
+  "private": true,
+  "version": "1.2.3",
+  "description": "The default gate-fixture shape plus the package-root `vitest.config.ts` a consumer writes: `include` names `src/**/*.test.ts`, relative to the package root vitest resolves the config at. Scanned at `src/`, the gate must narrow the run to the colocated suite while leaving vitest rooted where the config is, so the include still resolves; the `tests/` tier fails loudly if ever collected. Every mutant is caught."
+}

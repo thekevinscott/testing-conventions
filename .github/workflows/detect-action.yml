@@ -72,7 +72,7 @@ jobs:
           set -euo pipefail
           echo "integration_lint_languages=$LINT colocated_test_languages=$COLOC packaging_dist=$PKG e2e_attestation=$ATT package_root=$PKGROOT ts_package_manager=$TSPM ts_pnpm_version=$TSPNPM python_env=$PYENV provision_rust=$PROVRUST cargo_target_dir=$CARGOTARGETDIR config=$CONFIG build_command=$BUILDCMD cli_command=$CLICMD ts_mutation_adapter_args=$TSADAPTER"
           [ "$LINT" = '["rust"]' ]  || { echo "::error::expected rust auto-detected, got $LINT"; exit 1; }
-          [ "$COLOC" = '["rust"]' ] || { echo "::error::expected rust in the colocated-test matrix (#274), got $COLOC"; exit 1; }
+          [ "$COLOC" = '["rust"]' ] || { echo "::error::expected rust in the colocated-test matrix, got $COLOC"; exit 1; }
           [ "$PKG" = "true" ]      || { echo "::error::expected packaging_dist=true, got $PKG"; exit 1; }
           [ "$ATT" = "true" ]      || { echo "::error::expected e2e_attestation=true, got $ATT"; exit 1; }
           [ "$PKGROOT" = "detect-fixture" ] || { echo "::error::expected package_root=detect-fixture, got $PKGROOT"; exit 1; }

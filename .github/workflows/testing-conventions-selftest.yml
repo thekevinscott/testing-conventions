@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'testing-conventions version to verify against, e.g. 0.0.67. Empty (the default, on pull_request) runs the #356 hermetic build-from-HEAD path unchanged; the verify-and-promote workflow (#357) dispatches this at the release SHA with the just-published version pinned, forcing the published consumer path.'
+        description: 'testing-conventions version to verify against, e.g. 0.0.67. Empty (the default, on pull_request) runs the hermetic build-from-HEAD path. The verify-and-promote workflow dispatches this at the release SHA with the just-published version pinned, forcing the published consumer path.'
         type: string
         default: ''
 
@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   build-cli:
-    name: Build the CLI from HEAD (hermetic, #356)
+    name: Build the CLI from HEAD (hermetic)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -62,7 +62,7 @@ jobs:
       source: .github/selftest/no-sources
 
   integration-lint-config-waiver:
-    name: Integration lint forwards the consumer's --config (#102 waiver honored)
+    name: Integration lint honors the consumer's --config waiver
     needs: [build-cli]
     uses: ./.github/workflows/testing-conventions.yml
     with:
@@ -86,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - name: The rust/typescript integration-lint arms trip on a violation and pass when clean
@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-python@v6
@@ -113,7 +113,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -132,7 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-python@v5
@@ -237,7 +237,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - name: A crate with an out-of-module unit-test call must fail `unit lint`
@@ -269,7 +269,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - name: A wheel that ships a `*_test.py` must fail `packaging`
@@ -300,7 +300,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -360,7 +360,7 @@ jobs:
       base: origin/main
 
   wiring-detect-action:
-    name: The reusable workflow detects via the detect action (#185)
+    name: The reusable workflow detects via the detect action
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -369,7 +369,7 @@ jobs:
         run: uv run --project internals/checks tc-checks wiring-detect-action
 
   wiring-packaging-default-on:
-    name: The reusable workflow runs packaging by default (#186)
+    name: The reusable workflow runs packaging by default
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -378,7 +378,7 @@ jobs:
         run: uv run --project internals/checks tc-checks wiring-packaging-default-on
 
   wiring-e2e-default-on:
-    name: The reusable workflow runs e2e verify by default (#186)
+    name: The reusable workflow runs e2e verify by default
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -492,7 +492,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - name: A bodied fn with no inline test module must fail `unit colocated-test`
@@ -595,7 +595,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         uses: ./.github/actions/download-hermetic-cli
       - uses: astral-sh/setup-uv@v7
       - name: A per-package dist/ shipping a test file must fail packaging

@@ -134,5 +134,5 @@ jobs:
         run: ./target/release/testing-conventions --version
       # Every `testing-conventions` invocation in the reusable workflow must name a subcommand the
       # just-built binary still exposes, so a rename cannot strand consumers pinned to `@v0`.
-      - name: Guard the reusable workflow against subcommand drift (#92)
+      - name: Guard the reusable workflow against subcommand drift
         run: ./target/release/testing-conventions workflow ../../.github/workflows/testing-conventions.yml

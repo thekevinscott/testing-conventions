@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       languages:
-        description: 'Optional JSON array restricting which languages to check, e.g. ["python"]. Empty (the default) auto-detects every supported language present under `source` (#185).'
+        description: 'Optional JSON array restricting which languages to check, e.g. ["python"]. Empty (the default) auto-detects every supported language present under `source`.'
         type: string
         default: ''
       source:
@@ -27,19 +27,19 @@ on:
         type: string
         default: 'origin/main'
       run_e2e:
-        description: 'Force the `e2e verify` job (#68 freshness gate) on. It is already default-on when committed receipts (`e2e-attestations/`) are present at the package root (#186); set this to run it regardless. Needs the receipts and full git history.'
+        description: 'Force the `e2e verify` freshness gate on. It is already default-on when committed receipts (`e2e-attestations/`) are present at the package root; set this to run it regardless. Needs the receipts and full git history.'
         type: boolean
         default: false
       packaging_artifact:
-        description: 'Name of an uploaded build artifact (actions/upload-artifact) holding the built distributions (.whl/.tar.gz/.tgz/.crate) to check. When set, the packaging job downloads and inspects it. When empty (default), packaging still runs over a conventional dist/ found in the checkout, and is skipped only when no dist/ exists either (#186).'
+        description: 'Name of an uploaded build artifact (actions/upload-artifact) holding the built distributions (.whl/.tar.gz/.tgz/.crate) to check. When set, the packaging job downloads and inspects it. When empty (default), packaging still runs over a conventional dist/ found in the checkout, and is skipped only when no dist/ exists either.'
         type: string
         default: ''
       gates:
-        description: 'Optional JSON array naming which gates run, e.g. ["colocated-test", "unit-lint", "integration-lint"] (#262). Empty (the default) runs every applicable gate. Gate names: colocated-test, one-function-per-file, unit-lint, unit-coverage, mutation, integration-lint, packaging, e2e-verify. A named gate still applies its own conditions, and its diff-scoped variant rides with it (colocated-test covers the co-change job, unit-coverage the changed-line job). The allowlist is authoritative: a gate left out is skipped even when run_e2e / packaging_artifact is set.'
+        description: 'Optional JSON array naming which gates run, e.g. ["colocated-test", "unit-lint", "integration-lint"]. Empty (the default) runs every applicable gate. Gate names: colocated-test, one-function-per-file, unit-lint, unit-coverage, mutation, integration-lint, packaging, e2e-verify. A named gate still applies its own conditions, and its diff-scoped variant rides with it (colocated-test covers the co-change job, unit-coverage the changed-line job). The allowlist is authoritative: a gate left out is skipped even when run_e2e / packaging_artifact is set.'
         type: string
         default: ''
       rust_toolchain:
-        description: 'Manual override: provision a stable Rust toolchain (with a cargo registry + target cache) in the suite-executing jobs, before build_command runs. unit coverage / changed-line coverage / unit mutation already auto-provision it when the manifest at the derived package root declares a Rust-compiling build (a Cargo.toml, a maturin backend, a napi key — #277); set this by hand only for a build the manifest does not express. The rust matrix arm always carries its own toolchain. false (the default) adds nothing beyond auto-derivation (#263).'
+        description: 'Manual override: provision a stable Rust toolchain (with a cargo registry + target cache) in the suite-executing jobs, before build_command runs. unit coverage / changed-line coverage / unit mutation already auto-provision it when the manifest at the derived package root declares a Rust-compiling build (a Cargo.toml, a maturin backend, a napi key); set this by hand only for a build the manifest does not express. The rust matrix arm always carries its own toolchain. false (the default) leaves provisioning to that auto-derivation.'
         type: boolean
         default: false
 
@@ -114,7 +114,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
       - name: Check colocated test
@@ -178,7 +178,7 @@ jobs:
         language: ${{ fromJSON(needs.detect.outputs.coverage_languages) }}
     steps:
       - uses: actions/checkout@v6
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
       # cargo must be on PATH first: `uv sync` or an npm `prepare` may itself compile a Rust core.
@@ -268,7 +268,7 @@ jobs:
         with:
           # `--base` diffs `<base>...HEAD`, so the base ref must be reachable.
           fetch-depth: 0
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
       # cargo must be on PATH first: `uv sync` or an npm `prepare` may itself compile a Rust core.
@@ -359,7 +359,7 @@ jobs:
         with:
           # `--base` diffs `<base>...HEAD`, so the base ref must be reachable.
           fetch-depth: 0
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
       # cargo must be on PATH first: a maturin/PyO3 build triggered by `uv sync` needs it.
@@ -453,7 +453,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
       - name: Verify the e2e attestation is current
@@ -486,7 +486,7 @@ jobs:
         with:
           name: ${{ inputs.packaging_artifact }}
           path: _packaging_artifact
-      - name: Download the CLI built from HEAD (hermetic, #356)
+      - name: Download the CLI built from HEAD (hermetic)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
       # cargo must be on PATH first: `cargo package` needs it, and `uv build`/`prepack` may compile a Rust core.

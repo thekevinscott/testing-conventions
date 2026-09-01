@@ -104,10 +104,8 @@ def _parse_output_file(text):
 def _declared_outputs():
     """The composite action's `outputs:` block, as `name -> value expression`.
 
-    `action.yml` is a hand-maintained manifest with a fixed two-space shape, read here with the
-    stdlib: `detect.py` is stdlib-only by contract (`docs/internals/repo.md`, "The scan's
-    invocation is an external contract"), and its test package carries pytest as its one
-    dev-dependency.
+    Parsed with the stdlib against the manifest's fixed two-space shape: `detect.py` is
+    stdlib-only by contract, so its test package carries pytest and nothing else.
     """
     lines = ACTION_YML.read_text().split("\n")
     start = lines.index("outputs:") + 1
@@ -987,11 +985,8 @@ def test_published_outputs_when_a_version_is_pinned(run_detect):
 
 
 def test_every_emitted_output_is_declared_by_the_composite_action(run_detect):
-    # A composite action forwards only the outputs its manifest declares, so an output the
-    # script writes to GITHUB_OUTPUT but `action.yml` omits reaches the caller as the empty
-    # string — and an expression with a `||` fallback silently takes the fallback arm, with a
-    # green run and no signal. The two sets are one contract, asserted here as a set so the
-    # next output is covered on the day it is added rather than by a fresh one-off assertion.
+    # An emitted output the manifest omits reaches the caller as the empty string, which an
+    # expression with a `||` fallback takes as the fallback arm — green, with no signal.
     emitted = set(run_detect())
     assert emitted == set(_declared_outputs())
 

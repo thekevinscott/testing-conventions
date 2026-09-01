@@ -15,7 +15,9 @@ exist:
 - a local (`./.github/actions/detect`) detect step alongside the published `@v0` one;
 - a `cli_command` detect output;
 - the `${CLI_COMMAND:-` fallback (transition-safe: an old `@v0` detect emits no `cli_command`,
-  and the consumer path must stay byte-for-byte today's npx line);
+  and the consumer path must stay byte-for-byte today's npx line), with its `CLI_COMMAND` env
+  line present in each step that runs it — the value is step-local, so a step missing the line
+  expands to the published binary while the file-wide fallback text survives on its neighbours;
 - a `hermetic-cli` artifact download, via the shared `./.github/actions/download-hermetic-cli`
   composite action (the download + chmod trio the nine rule jobs would otherwise each repeat).
 
@@ -41,6 +43,7 @@ from pathlib import Path
 import click
 
 from checks.config import DOGFOOD_WORKFLOW, REUSABLE_WORKFLOW, SELFTEST_WORKFLOW
+from checks.hermetic_wired.cli_command_env import unwired_steps
 from checks.utils.check_failed import CheckFailed
 from checks.utils.job_block import iter_job_blocks
 
@@ -84,6 +87,15 @@ def cli(workflow: str, callers: tuple[str, ...]) -> None:
             + ", ".join(missing)
             + " — so an in-repo caller (self-test, dogfood) can only validate the published "
             "detect/binary, not the commit under test (#356)"
+        )
+    unwired_fallback = unwired_steps(text)
+    if unwired_fallback:
+        raise CheckFailed(
+            "the reusable workflow runs the `${CLI_COMMAND:-` npx fallback in "
+            + ", ".join(unwired_fallback)
+            + " with no `CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}` in that step's "
+            "own `env:` — `CLI_COMMAND` is step-local, so those steps expand to the published "
+            "binary while the file-wide fallback text stays intact: green, with Layer 1 off (#356)"
         )
     for caller in callers:
         caller_text = Path(caller).read_text()

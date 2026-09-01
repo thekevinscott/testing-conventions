@@ -1,10 +1,5 @@
-//! The testing-conventions config schema and loader.
-//!
-//! One config file is read into the in-memory [`Config`] below. The loader
-//! parses *and* validates the config itself (the "self-guard"):
-//! a malformed or unknown-key config is an error, never a silently-accepted
-//! default. Validation also covers the per-file [`Exemption`] list:
-//! every exemption must name at least one rule and carry a non-empty reason.
+//! The testing-conventions config schema and loader. A malformed or unknown-key
+//! config is an error, never a silently-accepted default.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -13,12 +8,6 @@ use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
 /// A fully-parsed testing-conventions config file.
-///
-/// Holds the per-language coverage thresholds — the `[python]` / `[typescript]`
-/// / `[rust]` tables from the README's "Configuration" section — and the
-/// per-language `exempt` lists. Each table is optional so a repo can configure
-/// only the languages it ships. Test locations follow convention, not config, so
-/// there are no location keys here.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -28,10 +17,7 @@ pub struct Config {
     pub e2e: Option<E2eConfig>,
 }
 
-/// The `[python]` table. Both keys are optional, so a repo can configure just
-/// coverage, just exemptions, or both. `Default` (no coverage table, no
-/// exemptions) backs the zero-config path: an absent `[python]` table means the
-/// rule runs against the default floor with nothing exempt.
+/// The `[python]` table.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PythonConfig {
@@ -40,35 +26,16 @@ pub struct PythonConfig {
     pub one_function_per_file: Option<OneFunctionPerFile>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
-    /// The build declaration: a shell
-    /// command a build-dependent job runs after toolchain + dependency setup and before it
-    /// builds or imports the package, for a build the manifest **structurally can't express**.
-    /// It is not an escape hatch — it *supplies* a necessary fact (how to build), it doesn't
-    /// *waive* a check — so it carries no reason requirement. `detect` reads it from the
-    /// package's own config and the workflow jobs run it; the binary never runs it, but the
-    /// schema must accept the key so a consumer's config still loads under `deny_unknown_fields`.
-    /// Absent (`None`) means no build step. For Python it's the common case — a PEP 517 backend
-    /// exposes only sandboxed `build_wheel`/`build_sdist` hooks with no pre-build shell step.
+    /// The build declaration a build-dependent workflow job runs. `detect` reads it and the
+    /// jobs run it; the binary only accepts the key so a consumer's config still loads.
     pub build_command: Option<String>,
-    /// Optional note on the build: free-form documentation, never validated — a necessary
-    /// build fact needs no justification. Retained as a key so a config that carried one still
-    /// loads under `deny_unknown_fields`.
+    /// Free-form note on the build, never validated.
     #[serde(default)]
     pub reason: String,
 }
 
-/// The `[e2e]` table. `extra_scope` names a shared source tree beside the
-/// package — a native core bound into several language bindings — whose commits
-/// join the `e2e verify` freshness walk, and `exclude` carves feature-gated
-/// subtrees of it back out. Both are optional lists of repo-relative directory
-/// paths, so an absent `[e2e]` table (or one setting just one key) is the
-/// zero-config default.
-///
-/// The binary never acts on these keys — the freshness walk is driven by the
-/// `e2e verify --extra-scope` / `--exclude` CLI flags, which `detect` renders
-/// from this table and the reusable workflow supplies — but the schema must
-/// accept the table so a consumer declaring it still loads the rest of its
-/// config under `deny_unknown_fields`, exactly like `[python].build_command`.
+/// The `[e2e]` table. `detect` renders these into `e2e verify --extra-scope` / `--exclude`;
+/// the binary only accepts the table so a consumer declaring it still loads.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct E2eConfig {
@@ -87,13 +54,9 @@ pub struct TypeScriptConfig {
     pub one_function_per_file: Option<OneFunctionPerFile>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
-    /// The build declaration; see [`PythonConfig::build_command`]. For TypeScript it's
-    /// *necessary*, not exceptional: a published TS library ships compiled JS, and `npm pack`
-    /// runs `prepare` / `prepack` but not a bare `build` script — whose name npm never
-    /// standardized — so a compiling package that doesn't wire `prepare` names its build here.
+    /// The build declaration; see [`PythonConfig::build_command`].
     pub build_command: Option<String>,
-    /// Optional note on the build; free-form, never validated. See
-    /// [`PythonConfig::reason`].
+    /// Free-form note on the build, never validated.
     #[serde(default)]
     pub reason: String,
 }
@@ -105,30 +68,20 @@ pub struct RustConfig {
     pub coverage: Option<RustCoverage>,
     /// The `one-function-per-file` threshold; see [`OneFunctionPerFile`].
     pub one_function_per_file: Option<OneFunctionPerFile>,
-    /// Cargo features the suite-running Rust rules enable: `unit coverage`
-    /// passes them to `cargo llvm-cov` (`--features`) and `unit mutation` passes them
-    /// to cargo-mutants (`--features`), which enables them on every cargo invocation
-    /// the run makes, so `#[cfg(feature = ...)]` code — and the test targets that name
-    /// it — is built, measured, and mutated. Cargo features are Rust's build-system
-    /// concept with no Python/TypeScript analog, so the key is deliberately
-    /// Rust-only (a documented asymmetry under the parity rule).
+    /// Cargo features `unit coverage` and `unit mutation` pass to their engines.
     #[serde(default)]
     pub features: Vec<String>,
     #[serde(default)]
     pub exempt: Vec<Exemption>,
-    /// The build declaration; see [`PythonConfig::build_command`]. Rarely needed for Rust
-    /// — `cargo` compiles via `build.rs` and packages via `cargo package` from the manifest — so
-    /// this is only for a pre-build step neither expresses.
+    /// The build declaration; see [`PythonConfig::build_command`].
     pub build_command: Option<String>,
-    /// Optional note on the build; free-form, never validated. See
-    /// [`PythonConfig::reason`].
+    /// Free-form note on the build, never validated.
     #[serde(default)]
     pub reason: String,
 }
 
-/// `[python].coverage`. A **partial override** — `#[serde(default)]` fills any missing
-/// field from [`PythonCoverage::default`], so a table that sets only one threshold keeps
-/// our defaults for the rest; `deny_unknown_fields` still rejects a typo'd key.
+/// `[python].coverage`. A partial override: a missing field falls back to
+/// [`PythonCoverage::default`].
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PythonCoverage {
@@ -136,12 +89,7 @@ pub struct PythonCoverage {
     pub fail_under: u8,
 }
 
-/// The default Python floor used when coverage isn't configured: branch
-/// coverage on, `fail_under = 100`. Strict by default — "100% of what you
-/// didn't explicitly exempt" — because the rule already honors `# pragma: no cover`,
-/// reason-required `[[python.exempt]]` entries, and the empty/comment-only
-/// auto-exemption, so trivia is excluded deliberately rather than by a slack floor.
-/// A config `[python].coverage` table lowers it when a project wants headroom.
+/// Branch coverage on, `fail_under = 100`.
 impl Default for PythonCoverage {
     fn default() -> Self {
         Self {
@@ -151,10 +99,8 @@ impl Default for PythonCoverage {
     }
 }
 
-/// `[typescript].coverage`. A **partial override** — `#[serde(default)]` fills any
-/// missing field from [`TypeScriptCoverage::default`], so a table that sets only one of
-/// the four metrics keeps our defaults for the rest; `deny_unknown_fields` still
-/// rejects a typo'd key.
+/// `[typescript].coverage`. A partial override: a missing field falls back to
+/// [`TypeScriptCoverage::default`].
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct TypeScriptCoverage {
@@ -164,11 +110,7 @@ pub struct TypeScriptCoverage {
     pub statements: u8,
 }
 
-/// The default TypeScript floors used when coverage isn't configured: all
-/// four metrics at 100, matching the strict-by-default Python floor. As with
-/// Python, "100" means "100% of what you didn't explicitly exempt" — the rule honors
-/// reason-required `[[typescript.exempt]]` entries and skips declaration files
-/// (`*.d.ts`). A config `[typescript].coverage` table lowers any of the four.
+/// All four metrics at 100.
 impl Default for TypeScriptCoverage {
     fn default() -> Self {
         Self {
@@ -180,13 +122,8 @@ impl Default for TypeScriptCoverage {
     }
 }
 
-/// `[rust].coverage`. A **partial override** — `#[serde(default)]` fills any missing
-/// field from [`RustCoverage::default`] (`lines = 100`, everything else `None`), so a
-/// table that sets only `regions` keeps `lines = 100`; `deny_unknown_fields`
-/// still rejects a typo'd key. Three opt-in floors sit alongside `lines`:
-/// `regions` (a Rust-only sub-line metric), `functions` (the export's functions
-/// total, stable toolchain), and `branch` (adds `--branch` to the run, which
-/// instruments only on a nightly toolchain).
+/// `[rust].coverage`. A partial override: a missing field falls back to
+/// [`RustCoverage::default`]. `branch` instruments only on a nightly toolchain.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct RustCoverage {
@@ -196,14 +133,7 @@ pub struct RustCoverage {
     pub branch: Option<u8>,
 }
 
-/// The default Rust floor used when coverage isn't configured: `lines = 100`,
-/// matching Python/TypeScript's line-level 100. The other metrics are opt-in (`None`
-/// unless a config sets them): `regions` is a Rust-only sub-line metric harsher than
-/// lines, `functions` keeps the default line-shaped like Python's, and `branch`
-/// requires a nightly toolchain — so the zero-config floor is lines only. As
-/// with Python/TypeScript, "100" means "100% of what you didn't explicitly exempt" —
-/// the rule honors reason-required `[[rust.exempt]]` entries. A config
-/// `[rust].coverage` table lowers the line floor or adds the opt-in floors.
+/// `lines = 100`; the other metrics are opt-in.
 impl Default for RustCoverage {
     fn default() -> Self {
         Self {
@@ -215,9 +145,8 @@ impl Default for RustCoverage {
     }
 }
 
-/// `[<language>].one_function_per_file`. A **partial override** — `#[serde(default)]`
-/// fills a missing field from [`OneFunctionPerFile::default`], and `deny_unknown_fields`
-/// still rejects a typo'd key.
+/// `[<language>].one_function_per_file`. A partial override: a missing field falls back to
+/// [`OneFunctionPerFile::default`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct OneFunctionPerFile {
@@ -226,10 +155,7 @@ pub struct OneFunctionPerFile {
     pub max_lines: u32,
 }
 
-/// The default threshold used when the table is absent: `max_lines = 1`. A one-line
-/// function is an expression with a name — it carries no branch to test in isolation,
-/// so it shares a file freely, and anything longer earns its own module. A config
-/// table raises the line for a tree whose natural grain is longer functions.
+/// `max_lines = 1`.
 impl Default for OneFunctionPerFile {
     fn default() -> Self {
         Self { max_lines: 1 }
@@ -244,8 +170,7 @@ pub enum Rule {
     ColocatedTest,
     /// The unit-test coverage floor ([`crate::coverage`]).
     Coverage,
-    /// The commit-scoped `co-change` check ([`crate::co_change`]) — a
-    /// changed source whose colocated test needn't co-change.
+    /// The commit-scoped `co-change` check ([`crate::co_change`]).
     CoChange,
     /// `integration lint` — a test/fixture takes pytest's `monkeypatch` fixture ([`crate::lint`]).
     NoMonkeypatch,
@@ -269,27 +194,21 @@ pub enum Rule {
     UntypedMock,
     /// `integration lint` — a `vi.mock` of a first-party module in a TS integration test.
     NoFirstPartyMock,
-    /// `integration lint` — a test file under `<package root>/tests/` outside a
-    /// standard suite tier (`tests/integration/`, `tests/e2e/`).
+    /// `integration lint` — a test file outside a standard suite tier.
     UnknownTier,
     /// `unit mutation` — a surviving mutant the unit suite didn't catch ([`crate::mutation`]).
     Mutation,
-    /// `unit one-function-per-file` — a module-scope function sharing its file with
-    /// another over the threshold ([`crate::one_function`]).
+    /// `unit one-function-per-file` ([`crate::one_function`]).
     OneFunctionPerFile,
 }
 
 impl Rule {
-    /// Whether a `lines` list may scope this rule. The measured-line rules —
-    /// `coverage` and `mutation` — judge individual lines, so an exemption can name
-    /// the exact lines it lifts. Every other rule is whole-file (presence, a lint, a
-    /// folder convention), so a `lines` key alongside it is a config error.
+    /// Whether a `lines` list may scope this rule — true for the measured-line rules.
     pub fn is_line_scopable(self) -> bool {
         matches!(self, Rule::Coverage | Rule::Mutation)
     }
 
-    /// The rule's kebab-case id — the string used in a `Violation` and in a config
-    /// `rules` value. Mirrors the `serde(rename_all = "kebab-case")` encoding.
+    /// The rule's kebab-case id, mirroring the `serde(rename_all = "kebab-case")` encoding.
     pub fn id(self) -> &'static str {
         match self {
             Rule::ColocatedTest => "colocated-test",
@@ -338,25 +257,18 @@ impl Rule {
     }
 }
 
-/// One element of an exemption's `lines` list: a single 1-based line, or an
-/// inclusive `"start-end"` range.
-///
-/// Parses from a TOML integer (`9`) or a string range (`"12-13"`). Semantic checks
-/// (a line ≥ 1, a range's start ≤ end) live in [`Config::validate`] so the error can
-/// name the offending exemption; the deserializer only rejects what isn't a line spec
-/// at all (a non-integer, a malformed range).
+/// One element of an exemption's `lines` list: a single 1-based line, or an inclusive
+/// `"start-end"` range. Semantic checks live in [`Config::validate`], so the error can name
+/// the offending exemption.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LineSpec {
-    /// A single line.
     Single(u32),
     /// An inclusive line range, `start..=end`.
     Range(u32, u32),
 }
 
 impl LineSpec {
-    /// Parse a string spec: `"12-13"` → a range, `"9"` → a single line. The two parts
-    /// of a range are trimmed, so `"12 - 13"` is accepted. A part that isn't a
-    /// non-negative integer (or a range with more than one `-`) is an error.
+    /// Parse a string spec: `"12-13"` → a range, `"9"` → a single line.
     fn parse_str(s: &str) -> Result<LineSpec, String> {
         let parse = |part: &str| {
             part.trim()
@@ -403,7 +315,7 @@ impl<'de> Deserialize<'de> for LineSpec {
                     .map_err(|_| E::custom(format!("line number {v} is out of range")))
             }
 
-            // TOML integers arrive as i64; a negative line number is nonsense.
+            // TOML integers arrive as i64, so a negative line number reaches this visitor.
             fn visit_i64<E: serde::de::Error>(self, v: i64) -> std::result::Result<LineSpec, E> {
                 u64::try_from(v)
                     .map_err(|_| E::custom(format!("line number {v} must be positive")))
@@ -419,23 +331,14 @@ impl<'de> Deserialize<'de> for LineSpec {
 }
 
 /// One auditable per-file exemption — a `[[<language>.exempt]]` entry.
-///
-/// The opposite of a silent ignore-glob: an exemption is declared in the one
-/// config file, names the rules it lifts, and **must say why**. Empty
-/// (comment-only) files need no entry — they carry no logic and are not
-/// subjects — so this is for deliberate omissions the tool can't infer (a
-/// launcher shim, generated code, a re-export barrel).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Exemption {
     /// Path to the exempt file, relative to the scanned root.
     pub path: String,
-    /// Which rules the exemption lifts (`colocated-test`, `coverage`).
+    /// Which rules the exemption lifts.
     pub rules: Vec<Rule>,
-    /// Lines this exemption is scoped to. Empty (the default, the `lines` key
-    /// omitted) is a **whole-file** exemption — today's behavior. A non-empty list
-    /// narrows a `coverage` / `mutation` exemption to exactly those lines, guarded so
-    /// every listed line must actually be failing.
+    /// Lines this exemption is scoped to; empty is a whole-file exemption.
     #[serde(default)]
     pub lines: Vec<LineSpec>,
     /// Why the omission is deliberate — required, and never empty.
@@ -444,7 +347,6 @@ pub struct Exemption {
 
 impl Exemption {
     /// The 1-based line numbers this exemption is scoped to, with ranges expanded.
-    /// Empty when the entry carries no `lines` (a whole-file exemption).
     pub fn line_set(&self) -> BTreeSet<u32> {
         let mut set = BTreeSet::new();
         for spec in &self.lines {
@@ -455,22 +357,15 @@ impl Exemption {
 }
 
 /// What an exemption lifts for one file: the whole file, or only specific lines.
-///
-/// The resolved counterpart of [`Exemption::lines`] — [`resolve_exempt_scoped`] turns
-/// each entry into one of these, so the `coverage` / `mutation` rules can apply a
-/// file-level omit or a line-level guard uniformly.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LineScope {
-    /// The whole file is exempt (no `lines` key) — today's behavior.
     WholeFile,
     /// Only these 1-based lines are exempt.
     Lines(BTreeSet<u32>),
 }
 
 impl LineScope {
-    /// Merge two scopes for the same path: a whole-file exemption subsumes any
-    /// line-scoped one (the file is wholly lifted either way), otherwise the line sets
-    /// union. Lets two entries naming the same file for the same rule combine cleanly.
+    /// Merge two scopes for the same path: whole-file subsumes line-scoped, otherwise union.
     fn merged_with(self, other: LineScope) -> LineScope {
         match (self, other) {
             (LineScope::WholeFile, _) | (_, LineScope::WholeFile) => LineScope::WholeFile,
@@ -482,16 +377,13 @@ impl LineScope {
     }
 }
 
-/// The migration record: every key a release renamed or removed, alongside its replacement.
-/// An unknown-key rejection points here — a stale key left by a rename reads identically to a
-/// typo at parse time, so the record is the only thing that distinguishes upgrade from mistake.
+/// The migration record an unknown-key rejection points at: a stale key left by a rename
+/// reads identically to a typo at parse time.
 const MIGRATIONS_URL: &str =
     "https://github.com/thekevinscott/testing-conventions/blob/main/packages/rust/MIGRATIONS.md";
 
-/// Append the migration pointer to a `deny_unknown_fields` rejection, passing every other TOML
-/// parse error through untouched. The `serde` message already names the key and lists the
-/// accepted ones; the pointer supplies the upgrade path serde can't know — the key may be one a
-/// release renamed or removed, and [`MIGRATIONS_URL`] is where that mapping lives.
+/// Append the [`MIGRATIONS_URL`] pointer to a `deny_unknown_fields` rejection, passing every
+/// other TOML parse error through untouched.
 fn annotate_toml_error(err: toml::de::Error) -> anyhow::Error {
     if err.message().contains("unknown field") {
         anyhow::anyhow!(err).context(format!(
@@ -503,13 +395,6 @@ fn annotate_toml_error(err: toml::de::Error) -> anyhow::Error {
 }
 
 /// Read one config file at `path` into a [`Config`], validating it on the way.
-///
-/// The validation is the config's self-guard: `serde`'s `deny_unknown_fields`
-/// rejects keys that aren't part of the schema, missing required keys and
-/// wrong-typed values are type errors, malformed TOML fails to parse, and every
-/// `exempt` entry must name a rule and carry a non-empty reason. Any of these
-/// surfaces as an `Err` rather than a silently-accepted default. An unknown-key
-/// rejection additionally points at `MIGRATIONS.md` (see [`annotate_toml_error`]).
 pub fn load_config(path: impl AsRef<Path>) -> Result<Config> {
     let path = path.as_ref();
     let contents = std::fs::read_to_string(path)
@@ -537,20 +422,9 @@ impl Config {
         }
     }
 
-    /// The `one-function-per-file` threshold for `language` — the longest body a
-    /// function may have and still share a file — or `None` when the rule does not
-    /// apply to that language.
-    ///
-    /// Python and TypeScript default to [`OneFunctionPerFile::default`]; **Rust is off
-    /// until a `[rust].one_function_per_file` table opts in**. This is the deliberate
-    /// asymmetry the cross-language parity rule requires be named: in Python and
-    /// TypeScript a file is a bag of definitions, so "one subject per file" is a choice
-    /// the author makes and the rule can hold them to. In Rust a file *is* a module —
-    /// the language's own unit of organization — and grouping free functions and their
-    /// `impl` blocks inside one is how Rust is written, not a lapse. Enforcing the rule
-    /// there by default would flag idiomatic code as a violation. The capability is
-    /// identical in all three languages, so a Rust tree that does want the rule gets it
-    /// by naming a threshold; only the default differs.
+    /// The `one-function-per-file` threshold for `language`, or `None` when the rule is off.
+    /// Python and TypeScript default to [`OneFunctionPerFile::default`]; Rust is off until a
+    /// `[rust].one_function_per_file` table opts in.
     pub fn one_function_threshold(&self, language: crate::colocated_test::Language) -> Option<u32> {
         match language {
             crate::colocated_test::Language::Python => Some(
@@ -575,20 +449,13 @@ impl Config {
         }
     }
 
-    /// The `[[rust.exempt]]` list (empty when the table is absent). The named
-    /// accessor the Rust isolation rules waive through; equivalent to
-    /// [`Self::exemptions`]`(Language::Rust)`.
+    /// The `[[rust.exempt]]` list (empty when the table is absent).
     pub fn rust_exemptions(&self) -> &[Exemption] {
         self.rust.as_ref().map_or(&[], |c| &c.exempt)
     }
 
-    /// Reject any `exempt` entry that names no rule or carries an empty reason —
-    /// a reasonless or scopeless exemption can never be a silent pass.
+    /// Reject any `exempt` entry that names no rule or carries an empty reason.
     fn validate(&self) -> Result<()> {
-        // `build_command` carries no reason requirement: it *supplies* a necessary fact —
-        // how to build a package the ecosystem doesn't build for you — rather than *waiving* a
-        // check the way an exemption does, so there is nothing to justify. (An `exempt` entry
-        // still requires a reason below; that one really does waive a gate.)
         let tables = [
             ("python", self.python.as_ref().map(|c| &c.exempt)),
             ("typescript", self.typescript.as_ref().map(|c| &c.exempt)),
@@ -610,12 +477,6 @@ impl Config {
                         entry.path
                     );
                 }
-                // Line-scoping and whole-file exemptions don't mix. The
-                // measured-line rules (`coverage` / `mutation`) **require** `lines` —
-                // an exemption may not lift a whole file from coverage or mutation, only
-                // the exact lines it can prove are failing. The whole-file rules
-                // (presence, lints) **reject** `lines`. So an entry is either all
-                // line-scopable rules with `lines`, or all whole-file rules without.
                 let has_scopable = entry.rules.iter().any(|rule| rule.is_line_scopable());
                 let has_whole_file = entry.rules.iter().any(|rule| !rule.is_line_scopable());
                 if entry.lines.is_empty() {
@@ -661,13 +522,8 @@ impl Config {
     }
 }
 
-/// Resolve the set of exempt paths for `rule` from `exemptions`, validating that
-/// each still points to a file under `root`.
-///
-/// A stale entry — a path that no longer exists — is an error, so the exempt
-/// list can't silently rot (the auditable counterpart to an ignore-glob, which
-/// would just stop matching). Returns the matching paths as `/`-joined,
-/// `root`-relative strings, sorted and de-duplicated.
+/// The exempt paths for `rule` as `/`-joined, `root`-relative strings. A stale entry — a
+/// path that no longer exists — is an error, so the exempt list can't silently rot.
 pub fn resolve_exempt(
     root: &Path,
     exemptions: &[Exemption],
@@ -678,14 +534,8 @@ pub fn resolve_exempt(
         .collect())
 }
 
-/// Resolve the per-file exempt **scope** for `rule` — whole-file or line-scoped.
-///
-/// Like [`resolve_exempt`], a stale path is a hard error so the list can't rot. An
-/// entry with no `lines` resolves to [`LineScope::WholeFile`] (today's behavior); one
-/// with `lines` to [`LineScope::Lines`]. Two entries naming the same file for the same
-/// rule merge ([`LineScope::merged_with`]). The `coverage` / `mutation` rules read this
-/// to apply a file-level omit or a line-level guard; the file-level rules go through the
-/// [`resolve_exempt`] shim above, which keeps only the keys.
+/// The per-file exempt [`LineScope`] for `rule`. Like [`resolve_exempt`], a stale path is a
+/// hard error; two entries naming the same file merge via [`LineScope::merged_with`].
 pub fn resolve_exempt_scoped(
     root: &Path,
     exemptions: &[Exemption],

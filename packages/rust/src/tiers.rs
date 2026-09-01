@@ -1,20 +1,9 @@
 //! The standard suite-tier layout, derived from the package root.
-//!
-//! The standard places a package's test suites at fixed locations relative to
-//! its package root: colocated unit tests beside the sources, the integration
-//! suite in `tests/integration/`, and the e2e suite in `tests/e2e/` (Rust's
-//! cargo layout keeps both out-of-crate suites in the crate root's `tests/`).
-//! The scans derive those locations from the scanned `path` and the package's
-//! own manifest — `integration lint` takes its subjects from the derived suite
-//! directories, and the unit-tier scans leave `<package root>/tests/` to them.
 
 use std::path::{Path, PathBuf};
 
-/// The package root for `scan_root`: the nearest directory at or above it
-/// holding `manifest` (`pyproject.toml`, `package.json`, or `Cargo.toml`).
-/// The walk stops at a `.git` boundary so it cannot escape the repository into
-/// an unrelated manifest. `None` when no manifest is found — a loose-script
-/// tree, scanned at `scan_root` directly.
+/// The nearest directory at or above `scan_root` holding `manifest`, or `None`.
+/// The walk stops at a `.git` boundary so it cannot escape the repository.
 pub fn package_root(scan_root: &Path, manifest: &str) -> Option<PathBuf> {
     for dir in scan_root.ancestors() {
         if dir.join(manifest).is_file() {
@@ -27,9 +16,7 @@ pub fn package_root(scan_root: &Path, manifest: &str) -> Option<PathBuf> {
     None
 }
 
-/// The `<package root>/tests/` directory `scan_root` belongs to, or `None` for
-/// a loose-script tree. The unit-tier scans skip every file under it — that
-/// subtree belongs to the suite tiers.
+/// The `<package root>/tests/` directory `scan_root` belongs to, or `None`.
 pub fn suite_tests_dir(scan_root: &Path, manifest: &str) -> Option<PathBuf> {
     package_root(scan_root, manifest).map(|root| root.join("tests"))
 }
@@ -41,7 +28,6 @@ mod tests {
 
     use super::{package_root, suite_tests_dir};
 
-    /// A throwaway directory tree, removed on drop.
     struct TempTree(PathBuf);
 
     impl TempTree {

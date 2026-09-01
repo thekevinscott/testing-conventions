@@ -1,28 +1,6 @@
-//! Rust unit-isolation lint: an inline `#[cfg(test)] mod` may call only into
-//! the unit under test — its parent module, reached via `super::`. A call *out of
-//! the test's own module* — into another first-party module (`crate::…`), an
-//! external crate, or effectful `std` — is a violation. Inject a trait double
-//! (hand-rolled or `mockall`) instead; the compiler checks the double.
-//!
-//! Detection is AST-based: each `*.rs` file under the crate root is parsed with
-//! `syn` and its `#[cfg(test)]` modules are walked with a [`Visit`]or. This is the
-//! deterministic `syn` heuristic; full name-resolution precision is a future
-//! `dylint` pass. The design and its precision limits live in
-//! `internals/rust/isolation.md`.
-//!
-//! Implemented detectors:
-//! - **`no-out-of-module-call`** (D1): a call expression `A::…::f(…)` inside a
-//!   `#[cfg(test)]` module whose leading segment `A` reaches out of the module —
-//!   `crate::` (first-party, another module), `super::super::…` (an ancestor),
-//!   an external crate from `Cargo.toml`, or effectful `std`. A single `super::`,
-//!   `self`/`Self`, a bare/unqualified call, and pure `std` (incl. `io::Cursor`)
-//!   stay in-module and are not flagged.
-//! - **`no-out-of-module-import`** (D2): a `use` inside a `#[cfg(test)]` module
-//!   that brings in a foreign surface — a glob of anything but `super::*`, or a
-//!   named import rooted at `crate::`, an external crate, or effectful `std`.
-//!   `use super::*` / `use super::Thing` (the unit under test), `self`, and pure
-//!   `std` (e.g. `collections`, `io::Cursor`) are in-module. Catches a collaborator
-//!   imported then called unqualified, which D1's call check can't see.
+//! Rust unit-isolation lint: an inline `#[cfg(test)] mod` may call and import only into the
+//! unit under test, its parent module reached via `super::`. The AST walk is the deterministic
+//! `syn` heuristic; its design and precision limits live in `internals/rust/isolation.md`.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -33,16 +11,11 @@ use syn::visit::{self, Visit};
 
 pub use crate::violation::Violation;
 
-/// Rule id reported for an out-of-module call (D1).
 const RULE_CALL: &str = "no-out-of-module-call";
-/// Rule id reported for an out-of-module `use` import (D2).
 const RULE_IMPORT: &str = "no-out-of-module-import";
-/// Rule id reported for doubling a first-party item in an integration test.
 const RULE_DOUBLE: &str = "no-first-party-double";
 
-/// A language whose unit-isolation convention can be checked (Python is a
-/// separate detector). Each detector lives in its own module; this enum is the
-/// shared `unit lint` language selector.
+/// The `unit lint` language selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Language {
     /// Inline `#[cfg(test)]` modules in `*.rs` files (`no-out-of-module-call`).
@@ -58,16 +31,9 @@ pub enum Language {
     Python,
 }
 
-/// Scan the Rust source files under `root` and return every isolation violation,
-/// sorted by `(file, line)` for deterministic output.
-///
-/// `root` is the crate root: its `Cargo.toml` names the external crates whose
-/// calls are out-of-module. The scan reuses the colocated-test unit-source walk, so
-/// it reads only the crate's own unit source (`src/`, `lib.rs`, `main.rs`) and skips
-/// the non-unit trees — `tests/` integration crates, `benches/`, `examples/`, and the
-/// `target/` build directory — exactly as the presence rule does. A locally-built
-/// crate is therefore scanned the same as a fresh checkout: a `target/` build artifact
-/// or a broken fixture under `tests/` neither aborts the rule nor is false-flagged.
+/// Every isolation violation in the unit source under crate root `root`, sorted by
+/// `(file, line)`. `root`'s `Cargo.toml` names the external crates. `tests/`, `benches/`,
+/// `examples/`, and `target/` are not unit source, so a local build changes no result.
 pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     let root = root.as_ref();
     let deps = external_deps(root)?;
@@ -96,11 +62,9 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     Ok(violations)
 }
 
-/// Scan the Rust integration crates under `root` (the `*.rs` files in a `tests/`
-/// directory) and return every `no-first-party-double` violation — a `#[double]`
-/// import of a first-party item. An integration test runs first-party code for
-/// real, so doubling it is the error; doubling an external crate is fine. `root`
-/// is the crate root; its `Cargo.toml` names the first-party crates.
+/// Every `no-first-party-double` violation in the `tests/` crates under crate root `root`.
+/// An integration test runs first-party code for real, so doubling it is the error;
+/// doubling an external crate is fine.
 pub fn find_integration_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     let root = root.as_ref();
     let first_party = first_party_crates(root)?;
@@ -129,8 +93,7 @@ pub fn find_integration_violations(root: impl AsRef<Path>) -> Result<Vec<Violati
     Ok(violations)
 }
 
-/// Walks one parsed integration-test file, flagging a `#[double]` import whose
-/// path names a first-party crate.
+/// Walks one integration-test file, flagging a `#[double]` of a first-party crate.
 struct DoubleVisitor<'a> {
     file: &'a Path,
     first_party: &'a BTreeSet<String>,
@@ -142,7 +105,6 @@ impl<'ast> Visit<'ast> for DoubleVisitor<'_> {
         if has_double_attr(&node.attrs) {
             let mut imports = Vec::new();
             flatten_use(&node.tree, &mut Vec::new(), &mut imports);
-            // One finding per `#[double] use`: flag if any leaf is first-party.
             if let Some((segs, is_glob)) = imports.iter().find(|(segs, _)| {
                 segs.first()
                     .is_some_and(|root| self.first_party.contains(root))
@@ -163,8 +125,7 @@ impl<'ast> Visit<'ast> for DoubleVisitor<'_> {
     }
 }
 
-/// `true` when `attrs` carries a `#[double]` (or `#[mockall_double::double]`)
-/// attribute — `mockall_double` swapping a real item for its mock.
+/// `true` for a `#[double]` / `#[mockall_double::double]` attribute.
 fn has_double_attr(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
         attr.path()
@@ -174,12 +135,9 @@ fn has_double_attr(attrs: &[syn::Attribute]) -> bool {
     })
 }
 
-/// The crate's first-party crates: its own `[package].name` plus every `path`
-/// dependency (your own crates, run for real), hyphens normalized to underscores.
-/// In a `tests/` integration crate the library under test is referenced by its
-/// crate name (not `crate::`, which is the test crate itself). Registry deps —
-/// including `mockall` / `mockall_double` — are external and absent here. Empty
-/// when there is no `Cargo.toml` at `root`.
+/// The crate's own `[package].name` plus every `path` dependency, hyphens normalized to
+/// underscores. A `tests/` crate names the library under test by crate name rather than
+/// `crate::`, so the name is what a `#[double]` import is matched against.
 fn first_party_crates(root: &Path) -> Result<BTreeSet<String>> {
     let manifest = root.join("Cargo.toml");
     let mut set = BTreeSet::new();
@@ -210,10 +168,9 @@ fn first_party_crates(root: &Path) -> Result<BTreeSet<String>> {
     Ok(set)
 }
 
-/// `true` when `file` (under `root`) is a Rust integration test — a `*.rs` file
-/// with a `tests` directory in its `root`-relative path. Unit tests are inline
-/// `#[cfg(test)]` in `src/`, where doubling a collaborator is correct isolation;
-/// only `tests/` crates run first-party for real and so are integration subjects.
+/// `true` when `file` (under `root`) is a Rust integration test — a `*.rs` file with a
+/// `tests` component. An inline `#[cfg(test)]` unit test doubles its collaborators by
+/// design; only a `tests/` crate runs first-party code for real.
 fn is_integration_test(root: &Path, file: &Path) -> bool {
     file.strip_prefix(root)
         .unwrap_or(file)
@@ -221,9 +178,7 @@ fn is_integration_test(root: &Path, file: &Path) -> bool {
         .any(|component| component.as_os_str() == "tests")
 }
 
-/// Walks one parsed file, flagging out-of-module calls inside `#[cfg(test)]`
-/// modules. `test_depth` counts how deep we are inside such modules, so a call in
-/// non-test code is ignored.
+/// Walks one parsed file, flagging out-of-module calls inside `#[cfg(test)]` modules.
 struct IsolationVisitor<'a> {
     file: &'a Path,
     deps: &'a BTreeSet<String>,
@@ -286,30 +241,25 @@ impl<'ast> Visit<'ast> for IsolationVisitor<'_> {
     }
 }
 
-/// Why a call's leading path is out-of-module, or `None` when the call stays
-/// in-module (or is unresolvable, and so deliberately not flagged — the `syn`
-/// heuristic's documented limit).
+/// Why a call's leading path is out-of-module, or `None` when it stays in-module or is
+/// unresolvable — an unresolvable path is not flagged, the `syn` heuristic's known limit.
 fn classify(path: &syn::Path, deps: &BTreeSet<String>) -> Option<&'static str> {
     let segs: Vec<String> = path.segments.iter().map(|s| s.ident.to_string()).collect();
     match segs.first().map(String::as_str)? {
-        // `self` / `Self` are local; a single `super::` is the unit under test.
         "self" | "Self" => None,
         "super" => (segs.get(1).map(String::as_str) == Some("super")).then_some("ancestor module"),
         "crate" => Some("first-party module"),
         "std" => is_effectful_std(&segs).then_some("effectful std"),
         // `core`/`alloc` carry no effectful APIs.
         "core" | "alloc" => None,
-        // Any other leading segment is in-module unless it names an external
-        // crate; a local type/fn (incl. `super::*`-imported) is not flagged.
+        // A local type or fn, including one imported by `super::*`, is in-module.
         other => deps.contains(other).then_some("external crate"),
     }
 }
 
-/// `true` for an effectful `std` path — filesystem, network, process, env,
-/// threads, OS, the clock (`SystemTime::now` / `Instant::now`), or real-handle
-/// I/O (`stdin`/`stdout`/`stderr`). Pure std is allowed: `std::io::Cursor` and the
-/// I/O traits, `time::Duration`, `collections`, `fmt`, … — `internals/rust/`
-/// `testing.md` makes `Cursor` the idiomatic in-memory unit-test tool.
+/// `true` for an effectful `std` path — fs, net, process, env, threads, OS, the clock, or
+/// real-handle I/O. Pure `std` stays in-module: `internals/rust/testing.md` makes
+/// `io::Cursor` the idiomatic in-memory unit-test tool.
 fn is_effectful_std(segs: &[String]) -> bool {
     match segs.get(1).map(String::as_str) {
         Some("fs" | "net" | "process" | "env" | "thread" | "os") => true,
@@ -328,8 +278,7 @@ fn is_effectful_std(segs: &[String]) -> bool {
 }
 
 /// Flatten a `use` tree into `(path, is_glob)` leaves: `use a::{b, c::*}` yields
-/// `([a, b], false)` and `([a, c], true)`. A rename (`use a::b as c`) is judged by
-/// its source path `[a, b]`.
+/// `([a, b], false)` and `([a, c], true)`. A rename is judged by its source path.
 fn flatten_use(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<(Vec<String>, bool)>) {
     match tree {
         syn::UseTree::Path(path) => {
@@ -356,27 +305,20 @@ fn flatten_use(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<(Vec
     }
 }
 
-/// Why a `use` import reaches out of the test's own module, or `None` when it
-/// stays in-module. The one legal glob is `super::*`; any other glob is foreign. A
-/// named import is judged by its root like a call — `crate::`, an external crate,
-/// or effectful `std` are out; `super`/`self`, pure `std`, and a local name are in.
+/// Why a `use` reaches out of the test's own module, or `None` when it stays in-module.
+/// The one legal glob is `super::*`; a named import is judged by its root like a call.
 fn classify_use(segs: &[String], is_glob: bool, deps: &BTreeSet<String>) -> Option<&'static str> {
     match segs.first().map(String::as_str)? {
-        // `super::*` / `super::Thing` are the unit under test; `super::super::…`
-        // reaches past it.
         "super" => (segs.get(1).map(String::as_str) == Some("super")).then_some("ancestor module"),
         "self" | "Self" => None,
         "crate" => Some("first-party module"),
         "std" if is_effectful_std(segs) => Some("effectful std"),
-        // Pure `std` / `core` / `alloc`: a named import is in-module, but a glob of
-        // anything but `super` is foreign.
+        // A glob of anything but `super` is foreign, even for pure `std`.
         "std" | "core" | "alloc" => is_glob.then_some("glob import"),
         other => {
             if deps.contains(other) {
                 Some("external crate")
             } else {
-                // A local module/type: a named import is in-module; a non-`super`
-                // glob is still foreign.
                 is_glob.then_some("glob import")
             }
         }
@@ -395,8 +337,7 @@ fn render_use(segs: &[String], is_glob: bool) -> String {
     out
 }
 
-/// Render a path back to `a::b::c` for the message (idents only; generic args
-/// dropped).
+/// Render a path back to `a::b::c` for the message; generic args are dropped.
 fn render_path(path: &syn::Path) -> String {
     let mut out = String::new();
     if path.leading_colon.is_some() {
@@ -411,9 +352,8 @@ fn render_path(path: &syn::Path) -> String {
     out
 }
 
-/// `true` when `attrs` carries a `#[cfg(test)]` gate (including `cfg(all(test, …))`
-/// / `cfg(any(test, …))`) — the signal for an inline unit-test module. Shared with
-/// the colocated-test presence rule ([`crate::colocated_test::missing_inline_tests`]).
+/// `true` when `attrs` carries a `#[cfg(test)]` gate, including `cfg(all(test, …))` and
+/// `cfg(any(test, …))` — the signal for an inline unit-test module.
 pub(crate) fn has_cfg_test(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
         attr.path().is_ident("cfg")
@@ -425,26 +365,20 @@ pub(crate) fn has_cfg_test(attrs: &[syn::Attribute]) -> bool {
     })
 }
 
-/// `true` when a `cfg(...)` token stream *positively requires* the `test` ident —
-/// a bare `test` reached under an **even** number of `not(...)` negations (recursing
-/// into `all(...)` / `any(...)` groups). `#[cfg(not(test))]` gates production code
-/// for non-test builds, so it does not count; a `feature = "test"` string
-/// literal never counts.
+/// `true` when a `cfg(...)` predicate positively requires `test`. `#[cfg(not(test))]` gates
+/// production code for non-test builds, and a `feature = "test"` string never counts.
 fn cfg_mentions_test(tokens: proc_macro2::TokenStream) -> bool {
     cfg_requires_test(tokens, false)
 }
 
-/// Walk a `cfg(...)` predicate's tokens, returning `true` when a bare `test` ident
-/// is reached with `negated == false` — i.e. under an even number of enclosing
-/// `not(...)` groups. `negated` flips for the contents of each `not(...)`, so
-/// `not(test)` (and any oddly-negated `test`) is not a positively-required test cfg.
+/// `true` when a bare `test` ident is reached under an even number of enclosing `not(...)`
+/// groups. `negated` flips inside each `not(...)`, so `not(test)` does not qualify.
 fn cfg_requires_test(tokens: proc_macro2::TokenStream, negated: bool) -> bool {
     let mut iter = tokens.into_iter().peekable();
     while let Some(tt) = iter.next() {
         match tt {
             proc_macro2::TokenTree::Ident(id) if id == "not" => {
-                // `not` applies to the immediately following group; recurse into it
-                // with the negation parity flipped.
+                // `not` applies to the group immediately following it.
                 if let Some(proc_macro2::TokenTree::Group(group)) = iter.peek() {
                     let stream = group.stream();
                     iter.next();
@@ -467,11 +401,9 @@ fn cfg_requires_test(tokens: proc_macro2::TokenStream, negated: bool) -> bool {
     false
 }
 
-/// The crate's normal `[dependencies]` names (hyphens normalized to underscores,
-/// the form used in paths) — the external crates whose calls are out-of-module.
-/// `[dev-dependencies]` are test tooling (`mockall`, `rstest`, …) and are
-/// deliberately excluded: a unit test uses its framework for real. Returns an
-/// empty set when there is no `Cargo.toml` at `root`.
+/// The crate's `[dependencies]` names, hyphens normalized to underscores — the external
+/// crates whose calls are out-of-module. `[dev-dependencies]` are excluded: a unit test
+/// uses its framework (`mockall`, `rstest`, …) for real.
 fn external_deps(root: &Path) -> Result<BTreeSet<String>> {
     let manifest = root.join("Cargo.toml");
     if !manifest.is_file() {
@@ -490,7 +422,6 @@ fn external_deps(root: &Path) -> Result<BTreeSet<String>> {
     Ok(deps)
 }
 
-/// Recursively collect every `*.rs` file under `dir` into `out`.
 fn collect_rust_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
@@ -590,7 +521,6 @@ mod tests {
     #[test]
     fn effectful_std_policy() {
         let segs = |p: &str| p.split("::").map(str::to_string).collect::<Vec<_>>();
-        // effectful — flagged
         assert!(is_effectful_std(&segs("std::fs::read")));
         assert!(is_effectful_std(&segs("std::net::TcpStream::connect")));
         assert!(is_effectful_std(&segs("std::env::var")));
@@ -598,7 +528,6 @@ mod tests {
         assert!(is_effectful_std(&segs("std::thread::sleep")));
         assert!(is_effectful_std(&segs("std::time::SystemTime::now")));
         assert!(is_effectful_std(&segs("std::io::stdout")));
-        // pure — allowed
         assert!(!is_effectful_std(&segs("std::collections::HashMap")));
         assert!(!is_effectful_std(&segs("std::io::Cursor")));
         assert!(!is_effectful_std(&segs("std::time::Duration")));
@@ -642,7 +571,6 @@ mod tests {
             &module("#[cfg(feature = \"test\")] mod t {}").attrs
         ));
         assert!(!has_cfg_test(&module("mod t {}").attrs));
-        // `not(test)` gates production code, not a test module.
         assert!(!has_cfg_test(&module("#[cfg(not(test))] mod t {}").attrs));
         assert!(!has_cfg_test(
             &module("#[cfg(all(not(test), unix))] mod t {}").attrs
@@ -650,7 +578,6 @@ mod tests {
         assert!(!has_cfg_test(
             &module("#[cfg(not(all(test, unix)))] mod t {}").attrs
         ));
-        // Even negation parity restores a positively-required `test`.
         assert!(has_cfg_test(
             &module("#[cfg(not(not(test)))] mod t {}").attrs
         ));
@@ -671,8 +598,7 @@ mod tests {
     use std::io::Cursor;
 }
 ";
-        // Flagged: the crate glob, the crate named import, the external crate, and
-        // effectful `std::fs` — not `super::*` / `super::Thing` / pure std.
+        // Flagged: the crate glob, the crate named import, `rand`, and `std::fs`.
         let violations = violations_in(src, &["rand"]);
         assert_eq!(violations.len(), 4, "got {violations:?}");
         assert!(violations.iter().all(|v| v.rule == RULE_IMPORT));
@@ -682,7 +608,6 @@ mod tests {
     fn classify_use_roots() {
         let deps: BTreeSet<String> = ["rand"].iter().map(|s| s.to_string()).collect();
         let segs = |p: &str| p.split("::").map(str::to_string).collect::<Vec<_>>();
-        // in-module (None)
         assert_eq!(classify_use(&segs("super"), true, &deps), None); // `use super::*`
         assert_eq!(classify_use(&segs("super::Thing"), false, &deps), None);
         assert_eq!(classify_use(&segs("self::helper"), false, &deps), None);
@@ -691,7 +616,6 @@ mod tests {
             None
         );
         assert_eq!(classify_use(&segs("std::io::Cursor"), false, &deps), None);
-        // out-of-module
         assert_eq!(
             classify_use(&segs("super::super"), true, &deps),
             Some("ancestor module")
@@ -712,7 +636,6 @@ mod tests {
             classify_use(&segs("std::fs"), false, &deps),
             Some("effectful std")
         );
-        // a non-`super` glob is foreign even for pure std
         assert_eq!(
             classify_use(&segs("std::collections"), true, &deps),
             Some("glob import")
@@ -749,8 +672,7 @@ use rand::rngs::ThreadRng;
 #[double]
 use crate::support::Helper;
 ";
-        // Only the first-party `widget` double is flagged; `rand` (external) and
-        // `crate::` (the test crate itself, not the library under test) are not.
+        // Only `widget` is first-party: `rand` is external and `crate::` is the test crate.
         let violations = integration_violations_in(src, &["widget"]);
         assert_eq!(violations.len(), 1, "got {violations:?}");
         assert_eq!(violations[0].rule, RULE_DOUBLE);

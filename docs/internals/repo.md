@@ -334,6 +334,16 @@ and the `hermetic-cli` download in the reusable workflow; no `inputs.hermetic` a
 job there; and, in each caller file, a `build-cli` job plus a `needs: [build-cli]` edge on every
 `uses:` call (without the edge the build races the download and fails flaky).
 
+The fallback half of that contract is asserted **per step**, not file-wide. `CLI_COMMAND` is a
+step-local `env:` value, so each of the ten steps running the fallback carries its own
+`CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}` line; drop one and that step keeps the
+`${CLI_COMMAND:-` text while silently expanding to the published npx binary, so a file-wide
+substring check passes on nine wired steps out of ten and Layer 1 is off for the tenth with no
+signal. `checks/hermetic_wired/cli_command_env.py` bounds every `steps:` list item to its own
+lines and reports each one that runs the fallback without the env line, naming it. The file-wide
+needle stays as the non-vacuity guard: a workflow that runs the fallback nowhere would satisfy
+the per-step rule vacuously.
+
 The acceptance bar (#356): a PR that changes `detect`'s behavior, or a rule's, goes **red in its
 own CI** before merge when that change breaks something. There is no dedicated acceptance job —
 hermetic mode has no input, so every `uses:` call in the two caller workflows is the acceptance

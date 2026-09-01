@@ -135,10 +135,8 @@ def test_apply_defaults_swallows_errors(mock_decide):
 
 
 def test_hook_is_registered_as_a_pytest_wrapper():
-    # The decorator's *effect* (pytest dispatching this before pytest-cov) only
-    # shows up in a live run, but pluggy records the opts on the function, so the
-    # registration itself is unit-checkable — killing "remove decorator" and
-    # "wrapper=True -> False".
+    # The decorator's dispatch order only shows up in a live run, but pluggy records the opts
+    # on the function, so "remove decorator" and "wrapper=True -> False" are still killable.
     assert hooks.pytest_load_initial_conftests.pytest_impl["wrapper"] is True
 
 

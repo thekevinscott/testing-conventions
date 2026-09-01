@@ -282,8 +282,13 @@ checks rows, so a consumer's checks UI is unchanged):
   action — one `uses:` line instead of the download-artifact-plus-chmod pair repeated across all
   six rule jobs (`static`, `unit-coverage`, `coverage-changed`, `mutation`, `e2e-verify`,
   `packaging` — the five static gates share the one `static` job since #410) — and runs
-  `${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} <subcommand> …`. The
-  fallback token is deliberate and load-bearing: the workflow and action `@v0` refs are resolved
+  `${CLI_COMMAND:-npx -y "testing-conventions${VERSION:+@$VERSION}"} <subcommand> …`. That
+  `cli_command` guard is load-bearing for the `uses:` line itself, not just for whether the
+  download runs: a local `uses: ./…` ref resolves against the calling job's checkout, which for
+  an external consumer is *their* repo and carries no `.github/actions/` tree of ours. The guard
+  is non-empty only when `caller_repository` is this repo, so wherever the ref is resolved the
+  checkout already is this repo; behind any other `if:`, the same line 404s for every consumer.
+  The fallback token is deliberate and load-bearing: the workflow and action `@v0` refs are resolved
   at different moments, so a consumer can transiently pair a new workflow with an old detect that
   emits no `cli_command` — the default-expansion keeps that combination running today's exact
   npx line, and it keeps the consumer execution path byte-for-byte unrouted through any new

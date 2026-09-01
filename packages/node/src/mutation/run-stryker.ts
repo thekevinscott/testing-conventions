@@ -19,11 +19,8 @@ export interface RunStrykerOptions {
   vitestDir?: string;
 }
 
-// The bundled vitest runner plugin's absolute path. Stryker discovers plugins relative to the
-// *project* under test, not to where it was imported from — so when the rule runs the engine
-// over a consumer project, our bundled `@stryker-mutator/vitest-runner` isn't on that search
-// path. Passing its resolved path as an explicit plugin makes Stryker load our copy regardless
-// of the project's location (#246). `vitest` itself stays the consumer's (the runner's peer).
+// Stryker discovers plugins relative to the *project* under test, so a consumer project never
+// finds our bundled `@stryker-mutator/vitest-runner`; passing the resolved path loads our copy.
 const vitestRunnerPlugin = createRequire(import.meta.url).resolve('@stryker-mutator/vitest-runner');
 
 /**
@@ -38,14 +35,10 @@ export async function runStryker(options: RunStrykerOptions = {}): Promise<Norma
   const cliOptions: PartialStrykerOptions = {
     testRunner: 'vitest',
     plugins: [vitestRunnerPlugin],
-    // Stryker runs in place: mutants are applied to the project's real tree (backed up under
-    // .stryker-tmp, restored at run end) rather than to a sandbox copy, so everything the run
-    // touches resolves through the project's own node_modules. Stryker's ts-config
-    // preprocessor rewrites sandbox copies by importing `typescript` from
-    // @stryker-mutator/core's location — absent from this package's isolated production
-    // install — and stays out of an in-place run entirely.
+    // In place, so the run resolves through the project's own node_modules; a sandbox copy
+    // would invoke Stryker's ts-config preprocessor, which needs a `typescript` this package's
+    // production install does not carry.
     inPlace: true,
-    // Results come from runMutationTest()'s return value, so no file/stdout reporter is needed.
     reporters: [],
     ...(options.mutate ? { mutate: options.mutate } : {}),
     ...(options.vitestDir === undefined ? {} : { vitest: { dir: options.vitestDir } }),

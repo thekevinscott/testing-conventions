@@ -1,17 +1,7 @@
 import { defineConfig } from 'vitest/config';
 
-// The shared vitest base config (#217). Consumers extend it instead of
-// copy-pasting our coverage floor (and drifting from it):
-//
-//   import { defineConfig, mergeConfig } from 'vitest/config';
-//   import { vitestConfig } from 'testing-conventions';
-//   export default mergeConfig(vitestConfig, defineConfig({ /* overrides */ }));
-//
-// It carries the same TypeScript coverage default the CLI enforces
-// (100/100/100/100, branch on, v8 over `src`, declaration files excluded), so a
-// local `vitest --coverage` run surfaces a shortfall before CI does. The numbers
-// here are the one recommendation expressed on a second surface — keep them in
-// step with the tool's TypeScript coverage default.
+/** The shared vitest base config: the TypeScript coverage default the CLI enforces, for a
+ * consumer to extend with `mergeConfig`. Keep the numbers in step with that default. */
 export const vitestConfig = defineConfig({
   test: {
     include: ['src/**/*.test.ts'],

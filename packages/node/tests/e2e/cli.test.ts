@@ -5,18 +5,15 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-// E2E: drive the real, source-built CLI end to end — a real process against a
-// real temp directory, no mocks. CI never runs this; `e2e attest` records that
-// it ran locally and the dogfood `e2e verify` gate (#71) checks the committed
-// attestation is current. The binary is the source build the dogfood job
-// compiles; override with TESTING_CONVENTIONS_BIN if it lives elsewhere.
+// E2E: drive the real, source-built CLI against a real temp directory. `e2e attest` records
+// the local run and the dogfood `e2e verify` gate checks the committed attestation.
+// The binary is the dogfood job's source build; TESTING_CONVENTIONS_BIN overrides its path.
 const here = fileURLToPath(new URL('.', import.meta.url));
 const bin =
   process.env.TESTING_CONVENTIONS_BIN ??
   resolve(here, '../../../rust/target/release/testing-conventions');
 
-// Run `unit colocated-test` against `dir`; return the CLI's exit code
-// (execFileSync throws on a non-zero exit, carrying it as `status`).
+// execFileSync throws on a non-zero exit, carrying the code as `status`.
 function colocatedTestExit(dir: string): number {
   try {
     execFileSync(bin, ['unit', 'colocated-test', '--language', 'typescript', dir], {

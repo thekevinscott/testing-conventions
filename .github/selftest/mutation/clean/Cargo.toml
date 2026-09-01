@@ -1,6 +1,5 @@
-# Selftest crate: its colocated test asserts the real result, so every cargo-mutants
-# mutation of `add` is caught — no survivors, and `unit mutation` passes (#204).
-# `[workspace]` keeps it standalone (not part of the repo's cargo workspace).
+# Selftest crate: its colocated test asserts the real result, so every mutation of `add` is
+# caught and `unit mutation` passes. `[workspace]` keeps it standalone.
 [package]
 name = "selftest_mutation_clean"
 version = "0.0.0"

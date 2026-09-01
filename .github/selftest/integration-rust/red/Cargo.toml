@@ -1,5 +1,5 @@
 # Red self-test crate `widget`: its integration test doubles the crate under test.
-# Parsed by `syn` (never compiled); `[workspace]` keeps it standalone.
+# Parsed by `syn`, never compiled; `[workspace]` keeps it standalone.
 [package]
 name = "widget"
 version = "0.0.0"

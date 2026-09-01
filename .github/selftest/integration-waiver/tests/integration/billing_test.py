@@ -1,9 +1,6 @@
-# Integration test that trips `no-constant-patch` (#52): it patches a module-global
-# UPPER_CASE constant (`widget.MAX_RETRIES`). The patch lives in a fixture (so
-# `no-inline-patch` does not fire) and first-party code runs for real — the one
-# remaining violation is the constant patch, which a `[[python.exempt]]` entry in
-# testing-conventions.toml waives (#102). The reusable workflow's integration-lint
-# job only honors that waiver if it forwards `--config` (#126).
+# Integration test that trips `no-constant-patch` by patching `widget.MAX_RETRIES`. The patch
+# sits in a fixture so `no-inline-patch` stays quiet, leaving the constant patch as the one
+# violation — the one a `[[python.exempt]]` entry in testing-conventions.toml waives.
 from unittest.mock import patch
 
 import pytest

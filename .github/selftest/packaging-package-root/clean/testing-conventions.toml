@@ -1,3 +1,2 @@
-# Fixture-local config for the packaging-package-root self-test (#280): this package carries
-# no source, so only the packaging gate has anything to check — the calling job scopes to it
-# via `gates`.
+# Fixture-local config for the packaging-package-root self-test: the package carries no source,
+# so only the packaging gate has anything to check and the calling job scopes to it via `gates`.

@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { vitestConfig } from './vitest-config';
 
-// The base config is plain data — the same recommendation the CLI enforces,
-// expressed on a second surface. Pin its shape so the exported floor can't
-// silently drift from the tool's TypeScript coverage default.
+// Pin the config's shape so the exported floor can't drift from the CLI's TypeScript default.
 describe('vitestConfig', () => {
   const test = vitestConfig.test;
   const coverage = test?.coverage;

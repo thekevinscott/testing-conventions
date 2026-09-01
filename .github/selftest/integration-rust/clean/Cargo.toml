@@ -1,17 +1,12 @@
-# Clean self-test crate `gadget`: its integration test runs first-party code for
-# real and doubles nothing, so it passes `integration lint`; its inline unit test
-# covers every line, so the unit suite alone clears the zero-config Rust coverage
-# floor (#206) under unit-suite scoping (#265). No deps, so `[workspace]` keeps it
-# standalone.
+# Clean self-test crate `gadget`: its integration test doubles nothing so `integration lint`
+# passes, and its inline unit test covers every line so the unit suite clears the coverage
+# floor. `[workspace]` keeps it standalone.
 [package]
 name = "gadget"
 version = "0.0.0"
 edition = "2021"
-# #351 generalized packaging_build to Rust (`cargo package`), so this fixture's own crate is now
-# built and scanned by the packaging job too — `cargo package` ships `tests/` by default, which
-# the packaging gate rejects as a shipped test file (#364). `integration lint` and the
-# coverage/mutation jobs still run `tests/integration.rs` from the source tree, never from the
-# package, so excluding it from the package has no effect on what those jobs measure.
+# `cargo package` ships `tests/` by default and the packaging gate rejects a shipped test file;
+# the lint and coverage jobs read `tests/integration.rs` from the source tree, not the package.
 exclude = ["tests/*"]
 
 [workspace]

@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MutantResult, MutantStatus } from '@stryker-mutator/api/core';
 
-// Stryker is the one collaborator; mock it so `runStryker` runs without a real mutation run
-// (the real run is exercised end-to-end by the rule's integration/e2e suites). `vi.hoisted`
-// exposes the spies to the hoisted `vi.mock` factory.
+// Mock Stryker so `runStryker` runs without a real mutation run, which the rule's
+// integration/e2e suites cover. `vi.hoisted` exposes the spies to the hoisted `vi.mock` factory.
 const { runMutationTest, ctorOptions } = vi.hoisted(() => ({
   runMutationTest: vi.fn<() => Promise<MutantResult[]>>(),
   ctorOptions: [] as Array<Record<string, unknown>>,
@@ -47,9 +46,7 @@ describe('runStryker', () => {
 
     const survivors = await runStryker();
 
-    // In-place execution is part of the contract: the run mutates the real tree, so the
-    // ts-config preprocessor and every upward or tooling reference resolve through the
-    // project itself.
+    // In-place execution is part of the contract: a sandbox copy resolves tooling elsewhere.
     expect(ctorOptions[0]).toMatchObject({ testRunner: 'vitest', reporters: [], inPlace: true });
     // The bundled vitest-runner is passed by resolved path so Stryker loads our copy.
     expect(ctorOptions[0].plugins).toEqual([expect.stringContaining('vitest-runner')]);

@@ -2,11 +2,9 @@
 import { fileURLToPath } from 'node:url';
 import { main } from 'bin-shim';
 
-// The TypeScript `unit mutation` arm runs Stryker through the bundled Node adapter (#246): the
-// rust binary spawns `node` on it, but a Rust binary can't reliably locate a JS file in the npm
-// tree. The Node launcher — which knows its own `dist/` — hands the binary the adapter's path as
-// an explicit `--ts-mutation-adapter` CLI argument, appended only to a `unit mutation` invocation
-// (the only command that reads it). The binary errors clearly if the arm runs without it.
+// The rust binary cannot locate the bundled mutation adapter in the npm tree, so the launcher —
+// which knows its own `dist/` — passes the path as `--ts-mutation-adapter` on the one command
+// that reads it. The binary errors if the arm runs without it.
 const args = process.argv.slice(2);
 const isUnitMutation = args[0] === 'unit' && args[1] === 'mutation';
 const adapter = fileURLToPath(new URL('../mutation/main.js', import.meta.url));

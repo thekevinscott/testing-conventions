@@ -5,7 +5,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from checks.cli_node_engine_wired.cli import cli
+from checks.cli_node_engine_wired.cli import REUSABLE_WORKFLOW, cli, cli_jobs
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -33,7 +33,7 @@ def test_passes_on_a_wired_fixture(tmp_path):
     good.write_text(WIRED)
     result = CliRunner().invoke(cli, [str(good), manifest_at(tmp_path)])
     assert result.exit_code == 0
-    assert "every CLI-invoking job provisions node 24 or newer" in result.output
+    assert "all 1 CLI-invoking jobs provision node 24 or newer" in result.output
 
 
 def test_fails_when_the_setup_node_step_is_gated_by_a_language(tmp_path):
@@ -65,4 +65,9 @@ def test_default_path_passes_against_the_real_workflow_and_manifest():
     finally:
         os.chdir(old)
     assert result.exit_code == 0
-    assert "every CLI-invoking job provisions node" in result.output
+    assert "CLI-invoking jobs provision node" in result.output
+
+
+def test_the_real_workflow_matches_every_job_that_invokes_the_cli():
+    names = {name for name, _ in cli_jobs((REPO_ROOT / REUSABLE_WORKFLOW).read_text())}
+    assert names == {"static", "unit-coverage", "coverage-changed", "mutation", "packaging", "e2e-verify"}

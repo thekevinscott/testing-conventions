@@ -5,6 +5,7 @@ from checks.cli_node_engine_wired.cli import (
     NODE_PACKAGE_MANIFEST,
     REUSABLE_WORKFLOW,
     cli,
+    cli_jobs,
     engine_floor,
     violations,
 )
@@ -68,6 +69,10 @@ def test_a_job_that_invokes_no_cli_needs_no_setup_node():
     assert violations("jobs:\n  detect:\n    runs-on: ubuntu-latest\n", 24) == []
 
 
+def test_cli_jobs_names_only_the_jobs_that_invoke_the_cli():
+    assert [name for name, _ in cli_jobs(WIRED)] == ["static"]
+
+
 def test_engine_floor_reads_a_bare_major():
     assert engine_floor(">=24") == 24
 
@@ -91,7 +96,7 @@ def test_echoes_the_floor_on_a_wired_workflow(tmp_path, capsys):
     manifest = tmp_path / "package.json"
     manifest.write_text(json.dumps({"engines": {"node": ">=24"}}))
     cli.callback(workflow=str(workflow), manifest=str(manifest))
-    assert "every CLI-invoking job provisions node 24 or newer" in capsys.readouterr().out
+    assert "all 1 CLI-invoking jobs provision node 24 or newer" in capsys.readouterr().out
 
 
 def test_raises_naming_every_problem_on_an_unwired_workflow(tmp_path):
@@ -106,6 +111,19 @@ def test_raises_naming_every_problem_on_an_unwired_workflow(tmp_path):
         assert "`static` invokes the CLI with no unconditional `setup-node` step" in error.message
     else:
         raise AssertionError("an unwired workflow must raise")
+
+
+def test_a_workflow_matching_no_cli_invocation_fails_rather_than_passing_vacuously(tmp_path):
+    workflow = tmp_path / "wf.yml"
+    workflow.write_text(WIRED.replace('npx -y "testing-conventions', "pnpm exec testing-conventions"))
+    manifest = tmp_path / "package.json"
+    manifest.write_text(json.dumps({"engines": {"node": ">=24"}}))
+    try:
+        cli.callback(workflow=str(workflow), manifest=str(manifest))
+    except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
+        assert "inspected nothing and would pass at any node pin" in error.message
+    else:
+        raise AssertionError("a workflow matching no invocation must raise")
 
 
 def test_declares_the_workflow_and_manifest_arguments_with_their_defaults():

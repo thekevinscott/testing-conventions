@@ -21,12 +21,15 @@ SETUP_NODE = re.compile(
 )
 
 
+def cli_jobs(text: str) -> list[tuple[str, str]]:
+    """The `(name, block)` jobs in workflow `text` that invoke the published CLI."""
+    return [(name, block) for name, block in iter_job_blocks(text) if CLI_INVOCATION in block]
+
+
 def violations(text: str, floor: int) -> list[str]:
     """The CLI-invoking jobs in workflow `text` that do not unconditionally provision node `floor`."""
     problems = []
-    for name, block in iter_job_blocks(text):
-        if CLI_INVOCATION not in block:
-            continue
+    for name, block in cli_jobs(text):
         pinned = [int(major) for major in SETUP_NODE.findall(block)]
         if not pinned:
             problems.append(f"`{name}` invokes the CLI with no unconditional `setup-node` step")
@@ -48,10 +51,17 @@ def engine_floor(requirement: str) -> int:
 @click.argument("manifest", default=NODE_PACKAGE_MANIFEST, type=click.Path())
 def cli(workflow: str, manifest: str) -> None:
     floor = engine_floor(json.loads(Path(manifest).read_text())["engines"]["node"])
-    problems = violations(Path(workflow).read_text(), floor)
+    text = Path(workflow).read_text()
+    jobs = cli_jobs(text)
+    if not jobs:
+        raise CheckFailed(
+            f"no job in `{workflow}` matches `{CLI_INVOCATION}`, so this check inspected nothing and "
+            "would pass at any node pin — point `CLI_INVOCATION` at the invocation the workflow now uses"
+        )
+    problems = violations(text, floor)
     if problems:
         raise CheckFailed(
             "a job invokes the published CLI on a node below its own `engines.node` floor, so npm "
             f"resolves the bare name to an older release: {'; '.join(problems)}"
         )
-    click.echo(f"every CLI-invoking job provisions node {floor} or newer")
+    click.echo(f"all {len(jobs)} CLI-invoking jobs provision node {floor} or newer")

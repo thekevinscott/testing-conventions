@@ -1,15 +1,6 @@
-"""Validated-promotion steps for the verify-and-promote workflow — repo-only (#357, #321).
-
-Backs the `tc-checks verify-release` group: the three steps `move-major-tag.yml` runs before
-advancing `@v0` — resolve the just-published version, check the remote `detect`-action fetch
-layout at the release commit, and dispatch + poll the version-pinned self-test + dogfood suites.
-Each subcommand threads its argument into `checks.utils.verify_release` and then raises or
-echoes; `cli_test.py` drives those callbacks against a patched `vr`, so only a real run
-reaches real git/gh.
-
-A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
-untested prose and exposed to the GitHub Actions `${{ }}` templating trap.
-"""
+"""Backs `tc-checks verify-release`: the three steps `move-major-tag.yml` runs before advancing
+`@v0` — resolve the published version, check the remote `detect` fetch layout, and dispatch and
+poll the version-pinned self-test and dogfood suites."""
 from __future__ import annotations
 
 import click

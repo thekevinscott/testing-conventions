@@ -201,6 +201,28 @@ def test_run_text_raises_when_the_command_exits_nonzero():
         raise AssertionError("a failing git command must raise")
 
 
+def test_run_text_asks_subprocess_to_capture_and_decode():
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append(kwargs)
+        return _Result(stdout="testing-conventions-npm-v0.0.1\n")
+
+    resolve_version("thesha", run=run)
+    assert seen == [{"capture_output": True, "text": True}]
+
+
+def test_run_bytes_captures_without_decoding_and_forwards_its_extras():
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append(kwargs)
+        return _Result(stdout=b"tar-bytes")
+
+    check_layout("thesha", run=run)
+    assert seen == [{"capture_output": True}, {"capture_output": True, "input": b"tar-bytes"}]
+
+
 def test_run_raises_on_a_signal_death():
     # A negative return code (POSIX signal, e.g. OOM-killed git) is nonzero and must raise too.
     def run(argv, **kwargs):

@@ -1,9 +1,6 @@
-"""Tests for the version-conditional TOML loader.
-
-The fallback branch is dead on whichever interpreter you run on, but it's still
-testable: force ``import tomllib`` to fail and re-import the module.
-"""
+"""Tests for the version-conditional TOML loader."""
 import importlib
+import io
 import sys
 import types
 from unittest import mock
@@ -19,13 +16,15 @@ _MODULE = "testing_conventions.config.tomlcompat"
 
 @pytest.fixture
 def tomllib_absent():
-    """Make ``import tomllib`` raise and supply a fake ``tomli`` fallback. The
-    ``tomllib: None`` entry forces the ImportError; patch.dict restores
-    sys.modules — including the cached real module dropped by the test — on exit."""
+    """Make ``import tomllib`` raise and supply a fake ``tomli``; patch.dict restores both on exit."""
     fake_tomli = types.ModuleType("tomli")
     fake_tomli.load = lambda handle: {"from": "tomli"}
     with mock.patch.dict(sys.modules, {"tomllib": None, "tomli": fake_tomli}):
         yield fake_tomli
+
+
+def test_load_parses_toml_bytes_into_a_mapping():
+    assert tomlcompat.load(io.BytesIO(b"[tool]\nname = 'ruff'\n")) == {"tool": {"name": "ruff"}}
 
 
 def test_uses_stdlib_tomllib_when_available():

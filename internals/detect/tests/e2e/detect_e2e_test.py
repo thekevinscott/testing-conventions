@@ -21,6 +21,7 @@ import detect
 SCRIPT = Path(__file__).resolve().parents[2] / "src" / "detect.py"
 REPO_ROOT = Path(__file__).resolve().parents[4]
 ACTION_YML = REPO_ROOT / ".github" / "actions" / "detect" / "action.yml"
+WORKFLOW_YML = REPO_ROOT / ".github" / "workflows" / "testing-conventions.yml"
 
 
 @pytest.fixture
@@ -122,6 +123,29 @@ def _declared_outputs():
         if value and name is not None:
             declared[name] = value.group(1).strip()
     return declared
+
+
+def _detect_job_outputs(text):
+    """The reusable workflow `detect` job's `outputs:` block, as `name -> value expression`.
+
+    `[a-z0-9_]+`, never `[a-z_]+`: three output names carry a digit (`e2e_attestation`,
+    `e2e_extra_scope`, `e2e_exclude`), and a pattern that drops them drops them from both sides
+    of a set comparison at once, leaving the equality true over a smaller set.
+    """
+    lines = text.split("\n")
+    start = lines.index("    outputs:", lines.index("  detect:")) + 1
+    outputs = {}
+    for line in lines[start:]:
+        entry = re.match(r"^      ([a-z0-9_]+): (.*)$", line)
+        if not entry:  # the next job-level key ends the block
+            break
+        outputs[entry.group(1)] = entry.group(2).strip()
+    return outputs
+
+
+def _detect_references(text):
+    """Every `needs.detect.outputs.<name>` a job reads."""
+    return set(re.findall(r"needs\.detect\.outputs\.([a-z0-9_]+)", text))
 
 
 def test_e2e_explicit_python(run_detect):
@@ -998,3 +1022,52 @@ def test_every_declared_output_forwards_the_scan_step_of_the_same_name(run_detec
     assert declared  # the block parsed; an empty dict would pass the loop vacuously
     for name, value in declared.items():
         assert value == "${{ steps.scan.outputs." + name + " }}"
+
+
+def test_the_detect_job_forwards_exactly_the_outputs_the_action_declares():
+    # A name the job's `outputs:` block omits reaches every rule job as the empty string, exactly
+    # as a name the manifest omits does — `static_languages`' failure mode, one link downstream.
+    assert set(_detect_job_outputs(WORKFLOW_YML.read_text())) == set(_declared_outputs())
+
+
+def test_every_detect_job_output_forwards_both_scan_steps_of_the_same_name():
+    # `uses:` cannot be dynamic, so each output reads the hermetic step or the published one. A
+    # rename reaching one arm of the `||` and not the other still renders — as the empty string.
+    outputs = _detect_job_outputs(WORKFLOW_YML.read_text())
+    assert outputs  # the block parsed; an empty dict would pass the loop vacuously
+    for name, value in outputs.items():
+        hermetic = "${{ steps.scan_hermetic.outputs." + name
+        assert value == hermetic + " || steps.scan_published.outputs." + name + " }}"
+
+
+def test_every_needs_detect_reference_is_a_declared_job_output():
+    # The last link: a rule job reading a name the `detect` job never declared gets the empty
+    # string, and a declared output nobody reads is a derivation computed for no one.
+    text = WORKFLOW_YML.read_text()
+    assert _detect_references(text) == set(_detect_job_outputs(text))
+
+
+def test_the_output_names_that_carry_a_digit_survive_the_parse():
+    # The `[a-z_]+` trap: these three drop out of every set at once, so the comparisons above stay
+    # true while covering two thirds of the chain.
+    parsed = set(_detect_job_outputs(WORKFLOW_YML.read_text()))
+    assert {"e2e_attestation", "e2e_extra_scope", "e2e_exclude"} <= parsed
+
+
+def test_a_dropped_job_output_breaks_the_forwarding_set():
+    # Non-vacuity, against the real file: drop one output the workflow still references.
+    text = WORKFLOW_YML.read_text()
+    dropped = re.sub(r"^      package_root: .*\n", "", text, count=1, flags=re.M)
+    assert dropped != text
+    assert "package_root" not in _detect_job_outputs(dropped)
+    assert "package_root" in _detect_references(dropped)
+    assert set(_detect_job_outputs(dropped)) != set(_declared_outputs())
+
+
+def test_a_forward_wired_to_another_steps_output_breaks_the_same_name_rule():
+    text = WORKFLOW_YML.read_text().replace(
+        "steps.scan_published.outputs.package_root", "steps.scan_published.outputs.packaging_dist", 1
+    )
+    outputs = _detect_job_outputs(text)
+    assert "packaging_dist" in outputs["package_root"]
+    assert not outputs["package_root"].endswith("scan_published.outputs.package_root }}")

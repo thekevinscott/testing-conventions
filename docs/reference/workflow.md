@@ -105,7 +105,9 @@ script and Cargo's `build.rs` compile during dependency install.
 
 `version` is empty by default, so each job resolves `testing-conventions` to the newest release
 its node satisfies. Every job that invokes the CLI provisions node 24 to match the package's
-`engines.node`, so that is the newest release outright.
+`engines.node`, so that is the newest release outright. Each job resolves it from a runner-owned
+temp prefix, so the version it runs comes from the registry and this input, and a
+`testing-conventions` entry in your own manifest is free to differ.
 The packument that resolution reads is served by `registry.npmjs.org` with `cache-control: public,
 max-age=300`, so a version becomes visible at a given CDN edge over the five minutes after it is
 published. A run starting inside that window resolves the version before it and reports whatever

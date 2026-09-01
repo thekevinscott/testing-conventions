@@ -22,6 +22,10 @@ def test_changelog_gate_is_registered():
     assert "changelog-gate" in main.commands
 
 
+def test_cli_isolation_wired_is_registered():
+    assert "cli-isolation-wired" in main.commands
+
+
 def test_cli_node_engine_wired_is_registered():
     assert "cli-node-engine-wired" in main.commands
 

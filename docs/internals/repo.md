@@ -238,6 +238,32 @@ mutable external reference inside a required check, which the CI-hermeticity inv
 Pinning the `version` input freezes a consumer on one release. Provisioning the engine is what
 resolves the newest one.
 
+### The CLI resolves outside the checkout
+
+`npx <name>` runs a binary already present in the checkout's `node_modules/.bin` in preference to
+fetching one. The suite-executing jobs install the consumer's dependencies before they invoke the
+CLI, so in a repo that carries `testing-conventions` as a devDependency those jobs ran *that* copy —
+a version the consumer picked, frozen wherever their lockfile put it. A caret does not widen below
+`0.1.0`, so `^0.0.91` means exactly 0.0.91 and stays there across every release. Jobs within one run
+disagreed with each other, too: `static` installs nothing and fetched, `mutation` installs first and
+did not.
+
+Every invocation therefore names a prefix outside the checkout:
+
+```
+npm --prefix "$RUNNER_TEMP/testing-conventions-cli" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"
+```
+
+`--prefix` moves the tree npm searches for an installed binary to a runner-owned temp directory, so
+resolution reads the registry and the `version` input, and the consumer's manifest reaches neither.
+The executed process keeps the step's working directory, so the relative scan paths the CLI takes as
+arguments resolve as before. The first invocation in a job populates the prefix and the rest reuse
+it, which also fixes the version for the whole run.
+
+The isolation and the engine pin ("The CLI runs on its own engine", above) answer different halves of
+the same question. The engine pin decides *which release the registry offers*; the prefix decides
+*whether the registry is asked at all*. A job needs both to run the release the workflow intends.
+
 ## CI provisions from disk: uv, and the source mutation adapter (#352)
 
 Inside CI jobs the Python toolchain comes from **uv, and this repo's own mutation adapter comes from the source tree** — never `pip install`, and never a fetch of the published `testing-conventions` wheel. Two separable facts sit behind that one rule:
@@ -611,6 +637,7 @@ With epic #321 complete, every #302 wiring/assertion and failure-path check live
 - **Failure-path (#328):** `isolation-red`, `below-floor`, `mutation-gate`, `python-mutation-clean`, `packaging-red`, `coverage-rust-red`, `integration-lint-new-arms-trip`, `packaging-package-root-red`, `colocated-rust-red` (#379) — each runs hermetic-CLI (`./hermetic-cli/testing-conventions`, from `config.HERMETIC_CLI`) invocations from a `CHECKS` list and asserts the exit code via `failure_reason`.
 - **github-helpers-wired (#329):** retired in #452 along with `dogfood-github-helpers.yml`, the workflow whose arms it pinned — `move_major_tag.py`, the last loose script it dogfooded, is a real package now (see "The move-major-tag helper's package").
 - **red-path-hermetic-wired (#379):** asserts every failure-path job downloads the `hermetic-cli` artifact (`needs: [build-cli]` + `./.github/actions/download-hermetic-cli`), so none drives npm-latest.
+- **cli-isolation-wired:** asserts every line naming the CLI package spec launches it through `npm --prefix "$RUNNER_TEMP/…" exec`, so resolution reads the registry rather than the checkout's `node_modules`. It also fails when it matches no line at all, so a rename of the spec surfaces as a failure rather than a vacuous pass. See "The CLI resolves outside the checkout".
 - **cli-node-engine-wired:** reads **both sides** — each CLI-invoking job's unconditional `setup-node` pin, and `engines.node` in `packages/node/package.json` — and fails when a pin sits below the floor. Raising the floor trips it without an edit, and adding a CLI-invoking job that forgets its `setup-node` trips it too. It also fails when it matches **no** job, so an edit to the `npx` invocation it keys on surfaces as a failure rather than a vacuous pass. See "The CLI runs on its own engine".
 
 The static checks hold their inspection in a pure predicate over the workflow file; the failure-path group holds a `CHECKS` list run through the shared `run_checks` orchestrator. Either way the colocated `cli_test.py` drives the pure logic in isolation, the `@click.command()` raises `CheckFailed` (a `::error::` annotation) on a failure, and a sibling `CliRunner` e2e suite exercises the real boundary — held to the same coverage and mutation bar as any shipped source.

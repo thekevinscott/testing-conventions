@@ -555,9 +555,10 @@ def compute_outputs(
     `package_root` / `ts_package_manager` / `python_env` / `provision_rust` / `config` (#277)
     are the monorepo primitive: everything a suite-executing job needs to install, build, run,
     and configure at the right directory, derived from `scan_root` and the nearest manifest
-    rather than a second, consumer-facing scoping input. `build_command` (#289) is the
-    `[python].build_command` escape hatch, read from that same discovered `config` file rather
-    than passed on the `uses:` call — the suite-executing jobs run it before the suite.
+    rather than a second, consumer-facing scoping input. `build_command` is the
+    `[<language>].build_command` build declaration, read from the package's primary-language table
+    in that same discovered `config` file; the suite-executing jobs run it before the suite and the
+    packaging job runs it before the pack.
     """
     root = Path(scan_root)
     present = [

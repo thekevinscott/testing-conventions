@@ -56,8 +56,8 @@ fn a_nested_colocated_suite_passes_the_gate() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        !stdout.contains("_test.py"),
-        "no survivor is reported against the consumer's own suite; got: {stdout}"
+        !stderr.contains("_test.py"),
+        "no survivor is reported against the consumer's own suite; got: {stderr}"
     );
     assert_eq!(
         out.status.code(),

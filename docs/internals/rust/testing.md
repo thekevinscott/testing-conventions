@@ -69,6 +69,14 @@ re-resolves the pattern to `src/src/**`, finds nothing, and the run dies on `No 
 executed`. The fixtures without a config cannot catch that, since vitest's default `include` is
 root-agnostic.
 
+A gate that excludes test files from mutation additionally carries a fixture whose colocated suite
+sits a directory **below** the scan path (`python/nested_tests`, whose `src/pkg/deep_test.py` joins
+the top-level `src/calc_test.py`). Every other fixture keeps its suite at the scan path's top
+level, where a non-recursive glob and a recursive one behave identically, so a depth regression
+stays invisible in them. The nested suite asserts `total(2, 3) == 5`, a comparison whose mutation
+to `>=` leaves the assertion true — so mutating that file yields survivors by construction, and
+the gate reports them against the consumer's own test file.
+
 ### Fixture comments are input
 
 A comment inside a fixture is data the gates read: line-scoped exemptions pin `lines` to fixed

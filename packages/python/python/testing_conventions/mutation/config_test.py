@@ -1,5 +1,42 @@
 """Unit tests for the mutation adapter's cosmic-ray config."""
+import glob
+
 from testing_conventions.mutation.config import EXCLUDES, build_config, render_config
+
+
+def test_the_excludes_match_test_files_at_every_depth(tmp_path, monkeypatch):
+    # cosmic-ray expands each exclude with `glob.glob(pattern, recursive=True)` from the scan
+    # path, so a bare `*_test.py` reaches the top level only and every nested suite is mutated
+    # as if it were production source.
+    for rel in (
+        "calc.py",
+        "calc_test.py",
+        "test_calc.py",
+        "conftest.py",
+        "pkg/deep.py",
+        "pkg/deep_test.py",
+        "pkg/test_deep.py",
+        "pkg/conftest.py",
+        "pkg/sub/deeper_test.py",
+    ):
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("")
+    monkeypatch.chdir(tmp_path)
+
+    excluded = {
+        match for pattern in EXCLUDES for match in glob.glob(pattern, recursive=True)
+    }
+
+    assert excluded == {
+        "calc_test.py",
+        "test_calc.py",
+        "conftest.py",
+        "pkg/deep_test.py",
+        "pkg/test_deep.py",
+        "pkg/conftest.py",
+        "pkg/sub/deeper_test.py",
+    }
 
 
 def test_renders_the_whole_project_when_no_modules():
@@ -7,8 +44,8 @@ def test_renders_the_whole_project_when_no_modules():
     assert 'module-path = ["."]' in toml
     assert 'name = "local"' in toml
     assert "python3 -m pytest" in toml
-    for glob in EXCLUDES:
-        assert f'"{glob}"' in toml
+    for pattern in EXCLUDES:
+        assert f'"{pattern}"' in toml
 
 
 def test_renders_the_given_modules_scoped():

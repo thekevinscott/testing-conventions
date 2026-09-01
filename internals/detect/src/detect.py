@@ -33,14 +33,11 @@ import tomllib
 from pathlib import Path
 from typing import Optional
 
-# Source globs per language. Rust is a crate (a Cargo.toml or any *.rs), detected separately.
 _SOURCE_GLOBS: dict[str, tuple[str, ...]] = {
     "python": ("*.py",),
     "typescript": ("*.ts", "*.tsx", "*.mts", "*.cts"),
 }
 
-
-# --- filesystem boundary (the external dependency an integration test mocks) ---
 
 def _any_match(root: Path, globs: tuple[str, ...]) -> bool:
     """True if any file matching one of `globs` exists anywhere under `root`."""
@@ -129,9 +126,6 @@ def has_lockfile(root: Path, name: str) -> bool:
     return (root / name).is_file()
 
 
-# --- orchestration (runs for real under both test kinds; only the fs is mocked) ---
-
-
 def derive_package_root(scan_root: Path, repo_root: Path) -> Path:
     """The package root: the nearest directory at-or-above `scan_root`, down to `repo_root`
     inclusive, holding a manifest; `repo_root` when none is found (#277). A single-package repo
@@ -150,8 +144,6 @@ def derive_package_root(scan_root: Path, repo_root: Path) -> Path:
         if ancestor == repo_root:
             break
     else:
-        # The walk never reached repo_root (scan_root isn't under it): fall back to checking
-        # repo_root itself, without crossing its boundary outward.
         candidates.append(repo_root)
     for candidate in candidates:
         if has_manifest(candidate):
@@ -159,8 +151,6 @@ def derive_package_root(scan_root: Path, repo_root: Path) -> Path:
     return repo_root
 
 
-# The pnpm floor this repo supports, handed to `pnpm/action-setup` only when the consumer's
-# manifest names no version of its own (#465, #475).
 PNPM_FLOOR = ">=11"
 
 
@@ -369,8 +359,6 @@ def cargo_workspace_root(package_root: Path, repo_root: Path) -> Optional[Path]:
         if ancestor == repo_root:
             break
     else:
-        # The walk never reached repo_root (package_root isn't under it): fall back to
-        # checking repo_root itself, mirroring `derive_package_root`'s own boundary handling.
         ancestors.append(repo_root)
     for ancestor in ancestors:
         if "workspace" in read_cargo(ancestor):
@@ -400,8 +388,6 @@ def is_workspace_member(package_root: Path, repo_root: Path) -> bool:
         if ancestor == repo_root:
             break
     else:
-        # The walk never reached repo_root (package_root isn't under it): fall back to
-        # checking repo_root itself, mirroring `derive_package_root`'s own boundary handling.
         ancestors.append(repo_root)
     return any("workspace" in read_cargo(ancestor) for ancestor in ancestors)
 
@@ -540,25 +526,7 @@ def compute_outputs(
 ) -> dict[str, str]:
     """The detected sets, as `name -> value` strings for GITHUB_OUTPUT.
 
-    `languages` (python/typescript present) drives the co-change job — rust units are inline
-    `#[cfg(test)]` modules, so a sibling test can't go stale and co-change doesn't apply. The
-    whole-tree colocated-test set, the `static_languages` set (the `static` job's matrix, whose
-    steps run the five static gates, #410), the `one_function_languages` set, and the
-    lint/isolation and coverage sets add Rust whenever a crate is present — the rust presence arm checks the inline module (#40/#274), and
-    Rust coverage is zero-config now (`lines = 100` by default, #206), so neither waits for config.
-    `packaging_dist` is looked for at the derived `package_root` (#280) — a per-package `uses:`
-    call inspects only its own package's `dist/`; a repo-root `dist/` counts only when the
-    derived package root IS the repo root, which every current single-package consumer's is.
-    `e2e_attestation` is likewise looked for at `package_root` (#281) — a monorepo package
-    carries its own attestation, exactly like `e2e verify <path>` checks it. Either lets the
-    packaging and e2e-verify jobs run by default and skip — never fail — when absent (#186).
-    `package_root` / `ts_package_manager` / `python_env` / `provision_rust` / `config` (#277)
-    are the monorepo primitive: everything a suite-executing job needs to install, build, run,
-    and configure at the right directory, derived from `scan_root` and the nearest manifest
-    rather than a second, consumer-facing scoping input. `build_command` is the
-    `[<language>].build_command` build declaration, read from the package's primary-language table
-    in that same discovered `config` file; the suite-executing jobs run it before the suite and the
-    packaging job runs it before the pack.
+    See `docs/internals/repo.md` for what each matrix and package-root output means.
     """
     root = Path(scan_root)
     present = [
@@ -589,64 +557,27 @@ def compute_outputs(
     cargo_target_dir = derive_cargo_target_dir(package_root_rel, workspace_root_rel)
     return {
         "languages": _to_json(present),
-        # Whole-tree colocated-test (#274): the file-paired languages plus rust — the rust
-        # arm checks inline `#[cfg(test)]` presence (#40), so a crate rides the matrix too.
         "colocated_test_languages": _to_json(with_rust),
         "integration_lint_languages": _to_json(with_rust),
         "isolation_languages": _to_json(with_rust),
-        # The `static` job's matrix (#410): the five static gates — colocated-test (and its
-        # co-change variant), unit-lint, one-function-per-file, integration-lint — run as its
-        # steps, fanned out over this rust-inclusive union. The same set the
-        # colocated/isolation/integration sets already hold, under its own name so a future
-        # language can diverge per set without breaking the matrix.
         "static_languages": _to_json(with_rust),
-        # `unit one-function-per-file`: every detected language, rust included — the rule is
-        # capability-identical in all three, and an unconfigured rust tree reports that the rule
-        # is not enabled and passes, so the matrix carries rust rather than the workflow
-        # filtering it out.
         "one_function_languages": _to_json(with_rust),
         "coverage_languages": _to_json(with_rust),
-        # `unit mutation` (#204): the same set as coverage — present python/typescript plus
-        # rust when a crate is here — now that all three arms are at parity (#201/#202/#203).
         "mutation_languages": _to_json(with_rust),
         "packaging_dist": "true" if has_dist(package_root) else "false",
-        # #281: scoped to the package root, not the checkout root — a monorepo package
-        # carries its own attestation, exactly like `e2e verify <path>` checks it.
         "e2e_attestation": "true" if has_attestation(package_root) else "false",
         "package_root": str(package_root_rel),
         "ts_package_manager": ts_package_manager(package_root),
-        # #475: the `version` `pnpm/action-setup` gets — empty when the consumer pins
-        # `packageManager`, since the action throws on any non-string-equal pairing of the two.
         "ts_pnpm_version": ts_pnpm_version(package_root),
         "python_env": python_env(package_root),
         "provision_rust": provision_rust(package_root),
-        # #410: the workspace-aware Rust build cache location — the workspace root's `target/`
-        # for a workspace-member crate (cargo resolves it there regardless of invoking cwd), else
-        # the package root's own. Emitted unconditionally; the cache steps' own `if` guards
-        # already decide whether it matters.
         "cargo_target_dir": cargo_target_dir,
         "config": config,
-        # #289/#335: the `[<primary>].build_command` declaration, read from the package's own
-        # config (`config` above) — the suite-executing and packaging jobs run it. Read from the
-        # package's primary-language table, generalized from the old `[python]`-only lookup.
         "build_command": derive_build_command(config, bc_language),
-        # #335: the standard artifact build derived from the manifest (`uv build` / `<pm> pack` /
-        # `cargo package`), and the language to provision for it — so the packaging job builds the
-        # distribution before scanning, no caller build job. Empty when the manifest can't state a
-        # build (the job then scans a committed dist/ or a packaging_artifact, as before).
         "packaging_build": packaging_build,
         "packaging_language": primary if packaging_build else "",
-        # #333: extra e2e freshness roots and their feature-gated excludes, read from the same
-        # discovered `config` — a shared source tree beside the package that no `--scope`
-        # at-or-below the package root can reach. Rendered as repeated `--extra-scope`/`--exclude`
-        # arguments the e2e-verify run step appends; empty when the package declares none.
         "e2e_extra_scope": derive_e2e_extra_scope(config),
         "e2e_exclude": derive_e2e_exclude(config),
-        # #356: the hermetic CLI invocation — the path where the caller workflows' build-cli job
-        # staged this commit's own binary — when this repo gates itself with no pinned version;
-        # empty (-> the run line's npx fallback) for every other caller. The TS mutation adapter
-        # argument rides along pre-rendered (the #333 e2e_extra_scope pattern): the npm launcher
-        # normally appends it, and the hermetic path bypasses the launcher.
         "cli_command": _HERMETIC_CLI_COMMAND if hermetic(caller_repository, version) else "",
         "ts_mutation_adapter_args": (
             _HERMETIC_TS_ADAPTER_ARGS if hermetic(caller_repository, version) else ""

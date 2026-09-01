@@ -104,10 +104,8 @@ def _parse_output_file(text):
 def _declared_outputs():
     """The composite action's `outputs:` block, as `name -> value expression`.
 
-    `action.yml` is a hand-maintained manifest with a fixed two-space shape, read here with the
-    stdlib: `detect.py` is stdlib-only by contract (`docs/internals/repo.md`, "The scan's
-    invocation is an external contract"), and its test package carries pytest as its one
-    dev-dependency.
+    Parsed with the stdlib against the manifest's fixed two-space shape: `detect.py` is
+    stdlib-only by contract, so its test package carries pytest and nothing else.
     """
     lines = ACTION_YML.read_text().split("\n")
     start = lines.index("outputs:") + 1
@@ -139,8 +137,6 @@ def test_e2e_auto_detects_a_rust_crate(run_detect):
 
 
 def test_e2e_rust_crate_enters_the_colocated_test_matrix(run_detect):
-    # #274: the whole-tree colocated-test matrix carries rust (inline `#[cfg(test)]`
-    # presence, #40); the co-change matrix (`languages`) stays python/typescript.
     out = run_detect(sources={"Cargo.toml": '[package]\nname = "x"\n', "src/lib.rs": "pub fn f() {}\n"})
     assert out["colocated_test_languages"] == '["rust"]'
     assert out["languages"] == "[]"
@@ -178,9 +174,6 @@ def test_e2e_packaging_dist_located(run_detect):
     assert out["packaging_dist"] == "true"
 
 
-# --- #280: packaging_dist is looked for at the derived package root, not the checkout root ---
-
-
 def test_e2e_packaging_dist_found_at_the_derived_package_root(run_detect):
     out = run_detect(
         scan_path="packages/x/src",
@@ -208,8 +201,6 @@ def test_e2e_packaging_dist_at_the_repo_root_is_not_found_for_a_scoped_package(r
 
 
 def test_e2e_packaging_dist_at_the_repo_root_still_found_for_a_single_package_repo(run_detect):
-    # Regression guard: no manifest above the scan root derives package_root == "." (the
-    # checkout root), so a root-level dist/ is unchanged from today's behavior.
     out = run_detect(root_files={"dist/widget-0.1.0-py3-none-any.whl": ""})
     assert out["package_root"] == "."
     assert out["packaging_dist"] == "true"
@@ -222,28 +213,19 @@ def test_e2e_attestation_detected(run_detect):
 
 
 def test_e2e_attestation_receipts_directory_detected(run_detect):
-    # Branch-keyed receipts live under `e2e-attestations/`; a committed receipt
-    # there turns the verify-if-present gate on, exactly like the legacy single
-    # file (which stays recognized so an existing consumer's gate never silently
-    # skips mid-migration).
     out = run_detect(root_files={"e2e-attestations/feature-one-abcd012345.json": "{}"})
     assert out["e2e_attestation"] == "true"
 
 
 def test_e2e_attestation_receipts_directory_without_receipts_is_not_detected(run_detect):
-    # A stray non-receipt file under the directory is not a receipt.
     out = run_detect(root_files={"e2e-attestations/README.md": ""})
     assert out["e2e_attestation"] == "false"
 
 
 def test_e2e_runs_without_a_github_output_file(run_detect, capsys):
-    # GITHUB_OUTPUT empty: the script still runs and prints a summary, writing no output file.
     out = run_detect(languages='["python"]', sources={"widget.py": "x = 1\n"}, github_output="")
     assert out == {}
     assert "languages" in capsys.readouterr().out
-
-
-# --- #277: the monorepo package-root primitive ---
 
 
 def test_e2e_package_root_at_nested_manifest(run_detect):
@@ -314,10 +296,6 @@ def test_e2e_ts_package_manager_defaults_to_pnpm(run_detect):
 
 
 def test_e2e_ts_pnpm_version_echoes_a_packagemanager_pnpm_pin(run_detect):
-    # `pnpm/action-setup` throws "Multiple versions of pnpm specified" whenever its
-    # `version` input is set and the consumer's `packageManager` is not string-equal
-    # to it — which no range ever is. Echo the pin back: it satisfies that equality and
-    # installs exactly what deferring would (#475).
     out = run_detect(
         scan_path="packages/ts/src",
         root_files={
@@ -329,8 +307,6 @@ def test_e2e_ts_pnpm_version_echoes_a_packagemanager_pnpm_pin(run_detect):
 
 
 def test_e2e_ts_pnpm_version_is_never_empty_for_a_pnpm_pin(run_detect):
-    # Empty is the reusable workflow's signal for "this detect predates the output", on which
-    # it falls back to the floor. A real answer must never be mistaken for that.
     out = run_detect(
         scan_path="packages/ts/src",
         root_files={
@@ -338,12 +314,10 @@ def test_e2e_ts_pnpm_version_is_never_empty_for_a_pnpm_pin(run_detect):
             "packages/ts/src/index.ts": "export const x = 1;\n",
         },
     )
-    # Build metadata survives: the equality is against the raw remainder of the field.
     assert out["ts_pnpm_version"] == "10.33.0+sha512.abc123"
 
 
 def test_e2e_ts_pnpm_version_is_the_floor_with_no_packagemanager_field(run_detect):
-    # Nothing to defer to, and `action-setup` errors when neither is present.
     out = run_detect(
         scan_path="packages/ts/src",
         root_files={
@@ -376,8 +350,6 @@ def test_e2e_read_package_json_falls_back_to_empty_on_malformed_json(run_detect)
             "packages/ts/src/index.ts": "export const x = 1;\n",
         },
     )
-    # A malformed package.json never crashes detect: no packageManager field is readable,
-    # so ts_package_manager falls through to the lockfile tier.
     assert out["ts_package_manager"] == "npm"
 
 
@@ -471,17 +443,12 @@ def test_e2e_provision_rust_false_by_default(run_detect):
 
 
 def test_derive_package_root_falls_back_to_repo_root_when_scan_root_is_unrelated(tmp_path_factory):
-    # scan_root and repo_root live in disjoint trees, so walking up from scan_root never
-    # reaches repo_root — the walk exhausts at the filesystem root, and repo_root is appended
-    # as the final fallback candidate rather than already being one from the walk.
     scan_root = tmp_path_factory.mktemp("scan-tree")
     repo_root = tmp_path_factory.mktemp("repo-tree")
     assert detect.derive_package_root(scan_root, repo_root) == repo_root.resolve()
 
 
 def test_derive_package_root_never_searches_outside_repo_root(tmp_path_factory):
-    # A manifest sitting *above* repo_root (outside the checkout) must never be returned: the
-    # walk stops at repo_root, inclusive, even though repo_root itself carries no manifest here.
     base = tmp_path_factory.mktemp("outside-base")
     (base / "Cargo.toml").write_text('[package]\nname = "outside"\n')
     repo_root = base / "repo"
@@ -491,12 +458,6 @@ def test_derive_package_root_never_searches_outside_repo_root(tmp_path_factory):
 
 
 def test_derive_package_root_boundary_is_an_exact_match_not_an_ordering(tmp_path):
-    # A regression guard against a specific mutation-testing trap: the walk's stop condition
-    # (`ancestor == repo_root`) must be an exact match, never an ordering comparison. `repo_root`
-    # here is a disjoint sibling that sorts lexicographically *after* scan_root's own ancestor
-    # chain, so a `<=` in place of `==` would treat scan_root as already "past" repo_root and
-    # stop the walk on the very first candidate — before ever climbing to `base`, which is a
-    # real ancestor of scan_root carrying a manifest an `==`-based walk correctly finds.
     base = tmp_path / "aaa"
     scan_root = base / "pkg" / "src"
     scan_root.mkdir(parents=True)
@@ -534,14 +495,10 @@ def test_e2e_config_explicit_override_wins_verbatim(run_detect):
             "packages/py/src/widget.py": "x = 1\n",
         },
     )
-    # A caller-provided non-default value passes through unchanged even though a
-    # package-root file exists, since the explicit override always wins.
     assert out["config"] == "custom.toml"
 
 
 def test_e2e_config_explicit_override_sorts_after_the_default_lexicographically(run_detect):
-    # "zzz-custom.toml" sorts after "testing-conventions.toml", unlike "custom.toml" above
-    # (which sorts before it) — together they pin the comparison to inequality, not ordering.
     out = run_detect(
         scan_path="packages/py/src",
         config="zzz-custom.toml",
@@ -552,9 +509,6 @@ def test_e2e_config_explicit_override_sorts_after_the_default_lexicographically(
         },
     )
     assert out["config"] == "zzz-custom.toml"
-
-
-# --- #281: e2e-verify attestation discovery scoped to the package root ---
 
 
 def test_e2e_attestation_at_the_package_root_is_detected(run_detect):
@@ -570,8 +524,6 @@ def test_e2e_attestation_at_the_package_root_is_detected(run_detect):
 
 
 def test_e2e_attestation_at_the_repo_root_is_not_detected_for_a_nested_package(run_detect):
-    # The attestation moved from repo-root lookup to package-root lookup (#281): a
-    # repo-root attestation no longer counts for a scan scoped to a nested package.
     out = run_detect(
         scan_path="packages/x/src",
         root_files={
@@ -584,8 +536,6 @@ def test_e2e_attestation_at_the_repo_root_is_not_detected_for_a_nested_package(r
 
 
 def test_e2e_attestation_at_the_repo_root_is_still_detected_for_a_single_package_repo(run_detect):
-    # Regression guard: a single-package repo (no manifest above `scan_path`) still
-    # derives `package_root == repo_root`, so a repo-root attestation is unchanged.
     out = run_detect(
         scan_path="src",
         root_files={
@@ -596,13 +546,7 @@ def test_e2e_attestation_at_the_repo_root_is_still_detected_for_a_single_package
     assert out["e2e_attestation"] == "true"
 
 
-# --- #289: the [python].build_command escape hatch, read from the package's own config ---
-
-
 def test_e2e_build_command_derived_from_the_package_root_config(run_detect):
-    # The escape hatch moves from a `uses:`-call input to a `[python] build_command` key in
-    # the package's own testing-conventions.toml, discovered at the package root exactly like
-    # `config` itself (never passed on the call). `detect` opens that file and emits it.
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -619,9 +563,6 @@ def test_e2e_build_command_derived_from_the_package_root_config(run_detect):
 
 
 def test_e2e_multiline_build_command_round_trips_through_github_output(run_detect):
-    # A multi-line `build_command` (a legal TOML `"""…"""` string) must survive
-    # GITHUB_OUTPUT intact — the heredoc form, not a raw `name=value` line a newline
-    # would split into a corrupt file-command / bogus output.
     build = "cp a.tmpl a.py\ncp b.tmpl b.py"
     out = run_detect(
         scan_path="packages/py/src",
@@ -638,8 +579,6 @@ def test_e2e_multiline_build_command_round_trips_through_github_output(run_detec
 
 
 def test_e2e_build_command_from_an_explicit_config_override(run_detect):
-    # An explicit non-default `config` path is honored verbatim (like `config` today), and
-    # build_command is read from that same file.
     out = run_detect(
         scan_path="packages/py/src",
         config="packages/py/custom.toml",
@@ -656,15 +595,11 @@ def test_e2e_build_command_from_an_explicit_config_override(run_detect):
 
 
 def test_e2e_build_command_absent_is_empty(run_detect):
-    # No config file at all: byte-identical to the old empty `build_command: ''` default —
-    # no build step.
     out = run_detect(sources={"widget.py": "x = 1\n"})
     assert out["build_command"] == ""
 
 
 def test_e2e_build_command_empty_when_config_declares_none(run_detect):
-    # A package-root config with a [python] table but no build_command emits an empty
-    # build_command.
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -677,7 +612,6 @@ def test_e2e_build_command_empty_when_config_declares_none(run_detect):
 
 
 def test_e2e_build_command_empty_when_config_has_no_python_table(run_detect):
-    # A config with no [python] table at all (a rust-only config) emits an empty build_command.
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -690,8 +624,6 @@ def test_e2e_build_command_empty_when_config_has_no_python_table(run_detect):
 
 
 def test_e2e_build_command_empty_on_a_malformed_config(run_detect):
-    # A malformed testing-conventions.toml never crashes detect — build_command falls back to
-    # empty, like read_pyproject on a malformed manifest.
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -704,8 +636,6 @@ def test_e2e_build_command_empty_on_a_malformed_config(run_detect):
 
 
 def test_e2e_build_command_empty_when_value_is_not_a_string(run_detect):
-    # A non-string build_command (which the Rust config loader would separately reject) is
-    # treated as absent by detect rather than emitted verbatim — detect never crashes on it.
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -718,11 +648,6 @@ def test_e2e_build_command_empty_when_value_is_not_a_string(run_detect):
 
 
 def test_e2e_build_command_derived_for_a_manifest_less_pip_python_package(run_detect):
-    # #354/#355: a bare pip Python package (no pyproject.toml — python_env defaults to pip, #289's
-    # original case) still declares [python].build_command. #335 generalized the lookup to key off
-    # `primary_language`, which requires a manifest and returns '' here, silently dropping the
-    # build step for every manifest-less package. With exactly one language present, build_command
-    # falls back to it.
     out = run_detect(
         languages='["python"]',
         root_files={
@@ -736,8 +661,6 @@ def test_e2e_build_command_derived_for_a_manifest_less_pip_python_package(run_de
 
 
 def test_e2e_build_command_empty_when_manifest_less_and_ambiguous(run_detect):
-    # Two manifest-less languages present at once: no single language to fall back to, so
-    # build_command stays empty rather than guessing which table applies.
     out = run_detect(
         languages='["python","typescript"]',
         root_files={
@@ -748,14 +671,7 @@ def test_e2e_build_command_empty_when_manifest_less_and_ambiguous(run_detect):
     assert out["build_command"] == ""
 
 
-# --- #333: the [e2e] extra_scope / exclude freshness roots, read from the package's own config ---
-
-
 def test_e2e_extra_scope_and_exclude_rendered_as_repeated_flags(run_detect):
-    # A binding package declares the shared core beside it as an extra freshness root, with the
-    # feature-gated cli/ and bin/ excluded. detect discovers the config at the package root
-    # (like `config`/`build_command`) and renders repeated --extra-scope/--exclude arguments the
-    # e2e-verify run step appends verbatim.
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -773,14 +689,12 @@ def test_e2e_extra_scope_and_exclude_rendered_as_repeated_flags(run_detect):
 
 
 def test_e2e_extra_scope_and_exclude_absent_is_empty(run_detect):
-    # No config file at all: byte-identical to before — no extra roots, no excludes.
     out = run_detect(sources={"widget.py": "x = 1\n"})
     assert out["e2e_extra_scope"] == ""
     assert out["e2e_exclude"] == ""
 
 
 def test_e2e_extra_scope_empty_when_config_declares_no_e2e_table(run_detect):
-    # A package-root config with no [e2e] table emits empty extra-scope/exclude.
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -794,7 +708,6 @@ def test_e2e_extra_scope_empty_when_config_declares_no_e2e_table(run_detect):
 
 
 def test_e2e_extra_scope_empty_on_a_malformed_config(run_detect):
-    # A malformed testing-conventions.toml never crashes detect — extra-scope falls back to empty.
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -807,8 +720,6 @@ def test_e2e_extra_scope_empty_on_a_malformed_config(run_detect):
 
 
 def test_e2e_extra_scope_empty_when_value_is_not_a_list(run_detect):
-    # A non-list extra_scope (which the tool would separately reject) is treated as absent by
-    # detect rather than emitted — detect never crashes on it.
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -821,10 +732,6 @@ def test_e2e_extra_scope_empty_when_value_is_not_a_list(run_detect):
 
 
 def test_e2e_extra_scope_skips_blank_and_non_string_entries(run_detect):
-    # A blank string renders as an empty `--extra-scope ` argument and a non-string can't render
-    # at all, so both are skipped — detect never emits a malformed flag. (The config loader
-    # separately rejects a non-string, but a blank string is a valid `Vec<String>` entry it
-    # accepts, so the guard earns its keep.)
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -834,9 +741,6 @@ def test_e2e_extra_scope_skips_blank_and_non_string_entries(run_detect):
         },
     )
     assert out["e2e_extra_scope"] == "--extra-scope packages/rust/src"
-
-
-# --- #335: the derived packaging build (`uv build` / `<pm> pack` / `cargo package`) ---
 
 
 def test_e2e_packaging_build_is_uv_build_for_a_python_project(run_detect):
@@ -885,11 +789,6 @@ def test_e2e_packaging_build_is_cargo_package_for_a_crate(run_detect):
 
 
 def test_e2e_packaging_build_redirects_target_dir_for_a_workspace_member(run_detect):
-    # #360: `cargo package` for a workspace member always writes to the *workspace root's*
-    # target/package/, never the member's own, regardless of the invoking cwd — a plain
-    # "cargo package" would build successfully but leave the packaging job scanning an empty
-    # `packages/rust/target/package`. The derived command must redirect the target dir back to
-    # the member's own tree.
     out = run_detect(
         scan_path="packages/rust/src",
         root_files={
@@ -903,7 +802,6 @@ def test_e2e_packaging_build_redirects_target_dir_for_a_workspace_member(run_det
 
 
 def test_e2e_packaging_build_unredirected_for_a_standalone_crate_with_no_workspace(run_detect):
-    # A crate with no ancestor [workspace] table at all is unaffected — same as today.
     out = run_detect(
         sources={"Cargo.toml": '[package]\nname = "x"\n', "src/lib.rs": "pub fn f() {}\n"},
     )
@@ -911,9 +809,6 @@ def test_e2e_packaging_build_unredirected_for_a_standalone_crate_with_no_workspa
 
 
 def test_e2e_packaging_build_unredirected_for_a_crate_that_is_itself_the_workspace_root(run_detect):
-    # A single Cargo.toml carrying both [package] and [workspace] (a workspace-root package) is
-    # not a *member* of an ancestor workspace — its own target dir is already correct, so no
-    # redirect is needed.
     out = run_detect(
         sources={
             "Cargo.toml": '[package]\nname = "x"\n\n[workspace]\nmembers = ["."]\n',
@@ -924,8 +819,6 @@ def test_e2e_packaging_build_unredirected_for_a_crate_that_is_itself_the_workspa
 
 
 def test_e2e_packaging_build_unredirected_when_the_package_root_is_the_repo_root(run_detect):
-    # The crate's manifest sits at the checkout root itself (package_root == repo_root) — there
-    # is no ancestor to inspect, so `is_workspace_member` returns early without walking upward.
     out = run_detect(
         root_files={"Cargo.toml": '[package]\nname = "x"\n', "src/lib.rs": "pub fn f() {}\n"},
     )
@@ -952,9 +845,6 @@ def test_is_workspace_member_false_when_package_root_is_the_repo_root(tmp_path):
 
 
 def test_is_workspace_member_false_for_repo_root_package_even_with_an_outer_workspace(tmp_path_factory):
-    # package_root == repo_root must short-circuit before any ancestor walk — even when an
-    # ancestor *above* repo_root genuinely declares a workspace, it must never be consulted.
-    # A `==`-vs-`is` regression on that comparison would fall through to the walk and find it.
     base = tmp_path_factory.mktemp("outside-base")
     (base / "Cargo.toml").write_text('[workspace]\nmembers = ["repo"]\n')
     repo_root = base / "repo"
@@ -963,10 +853,6 @@ def test_is_workspace_member_false_for_repo_root_package_even_with_an_outer_work
 
 
 def test_is_workspace_member_true_when_an_intermediate_ancestor_declares_a_workspace(tmp_path):
-    # The workspace sits at neither package_root nor repo_root but strictly between them, so
-    # only an ancestor walk that actually iterates (not a no-op loop) can find it — repo_root
-    # itself declares no workspace, so the for/else fallback candidate alone can't explain a
-    # correct `True` here.
     repo_root = tmp_path
     mid = repo_root / "mid"
     mid.mkdir()
@@ -977,9 +863,6 @@ def test_is_workspace_member_true_when_an_intermediate_ancestor_declares_a_works
 
 
 def test_is_workspace_member_falls_back_to_repo_root_when_package_root_is_unrelated(tmp_path_factory):
-    # package_root and repo_root live in disjoint trees, so walking up from package_root never
-    # reaches repo_root — the walk exhausts and repo_root is checked as the final fallback
-    # candidate, mirroring `derive_package_root`'s own boundary handling.
     package_root = tmp_path_factory.mktemp("package-tree")
     repo_root = tmp_path_factory.mktemp("repo-tree")
     (repo_root / "Cargo.toml").write_text('[workspace]\nmembers = ["x"]\n')
@@ -987,8 +870,6 @@ def test_is_workspace_member_falls_back_to_repo_root_when_package_root_is_unrela
 
 
 def test_is_workspace_member_never_searches_outside_repo_root(tmp_path_factory):
-    # A workspace Cargo.toml sitting *above* repo_root (outside the checkout) must never count:
-    # the walk stops at repo_root, inclusive, even though repo_root itself declares no workspace.
     base = tmp_path_factory.mktemp("outside-base")
     (base / "Cargo.toml").write_text('[workspace]\nmembers = ["repo/packages/rust"]\n')
     repo_root = base / "repo"
@@ -997,11 +878,7 @@ def test_is_workspace_member_never_searches_outside_repo_root(tmp_path_factory):
     assert detect.is_workspace_member(package_root, repo_root) is False
 
 
-# --- #410: cargo_target_dir — the workspace-aware Rust build cache location ---
-
-
 def test_e2e_cargo_target_dir_unredirected_for_a_standalone_crate_with_no_workspace(run_detect):
-    # A crate with no ancestor [workspace] table caches at its own package root, unchanged.
     out = run_detect(
         sources={"Cargo.toml": '[package]\nname = "x"\n', "src/lib.rs": "pub fn f() {}\n"},
     )
@@ -1009,9 +886,6 @@ def test_e2e_cargo_target_dir_unredirected_for_a_standalone_crate_with_no_worksp
 
 
 def test_e2e_cargo_target_dir_workspace_member_redirects_to_the_workspace_root(run_detect):
-    # #410: cargo resolves `target/` at the *workspace* root regardless of the invoking cwd, so a
-    # workspace member's cache must key on the workspace root's target/, not its own — the exact
-    # miss that made dirsql's suite jobs archive (and restore) an empty directory every run.
     out = run_detect(
         scan_path="packages/rust/src",
         root_files={
@@ -1024,8 +898,6 @@ def test_e2e_cargo_target_dir_workspace_member_redirects_to_the_workspace_root(r
 
 
 def test_e2e_cargo_target_dir_unredirected_for_a_crate_that_is_itself_the_workspace_root(run_detect):
-    # A workspace-root package (its own Cargo.toml carries both [package] and [workspace]) is not
-    # a *member* of an ancestor workspace — its own target dir is already correct.
     out = run_detect(
         sources={
             "Cargo.toml": '[package]\nname = "x"\n\n[workspace]\nmembers = ["."]\n',
@@ -1036,14 +908,11 @@ def test_e2e_cargo_target_dir_unredirected_for_a_crate_that_is_itself_the_worksp
 
 
 def test_e2e_cargo_target_dir_defaults_to_the_repo_root_target_with_no_rust(run_detect):
-    # No manifest anywhere: package_root falls back to the repo root, and cargo_target_dir is
-    # emitted unconditionally — the cache steps' own `if` guards decide whether it matters.
     out = run_detect()
     assert out["cargo_target_dir"] == "./target"
 
 
 def test_e2e_packaging_build_prefers_the_wheel_for_a_pyo3_binding(run_detect):
-    # A binding carries two manifests; the published artifact is the wheel, not the core crate.
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -1057,8 +926,6 @@ def test_e2e_packaging_build_prefers_the_wheel_for_a_pyo3_binding(run_detect):
 
 
 def test_e2e_packaging_build_empty_when_the_manifest_cant_state_it(run_detect):
-    # A pyproject with no [project] table (tool config only) can't be `uv build`-ed from the
-    # manifest alone — no packaging build is derived, and the job falls back to a committed dist.
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -1071,8 +938,6 @@ def test_e2e_packaging_build_empty_when_the_manifest_cant_state_it(run_detect):
 
 
 def test_e2e_packaging_build_empty_on_a_malformed_cargo(run_detect):
-    # A malformed Cargo.toml never crashes detect — read_cargo falls back to empty, so no
-    # `[package]` is seen and no build is derived.
     out = run_detect(
         sources={"Cargo.toml": "not valid toml [[[", "src/lib.rs": "pub fn f() {}\n"},
     )
@@ -1080,17 +945,12 @@ def test_e2e_packaging_build_empty_on_a_malformed_cargo(run_detect):
 
 
 def test_e2e_packaging_build_empty_when_no_manifest_names_a_language(run_detect):
-    # No pyproject / package.json / Cargo.toml at the package root — the primary language is
-    # unresolved, so the dispatch table names no builder and no build is derived (the empty
-    # branch of `derive_packaging`).
     out = run_detect(sources={"src/widget.py": "x = 1\n"})
     assert out["packaging_build"] == ""
     assert out["packaging_language"] == ""
 
 
 def test_e2e_build_command_is_read_from_the_typescript_table(run_detect):
-    # #335: `build_command` reads the package's primary-language table — a TS package's
-    # `[typescript].build_command` (the compile-before-pack), not `[python]`.
     out = run_detect(
         scan_path="packages/ts/src",
         root_files={
@@ -1125,11 +985,8 @@ def test_published_outputs_when_a_version_is_pinned(run_detect):
 
 
 def test_every_emitted_output_is_declared_by_the_composite_action(run_detect):
-    # A composite action forwards only the outputs its manifest declares, so an output the
-    # script writes to GITHUB_OUTPUT but `action.yml` omits reaches the caller as the empty
-    # string — and an expression with a `||` fallback silently takes the fallback arm, with a
-    # green run and no signal. The two sets are one contract, asserted here as a set so the
-    # next output is covered on the day it is added rather than by a fresh one-off assertion.
+    # An emitted output the manifest omits reaches the caller as the empty string, which an
+    # expression with a `||` fallback takes as the fallback arm — green, with no signal.
     emitted = set(run_detect())
     assert emitted == set(_declared_outputs())
 

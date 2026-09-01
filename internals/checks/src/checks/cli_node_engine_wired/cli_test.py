@@ -50,6 +50,10 @@ def test_a_setup_node_gated_by_an_if_does_not_count():
     assert violations(GATED, 24) == ["`static` invokes the CLI with no unconditional `setup-node` step"]
 
 
+def test_a_job_pinning_above_the_floor_is_no_violation():
+    assert violations(WIRED.replace("node-version: 24", "node-version: 26"), 24) == []
+
+
 def test_a_job_pinning_below_the_floor_is_a_violation():
     text = WIRED.replace("node-version: 24", "node-version: 22")
     assert violations(text, 24) == ["`static` pins node 22, below the floor of 24"]

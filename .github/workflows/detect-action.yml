@@ -1,13 +1,11 @@
 name: Detect action (tests)
 
-# Red/green tests for the repo-only detect helper (internals/detect). `action.yml` stays at
-# .github/actions/detect/, the `uses:` contract consumers pin, so this trigger watches both.
-
 on:
   pull_request:
     paths:
       - 'internals/detect/**'
       - '.github/actions/detect/action.yml'
+      - '.github/workflows/testing-conventions.yml'
       - '.github/workflows/detect-action.yml'
   workflow_dispatch:
 

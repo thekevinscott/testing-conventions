@@ -367,29 +367,14 @@ def cargo_workspace_root(package_root: Path, repo_root: Path) -> Optional[Path]:
 
 
 def is_workspace_member(package_root: Path, repo_root: Path) -> bool:
-    """True when `package_root`'s crate belongs to a Cargo workspace rooted at an ancestor (#360):
-    some directory strictly above `package_root`, down to `repo_root` inclusive, has a
-    `Cargo.toml` with a `[workspace]` table. Cargo resolves the target directory — and so `cargo
-    package`'s output — at the *workspace* root regardless of the invoking working directory, so
-    a workspace member's derived build must redirect `--target-dir` back to its own tree rather
-    than let the crate land where the packaging job's scan never looks.
+    """True when `cargo_workspace_root` finds an owning workspace above `package_root` (#360).
 
-    A crate whose own `Cargo.toml` carries both `[package]` and `[workspace]` (a workspace-root
-    package) is not a *member* of an ancestor workspace — its own target dir is already correct,
-    so this only inspects ancestors, never `package_root` itself.
+    Cargo resolves the target directory — and so `cargo package`'s output — at the *workspace*
+    root regardless of the invoking working directory, so a workspace member's derived build must
+    redirect `--target-dir` back to its own tree rather than let the crate land where the
+    packaging job's scan never looks.
     """
-    package_root = package_root.resolve()
-    repo_root = repo_root.resolve()
-    if package_root == repo_root:
-        return False
-    ancestors = []
-    for ancestor in package_root.parents:
-        ancestors.append(ancestor)
-        if ancestor == repo_root:
-            break
-    else:
-        ancestors.append(repo_root)
-    return any("workspace" in read_cargo(ancestor) for ancestor in ancestors)
+    return cargo_workspace_root(package_root, repo_root) is not None
 
 
 def derive_cargo_target_dir(package_root_rel: Path, workspace_root_rel: Optional[Path]) -> str:
@@ -508,7 +493,7 @@ def hermetic(caller_repository: str, version: str) -> bool:
     artifact (the #357 post-publish verification path) and always wins. Every other caller takes
     the published `npx` path, so a consumer can neither trigger nor observe hermetic mode.
     """
-    return caller_repository == _HERMETIC_CALLER and version == ""
+    return caller_repository == _HERMETIC_CALLER and not version
 
 
 def _to_json(languages: list[str]) -> str:
@@ -585,17 +570,21 @@ def compute_outputs(
     }
 
 
-def _output_delimiter(value: str) -> str:
-    """A heredoc delimiter that appears on no line of `value`. Derived from the value's
-    hash so it's deterministic, then bumped until it can't collide with the content."""
-    base = "ghadelimiter_" + hashlib.sha256(value.encode()).hexdigest()[:32]
+def _free_of(base: str, lines: list[str]) -> str:
+    """`base`, suffixed with a counter until it matches no entry of `lines`."""
     delim = base
-    body = value.split("\n")
     counter = 0
-    while delim in body:
+    while delim in lines:
         counter += 1
         delim = f"{base}_{counter}"
     return delim
+
+
+def _output_delimiter(value: str) -> str:
+    """A heredoc delimiter that appears on no line of `value`. Derived from the value's
+    hash so it's deterministic, then bumped until it can't collide with the content."""
+    base = "ghadelimiter_" + hashlib.sha256(value.encode()).hexdigest()
+    return _free_of(base, value.split("\n"))
 
 
 def render_github_output(outputs: dict[str, str]) -> str:

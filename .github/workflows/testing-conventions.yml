@@ -133,11 +133,10 @@ name: Testing Conventions
 #
 # `rust_toolchain` (#263) is the manual override that provisions a stable Rust toolchain — with
 # a cargo registry + target cache — in the suite-executing jobs, before `build_command` runs.
-# `unit coverage` / `unit coverage --base` already auto-provision it whenever the package root's
-# manifest declares a Rust-compiling build (#277); set this by hand only for a build the
-# manifest does not express, or for `unit mutation`, which does not yet derive it. The rust
-# matrix arm always carries its own toolchain. `false` (the default) adds nothing beyond
-# auto-derivation.
+# `unit coverage`, `unit coverage --base`, and `unit mutation` already auto-provision it whenever
+# the package root's manifest declares a Rust-compiling build (#277); set this by hand only for a
+# build the manifest does not express. The rust matrix arm always carries its own toolchain.
+# `false` (the default) adds nothing beyond auto-derivation.
 #
 # Hermetic self-gating (#356): when this repo's own CI calls this workflow with no explicit
 # `version`, detect derives it (from `github.repository`, which belongs to the *calling* run —
@@ -185,7 +184,7 @@ on:
         type: string
         default: ''
       rust_toolchain:
-        description: 'Manual override: provision a stable Rust toolchain (with a cargo registry + target cache) in the suite-executing jobs, before build_command runs. unit coverage / changed-line coverage already auto-provision it when the manifest at the derived package root declares a Rust-compiling build (a Cargo.toml, a maturin backend, a napi key — #277); set this by hand only for a build the manifest does not express, or for unit mutation, which does not yet derive it. The rust matrix arm always carries its own toolchain. false (the default) adds nothing beyond auto-derivation (#263).'
+        description: 'Manual override: provision a stable Rust toolchain (with a cargo registry + target cache) in the suite-executing jobs, before build_command runs. unit coverage / changed-line coverage / unit mutation already auto-provision it when the manifest at the derived package root declares a Rust-compiling build (a Cargo.toml, a maturin backend, a napi key — #277); set this by hand only for a build the manifest does not express. The rust matrix arm always carries its own toolchain. false (the default) adds nothing beyond auto-derivation (#263).'
         type: boolean
         default: false
 

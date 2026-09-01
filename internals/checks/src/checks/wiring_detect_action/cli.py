@@ -23,8 +23,7 @@ from checks.utils.check_failed import CheckFailed
 @click.command()
 @click.argument("workflow", default=REUSABLE_WORKFLOW, type=click.Path())
 def cli(workflow: str) -> None:
-    # `uses: <maybe-prefix>actions/detect@<ref>` — the reusable workflow pins the detect action,
-    # mirroring the original grep `uses:[[:space:]]*[^[:space:]]*actions/detect@`.
+    # `uses: <maybe-prefix>actions/detect@<ref>` — the reusable workflow pins the detect action.
     if re.search(r"uses:\s*\S*actions/detect@", Path(workflow).read_text()) is None:
         raise CheckFailed(
             "the reusable workflow doesn't use the detect action — detection still runs as "

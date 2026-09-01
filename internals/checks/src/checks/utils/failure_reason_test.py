@@ -6,7 +6,6 @@ from checks.utils.failure_reason import failure_reason
 
 
 def test_red_check_flags_a_zero_exit():
-    # expect_fail=True, a zero exit is the violation.
     assert failure_reason(True, 0) == "the command exited 0, but a non-zero (failing) exit was required"
 
 

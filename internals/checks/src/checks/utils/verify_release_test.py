@@ -35,8 +35,6 @@ class _Result:
         self.returncode = returncode
 
 
-# --- pure decisions ---
-
 def test_published_version_picks_the_numeric_max_not_the_lexical_one():
     tags = [
         "testing-conventions-npm-v0.0.9",
@@ -191,8 +189,6 @@ def test_timing_constants_are_the_expected_seconds():
     assert RUN_POLL_INTERVAL_S == 10
 
 
-# --- operations (git + gh through the injected `run`) ---
-
 def test_run_text_raises_when_the_command_exits_nonzero():
     def run(argv, **kwargs):
         return _Result(returncode=2)
@@ -273,7 +269,6 @@ def test_verify_suites_creates_the_ref_dispatches_all_and_returns_conclusions():
     run = _suite_run(dispatched={"a.yml": 1, "b.yml": 2}, conclusions={1: "success", 2: "failure"})
     result = verify_suites("sha", "0.0.67", ["a.yml", "b.yml"], run=run, now=lambda: "2026-07-08T10:00:00Z")
     assert result == {"a.yml": "success", "b.yml": "failure"}
-    # Temp tag created at the sha and dispatched at, before cleanup deletes it.
     assert ["git", "push", "origin", "sha:refs/tags/verify-release-sha"] in run.calls
     dispatched = [c for c in run.calls if c[:3] == ["gh", "workflow", "run"]]
     assert [c[3] for c in dispatched] == ["a.yml", "b.yml"]

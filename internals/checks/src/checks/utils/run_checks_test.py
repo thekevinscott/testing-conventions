@@ -27,7 +27,6 @@ def _run_returning(returncode):
 
 
 def test_echoes_ok_for_every_check_that_holds(capsys):
-    # A red check whose command fails, plus a clean check whose command passes — both hold.
     fake = _run_returning(0)
     run_checks(
         [(["a"], False, "clean"), (["b"], False, "also-clean")],
@@ -40,7 +39,6 @@ def test_echoes_ok_for_every_check_that_holds(capsys):
 
 
 def test_raises_when_a_red_check_passed(capsys):
-    # expect_fail=True but the command exited 0 -> the red-path expectation is violated.
     try:
         run_checks([(["x"], True, "must-fail")], run=_run_returning(0))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
@@ -51,7 +49,6 @@ def test_raises_when_a_red_check_passed(capsys):
 
 
 def test_raises_when_a_clean_check_failed():
-    # expect_fail=False but the command exited non-zero -> the clean expectation is violated.
     try:
         run_checks([(["x"], False, "must-pass")], run=_run_returning(2))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
@@ -62,7 +59,6 @@ def test_raises_when_a_clean_check_failed():
 
 
 def test_stops_at_the_first_violation():
-    # The second check never runs once the first raises.
     fake = _run_returning(0)
     try:
         run_checks([(["first"], True, "first"), (["second"], True, "second")], run=fake)
@@ -74,8 +70,6 @@ def test_stops_at_the_first_violation():
 
 
 def test_a_trailing_command_becomes_a_single_red_path_check(capsys):
-    # A trailing command replaces CHECKS with one red-path check labelled "cli"; a non-zero exit
-    # makes that expectation hold.
     fake = _run_returning(1)
     run_checks([(["ignored"], False, "ignored")], command=("npx", "run"), run=fake)
     out = capsys.readouterr().out

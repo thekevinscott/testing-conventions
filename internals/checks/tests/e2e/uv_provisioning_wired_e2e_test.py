@@ -26,7 +26,7 @@ WIRED = (
     f"  mutation:\n    steps:\n{PYTHON_ARM}"
     "  integration-lint:\n    steps:\n      - run: echo lint\n"
 )
-# A pip arm survives beside the uv arm — the dual-provisioning shape #399 removes.
+# A pip arm survives beside the uv arm — the dual-provisioning shape the check rejects.
 UNWIRED = WIRED + (
     "      - uses: actions/setup-python@v6\n"
     "      - run: python -m pip install --quiet coverage pytest\n"

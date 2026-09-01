@@ -30,8 +30,7 @@ _SKIP_LINE = re.compile(r"(?im)^skip-changelog:")
 # subdirectory under a fragment dir is not a fragment.
 _FRAGMENT = re.compile(rf"({ROOT}/[^/]+)/({'|'.join(KINDS)})\.d/([^/]+)")
 
-# An ISO date, a kebab-case slug, and `.md`. The date is the UTC merge date; the directory already
-# names the package and the kind, so the filename carries neither.
+# An ISO date, a kebab-case slug, and `.md`; the date is the UTC merge date.
 _FRAGMENT_NAME = re.compile(r"\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md")
 
 

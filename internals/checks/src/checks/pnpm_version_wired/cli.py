@@ -33,8 +33,8 @@ from checks.utils.check_failed import CheckFailed
 
 PNPM_SETUP = "pnpm/action-setup"
 DERIVED = "needs.detect.outputs.ts_pnpm_version"
-# The floor a step falls back to when detect emits nothing for the output — i.e. a published
-# detect from before it existed. Matched as a substring, so the literal has to appear.
+# The floor a step falls back to when detect emits nothing for the output. Matched as a
+# substring, so the literal has to appear.
 FALLBACK = "|| '>=11'"
 
 

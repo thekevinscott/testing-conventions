@@ -111,8 +111,7 @@ MISSING_PULL_REQUEST_GATE = """\
     name: Packaging
 """
 
-# #333: scope/base/gate all wired, but the extra-scope/exclude wiring varies. Each keeps
-# everything the earlier checks require so the walk reaches the new branches.
+# Each variant keeps everything the earlier checks require, so the walk reaches the new branch.
 MISSING_EXTRA_SCOPE_ARG_ONLY = """\
   e2e-verify:
     if: ${{ github.event_name == 'pull_request' }}
@@ -171,8 +170,6 @@ MISSING_EXCLUDE_ENV_ONLY = """\
 
 
 def test_declares_the_workflow_argument_defaulting_to_the_reusable_workflow():
-    # Assert click's own registered metadata (the `@click.argument`) — `.callback` bypasses
-    # arg parsing, so this is what pins the decorator without a CliRunner collaborator.
     (argument,) = cli.params
     assert argument.name == "workflow"
     assert argument.default == REUSABLE_WORKFLOW
@@ -233,22 +230,19 @@ def test_extract_e2e_verify_block_is_empty_when_the_job_is_absent():
 
 
 def test_extract_e2e_verify_block_runs_to_end_when_no_next_job_follows():
-    # The e2e-verify job with no following `  packaging:` — the block extends to the end of the
-    # file (the `else len(workflow_text)` arm of the ternary).
+    # No following `  packaging:` header, so the block extends to the end of the file.
     text = '  e2e-verify:\n    run: something --scope x --base y $EXTRA_SCOPE $EXCLUDE\n'
     assert extract_e2e_verify_block(text) == text
 
 
 def test_rejects_a_scope_flag_outside_the_e2e_verify_block():
-    # Regression for the actual #294 wiring bug this replaced: a --scope elsewhere in the file
-    # (e.g. a sibling job) must not satisfy the check for the e2e-verify job specifically.
+    # A --scope in a sibling job must not satisfy the check for the e2e-verify job.
     text = "  other-job:\n    run: something --scope foo --base bar\n\n" + UNWIRED
     assert find_missing_wiring(text) is not None
 
 
 def test_rejects_a_base_flag_outside_the_e2e_verify_block():
-    # A --base in a sibling job (e.g. coverage-changed) must not satisfy the e2e-verify check:
-    # the block is extracted first, so only the e2e-verify job's own wiring counts (#319).
+    # The block is extracted first, so only the e2e-verify job's own `--base` counts.
     text = "  other-job:\n    run: something --base origin/main\n\n" + MISSING_BASE_FLAG_ONLY
     assert find_missing_wiring(text) == _BASE_ERROR
 

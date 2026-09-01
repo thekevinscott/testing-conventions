@@ -143,10 +143,8 @@ def test_raises_when_a_callers_uses_call_lacks_the_needs_edge(tmp_path):
 
 
 def test_names_the_unwired_job_even_when_an_unrelated_job_has_the_edge(tmp_path):
-    # The false negative a file-wide uses/needs *count* comparison missed: an unrelated job
-    # carrying `needs: [build-cli]` with no `uses:` call of its own numerically balances a
-    # different job that's genuinely unwired, so a count-based check would pass while the race
-    # is still real. Checking per job (not per file) can't be fooled this way.
+    # An unrelated job carrying `needs: [build-cli]` with no `uses:` call of its own numerically
+    # balances a genuinely unwired one, so a file-wide count passes while the race is real.
     workflow = _write(tmp_path, "wf.yml", WIRED)
     caller = _write(
         tmp_path,
@@ -164,8 +162,6 @@ def test_names_the_unwired_job_even_when_an_unrelated_job_has_the_edge(tmp_path)
 
 
 def test_declares_the_workflow_argument_and_variadic_callers():
-    # Assert click's own registered metadata (the decorators) — `.callback` bypasses arg
-    # parsing, so this is what pins them without a CliRunner collaborator.
     workflow, callers = cli.params
     assert workflow.name == "workflow"
     assert workflow.default == REUSABLE_WORKFLOW

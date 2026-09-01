@@ -30,7 +30,6 @@ def test_changed_files_diffs_from_the_merge_base():
     runner = _runner_returning("a.rs\nb.rs\n")
     assert changed_files("base", "head", runner=runner) == ["a.rs", "b.rs"]
     (argv, kwargs) = runner.seen[0]
-    # Three-dot: the files this branch changed, not the ones main changed after it forked.
     assert argv == ["git", "diff", "--name-only", "base...head"]
     assert kwargs == {"capture_output": True, "text": True, "check": True}
 
@@ -59,6 +58,5 @@ def test_commit_messages_returns_raw_bodies_over_the_two_dot_range():
     runner = _runner_returning("fix: x\n\nskip-changelog: y\n")
     assert commit_messages("base", "head", runner=runner) == "fix: x\n\nskip-changelog: y\n"
     (argv, kwargs) = runner.seen[0]
-    # `%B` is the raw body: the skip line is found on any line, not only a formal trailer.
     assert argv == ["git", "log", "--format=%B", "base..head"]
     assert kwargs == {"capture_output": True, "text": True, "check": True}

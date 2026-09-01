@@ -30,8 +30,6 @@ def _exit_code():
 
 
 def test_declares_the_base_and_head_sha_arguments():
-    # Assert click's own registered metadata — `.callback` bypasses arg parsing, so this is what
-    # pins the `@click.argument` decorators without a CliRunner collaborator.
     base, head = cli.params
     assert base.name == "base_sha"
     assert head.name == "head_sha"

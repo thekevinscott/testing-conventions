@@ -25,8 +25,6 @@ def test_raises_when_python_is_absent():
 
 
 def test_declares_the_isolation_languages_argument_with_its_default():
-    # Assert click's own registered metadata (the `@click.argument`) — `.callback` bypasses
-    # arg parsing, so this is what pins the decorator without a CliRunner collaborator.
     (argument,) = cli.params
     assert argument.name == "isolation_languages"
     assert argument.default == DEFAULT_ISOLATION_LANGUAGES

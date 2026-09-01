@@ -19,8 +19,7 @@ def step(version: str) -> str:
 GUARDED = "${{ " + DERIVED + " " + FALLBACK + " }}"
 WIRED_STEP = step(GUARDED)
 LITERAL_STEP = step('">=11"')
-# Reads detect but resolves to empty against a detect that predates the output — the shape that
-# blocked the first #475 release.
+# Reads detect with no fallback, so a detect predating the output leaves `version` empty.
 UNGUARDED_STEP = step("${{ " + DERIVED + " }}")
 
 
@@ -88,16 +87,12 @@ def test_raises_when_no_step_sets_a_version(tmp_path):
 
 
 def test_declares_the_workflow_argument_defaulting_to_the_reusable_workflow():
-    # Assert click's own registered metadata (the `@click.argument`) — `.callback` bypasses
-    # arg parsing, so this is what pins the decorator without a CliRunner collaborator.
     (argument,) = cli.params
     assert argument.name == "workflow"
     assert argument.default == REUSABLE_WORKFLOW
 
 
 def test_raises_on_a_derived_version_with_no_stale_detect_fallback(tmp_path):
-    # The regression that blocked the first #475 release: the published detect at release time
-    # predates the output, so an unguarded reference resolves to an empty `version`.
     workflow = tmp_path / "wf.yml"
     workflow.write_text(UNGUARDED_STEP)
     try:

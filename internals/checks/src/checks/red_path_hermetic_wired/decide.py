@@ -19,8 +19,8 @@ import re
 
 from checks.utils.job_block import iter_job_blocks
 
-# The direct-drive failure-path jobs (#379): each runs the CLI by hand over a fixture and asserts
-# its exit code, so each needs the HEAD binary the `uses:`-called jobs already download.
+# The direct-drive failure-path jobs: each runs the CLI by hand over a fixture and asserts its
+# exit code, so each needs the HEAD binary the `uses:`-called jobs already download.
 RED_PATH_JOBS = (
     "below-floor",
     "mutation-gate",

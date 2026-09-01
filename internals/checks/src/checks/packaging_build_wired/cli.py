@@ -33,9 +33,7 @@ _NEXT_JOB = re.compile(r"^  [a-z][a-z0-9-]*:\s*$", re.MULTILINE)
 _HAS_BUILD_GATE = re.compile(
     r"packaging_build != '' \|\| needs\.detect\.outputs\.packaging_dist == 'true'"
 )
-# The toolchain provisioning steps must branch on detect's `packaging_language`.
 _HAS_LANGUAGE_PROVISION = re.compile(r"needs\.detect\.outputs\.packaging_language")
-# The build step must run the derived command, wired from detect's `packaging_build`.
 _HAS_BUILD_EVAL = re.compile(r'eval "\$PACKAGING_BUILD"')
 _HAS_BUILD_FROM_DETECT = re.compile(r"PACKAGING_BUILD:\s*.*needs\.detect\.outputs\.packaging_build")
 # The scan must reach `target/package`, where `cargo package` writes the crate.

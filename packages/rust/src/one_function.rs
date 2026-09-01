@@ -1,18 +1,5 @@
-//! The `unit one-function-per-file` check.
-//!
-//! A source file holds at most **one** module-scope function whose body runs
-//! longer than the configured threshold. Functions at or under the threshold are
-//! trivial — an expression with a name — and share a file freely.
-//!
-//! Detection is AST-based, one arm per language, each reading the same shape:
-//! - **Python** — `def` / `async def` at module level (`rustpython_parser`).
-//! - **TypeScript** — top-level `function` declarations and a top-level `const` /
-//!   `let` / `var` bound to an arrow or function expression, `export` or not (`oxc`).
-//! - **Rust** — `fn` items at the top level of the file (`syn`).
-//!
-//! Methods, nested functions, and callbacks belong to their owner and are never
-//! counted on their own; the walk reads the same source tree the colocated-test
-//! presence rule does, so no test file is a subject.
+//! The `unit one-function-per-file` check: a source file holds at most one module-scope
+//! function whose body runs longer than the configured threshold.
 
 use std::path::{Path, PathBuf};
 
@@ -31,12 +18,10 @@ pub use crate::violation::Violation;
 
 use crate::colocated_test::Language;
 
-/// The rule id reported for a function that shares its file with another over the
-/// threshold.
+/// The rule id reported for a function sharing its file with another over the threshold.
 const RULE: &str = "one-function-per-file";
 
-/// A module-scope function: its name, the line it is declared on, and the number
-/// of code lines in its body.
+/// A module-scope function: its name, declaration line, and body code-line count.
 #[derive(Debug, PartialEq, Eq)]
 struct Function {
     name: String,
@@ -44,12 +29,9 @@ struct Function {
     body_lines: usize,
 }
 
-/// Scan the source files under `root` for `language` and return a violation for
-/// every module-scope function past the first whose body runs longer than
-/// `max_lines`, sorted by `(file, line)`.
-///
-/// The first over-threshold function in a file holds it; each later one is a
-/// violation naming both. A file that cannot be read or parsed is an error.
+/// A violation for every module-scope function under `root` past the first whose body runs
+/// longer than `max_lines`, sorted by `(file, line)`. The first over-threshold function in a
+/// file holds it; each later one is a violation naming both.
 pub fn find_violations(
     root: impl AsRef<Path>,
     language: Language,
@@ -84,9 +66,8 @@ pub fn find_violations(
     Ok(violations)
 }
 
-/// Every file under `root` the rule judges: the language's source files, minus
-/// the test and support files and the suite tiers under `<package root>/tests/`.
-/// Sorted, so the report is deterministic.
+/// Every file under `root` the rule judges, sorted: the language's source files, minus the
+/// test and support files and the suite tiers under `<package root>/tests/`.
 fn source_files(root: &Path, language: Language) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     if language == Language::Rust {
@@ -137,8 +118,7 @@ fn python_functions(source: &str, path: &Path) -> Result<Vec<Function>> {
     Ok(found)
 }
 
-/// The code lines of a Python function body — the docstring excluded, so a
-/// documented one-statement function stays trivial.
+/// The code lines of a Python function body, the docstring excluded.
 fn python_body_lines(source: &str, lines: &[&str], body: &[Stmt]) -> usize {
     let start = body.iter().position(|statement| !is_docstring(statement));
     let Some(start) = start else {
@@ -202,8 +182,7 @@ fn typescript_functions(source: &str, path: &Path) -> Result<Vec<Function>> {
     Ok(found)
 }
 
-/// Record a TypeScript `function` declaration. An overload signature carries no
-/// body and declares nothing to move, so it is skipped.
+/// Record a TypeScript `function` declaration; a bodyless overload signature is skipped.
 fn push_ts_function(
     source: &str,
     lines: &[&str],
@@ -225,8 +204,8 @@ fn push_ts_function(
     });
 }
 
-/// Record every binding in a `const` / `let` / `var` declaration whose initializer
-/// is an arrow or function expression — TypeScript's other module-scope function form.
+/// Record every `const` / `let` / `var` binding initialized with an arrow or function
+/// expression.
 fn push_ts_bindings(
     source: &str,
     lines: &[&str],
@@ -253,8 +232,7 @@ fn push_ts_bindings(
     }
 }
 
-/// The code lines of a TypeScript function body. An arrow's expression body is a
-/// body of one statement, so both forms measure the same way.
+/// The code lines of a TypeScript function body.
 fn ts_body_lines(source: &str, lines: &[&str], body: &oxc::ast::ast::FunctionBody) -> usize {
     let (Some(first), Some(last)) = (body.statements.first(), body.statements.last()) else {
         return 0;
@@ -286,8 +264,7 @@ fn rust_functions(source: &str, path: &Path) -> Result<Vec<Function>> {
     Ok(found)
 }
 
-/// The code lines of a Rust function body — the block's statements, so the braces
-/// on their own lines are not the body.
+/// The code lines of a Rust function body — the block's statements, never the braces.
 fn rust_body_lines(lines: &[&str], block: &syn::Block) -> usize {
     let (Some(first), Some(last)) = (block.stmts.first(), block.stmts.last()) else {
         return 0;
@@ -309,9 +286,8 @@ enum Comment {
     Slash,
 }
 
-/// The number of lines in the inclusive 1-based range `first..=last` of `lines`
-/// that carry code — blank lines and comment lines don't count, so documentation
-/// never pushes a function over the threshold.
+/// The number of lines in the inclusive 1-based range `first..=last` of `lines` that carry
+/// code — blank and comment lines don't count.
 fn code_lines(lines: &[&str], first: usize, last: usize, comment: Comment) -> usize {
     lines
         .iter()
@@ -324,9 +300,8 @@ fn code_lines(lines: &[&str], first: usize, last: usize, comment: Comment) -> us
         .count()
 }
 
-/// `true` when a trimmed line carries only a comment. The `*` forms catch the
-/// interior and closing lines of a `/* … */` block, which a `*`-prefixed Rust
-/// dereference never matches: that spelling has no space after the star.
+/// `true` when a trimmed line carries only a comment. The `* ` form catches a `/* … */`
+/// block's interior, which a Rust dereference never matches: no space after the star.
 fn is_comment(trimmed: &str, comment: Comment) -> bool {
     match comment {
         Comment::Hash => trimmed.starts_with('#'),

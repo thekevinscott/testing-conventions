@@ -1,30 +1,13 @@
-//! Packaging rule — foundation.
-//!
-//! README "Packaging": test files never ship in the built artifact. Colocated
-//! unit tests live next to the source, so packaging has to strip them — and this
-//! rule confirms it did, by inspecting the *built* artifact rather than the
-//! working tree.
-//!
-//! This module is the deterministic core: given the root of an unpacked built
-//! artifact and the test-file globs that must not appear in it, [`scan`] walks
-//! the tree and returns every offending file. Producing the artifact (building a
-//! wheel/sdist, `npm pack`, `cargo package`, then unpacking it) is a per-language
-//! layer on top — kept separate, and out of this foundation slice, so the core
-//! guarantee is testable without any language toolchain. The per-language slices
-//! supply the build step and the glob set: Python `*_test.py`, TypeScript
-//! `*.test.*`, Rust `tests/`.
+//! Packaging rule — the deterministic core: given the root of an unpacked built artifact and
+//! the test-file globs that must not appear in it, [`scan`] returns every offending file.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-/// Walk `root` — the root of an unpacked built artifact — and return every file
-/// whose name matches one of `globs`, sorted for deterministic output.
-///
-/// `globs` are file-name globs where `*` matches any run of characters
-/// (including none); each is matched against an entry's file name, not its full
-/// path. A non-empty result means test files leaked into the artifact. Returns
-/// an error if the tree under `root` cannot be read.
+/// Every file under `root` — the root of an unpacked built artifact — whose name matches one
+/// of `globs`, sorted. `globs` are file-name globs where `*` matches any run of characters;
+/// each is matched against an entry's file name, not its full path.
 pub fn scan(root: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>> {
     let root = root.as_ref();
     let mut offenders = Vec::new();
@@ -33,17 +16,9 @@ pub fn scan(root: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>> {
     Ok(offenders)
 }
 
-/// Inspect a built artifact at `path` for files matching `globs` — the test-file
-/// patterns that must not ship.
-///
-/// `path` is either a **directory** (an already-unpacked artifact) or a packed
-/// archive this rule understands — a Python wheel (`.whl`, a zip) or a gzipped tar
-/// (`.tgz` / `.tar.gz`, e.g. an `npm pack` tarball or Python sdist; a Cargo
-/// `.crate` too) — which is unpacked into a scratch directory first. Either way
-/// the unpacked tree is handed to [`scan`]. Offenders come back as paths
-/// **relative to the artifact root** (e.g. `package/dist/widget.test.js`), so they
-/// read the same whether the artifact was a directory or an archive. Errors if the
-/// artifact can't be read, or isn't a directory or a recognized archive.
+/// Inspect a built artifact at `path` for files matching `globs`. `path` is a directory (an
+/// already-unpacked artifact) or an archive this rule unpacks first — `.whl`, `.tgz`/`.tar.gz`,
+/// `.crate`. Offenders come back as paths **relative to the artifact root**.
 pub fn inspect(path: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>> {
     let path = path.as_ref();
     if path.is_dir() {
@@ -63,8 +38,7 @@ pub fn inspect(path: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>>
     Ok(relative_to(unpacked.path(), scan(unpacked.path(), globs)?))
 }
 
-/// `true` for an artifact this rule unpacks as a zip: a Python wheel (`.whl`) or
-/// a plain `.zip`.
+/// `true` for an artifact this rule unpacks as a zip: a Python wheel (`.whl`) or a `.zip`.
 fn is_zip_artifact(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|ext| ext.to_str()),
@@ -72,8 +46,7 @@ fn is_zip_artifact(path: &Path) -> bool {
     )
 }
 
-/// Re-express each offender as a path relative to `root`. [`scan`] returns paths
-/// under `root`, so the strip always succeeds; an unexpected path is kept as-is.
+/// Re-express each offender as a path relative to `root`; an unexpected path is kept as-is.
 fn relative_to(root: &Path, offenders: Vec<PathBuf>) -> Vec<PathBuf> {
     offenders
         .into_iter()
@@ -93,9 +66,7 @@ fn unzip_to_temp(archive: &Path) -> Result<TempDir> {
     Ok(dir)
 }
 
-/// `true` for an artifact this rule unpacks as a gzipped tar: an `npm pack`
-/// tarball (`.tgz`), a `.tar.gz` (a Python sdist), or a Cargo `.crate` from
-/// `cargo package` — all gzipped tarballs.
+/// `true` for an artifact this rule unpacks as a gzipped tar: `.tgz`, `.tar.gz`, `.crate`.
 fn is_tar_gz_artifact(path: &Path) -> bool {
     let name = path
         .file_name()
@@ -115,9 +86,7 @@ fn untar_gz_to_temp(archive: &Path) -> Result<TempDir> {
     Ok(dir)
 }
 
-/// A scratch directory removed on drop — where an archive artifact is unpacked.
-/// Unique per call (so parallel checks don't collide) and cleaned up so nothing
-/// leaks into the temp dir.
+/// A scratch directory removed on drop, unique per call so parallel checks never collide.
 struct TempDir(PathBuf);
 
 impl TempDir {
@@ -168,13 +137,9 @@ fn collect_offenders(
     Ok(())
 }
 
-/// `true` when `path` matches any of `patterns`.
-///
-/// A pattern ending in `/` is a **directory** pattern: it matches when `path`
-/// (relative to the artifact `root`) lives under a directory of that name — e.g.
-/// `tests/` flags `…/tests/integration.rs` (Rust's crate-root integration
-/// tests). Every other pattern is a file-name glob (`*` wildcards) matched against
-/// the entry's name (`*_test.py`, `*.test.*`).
+/// `true` when `path` matches any of `patterns`. A pattern ending in `/` is a **directory**
+/// pattern — it matches when `path` (relative to `root`) lives under a directory of that name;
+/// every other pattern is a file-name glob (`*` wildcards) matched against the entry's name.
 fn matches_any(path: &Path, root: &Path, patterns: &[String]) -> bool {
     let name = path
         .file_name()
@@ -188,8 +153,7 @@ fn matches_any(path: &Path, root: &Path, patterns: &[String]) -> bool {
         })
 }
 
-/// `true` when `path` (relative to `root`) has an **ancestor** directory named
-/// `dir` — i.e. the file lives somewhere under a `dir/`.
+/// `true` when `path` (relative to `root`) has an **ancestor** directory named `dir`.
 fn path_under_dir(path: &Path, root: &Path, dir: &str) -> bool {
     let relative = path.strip_prefix(root).unwrap_or(path);
     relative
@@ -197,16 +161,13 @@ fn path_under_dir(path: &Path, root: &Path, dir: &str) -> bool {
         .is_some_and(|parents| parents.components().any(|c| c.as_os_str() == dir))
 }
 
-/// Match `name` against a file-name `glob` where `*` matches any run of
-/// characters (including none) and every other character is literal.
-///
-/// `*` is the only metacharacter — it is all the test-file patterns this rule
-/// checks (`*_test.py`, `*.test.*`) need. Matching is over Unicode scalar values.
+/// Match `name` against a file-name `glob` where `*` matches any run of characters (including
+/// none) and every other character is literal. Matching is over Unicode scalar values.
 fn matches_glob(glob: &str, name: &str) -> bool {
     let glob: Vec<char> = glob.chars().collect();
     let name: Vec<char> = name.chars().collect();
-    // Linear wildcard match: walk `name`, and on a mismatch backtrack to the most
-    // recent `*`, extending what it consumed by one character.
+    // Linear wildcard match: on a mismatch, backtrack to the most recent `*` and extend
+    // what it consumed by one character.
     let (mut g, mut n) = (0usize, 0usize);
     let mut star: Option<usize> = None;
     let mut consumed_by_star = 0usize;
@@ -219,7 +180,6 @@ fn matches_glob(glob: &str, name: &str) -> bool {
             consumed_by_star = n;
             g += 1;
         } else if let Some(star) = star {
-            // Mismatch under an open `*`: let the star swallow one more char.
             g = star + 1;
             consumed_by_star += 1;
             n = consumed_by_star;
@@ -239,7 +199,6 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    /// A throwaway directory tree, removed on drop.
     struct TempTree(PathBuf);
 
     impl TempTree {
@@ -273,7 +232,6 @@ mod tests {
     fn star_matches_any_run_including_empty() {
         assert!(matches_glob("*", ""));
         assert!(matches_glob("*", "anything.py"));
-        // The `*` consumes nothing: the literal `.py` matches the whole name.
         assert!(matches_glob("*.py", ".py"));
     }
 
@@ -281,7 +239,6 @@ mod tests {
     fn the_python_test_glob_matches_only_test_files() {
         assert!(matches_glob("*_test.py", "widget_test.py"));
         assert!(!matches_glob("*_test.py", "widget.py"));
-        // A trailing extension beyond `.py` must not match (no `*` at the end).
         assert!(!matches_glob("*_test.py", "widget_test.pyc"));
     }
 
@@ -311,8 +268,6 @@ mod tests {
     fn a_directory_pattern_flags_files_under_that_dir() {
         let tree = TempTree::new(&["tests/integration.rs", "src/lib.rs", "src/tests/nested.rs"]);
         let offenders = scan(tree.path(), &["tests/".to_string()]).unwrap();
-        // Any file with a `tests/` ancestor is flagged (here the crate-root
-        // `tests/` and a nested `src/tests/`); `src/lib.rs` is not.
         assert_eq!(
             offenders,
             vec![

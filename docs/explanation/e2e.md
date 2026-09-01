@@ -40,9 +40,12 @@ The mechanism is a pair:
   Parallel pull requests therefore write distinct files and merge cleanly beside each other. The
   derivation is public: `testing-conventions e2e slug [branch]` prints the slug (default: the
   checked-out branch), so a script locates a branch's receipt at
-  `e2e-attestations/$(testing-conventions e2e slug).json`. `attest` also deletes the receipts other
-  branches left behind — once their PRs merge those files are dead weight, since `verify` reads
-  only the current branch's diff — so the directory carries one live receipt at a time.
+  `e2e-attestations/$(testing-conventions e2e slug).json`. `attest` only ever **adds**: pairing a
+  delete of another branch's receipt with this branch's add makes git's rename detection read the
+  two as a rename — receipts look alike, because `command` is usually byte-identical across a
+  repo's branches and is the longest field — so two branches cut from one parent collide on an
+  unresolvable `rename/rename` conflict. Receipts left by merged branches accumulate, which is
+  inert: `verify` reads only whether *this* branch's diff adds or updates one.
 
 - **`e2e verify [path] [--scope <dir>] [--base <ref>] [--extra-scope <dir>]… [--exclude <dir>]…`** —
   the CI half, run by the [workflow](../reference/workflow) on pull requests. It asks two

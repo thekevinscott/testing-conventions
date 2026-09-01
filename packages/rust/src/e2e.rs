@@ -1,10 +1,5 @@
-//! `e2e attest` / `e2e verify` — the e2e decision nudge.
-//!
-//! `attest` runs the e2e command of the runner's choosing and records the
-//! decision as a branch-keyed receipt; `verify` confirms in CI that a branch
-//! changing the scoped source carries a receipt in its own diff. CI never runs
-//! e2e, and the command is unrestricted — the choice of command (the full
-//! suite, a targeted subset, a no-op) *is* the judgment the receipt records.
+//! `e2e attest` / `e2e verify` — the e2e decision nudge. `attest` records the runner's chosen
+//! command as a branch-keyed receipt; `verify` confirms a branch changing scoped source has one.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -13,19 +8,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
-/// Where the branch-keyed receipts live, relative to the package root. Each
-/// receipt is `<branch_slug>.json`, so parallel branches write distinct files.
+/// Where the branch-keyed receipts live, relative to the package root: `<branch_slug>.json`.
 pub const RECEIPTS_DIR: &str = "e2e-attestations";
 
-/// The retired single-file attestation location: never read as a receipt and
-/// never counted as scoped source, so a branch deleting it owes nothing.
+/// The retired single-file attestation location: never a receipt, never scoped source.
 const LEGACY_ATTESTATION: &str = "e2e-attestation.json";
 
-/// A record of one e2e decision — written to `RECEIPTS_DIR/<branch_slug>.json`
-/// and committed by [`attest`].
-///
-/// Everything here is information for humans — [`verify`] reads only the
-/// receipt's presence in the branch's diff, never its contents.
+/// A record of one e2e decision, written to `RECEIPTS_DIR/<branch_slug>.json`. Everything
+/// here is for humans — [`verify`] reads only the receipt's presence in the branch's diff.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attestation {
     /// The command that was run (e.g. `pnpm run e2e`) — the judgment itself.
@@ -36,18 +26,14 @@ pub struct Attestation {
     pub exit_code: i32,
     /// The commit the run was made against (HEAD at attest time).
     pub commit: String,
-    /// The raw branch name the receipt is keyed by (the filename carries only
-    /// its sanitized slug).
+    /// The raw branch name the receipt is keyed by; the filename carries only its slug.
     #[serde(default)]
     pub branch: String,
 }
 
 /// The standardized receipt slug for a branch name — the receipt lives at
-/// `e2e-attestations/<slug>.json`. Lowercased; every character outside
-/// `[a-z0-9._-]` becomes `-`; runs of `-` collapse to one; truncated to 80
-/// characters; leading/trailing `-` and `.` trimmed; an empty result falls
-/// back to `branch`. Deterministic and git-free, so a script can locate a
-/// branch's receipt; exposed on the CLI as `e2e slug`.
+/// `e2e-attestations/<slug>.json`. Lowercased; every character outside `[a-z0-9._-]` becomes
+/// `-`; runs collapse; truncated to 80; edges trimmed; an empty result falls back to `branch`.
 pub fn branch_slug(branch: &str) -> String {
     let mut slug = String::new();
     for c in branch.to_lowercase().chars() {
@@ -70,8 +56,7 @@ pub fn branch_slug(branch: &str) -> String {
     }
 }
 
-/// The checked-out branch of `repo`, or an error naming the fix on a detached
-/// HEAD — the receipt is keyed by branch, so attest needs one.
+/// The checked-out branch of `repo`; a detached HEAD is an error naming the fix.
 pub(crate) fn current_branch(repo: &Path) -> Result<String> {
     git_capture(repo, &["symbolic-ref", "--short", "-q", "HEAD"]).context(
         "resolving the current branch — the receipt is keyed by branch, so this \
@@ -79,24 +64,14 @@ pub(crate) fn current_branch(repo: &Path) -> Result<String> {
     )
 }
 
-/// Run `command` in `repo` and, when it passes, write the branch's receipt to
-/// `repo`/[`RECEIPTS_DIR`]`/<branch_slug>.json` and commit it. Returns the
-/// attestation either way.
-///
-/// The commit only ever **adds**: every other branch's receipt, and any retired
-/// single-file attestation, is left exactly where it is. See the write site for
-/// why a paired delete is unsafe.
-///
-/// A receipt records a run that **passed**, so a non-zero `command` leaves the
-/// receipts directory exactly as it was — the branch's earlier receipt, if any,
-/// stays committed and unmodified. The returned [`Attestation::exit_code`]
-/// carries the failure for the caller to propagate.
+/// Run `command` in `repo` and, when it passes, write and commit the branch's receipt at
+/// `repo`/[`RECEIPTS_DIR`]`/<branch_slug>.json`. A non-zero `command` leaves the receipts
+/// untouched; the returned [`Attestation::exit_code`] carries the failure either way.
 pub fn attest(repo: &Path, command: &str) -> Result<Attestation> {
     let commit = git_capture(repo, &["rev-parse", "HEAD"])
         .context("resolving HEAD — `e2e attest` must run inside a git repo with a commit")?;
     let branch = current_branch(repo)?;
 
-    // Run the e2e command via the shell, streaming its output through.
     let status = Command::new("sh")
         .arg("-c")
         .arg(command)
@@ -118,28 +93,12 @@ pub fn attest(repo: &Path, command: &str) -> Result<Attestation> {
         branch: branch.clone(),
     };
 
-    // A failing run writes nothing: a receipt records a suite that passed, and
-    // overwriting an earlier one with a failure would leave a branch that had
-    // attested worse off than before it re-ran.
     if exit_code != 0 {
         return Ok(attestation);
     }
 
-    // Only ever add. Deleting other branches' receipts pairs the delete with
-    // this branch's add, and git's rename detection reads that pair as a rename
-    // whenever the two receipts look alike — which they do, since `command` is
-    // usually byte-identical across a repo's branches and is the longest field.
-    // Two branches off one parent then rename the same source, which is an
-    // unresolvable rename/rename conflict for anyone stacking or working
-    // parallel slices. A pure add has no delete to pair with, so the property
-    // holds regardless of what a receipt contains.
-    //
-    // The same reasoning retires collecting LEGACY_ATTESTATION: that `git rm`
-    // was a delete beside this add too.
-    //
-    // Stale files are inert, not harmful: `verify` asks only whether the
-    // branch's own diff touches any receipt, and excludes both RECEIPTS_DIR and
-    // LEGACY_ATTESTATION from the scope it measures.
+    // Only ever add: a paired delete reads as a rename to git and conflicts across parallel
+    // branches — `docs/explanation/e2e.md`.
     let dir = repo.join(RECEIPTS_DIR);
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let path = dir.join(format!("{}.json", branch_slug(&branch)));
@@ -149,47 +108,31 @@ pub fn attest(repo: &Path, command: &str) -> Result<Attestation> {
     git_run(repo, &["add", "-A", "--", RECEIPTS_DIR])?;
 
     let message = format!("e2e attestation for {branch}");
-    // A plain commit that inherits the repo's signing policy: a repo requiring
-    // verified signatures gets a signed (mergeable) receipt, instead of the
-    // unsigned commit a forced `commit.gpgsign=false` would leave behind.
+    // A plain commit inherits the repo's signing policy, so a repo requiring verified
+    // signatures gets a signed (mergeable) receipt.
     git_run(repo, &["commit", "-q", "-m", message.as_str()])?;
 
     Ok(attestation)
 }
 
-/// The outcome of [`verify`] — whether a committed receipt answers the branch's
-/// e2e nudge.
+/// The outcome of [`verify`] — whether a committed receipt answers the branch's e2e nudge.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Verification {
-    /// The branch owes no decision (its scoped diff is empty), or a receipt in
-    /// its diff answers the one it owes — the gate passes.
+    /// The branch owes no decision, or a receipt in its diff answers the one it owes.
     Fresh,
-    /// No receipt answers the nudge: the branch changed the scoped source and
-    /// its diff adds or updates no receipt (or, without a base, no committed
-    /// receipt is present at all) — the gate fails.
+    /// No receipt answers the nudge — the gate fails.
     Missing,
 }
 
-/// Verify the e2e decision at `repo` — the CI side of the nudge. Reads only
-/// receipt presence and content diffs: never runs e2e, never inspects a
-/// recorded command or exit code, never compares commit SHAs.
-///
-/// Equivalent to [`verify_scoped`] with `scope` set to `repo`.
+/// Verify the e2e decision at `repo` — the CI side of the nudge. Equivalent to
+/// [`verify_scoped`] with `scope` set to `repo`.
 pub fn verify(repo: &Path) -> Result<Verification> {
     verify_scoped(repo, repo)
 }
 
-/// Verify the e2e decision at `repo`, with `scope` (rather than all of `repo`)
-/// defining what counts as scoped source.
-///
-/// `repo` and `scope` serve different roles: `repo` is where the receipts live
-/// (the package root — a manifest's own natural home), while `scope` is what
-/// counts as "code" (the directory a `source`-scoped call actually named, which
-/// can be narrower — a package root commonly also holds `tests/`, docs, and
-/// config files that aren't the attestable source). `scope` must be `repo` or
-/// a descendant of it.
-///
-/// Equivalent to [`verify_since`] with no `base`.
+/// Verify the e2e decision at `repo`, with `scope` (rather than all of `repo`) defining what
+/// counts as scoped source; `scope` must be `repo` or a descendant. Equivalent to
+/// [`verify_since`] with no `base`.
 pub fn verify_scoped(repo: &Path, scope: &Path) -> Result<Verification> {
     verify_since(repo, scope, None)
 }
@@ -199,25 +142,9 @@ pub fn verify_since(repo: &Path, scope: &Path, base: Option<&str>) -> Result<Ver
     verify_extra_scoped(repo, scope, base, &[], &[])
 }
 
-/// Verify the e2e decision at `repo`, joining **extra scopes** outside `scope`
-/// into what counts as scoped source.
-///
-/// With `base`, both checks are content diffs of `<base>...HEAD`, read from
-/// the merge base — indifferent to commit identity, so rebases and squash
-/// merges never disturb a receipt:
-///
-/// 1. A branch whose diff leaves the scoped source untouched owes no decision
-///    and passes. The scoped source is the union of `scope` and every
-///    repo-root-relative `extra_scopes` entry (a shared source tree beside the
-///    package — a native core bound into several bindings — which no `scope`
-///    at-or-below `repo` can reach), minus the `excludes` (feature-gated
-///    subtrees compiled out of the package). Receipts and the retired
-///    single-file attestation are never scoped source.
-/// 2. Otherwise the branch passes when its diff **adds or updates** a receipt
-///    under `repo`'s receipts directory. A deletion is not a decision.
-///
-/// Without `base` there is no branch diff to read, so presence is the check: a
-/// committed receipt at `repo` passes.
+/// Verify the e2e decision at `repo`, joining **extra scopes** outside `scope` into what
+/// counts as scoped source and subtracting `excludes`. With `base`, both checks are content
+/// diffs of `<base>...HEAD`; without one, a committed receipt at `repo` is the whole check.
 pub fn verify_extra_scoped(
     repo: &Path,
     scope: &Path,
@@ -234,8 +161,7 @@ pub fn verify_extra_scoped(
     };
     validate_scopes(repo, scope, extra_scopes)?;
 
-    // Question 1 — did this branch change the scoped source? `<base>...HEAD`
-    // diffs from the merge base, so only the branch's own changes count.
+    // Question 1 — did this branch change the scoped source?
     let mut args: Vec<String> = vec![
         "diff".into(),
         "--quiet".into(),
@@ -248,8 +174,8 @@ pub fn verify_extra_scoped(
     }
     args.push(format!(":(exclude){RECEIPTS_DIR}"));
     args.push(format!(":(exclude){LEGACY_ATTESTATION}"));
-    // Receipts and legacy files anywhere in the tree (a monorepo sibling's, an
-    // extra scope's) are never scoped source either.
+    // A receipt anywhere in the tree — a monorepo sibling's, an extra scope's — is not scoped
+    // source either.
     args.push(format!(":(top,exclude,glob)**/{RECEIPTS_DIR}/**"));
     args.push(format!(":(top,exclude,glob)**/{LEGACY_ATTESTATION}"));
     for exclude in excludes {
@@ -260,9 +186,8 @@ pub fn verify_extra_scoped(
         return Ok(Verification::Fresh);
     }
 
-    // Question 2 — does the branch's diff add or update a receipt? The
-    // diff-filter drops deletions, so sweeping a stale receipt by hand never
-    // counts as a decision.
+    // Question 2 — does the branch's diff add or update a receipt? The filter drops
+    // deletions, so sweeping a stale receipt by hand never counts as a decision.
     let out = git_capture(
         repo,
         &[
@@ -291,9 +216,8 @@ fn has_receipts(repo: &Path) -> bool {
         .any(|e| e.path().extension().is_some_and(|ext| ext == "json") && e.path().is_file())
 }
 
-/// `scope` as a pathspec relative to `repo` (git resolves pathspecs relative to
-/// the invocation's cwd, which is always `repo` here). `.` when `scope` is
-/// `repo` itself.
+/// `scope` as a pathspec relative to `repo` — git resolves pathspecs against the invocation's
+/// cwd, which is always `repo` here. `.` when `scope` is `repo` itself.
 fn relative_pathspec(repo: &Path, scope: &Path) -> String {
     if scope == repo {
         return ".".to_string();
@@ -304,15 +228,9 @@ fn relative_pathspec(repo: &Path, scope: &Path) -> String {
     }
 }
 
-/// Confirm `scope` and every `extra_scope` name at least one path git tracks under
-/// `repo`, erroring loudly on one that matches nothing (#391).
-///
-/// A typo'd or outside `scope` otherwise falls through [`relative_pathspec`] as a
-/// pathspec matching nothing, and a diff over nothing is always empty — a branch
-/// that changed real source would pass forever. Each `extra_scope` has the same
-/// failure mode: a misspelled shared-tree root silently drops out of the scoped
-/// diff. Confirming the pathspec matches a tracked path first turns both into an
-/// honest error naming the bad scope.
+/// Confirm `scope` and every `extra_scope` name at least one path git tracks under `repo`.
+/// A pathspec matching nothing diffs to empty forever, so a typo'd scope would wave every
+/// branch through; erroring names the bad scope instead.
 fn validate_scopes(repo: &Path, scope: &Path, extra_scopes: &[PathBuf]) -> Result<()> {
     let scope_spec = relative_pathspec(repo, scope);
     if !pathspec_matches_tracked(repo, &scope_spec)? {
@@ -337,10 +255,8 @@ fn validate_scopes(repo: &Path, scope: &Path, extra_scopes: &[PathBuf]) -> Resul
     Ok(())
 }
 
-/// `true` when git tracks at least one path matching `pathspec` (run with cwd
-/// `repo`). A pathspec git rejects as outside the repository exits non-zero; that
-/// is treated identically to "matches nothing" — either way the scope names no
-/// tracked path.
+/// `true` when git tracks at least one path matching `pathspec` (run with cwd `repo`). A
+/// pathspec git rejects as outside the repository counts as "matches nothing".
 fn pathspec_matches_tracked(repo: &Path, pathspec: &str) -> Result<bool> {
     let out = Command::new("git")
         .args(["ls-files", "--", pathspec])
@@ -350,9 +266,8 @@ fn pathspec_matches_tracked(repo: &Path, pathspec: &str) -> Result<bool> {
     Ok(out.status.success() && !out.stdout.is_empty())
 }
 
-/// Run `git diff --quiet …` in `repo`: `false` for no differences, `true` for
-/// differences, an error (with git's stderr) for anything else — a bad base
-/// ref must fail loudly, never read as "no changes".
+/// Run `git diff --quiet …` in `repo`: `false` for no differences, `true` for differences, an
+/// error for anything else — a bad base ref must fail loudly, never read as "no changes".
 fn git_diff_changed(repo: &Path, args: &[&str]) -> Result<bool> {
     let out = Command::new("git")
         .args(args)

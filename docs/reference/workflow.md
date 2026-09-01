@@ -127,7 +127,7 @@ release described next.
 next run, with no tag bump on your side. Breaking changes are coordinated across consumers rather
 than held back by a semver pin.
 
-The workflow *file* is pinned at `@v0`; the `testing-conventions` **binary** it runs is pulled
+The workflow *file* tracks `@v0`; the `testing-conventions` **binary** it runs is pulled
 fresh from npm each run (the latest published version), and `@v0` only advances once that binary is
 published — so the workflow and the binary it calls always match. To freeze the binary, set the
 `version` input; the workflow file still tracks `@v0`.

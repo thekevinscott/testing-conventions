@@ -111,6 +111,9 @@ jobs:
         with:
           # The fetch-depth values are quoted: a bare 0 is falsy, so `&& 0 || 1` would always yield 1.
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
@@ -221,8 +224,7 @@ jobs:
         uses: pnpm/action-setup@v5
         with:
           version: ${{ needs.detect.outputs.ts_pnpm_version || '>=11' }}
-      - if: matrix.language == 'typescript'
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
       - if: matrix.language == 'typescript'
@@ -312,8 +314,7 @@ jobs:
         uses: pnpm/action-setup@v5
         with:
           version: ${{ needs.detect.outputs.ts_pnpm_version || '>=11' }}
-      - if: matrix.language == 'typescript'
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
       - if: matrix.language == 'typescript'
@@ -395,8 +396,7 @@ jobs:
         uses: pnpm/action-setup@v5
         with:
           version: ${{ needs.detect.outputs.ts_pnpm_version || '>=11' }}
-      - if: matrix.language == 'typescript'
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
       - if: matrix.language == 'typescript'
@@ -450,6 +450,9 @@ jobs:
           # can never name — it is rebuilt on every push.
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
       - name: Download the CLI built from HEAD (hermetic, #356)
         if: needs.detect.outputs.cli_command != ''
         uses: ./.github/actions/download-hermetic-cli
@@ -509,8 +512,7 @@ jobs:
         uses: pnpm/action-setup@v5
         with:
           version: ${{ needs.detect.outputs.ts_pnpm_version || '>=11' }}
-      - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_language == 'typescript' }}
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_language == 'typescript' }}

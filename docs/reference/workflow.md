@@ -103,7 +103,9 @@ script and Cargo's `build.rs` compile during dependency install.
 
 ## A publish reaches every runner within five minutes
 
-`version` is empty by default, so each job resolves `testing-conventions` from npm's `latest` tag.
+`version` is empty by default, so each job resolves `testing-conventions` to the newest release
+its node satisfies. Every job that invokes the CLI provisions node 24 to match the package's
+`engines.node`, so that is the newest release outright.
 The packument that resolution reads is served by `registry.npmjs.org` with `cache-control: public,
 max-age=300`, so a version becomes visible at a given CDN edge over the five minutes after it is
 published. A run starting inside that window resolves the version before it and reports whatever

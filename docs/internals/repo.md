@@ -500,7 +500,7 @@ Publish-gating is necessary but not sufficient. It proves the binary published; 
 - **"Narrow" scopes `detect`, never the suite.** Verification is still the *full* self-test + dogfood surface — every fixture, every rule job — just run version-pinned rather than hermetic. Narrowing means only that `detect` stays at the current `@v0` (per the unconstructable argument above), not that fewer jobs run.
 - **Pin to the release SHA, not "current `main`."** A `workflow_run`-triggered verification checks out whatever the default branch is at trigger time; a commit landing between publish and verification would have it verify a workflow file that is *not* the one the tag will bless. Local `uses:`/`./` reusable-workflow calls resolve at the verify workflow's own commit and their refs cannot be an expression, so the mechanism that pins both the workflow file *and* its inner `uses:` to an arbitrary commit is a `workflow_dispatch` targeting the release commit. `workflow_dispatch` takes a branch or tag ref, never a bare SHA, so verification creates a **throwaway tag at the release SHA** (`verify-release-<sha>`, cleaned up in a `finally`; no workflow triggers on `push: tags:`, so creating it fires nothing), dispatches the self-test and dogfood workflows at that tag with `version: <just-published>`, and polls their conclusions — pinning each dispatched run to the exact release commit, the same forward-only discipline `move-major-tag` applies to `@v0` itself.
 
-**Mechanism.** The direct `Release`-success → `move-major-tag` chain becomes `Release`-success → **verify-and-promote**. On a successful publish, verify-and-promote: (1) resolves the release SHA and the just-published npm version from the tags reachable there; (2) runs the layout check against the release SHA; (3) dispatches `testing-conventions-selftest.yml` and `dogfood.yml` at a throwaway tag on the release SHA with the pinned `version`, and polls until both conclude; (4) advances `@v0` via the unchanged forward-only `move_major_tag.py` **only** when the layout check and both dispatched runs are green. Every non-trivial step is the colocated-tested `tc-checks verify-release` command (`internals/checks`, `checks/utils/verify_release.py` behind an injected git/`gh` boundary — the `build-hermetic-cli` pattern, so the genuinely-equivalent boundary/timing mutants carry reasoned `testing-conventions.toml` exemptions rather than living where none is possible); the workflow YAML wires triggers, checkouts, and env, and holds no logic. It lives in `internals/checks` because its `gh` boundary can't be exercised for real in CI, so a handful of mutants need the reasoned exemptions only a package's `testing-conventions.toml` can grant. The `rolling-release-wired`/`verify-release-wired` static checks guard that the tag move stays gated on verification, so a regression that re-introduces a bare publish-only promotion fails the self-test.
+**Mechanism.** The direct `Release`-success → `move-major-tag` chain becomes `Release`-success → **verify-and-promote**. On a successful publish, verify-and-promote: (1) resolves the release SHA and the just-published npm version from the tags reachable there; (2) runs the layout check against the release SHA; (3) dispatches `testing-conventions-selftest.yml` and `dogfood.yml` at a throwaway tag on the release SHA with the pinned `version`, and polls until both conclude; (4) advances `@v0` via the unchanged forward-only `move_major_tag.py` **only** when the layout check and both dispatched runs are green. Every non-trivial step is the colocated-tested `tc-checks verify-release` command (`internals/checks`, `checks/utils/verify_release.py` behind an injected git/`gh` boundary — the `build-hermetic-cli` pattern); the workflow YAML wires triggers, checkouts, and env, and holds no logic. The injected `run` fake records each call's keyword arguments alongside its argv, so the subprocess boundary flags (`capture_output=`, `text=`) are asserted like any other decision, and the group's own raise-or-echo branches are driven through `.callback()` against a patched `vr` — `tc-checks verify-release` carries no exemption. The `rolling-release-wired`/`verify-release-wired` static checks guard that the tag move stays gated on verification, so a regression that re-introduces a bare publish-only promotion fails the self-test.
 
 ## The move-major-tag helper's package (`internals/move-major-tag`)
 
@@ -517,6 +517,29 @@ The layout mirrors `packages/python`, whose importable package sits in `packages
 The packaging gate's `packaging_build` derivation covers `internals/checks` too (a plain `uv build`, #335), so the dogfood packaging job builds this package's own distributions and scans them — and both must exclude the colocated `*_test.py` units the same way any other zero-config Python package would, or the scan rejects the artifact as shipping its tests (#354). `uv build` produces a wheel *and* an sdist, and hatchling's `[tool.hatch.build.targets.wheel]` / `[tool.hatch.build.targets.sdist]` exclude independently of each other — an exclude scoped to only the wheel target leaves the sdist (`.tar.gz`) shipping every test file untouched. The top-level `[tool.hatch.build] exclude = ["**/*_test.py"]` applies to both targets at once. Tests still run from the source tree (`.venv`/`uv run pytest`), never from a built artifact, so the exclude has no effect on execution — only on what `uv build` packages.
 
 It lives under `internals/` with the repo's other first-party helper packages. As a real package it is dogfooded through the **shipped reusable workflow** (`dogfood.yml`, `path: internals/checks/src`) — colocated-test, isolation, coverage, integration-lint, and diff-scoped mutation — exactly like `packages/python`.
+
+**The exemption inventory is one entry.** `internals/checks/testing-conventions.toml` exempts
+`checks/utils/job_block.py:50` from mutation and nothing else — the `i + 1 < len(headers)` bound is
+an equivalent mutant, unreachable by construction. Everything else is held by a test, and three
+techniques cover the shapes that keep tempting a waiver:
+
+- **A `@click.command` body reads as glue, and is not.** `check-layout` and `dispatch-and-wait` each
+  carry a real `if … raise` that lives in `cli.py`, not in the `utils` module they delegate to.
+  `changelog_gate/cli_test.py` set the pattern: patch the collaborator by its string target
+  (`monkeypatch.setattr("checks.<check>.cli.<name>", fake)`), drive `cli.callback(...)`, and assert
+  both the arguments threaded in and the branch taken. No `CliRunner`, no collaborator import, so the
+  isolation lint stays satisfied.
+- **A constants module earns a colocated test.** `config_test.py` asserts each literal, exactly as
+  `build_hermetic_cli/cli_test.py` asserts `COMMANDS`/`BINARY`/`NODE_DIST` — the assertion on the
+  literal is what kills a string mutant on it, so "a test could only re-assert the same string" is
+  the argument *for* the test.
+- **Boundary keyword arguments are observable through the fake that records them.** A `run` fake that
+  appends `kwargs` rather than discarding them pins `capture_output=True` / `text=True` without
+  re-implementing `subprocess.run`.
+
+Diff-scoped mutation has one consequence for the inventory: an entry whose `lines` drift out of date
+sits inert rather than erroring, because the determinism guard only judges lines inside the diff. So
+re-read a line-scoped mutation entry against its source whenever the file around it moves.
 
 ## The detect action's package (`internals/detect`)
 

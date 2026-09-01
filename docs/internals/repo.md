@@ -191,7 +191,7 @@ the per-package-lockfile shape the package-root derivation runs against, and
 `.github/selftest/packaging-package-root/` is generated — regenerate it with `python
 .github/selftest/packaging-package-root/make_fixtures.py`.
 
-The reusable workflow (`.github/workflows/testing-conventions.yml`) drives the **published** tool — its `detect` step pins `…/actions/detect@v0`, and each rule job runs `npx testing-conventions` (no version → latest on npm). The self-test (`testing-conventions-selftest.yml`) calls that reusable workflow. So a change to *detection* (which rules fan out) or *rule behavior* does **not** take effect in the self-test — or for any consumer — until a release **moves `@v0`** to the new commit and publishes the package.
+The reusable workflow (`.github/workflows/testing-conventions.yml`) drives the **published** tool — its `detect` step pins `…/actions/detect@v0`, and each rule job runs `npx testing-conventions` (no version → the newest release the job's node satisfies; see "The CLI runs on its own engine" below). The self-test (`testing-conventions-selftest.yml`) calls that reusable workflow. So a change to *detection* (which rules fan out) or *rule behavior* does **not** take effect in the self-test — or for any consumer — until a release **moves `@v0`** to the new commit and publishes the package.
 
 The trap: a change can stay green in its own PR's self-test (still running the old `@v0` path) yet break the self-test on the **next release**, when `@v0` advances. So any change that alters which rules a fixture is fanned over must leave every self-test fixture passing under the *new* path, not just the merged one. Concretely, a fixture driven through the reusable workflow (`uses:`) must pass **every** rule it could be fanned over — not only the rule it was added for.
 
@@ -209,6 +209,34 @@ A second #206 follow-up: zero-config Rust coverage also routed `packages/python`
 A third worked example, and a caution against over-attributing reds to `@v0` lag (#355): after the #351 `@v0` flip, `build-command-clean` and `rust-toolchain-clean` (the `[python].build_command` runtime fixtures, #243/#263/#289) still failed — `ModuleNotFoundError: No module named 'generated'`, the build step silently skipped. The workflow's own comments blamed the usual `@v0`/published-binary lag, but `@v0` was already current (it points at the same commit as `main`). The real cause: #335 generalized `build_command`'s config lookup to key off `primary_language(package_root)`, which returns `''` without a manifest (`pyproject.toml`/`package.json`/`Cargo.toml`) — but both fixtures are deliberately manifest-less (a bare pip Python package, #289's original case), so the lookup silently dropped the build step regardless of `@v0`. Fixed in `detect.compute_outputs`: `build_command`'s language falls back to the single present language when no manifest names a primary one (still empty, never guessed, when more than one language is present with no manifest to disambiguate). The lesson: a self-test red after a `@v0` flip is only actually *just* `@v0` lag if the *local* source (this PR's own `detect.py`, not the tag) also passes — check that first, per **Layer 1** in #353, rather than assuming the documented lag and waiting for the next release. Fixing the source doesn't make `build-command-clean` / `rust-toolchain-clean` green in *this* PR's own CI, though: `detect` here is still `actions/detect@v0`, so the fix only reaches this job once a release moves the tag — the ordinary pre-release lag, now with a real bug it had been masking underneath it.
 
 Each self-test job's assertion — run a CLI command over a fixture, then pass/fail on its exit code — lives as a standalone, colocated-tested check (epic #302). The failure-path jobs (#309) — `isolation-red`, `below-floor`, `mutation-gate`, `python-mutation-clean`, `packaging-red`, `coverage-rust-red`, `integration-lint-new-arms-trip`, `packaging-package-root-red`, and `colocated-rust-red` (#379) — have moved into the `internals/checks` package as `tc-checks <name>` subcommands (#328): each holds its hardcoded invocations in a `CHECKS` list and hands them to the shared `run_checks` orchestrator (`checks/utils/`), which runs each invocation — or a single trailing command, the benign `true`/`false` e2e seam — and decides pass/fail through the pure `failure_reason`; colocated `cli_test.py`, `run_checks_test.py`, and `failure_reason_test.py` cover the logic while a sibling e2e suite drives the real subprocess boundary through `CliRunner`. The workflow step runs `uv run --project internals/checks tc-checks <name>`; the tested Python holds the invocation and the exit-code logic, so it earns the same dogfood gate as the rest of the checks package and stays clear of the `${{ }}` templating trap an inline `run:` body carries. Each `CHECKS` list holds the **hermetic** binary (`./hermetic-cli/testing-conventions`), shared from `checks/config.py`'s `HERMETIC_CLI`, and each red-path job downloads the `hermetic-cli` artifact (`needs: [build-cli]` + `./.github/actions/download-hermetic-cli`) so it validates this branch's CLI, not npm-latest (#379) — the `red-path-hermetic-wired` check gates that wiring.
+
+### The CLI runs on its own engine
+
+Every rule job invokes the published CLI by bare name (`npx -y "testing-conventions"`). A bare name
+is an unconstrained range, so npm resolves it **engine-aware**: it picks the newest version whose
+`engines.node` the *running* node satisfies. `packages/node/package.json` declares `"node": ">=24"`,
+and GitHub's `ubuntu-latest` image ships node 22, so a job that provisions no node of its own
+resolves the newest release published before that floor rose — 0.0.86 — and exits zero. Every
+CLI-invoking job therefore carries an unconditional `actions/setup-node@v6` pinning a `node-version`
+at or above the floor, so the engine the package asks for is the engine the job has.
+
+The step is load-bearing because the failure is silent. The stale release runs the gates it knew
+about and reports pass or fail against its own rules, so a consumer sees a green run built from
+logic that shipped a dozen releases ago. Once a newer workflow passes a subcommand that release
+predates, the same skew surfaces as `unrecognized subcommand` and exit 2 — the first visible symptom
+of a condition that had been in place the whole time.
+
+The pin belongs to the CLI, not to the project under test. A `setup-node` gated on
+`matrix.language == 'typescript'` provisions the consumer's toolchain and leaves the CLI on the
+runner's ambient node, so a Python or Rust project runs the stale release in every job. Both
+concerns are served by one ungated step.
+
+Neither neighbouring specifier substitutes for it. `@latest` names a dist-tag, so npm skips engine
+filtering and installs a release the node cannot satisfy — `EBADENGINE` is a warning under the
+default `engine-strict: false`, so the run continues on an unsupported engine — and a dist-tag is a
+mutable external reference inside a required check, which the CI-hermeticity invariant rules out.
+Pinning the `version` input freezes a consumer on one release. Provisioning the engine is what
+resolves the newest one.
 
 ## CI provisions from disk: uv, and the source mutation adapter (#352)
 
@@ -230,7 +258,7 @@ Every job that provisions uv pins `astral-sh/setup-uv@v7`, whose bundled Node 24
 
 Every job in the reusable workflow resolves two mutable external references at run time: the
 `detect` step pins `…/actions/detect@v0` (a floating tag), and every rule job runs
-`npx -y "testing-conventions${VERSION:+@$VERSION}"` (no version → latest on npm). For a
+`npx -y "testing-conventions${VERSION:+@$VERSION}"` (no version → the newest release the job's node satisfies). For a
 *consumer*, that's the whole point — they want the released, supported surface. But when
 `testing-conventions.yml` gates its **own** merges (self-test, dogfood), it means a PR's own CI
 validates `(this commit's workflow) × (whatever @v0/npm currently are)`, not the commit under
@@ -446,7 +474,7 @@ itself (see AGENTS.md, "Wiring gates are earned").
 
 The tag is advanced by a dedicated workflow, `.github/workflows/move-major-tag.yml`, **not** inline in `release.yml`. It is **gated on a successful publish**: it triggers via `workflow_run` on the `Release` workflow completing and runs only when `conclusion == 'success'` (on `main`). That gate is the one place this repo departs from the generic "move the tag on every push to `main`" recipe, and it is non-negotiable:
 
-The reusable workflow runs the **published** binary (`npx testing-conventions` → latest on npm), but the workflow *file* is frozen at `@v0`. If `@v0` advanced to a commit whose workflow invokes a subcommand the npm-latest binary doesn't expose yet (a rename/addition — the #55 class of break), every consumer running in the publish window would get new-workflow + old-binary → `unrecognized subcommand`. Publishing the binary is this repo's analog of committing a built `dist/`: ship the runtime first, then move the tag. `needs: release` (#92) did this inline; `move-major-tag.yml` does it as a named, single-responsibility workflow.
+The reusable workflow runs the **published** binary (`npx testing-conventions` → the newest release the job's node satisfies), but the workflow *file* is frozen at `@v0`. If `@v0` advanced to a commit whose workflow invokes a subcommand the npm-latest binary doesn't expose yet (a rename/addition — the #55 class of break), every consumer running in the publish window would get new-workflow + old-binary → `unrecognized subcommand`. Publishing the binary is this repo's analog of committing a built `dist/`: ship the runtime first, then move the tag. `needs: release` (#92) did this inline; `move-major-tag.yml` does it as a named, single-responsibility workflow.
 
 Two safety properties:
 

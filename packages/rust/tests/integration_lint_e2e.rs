@@ -122,6 +122,16 @@ fn first_party_patch_clean_exits_zero() {
 }
 
 #[test]
+fn first_party_patch_red_object_exits_nonzero() {
+    assert_eq!(lint_exit("no_first_party_patch/red_object"), 1);
+}
+
+#[test]
+fn constant_patch_red_object_exits_nonzero() {
+    assert_eq!(lint_exit("constant_patch/red_object"), 1);
+}
+
+#[test]
 fn first_party_patch_waived_exits_zero() {
     assert_eq!(
         lint_exit_with_config(

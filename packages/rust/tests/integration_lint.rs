@@ -233,6 +233,22 @@ fn constant_patch_red_exits_nonzero() {
 }
 
 #[test]
+fn constant_patch_red_object_reports_a_violation() {
+    let violations = find_violations(fixture("constant_patch/red_object"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.iter().any(|v| v.rule == "no-constant-patch"),
+        "`patch.object(cfg, \"CACHE_DIR\", ...)` patches a module-global config constant \
+         and must be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn constant_patch_red_object_exits_nonzero() {
+    assert_eq!(lint_exit("constant_patch/red_object"), 1);
+}
+
+#[test]
 fn constant_patch_waived_exits_zero() {
     assert_eq!(
         lint_exit_with_config(
@@ -275,6 +291,49 @@ fn first_party_patch_red_exits_nonzero() {
 #[test]
 fn first_party_patch_clean_exits_zero() {
     assert_eq!(lint_exit("no_first_party_patch/clean"), 0);
+}
+
+#[test]
+fn first_party_patch_red_object_flags_the_imported_name_form() {
+    let violations = find_violations(fixture("no_first_party_patch/red_object"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.iter().any(|v| v.rule == "no-first-party-patch"
+            && v.file.ends_with("object_imported_name_test.py")),
+        "`patch.object(ledger, ...)` after `from myproject import ledger` patches a \
+         first-party target and must be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn first_party_patch_red_object_flags_the_dotted_module_form() {
+    let violations = find_violations(fixture("no_first_party_patch/red_object"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.iter().any(|v| v.rule == "no-first-party-patch"
+            && v.file.ends_with("object_dotted_module_test.py")),
+        "`patch.object(myproject.ledger, ...)` patches a first-party target and must be \
+         flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn first_party_patch_red_object_flags_the_dict_form() {
+    let violations = find_violations(fixture("no_first_party_patch/red_object"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "no-first-party-patch"
+                && v.file.ends_with("dict_object_target_test.py")),
+        "`patch.dict(config.registry, ...)` mutates first-party state and must be \
+         flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn first_party_patch_red_object_exits_nonzero() {
+    assert_eq!(lint_exit("no_first_party_patch/red_object"), 1);
 }
 
 #[test]

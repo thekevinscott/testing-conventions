@@ -1,10 +1,5 @@
 name: Detect action (tests)
 
-# Red/green tests for the repo-only detect helper (internals/detect). `action.yml` stays at
-# .github/actions/detect/, the `uses:` contract consumers pin, so this trigger watches both.
-# The e2e suite also asserts the rest of the output chain — the reusable workflow's `detect`
-# job re-declares every name and the rule jobs read them — so an edit there runs it too.
-
 on:
   pull_request:
     paths:

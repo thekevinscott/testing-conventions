@@ -539,7 +539,7 @@ techniques cover the shapes that keep tempting a waiver:
 
 Diff-scoped mutation has one consequence for the inventory: an entry whose `lines` drift out of date
 sits inert rather than erroring, because the determinism guard only judges lines inside the diff. So
-a line-scoped mutation entry is checked against the source when the file around it moves.
+re-read a line-scoped mutation entry against its source whenever the file around it moves.
 
 ## The detect action's package (`internals/detect`)
 

@@ -1,29 +1,6 @@
-//! Integration-test lints — the `integration lint`
-//! command.
-//!
-//! A *lint* here is a deterministic style/mechanism check on test code, as
-//! opposed to the structural `colocated-test` / `coverage` rules. This module hosts
-//! the mocking mechanism & style lints; more lints will join them under the
-//! same command.
-//!
-//! Detection is AST-based: each Python test file is parsed with
-//! `rustpython_parser` and the tree is walked with a [`Visitor`].
-//!
-//! Implemented lints:
-//! - **`no-monkeypatch`**: a test/fixture function that declares the
-//!   `monkeypatch` parameter (pytest's fixture). Patch with `unittest.mock`
-//!   wrapped in a `pytest.fixture` instead.
-//! - **`no-inline-patch`**: a `patch(...)` / `patch.object(...)` /
-//!   `patch.dict(...)` call inside a test body — the `with patch(...)` form or a
-//!   bare call. Patches belong in a `pytest.fixture`; a patch *inside* a fixture
-//!   is allowed.
-//! - **`no-environ-mutation`**: direct mutation of `os.environ` —
-//!   `os.environ[...] = …`, `del os.environ[...]`, or a mutating method
-//!   (`update` / `pop` / `setdefault` / `clear` / `popitem`). Set env via
-//!   `patch.dict(os.environ, {...})` instead.
-//! - **`no-constant-patch`**: patching a module-global UPPER_CASE constant,
-//!   e.g. `patch("pkg.config.CACHE_DIR", …)`. Inject config explicitly. Waivable
-//!   per file via the config `exempt` list.
+//! The Python mocking mechanism and style lints behind `integration lint`, plus the Python
+//! arm of `unit lint`. Each test file is parsed with `rustpython_parser` and walked with a
+//! [`Visitor`]; the rules themselves are documented under `docs/reference/checks/`.
 
 use std::path::{Path, PathBuf};
 
@@ -36,21 +13,15 @@ use rustpython_parser::ast::{
 use rustpython_parser::text_size::{TextRange, TextSize};
 use rustpython_parser::Parse;
 
-// `Violation` is shared with the Rust `isolation` lint; it lives in `violation`
-// and is re-exported here so `testing_conventions::lint::Violation` still resolves.
+// Re-exported so `testing_conventions::lint::Violation` still resolves.
 pub use crate::violation::Violation;
 
-/// Scan the Python test files under `root` and return every lint violation,
-/// sorted by `(file, line)` for deterministic output.
-///
-/// A *Python test file* is `*_test.py` or `conftest.py` (where fixtures live); a
-/// legacy `test_*.py` is ordinary source. Each is parsed and walked. A file
-/// that cannot be read or parsed is an error.
+/// Every lint violation in the Python test files under `root`, sorted by `(file, line)`. A
+/// *Python test file* is `*_test.py` or `conftest.py`, where fixtures live; a legacy
+/// `test_*.py` is ordinary source. A file that cannot be read or parsed is an error.
 pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     let root = root.as_ref();
-    // The dist's own top-level package, for `no-first-party-patch`. Resolved
-    // once for the whole tree; `None` (no declared package) means that rule flags
-    // nothing.
+    // Resolved once for the whole tree; `None` means `no-first-party-patch` flags nothing.
     let first_party = first_party_package(root);
     let mut files = Vec::new();
     collect_python_files(root, &mut files, is_python_test_file)?;
@@ -79,20 +50,12 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     Ok(violations)
 }
 
-/// Message for a test file under `<package root>/tests/` outside a standard
-/// suite tier.
 const UNKNOWN_TIER_MSG: &str = "test file sits under `tests/` outside the standard suite tiers; \
      a suite lives in `tests/integration/` or `tests/e2e/`";
 
-/// Scan `package_root`'s suite tiers and return every lint violation, sorted by
-/// `(file, line)` for deterministic output.
-///
-/// The subjects are the standard suite directories — `tests/integration/` and
-/// `tests/e2e/`, both of which run first-party code for real and so are held to
-/// the integration rules ([`find_violations`]). A `*_test.py` under
-/// `<package root>/tests/` outside a standard tier is flagged as `unknown-tier`:
-/// the layout is part of the standard, so a suite the scan would silently miss
-/// is an error instead.
+/// Every lint violation in `package_root`'s suite tiers, sorted by `(file, line)`.
+/// `tests/integration/` and `tests/e2e/` both run first-party code for real; a `*_test.py`
+/// under `tests/` outside them is `unknown-tier` rather than silently unscanned.
 pub fn find_suite_violations(package_root: &Path) -> Result<Vec<Violation>> {
     let tests = package_root.join("tests");
     let mut violations = Vec::new();
@@ -119,26 +82,17 @@ pub fn find_suite_violations(package_root: &Path) -> Result<Vec<Violation>> {
     Ok(violations)
 }
 
-/// Scan the colocated Python unit tests under `root` and return every
-/// `unmocked-collaborator` violation: a first-party collaborator a
-/// unit test imports without mocking it. The Python arm of `unit lint`
-/// ([`crate::isolation::Language::Python`]).
-///
-/// A *unit test* here is `*_test.py` (not `conftest.py`); a legacy `test_*.py` is
-/// ordinary source. First-party is the dist's own package
-/// ([`first_party_package`]); a tree with no declared package has no first-party
-/// collaborators and so reports nothing.
+/// Every `unmocked-collaborator` violation under `root` — a collaborator a `*_test.py`
+/// imports without mocking it — sorted by `(file, line)`. First-party is the dist's own
+/// package ([`first_party_package`]); a tree that declares none reports nothing.
 pub fn find_unit_isolation_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     let root = root.as_ref();
-    // First-party is the dist's own package; with none declared there are no
-    // first-party collaborators to flag.
     let Some(first_party) = first_party_package(root) else {
         return Ok(Vec::new());
     };
     let mut files = Vec::new();
     collect_python_files(root, &mut files, is_python_unit_test_file)?;
-    // `<package root>/tests/` belongs to the suite tiers (integration / e2e run
-    // first-party code for real), so its files are never unit subjects.
+    // The suite tiers run first-party code for real, so their files are never unit subjects.
     if let Some(tests) = crate::tiers::suite_tests_dir(root, "pyproject.toml") {
         files.retain(|file| !file.starts_with(&tests));
     }
@@ -162,8 +116,6 @@ pub fn find_unit_isolation_violations(root: impl AsRef<Path>) -> Result<Vec<Viol
         for stmt in suite {
             visitor.visit_stmt(stmt);
         }
-        // A first-party import that is neither the unit under test nor mocked by
-        // some `patch(...)` in the file is an un-mocked collaborator.
         for import in &visitor.imports {
             if import.is_uut || import.is_mocked(&visitor.patch_targets) {
                 continue;
@@ -186,38 +138,25 @@ pub fn find_unit_isolation_violations(root: impl AsRef<Path>) -> Result<Vec<Viol
     Ok(violations)
 }
 
-/// One first-party import seen in a unit test, with what it takes to decide
-/// whether it's the unit under test or mocked.
+/// One import seen in a unit test, with what it takes to decide whether it is mocked.
 struct ImportRecord {
     /// The module path to name in the message (`myproject.ledger`, `.ledger`).
     display: String,
     line: usize,
-    /// `true` when this import *is* the unit under test (never a collaborator).
     is_uut: bool,
-    /// For `from X import a, b` — the bound symbols. Each must be individually
-    /// mocked. Empty for a plain module import.
+    /// For `from X import a, b` — the bound symbols, each of which must be mocked.
     symbols: Vec<String>,
-    /// For an **absolute** `from X import a, b` — the source module `X`, which a
-    /// mocking patch's target must name (`patch("X.a")`). `None` for a relative
-    /// `from`-import (no absolute module to compare a patch against) and for a plain
-    /// `import X.Y` (which mocks via [`module`](Self::module)).
+    /// For an **absolute** `from X import a, b` — the source module `X`, which a mocking
+    /// patch must name. `None` for a relative `from`-import, which has no module to compare.
     source: Option<String>,
     /// For `import X.Y` — the module path (a patch reaching into it counts as a mock).
     module: Option<String>,
 }
 
 impl ImportRecord {
-    /// `true` when some `patch("…")` target mocks this import.
-    ///
-    /// - A plain `import X.Y` is mocked by a patch that reaches into the module —
-    ///   `patch("X.Y")` or `patch("X.Y.attr")`.
-    /// - A `from <module> import a, b` is mocked only when **every** bound symbol is
-    ///   individually mocked. A symbol `s` is mocked by a target whose last dotted
-    ///   segment is `s` **and**, for an absolute import, whose module path is the
-    ///   import's own [`source`](Self::source): `from pkg.ledger import record`
-    ///   needs `patch("pkg.ledger.record")`, not merely any `"….record"`. A relative
-    ///   import has no absolute module to compare, so a matching last segment alone
-    ///   is accepted (name resolution stays a documented non-goal).
+    /// `true` when some `patch("…")` target mocks this import: a plain `import X.Y` by any
+    /// patch reaching into `X.Y`, a `from X import a, b` only when **every** bound symbol
+    /// is patched at `X` itself.
     fn is_mocked(&self, patch_targets: &[String]) -> bool {
         if let Some(module) = &self.module {
             let prefix = format!("{module}.");
@@ -235,9 +174,8 @@ impl ImportRecord {
         })
     }
 
-    /// `true` when `target` patches `symbol` for this `from`-import: the target's
-    /// last dotted segment is `symbol` and — for an absolute import — its module
-    /// path equals the import's own [`source`](Self::source).
+    /// `true` when `target`'s last dotted segment is `symbol` and — for an absolute import
+    /// — its module path is the import's own [`source`](Self::source).
     fn symbol_is_mocked(&self, target: &str, symbol: &str) -> bool {
         let Some(module) = target.strip_suffix(&format!(".{symbol}")) else {
             return false;
@@ -249,10 +187,9 @@ impl ImportRecord {
     }
 }
 
-/// Walks one parsed unit test, collecting its first-party imports and every
-/// `patch("…")` string target so [`find_unit_isolation_violations`] can pair them.
-/// Imports guarded by `if TYPE_CHECKING:` are type-only (erased at runtime) and
-/// skipped.
+/// Walks one unit test, collecting its imports and every `patch("…")` string target so
+/// [`find_unit_isolation_violations`] can pair them. An `if TYPE_CHECKING:` import is erased
+/// at runtime and skipped.
 struct UnitIsolationVisitor<'a> {
     source: &'a str,
     first_party: &'a str,
@@ -287,18 +224,14 @@ impl Visitor for UnitIsolationVisitor<'_> {
         if self.type_checking_depth == 0 {
             let level = relative_level(&node);
             let module = node.module.as_ref().map(|m| m.as_str());
-            // Relative imports are first-party; an absolute import is checked when
-            // its head is first-party or external (third-party / effectful stdlib).
+            // A relative import is first-party; an absolute one is judged by its head.
             let should_check = level > 0
                 || module.is_some_and(|m| is_checked_import(import_head(m), self.first_party));
             if should_check {
                 let line = line_of(self.source, node.range.start());
                 let dots = ".".repeat(level);
                 match module {
-                    // `from <module> import a, b` — the bound symbols are collaborators.
-                    // An absolute import (`level == 0`) records its source module so a
-                    // mocking patch must name it; a relative import has no absolute
-                    // module to compare (`source: None`).
+                    // `from <module> import a, b` — the bound symbols are the collaborators.
                     Some(module) => self.imports.push(ImportRecord {
                         display: format!("{dots}{module}"),
                         line,
@@ -309,15 +242,8 @@ impl Visitor for UnitIsolationVisitor<'_> {
                     }),
                     // `from . import sub` — each name is a submodule.
                     None => {
-                        // A re-export barrel is tested by importing its public surface: in
-                        // `__init___test.py` (base `__init__`), a bare `from . import …`
-                        // (`level == 1`) names the package's own `__init__.py` — the unit
-                        // under test — so every bound name is the SUT, never a collaborator
-                        // (`__all__` / `__version__` included, since they live in the SUT).
-                        // Parity with TS's `index.test.ts` / `import … from './index.js'`.
-                        // Scoped exactly: a `from .. import …` (`level == 2`) reaches
-                        // the *parent* package, and a `from .core import …` takes the `Some`
-                        // branch above — both stay collaborators.
+                        // In `__init___test.py` a bare `from . import …` names the
+                        // package's own re-export surface — the unit under test itself.
                         let barrel_sut = self.base == "__init__" && level == 1;
                         for alias in &node.names {
                             let name = alias.name.as_str();
@@ -347,8 +273,7 @@ impl Visitor for UnitIsolationVisitor<'_> {
     }
 
     fn visit_stmt_if(&mut self, node: StmtIf) {
-        // Imports under `if TYPE_CHECKING:` are type-only — skip the body (the
-        // runtime `else` is still walked). Other `if`s recurse normally.
+        // An `if TYPE_CHECKING:` body is type-only; its runtime `else` is still walked.
         if is_type_checking(node.test.as_ref()) {
             self.type_checking_depth += 1;
             for stmt in node.body {
@@ -369,37 +294,30 @@ fn import_head(module: &str) -> &str {
     module.split('.').next().unwrap_or(module)
 }
 
-/// `true` when an import head names a collaborator the unit-isolation rule checks:
-/// **first-party** (the dist package) or **external** — a third-party package, or an
-/// effectful-stdlib module. The test framework and **pure** stdlib are not
-/// collaborators.
+/// `true` when an import head names a checked collaborator — the dist package, a third-party
+/// package, or effectful stdlib. The test framework and pure stdlib are not collaborators.
 fn is_checked_import(head: &str, first_party: &str) -> bool {
     if head == first_party {
-        return true; // first-party
+        return true;
     }
     if TEST_FRAMEWORK.contains(&head) {
-        return false; // pytest et al. — the harness, never a collaborator
+        return false;
     }
     if EFFECTFUL_STDLIB.contains(&head) {
-        return true; // external — effectful stdlib
+        return true;
     }
     if STDLIB_MODULES.contains(&head) {
-        return false; // pure stdlib
+        return false;
     }
-    true // external — a third-party package
+    true // an unrecognized head is a third-party package
 }
 
-/// The test harness — never a collaborator to mock. `unittest` / `unittest.mock`
-/// are stdlib (handled by [`STDLIB_MODULES`]); these are the rest.
+/// The test harness, never a collaborator. `unittest` is stdlib; these are the rest.
 const TEST_FRAMEWORK: &[&str] = &["pytest", "_pytest", "mock"];
 
-/// Standard-library modules that are **effectful at the head** — the README's
-/// External Dependencies (network / subprocess / process & IPC / randomness /
-/// database / low-level OS). **Dual-nature** heads (`os`, `pathlib`, `datetime`,
-/// `time`, `io`, `logging`, `threading`) are deliberately excluded: a pure use
-/// (`os.path.join`, `datetime(2020, 1, 1)`) can't be told from an effectful one at
-/// the import, so the clock / filesystem stay caught by the patch convention, not
-/// here (a documented non-goal). A tunable heuristic, not an exhaustive map.
+/// Standard-library modules that are **effectful at the head**. Dual-nature heads (`os`,
+/// `pathlib`, `datetime`, `time`, `io`, `logging`, `threading`) are excluded: a pure use
+/// can't be told from an effectful one at the import, so the patch convention catches those.
 const EFFECTFUL_STDLIB: &[&str] = &[
     "asynchat",
     "asyncore",
@@ -439,9 +357,8 @@ const EFFECTFUL_STDLIB: &[&str] = &[
     "winsound",
 ];
 
-/// Top-level standard-library module names (Python's `sys.stdlib_module_names`).
-/// Used to tell **pure** stdlib (allowed) from a **third-party** package (checked);
-/// the [`EFFECTFUL_STDLIB`] subset is what's actually flagged.
+/// Python's `sys.stdlib_module_names`, which tells pure stdlib from a third-party package.
+/// The [`EFFECTFUL_STDLIB`] subset is what is actually flagged.
 const STDLIB_MODULES: &[&str] = &[
     "abc",
     "aifc",
@@ -667,14 +584,12 @@ fn last_segment(module: &str) -> &str {
     module.rsplit('.').next().unwrap_or(module)
 }
 
-/// The number of leading dots on a `from`-import (`from ..pkg import x` → 2; an
-/// absolute import → 0).
+/// The number of leading dots on a `from`-import: `from ..pkg import x` → 2, absolute → 0.
 fn relative_level(node: &StmtImportFrom) -> usize {
     node.level.map_or(0, |level| level.to_usize())
 }
 
-/// `true` for `TYPE_CHECKING` / `typing.TYPE_CHECKING` — the guard whose body holds
-/// type-only imports.
+/// `true` for `TYPE_CHECKING` / `typing.TYPE_CHECKING`, the guard over type-only imports.
 fn is_type_checking(test: &Expr) -> bool {
     match test {
         Expr::Name(name) => name.id.as_str() == "TYPE_CHECKING",
@@ -683,9 +598,8 @@ fn is_type_checking(test: &Expr) -> bool {
     }
 }
 
-/// The unit-under-test base name for a test file: `widget_test.py` → `widget`.
-/// Only `*_test.py` reaches here (the unit-isolation scan no longer recognizes a
-/// legacy `test_*.py`), so stripping the `_test` suffix is all it takes.
+/// The unit-under-test base name for a test file: `widget_test.py` → `widget`. Only
+/// `*_test.py` reaches here, so stripping the `_test` suffix is all it takes.
 fn unit_under_test_base(file: &Path) -> String {
     let name = file
         .file_name()
@@ -695,9 +609,8 @@ fn unit_under_test_base(file: &Path) -> String {
     stem.strip_suffix("_test").unwrap_or(stem).to_string()
 }
 
-/// Walks one parsed test file, collecting lint violations. Tracks how deep we
-/// are inside `@pytest.fixture` functions so `no-inline-patch` can allow patches
-/// there while flagging them in test bodies.
+/// Walks one test file, collecting lint violations. `fixture_depth` tracks `@pytest.fixture`
+/// nesting, so `no-inline-patch` allows a patch there and flags one in a test body.
 struct LintVisitor<'a> {
     file: &'a Path,
     source: &'a str,
@@ -717,10 +630,8 @@ impl LintVisitor<'_> {
         });
     }
 
-    /// Shared entry for both function kinds: run the parameter lint, then return
-    /// whether this function is a fixture (so the caller bumps `fixture_depth`).
+    /// Run the parameter lint, and return whether this function is a fixture.
     fn enter_function(&mut self, args: &Arguments, decorators: &[Expr], range: TextRange) -> bool {
-        // `no-monkeypatch`: the `monkeypatch` parameter is the signal.
         let takes_monkeypatch = args
             .posonlyargs
             .iter()
@@ -766,8 +677,7 @@ impl Visitor for LintVisitor<'_> {
 
     fn visit_expr_call(&mut self, node: ExprCall) {
         let is_patch = is_patch_call(&node);
-        // `no-inline-patch`: a patch(...) call outside any fixture is a
-        // patch in a test body. Inside a fixture it is the right place.
+        // A fixture is the right place for a patch; a test body is not.
         if is_patch && self.fixture_depth == 0 {
             self.report(
                 node.range,
@@ -775,16 +685,11 @@ impl Visitor for LintVisitor<'_> {
                 "patch is called inline in a test body; move it into a `pytest.fixture`",
             );
         }
-        // `no-constant-patch`: patching a module-global UPPER_CASE constant.
-        // Fires regardless of fixture — config constants are usually patched in one.
+        // Fires regardless of fixture depth — a config constant is usually patched in one.
         if is_patch && patches_constant(&node) {
             self.report(node.range, "no-constant-patch", CONSTANT_PATCH_MSG);
         }
-        // `no-first-party-patch`: in an integration test, patching a
-        // first-party target — `patch("ourpkg.mod.fn")` — is forbidden; an
-        // integration test runs first-party code for real. Fires regardless of
-        // fixture (the patch belongs in one); only when the dist's own package is
-        // known (`first_party`) and the target's head segment names it.
+        // Fires regardless of fixture depth, and only when the dist's package is known.
         if is_patch {
             if let Some(pkg) = self.first_party {
                 if patch_string_target(&node).is_some_and(|target| patches_first_party(target, pkg))
@@ -793,7 +698,6 @@ impl Visitor for LintVisitor<'_> {
                 }
             }
         }
-        // `no-environ-mutation`: `os.environ.update(...)` and friends.
         if is_environ_mutation_call(&node) {
             self.report(node.range, "no-environ-mutation", ENVIRON_MUTATION_MSG);
         }
@@ -809,8 +713,6 @@ impl Visitor for LintVisitor<'_> {
         }
     }
 
-    // `no-environ-mutation`: `os.environ[...] = …`, augmented assignment,
-    // and `del os.environ[...]`.
     fn visit_stmt_assign(&mut self, node: StmtAssign) {
         if node.targets.iter().any(is_os_environ_subscript) {
             self.report(node.range, "no-environ-mutation", ENVIRON_MUTATION_MSG);
@@ -838,8 +740,7 @@ fn arg_named(arg: &Option<Box<Arg>>, name: &str) -> bool {
     arg.as_ref().is_some_and(|arg| arg.arg.as_str() == name)
 }
 
-/// `true` for an `@pytest.fixture` / `@fixture` decorator, with or without a
-/// call (`@pytest.fixture(autouse=True)`).
+/// `true` for an `@pytest.fixture` / `@fixture` decorator, called or bare.
 fn is_fixture_decorator(decorator: &Expr) -> bool {
     let target = match decorator {
         Expr::Call(call) => call.func.as_ref(),
@@ -852,8 +753,8 @@ fn is_fixture_decorator(decorator: &Expr) -> bool {
     }
 }
 
-/// `true` when a call is `patch(...)`, `patch.object(...)`, `patch.dict(...)`, or
-/// the same reached through a module (`mock.patch(...)`, `unittest.mock.patch`).
+/// `true` for `patch(...)` / `patch.object(...)` / `patch.dict(...)`, plain or reached
+/// through a module (`mock.patch(...)`, `unittest.mock.patch`).
 fn is_patch_call(call: &ExprCall) -> bool {
     match call.func.as_ref() {
         Expr::Name(name) => name.id.as_str() == "patch",
@@ -866,8 +767,7 @@ fn is_patch_call(call: &ExprCall) -> bool {
     }
 }
 
-/// `true` when an attribute's base resolves to `patch` — the receiver of
-/// `patch.object` / `patch.dict`.
+/// `true` when an attribute's base resolves to `patch` — a `patch.object` receiver.
 fn attr_base_is_patch(expr: &Expr) -> bool {
     match expr {
         Expr::Name(name) => name.id.as_str() == "patch",
@@ -876,15 +776,12 @@ fn attr_base_is_patch(expr: &Expr) -> bool {
     }
 }
 
-/// Message for the `no-constant-patch` lint.
 const CONSTANT_PATCH_MSG: &str = "patches a module-global config constant; inject config explicitly (a consumer that did `from pkg import CONSTANT` snapshots the value at import time and ignores the patch)";
 
-/// Message for the `no-first-party-patch` lint.
 const FIRST_PARTY_PATCH_MSG: &str = "patches a first-party target; an integration test must run first-party code for real — only third-party packages and effectful stdlib may be patched";
 
-/// The string-literal first argument of a `patch(...)` call — the dotted target
-/// like `"pkg.mod.attr"`. `None` when the first argument isn't a string literal
-/// (a non-literal target can't be classified deterministically).
+/// The string-literal first argument of a `patch(...)` call, the dotted target. `None` for
+/// a non-literal argument, which can't be classified deterministically.
 fn patch_string_target(call: &ExprCall) -> Option<&str> {
     if let Some(Expr::Constant(constant)) = call.args.first() {
         if let Constant::Str(target) = &constant.value {
@@ -894,16 +791,14 @@ fn patch_string_target(call: &ExprCall) -> Option<&str> {
     None
 }
 
-/// `true` when a `patch(...)` call's first string argument names a module-global
-/// UPPER_CASE constant, e.g. `patch("pkg.config.CACHE_DIR", …)`.
+/// `true` when a `patch(...)` target names an UPPER_CASE constant (`"pkg.cfg.CACHE_DIR"`).
 fn patches_constant(call: &ExprCall) -> bool {
     patch_string_target(call)
         .and_then(|target| target.rsplit('.').next())
         .is_some_and(is_upper_constant)
 }
 
-/// `true` when a patch `target`'s head dotted segment names the first-party
-/// package `pkg`, e.g. `target = "ourpkg.mod.fn"`, `pkg = "ourpkg"`.
+/// `true` when patch `target`'s head segment names the first-party package `pkg`.
 fn patches_first_party(target: &str, pkg: &str) -> bool {
     target
         .split('.')
@@ -911,8 +806,7 @@ fn patches_first_party(target: &str, pkg: &str) -> bool {
         .is_some_and(|head| !head.is_empty() && head == pkg)
 }
 
-/// `true` for an ALL-CAPS constant name — letters uppercase, digits and
-/// underscores allowed, at least one letter (`CACHE_DIR`, `DEBUG`, `MAX_SIZE`).
+/// `true` for an ALL-CAPS name: uppercase letters, digits, underscores, one letter minimum.
 fn is_upper_constant(name: &str) -> bool {
     !name.is_empty()
         && name
@@ -921,7 +815,6 @@ fn is_upper_constant(name: &str) -> bool {
         && name.chars().any(|c| c.is_ascii_uppercase())
 }
 
-/// Message for the `no-environ-mutation` lint.
 const ENVIRON_MUTATION_MSG: &str =
     "os.environ is mutated directly; set env via `patch.dict(os.environ, {...})` instead";
 
@@ -935,14 +828,12 @@ fn is_os_environ(expr: &Expr) -> bool {
     )
 }
 
-/// `true` for `os.environ[...]` — a subscript of `os.environ`, the form used as
-/// an assignment or `del` target.
+/// `true` for `os.environ[...]`, the form used as an assignment or `del` target.
 fn is_os_environ_subscript(expr: &Expr) -> bool {
     matches!(expr, Expr::Subscript(sub) if is_os_environ(sub.value.as_ref()))
 }
 
-/// `true` for a mutating method call on `os.environ` (`os.environ.update(...)`
-/// and friends).
+/// `true` for a mutating method call on `os.environ`, like `os.environ.update(...)`.
 fn is_environ_mutation_call(call: &ExprCall) -> bool {
     matches!(
         call.func.as_ref(),
@@ -969,14 +860,9 @@ fn line_of(source: &str, offset: TextSize) -> usize {
         + 1
 }
 
-/// The dist's own top-level import package — the first-party root for
-/// `no-first-party-patch`.
-///
-/// Walk up from `root` to the nearest `pyproject.toml`, read its `[project].name`,
-/// and [normalize](normalize_dist_name) it to an import name. Returns `None` when
-/// no `pyproject.toml` (with a `[project].name`) is found, so a tree with no
-/// declared package flags nothing rather than guess. The walk stops at a `.git`
-/// boundary so it can't escape the project into an unrelated `pyproject.toml`.
+/// The dist's own top-level import package: the nearest `pyproject.toml`'s `[project].name`,
+/// [normalized](normalize_dist_name). The walk up stops at a `.git` boundary so it can't
+/// escape into an unrelated project, and `None` means nothing is flagged rather than guessed.
 fn first_party_package(root: &Path) -> Option<String> {
     for dir in root.ancestors() {
         let candidate = dir.join("pyproject.toml");
@@ -1001,13 +887,12 @@ fn read_project_name(path: &Path) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Normalize a distribution name to its import package name: lower-cased, with
-/// `-` and `.` mapped to `_` (PEP 503-flavoured — `My-Project` → `my_project`).
+/// A distribution name as its import package name, PEP 503-flavoured: `My-Project` →
+/// `my_project`.
 fn normalize_dist_name(name: &str) -> String {
     name.trim().to_ascii_lowercase().replace(['-', '.'], "_")
 }
 
-/// Recursively collect every Python file under `dir` matching `is_match` into `out`.
 fn collect_python_files(
     dir: &Path,
     out: &mut Vec<PathBuf>,
@@ -1028,9 +913,8 @@ fn collect_python_files(
     Ok(())
 }
 
-/// `true` for a file the integration lints scan: `*_test.py` or `conftest.py`
-/// (where fixtures live). A legacy `test_*.py` is ordinary source, so
-/// it is not scanned.
+/// `true` for a file the integration lints scan: `*_test.py` or `conftest.py`. A legacy
+/// `test_*.py` is ordinary source.
 fn is_python_test_file(path: &Path) -> bool {
     let name = path
         .file_name()
@@ -1039,9 +923,8 @@ fn is_python_test_file(path: &Path) -> bool {
     name == "conftest.py" || name.ends_with("_test.py")
 }
 
-/// `true` for a colocated *unit* test the isolation rule scans: `*_test.py`. A
-/// legacy `test_*.py` is ordinary source, and `conftest.py` holds
-/// fixtures (not a unit) — neither is scanned.
+/// `true` for a colocated unit test: `*_test.py`. A legacy `test_*.py` is ordinary source,
+/// and `conftest.py` holds fixtures rather than a unit.
 fn is_python_unit_test_file(path: &Path) -> bool {
     let name = path
         .file_name()
@@ -1109,8 +992,6 @@ mod tests {
     fn patch_string_target_only_reads_string_literals() {
         let str_call = parse_call("patch(\"pkg.mod.attr\")\n");
         assert_eq!(patch_string_target(&str_call), Some("pkg.mod.attr"));
-        // A non-string literal (`patch(42)`), a name (`patch(target)`), and no args
-        // all yield `None` — a non-literal target can't be classified.
         let int_call = parse_call("patch(42)\n");
         assert_eq!(patch_string_target(&int_call), None);
         let name_call = parse_call("patch(target)\n");
@@ -1138,28 +1019,24 @@ mod tests {
     #[test]
     fn is_mocked_requires_every_symbol_at_the_import_module() {
         let rec = from_import(Some("pkg.ledger"), &["record", "erase"]);
-        // Only `record` patched → the un-mocked `erase` leaves the import un-mocked (1a).
+        // Only `record` patched → the un-mocked `erase` leaves the import un-mocked.
         assert!(!rec.is_mocked(&targets(&["pkg.ledger.record"])));
-        // Both symbols patched at the import's own module → mocked.
         assert!(rec.is_mocked(&targets(&["pkg.ledger.record", "pkg.ledger.erase"])));
     }
 
     #[test]
     fn is_mocked_rejects_a_last_segment_match_in_another_module() {
         let rec = from_import(Some("pkg.ledger"), &["record"]);
-        // Same last segment, different module → not mocked (1b).
+        // Same last segment, different module → not mocked.
         assert!(!rec.is_mocked(&targets(&["otherpkg.unrelated.record"])));
-        // A stdlib target sharing only the last segment likewise (`json.dumps`).
         let dumps = from_import(Some("pkg.formatter"), &["dumps"]);
         assert!(!dumps.is_mocked(&targets(&["json.dumps"])));
-        // The exact module path clears it.
         assert!(rec.is_mocked(&targets(&["pkg.ledger.record"])));
     }
 
     #[test]
     fn is_mocked_relative_import_accepts_a_last_segment_match() {
-        // A relative import has no absolute module to compare, so a matching last
-        // segment alone is accepted (documented non-goal).
+        // A relative import has no module to compare, so a last-segment match is accepted.
         let rec = from_import(None, &["record"]);
         assert!(rec.is_mocked(&targets(&["pkg.ledger.record"])));
         assert!(!rec.is_mocked(&targets(&["pkg.ledger.other"])));
@@ -1178,7 +1055,6 @@ mod tests {
         assert!(rec.is_mocked(&targets(&["pkg.db.connect"])));
         assert!(rec.is_mocked(&targets(&["pkg.db"])));
         assert!(!rec.is_mocked(&targets(&["pkg.other.connect"])));
-        // A `from`-import with no symbols and no module is never mocked.
         let empty = from_import(Some("pkg.mod"), &[]);
         assert!(!empty.is_mocked(&targets(&["pkg.mod.thing"])));
     }
@@ -1200,14 +1076,12 @@ mod tests {
             "pyproject.toml",
             "[project]\nname = \"My-Project\"\nversion = \"0.0.0\"\n",
         );
-        // Normalized to the import name.
         assert_eq!(first_party_package(&tree.0).as_deref(), Some("my_project"));
     }
 
     #[test]
     fn first_party_package_is_none_without_a_project_name() {
         let tree = TempDir::new();
-        // A pyproject with no `[project].name` — found, but no usable package.
         tree.write("pyproject.toml", "[build-system]\nrequires = []\n");
         tree.write(".git", "");
         assert_eq!(first_party_package(&tree.0), None);
@@ -1215,13 +1089,11 @@ mod tests {
 
     #[test]
     fn first_party_package_is_none_when_absent() {
-        // No pyproject.toml anywhere up the (temp) tree → nothing first-party.
         let tree = TempDir::new();
         assert_eq!(first_party_package(&tree.0), None);
     }
 
-    /// Run the unit-isolation visitor over `source` and return the flagged
-    /// (un-mocked, non-UUT first-party) import displays.
+    /// The displays of the imports `source` leaves un-mocked.
     fn unmocked(base: &str, first_party: &str, source: &str) -> Vec<String> {
         let suite = ast::Suite::parse(source, "t.py").expect("snippet should parse");
         let mut visitor = UnitIsolationVisitor {
@@ -1257,8 +1129,7 @@ mod tests {
             unit_under_test_base(Path::new("pkg/widget_test.py")),
             "widget"
         );
-        // Only `*_test.py` reaches here, so a legacy `test_*.py` keeps its
-        // `test_` prefix, and a name without the `_test` suffix is its own stem.
+        // Only `*_test.py` reaches here, so a legacy `test_*.py` keeps its prefix.
         assert_eq!(
             unit_under_test_base(Path::new("test_widget.py")),
             "test_widget"
@@ -1270,17 +1141,14 @@ mod tests {
     fn recognizes_python_unit_test_files() {
         assert!(is_python_unit_test_file(Path::new("widget_test.py")));
         assert!(is_python_unit_test_file(Path::new("pkg/widget_test.py")));
-        // A legacy `test_*.py` is ordinary source, not a unit test.
         assert!(!is_python_unit_test_file(Path::new("test_widget.py")));
-        // conftest holds fixtures, not a unit — excluded from unit lint.
         assert!(!is_python_unit_test_file(Path::new("conftest.py")));
         assert!(!is_python_unit_test_file(Path::new("widget.py")));
     }
 
     #[test]
     fn visitor_flags_first_party_and_external_collaborators() {
-        // The UUT is left alone; the first-party collaborator and the third-party
-        // import are both flagged (slice 3 broadened the rule to external deps).
+        // The UUT is left alone; the first-party and third-party imports are flagged.
         let found = unmocked(
             "widget",
             "myproject",
@@ -1296,7 +1164,6 @@ mod tests {
 
     #[test]
     fn visitor_clears_a_mocked_collaborator() {
-        // The imported `record` is patched at its own source module → not flagged.
         let found = unmocked(
             "widget",
             "myproject",
@@ -1307,8 +1174,8 @@ mod tests {
 
     #[test]
     fn visitor_flags_a_wrong_module_patch() {
-        // A patch that shares only the last segment but names a different module does
-        // not mock the import (#393, 1b): `record` stays an un-mocked collaborator.
+        // A patch sharing only the last segment names a different module, so `record`
+        // stays an un-mocked collaborator.
         let found = unmocked(
             "widget",
             "myproject",
@@ -1319,15 +1186,13 @@ mod tests {
 
     #[test]
     fn visitor_flags_a_partly_mocked_multi_symbol_import() {
-        // Every imported symbol must be mocked (#393, 1a): patching only `record`
-        // leaves the sibling `erase` a real collaborator, so the import is flagged.
+        // Patching only `record` leaves the sibling `erase` a real collaborator.
         let found = unmocked(
             "widget",
             "myproject",
             "from myproject.ledger import record, erase\npatch(\"myproject.ledger.record\")\n",
         );
         assert_eq!(found, vec!["myproject.ledger".to_string()]);
-        // Patching both symbols at their module clears it.
         let both = unmocked(
             "widget",
             "myproject",
@@ -1339,19 +1204,16 @@ mod tests {
 
     #[test]
     fn visitor_handles_module_and_relative_imports() {
-        // A first-party module import, not the UUT, un-mocked → flagged.
         assert_eq!(
             unmocked("widget", "myproject", "import myproject.db\n"),
             vec!["myproject.db".to_string()]
         );
-        // `import myproject.db` reached by a patch → mocked.
         assert!(unmocked(
             "widget",
             "myproject",
             "import myproject.db\npatch(\"myproject.db.connect\")\n"
         )
         .is_empty());
-        // Relative imports are first-party; `from . import widget` is the UUT.
         assert_eq!(
             unmocked("widget", "myproject", "from .ledger import record\n"),
             vec![".ledger".to_string()]
@@ -1368,29 +1230,24 @@ mod tests {
 
     #[test]
     fn visitor_treats_barrel_reexport_import_as_the_unit_under_test() {
-        // In `__init___test.py` (base `__init__`), a bare `from . import …`
-        // imports the package's own re-export surface — the SUT — so no name is a
-        // collaborator, `__all__` / `__version__` included (they live in the SUT).
+        // A bare `from . import …` names the package's own re-export surface, the SUT.
         assert!(unmocked(
             "__init__",
             "myproject",
             "from . import Thing, __all__, __version__\n"
         )
         .is_empty());
-        // Reaching AROUND the barrel into a sibling module directly is still a
-        // collaborator (the `module: Some("core")` branch, `core != __init__`).
+        // Reaching around the barrel into a sibling module is still a collaborator.
         assert_eq!(
             unmocked("__init__", "myproject", "from .core import Thing\n"),
             vec![".core".to_string()]
         );
-        // `from .. import x` (level 2) resolves to the PARENT package, not the SUT
-        // file — still a collaborator even inside a barrel test.
+        // `from .. import x` resolves to the parent package, not the SUT file.
         assert_eq!(
             unmocked("__init__", "myproject", "from .. import sibling\n"),
             vec!["..sibling".to_string()]
         );
-        // The barrel shortcut is scoped to the `__init__` base: an ordinary
-        // `widget_test.py` doing `from . import ledger` is still a collaborator.
+        // The barrel shortcut is scoped to the `__init__` base.
         assert_eq!(
             unmocked("widget", "myproject", "from . import ledger\n"),
             vec![".ledger".to_string()]
@@ -1399,8 +1256,7 @@ mod tests {
 
     #[test]
     fn visitor_skips_type_checking_imports() {
-        // A first-party import guarded by TYPE_CHECKING is type-only — not a runtime
-        // collaborator; the runtime `else` import is still seen.
+        // A TYPE_CHECKING import is type-only; the runtime `else` import is still seen.
         let found = unmocked(
             "widget",
             "myproject",
@@ -1420,7 +1276,7 @@ mod tests {
         assert!(!is_checked_import("dataclasses", "myproject"));
         assert!(is_checked_import("requests", "myproject")); // third-party
         assert!(is_checked_import("stripe", "myproject"));
-        // dual-nature stdlib heads stay pure (not flagged) — caught by patching, not import
+        // A dual-nature head stays pure — the patch convention catches it, not the import.
         assert!(!is_checked_import("os", "myproject"));
         assert!(!is_checked_import("pathlib", "myproject"));
         assert!(!is_checked_import("datetime", "myproject"));
@@ -1428,7 +1284,6 @@ mod tests {
 
     #[test]
     fn visitor_flags_external_collaborators() {
-        // Third-party + effectful stdlib are flagged; pure stdlib and the framework aren't.
         let found = unmocked(
             "widget",
             "myproject",
@@ -1441,16 +1296,14 @@ mod tests {
 
     #[test]
     fn visitor_type_checking_variants_and_plain_if() {
-        // `typing.TYPE_CHECKING` (attribute form) guards type-only imports — both
-        // the `from`-import and the plain module import are skipped.
+        // The attribute form guards type-only imports too.
         assert!(unmocked(
             "widget",
             "myproject",
             "if typing.TYPE_CHECKING:\n    from myproject.models import W\n    import myproject.db\n"
         )
         .is_empty());
-        // A plain `if` (not TYPE_CHECKING) is walked normally — its first-party
-        // import is still a collaborator.
+        // A plain `if` is walked normally; its import is still a collaborator.
         assert_eq!(
             unmocked(
                 "widget",
@@ -1463,7 +1316,6 @@ mod tests {
 
     #[test]
     fn find_unit_isolation_without_pyproject_reports_nothing() {
-        // No declared package → no first-party collaborators (the early return).
         let tree = TempDir::new();
         tree.write("widget_test.py", "from myproject.ledger import record\n");
         tree.write(".git", "");
@@ -1476,7 +1328,6 @@ mod tests {
     fn find_unit_isolation_walks_subdirs_and_flags() {
         let tree = TempDir::new();
         tree.write("pyproject.toml", "[project]\nname = \"myproject\"\n");
-        // A nested unit test — exercises the directory recursion.
         tree.write("pkg/thing_test.py", "from myproject.ledger import record\n");
         let found =
             find_unit_isolation_violations(&tree.0).expect("a readable tree should succeed");
@@ -1490,7 +1341,6 @@ mod tests {
         assert!(is_python_test_file(Path::new("widget_test.py")));
         assert!(is_python_test_file(Path::new("pkg/widget_test.py")));
         assert!(is_python_test_file(Path::new("conftest.py")));
-        // A legacy `test_*.py` is ordinary source, not a test file.
         assert!(!is_python_test_file(Path::new("test_widget.py")));
     }
 

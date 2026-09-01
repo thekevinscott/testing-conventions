@@ -1,0 +1,5 @@
+# 9 is the lowest `unit one-function-per-file` threshold this module passes today: `advance` runs
+# 9 lines and `main` runs 12, so only `main` sits above the bar and holds the file alone. Walk it
+# down as the module splits.
+[python]
+one_function_per_file = { max_lines = 9 }

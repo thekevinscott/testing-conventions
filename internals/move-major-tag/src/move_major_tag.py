@@ -9,9 +9,9 @@ here — rather than inline in the workflow YAML — lets it carry real integrat
 (see `tests/`).
 
 git is the one external dependency. It lives behind the small boundary functions below
-(`fetch_tags` / `tag_exists` / `is_ancestor` / `move_tag` / `push_tag`) so an *integration*
-test can mock them and exercise the real `advance` orchestration, while an *e2e* test runs the
-whole thing against a real git repo wired to a local remote.
+(`fetch_tags` / `tag_exists` / `is_ancestor` / `move_tag` / `push_tag`), so the colocated unit
+suite fakes `subprocess.run` and runs those helpers and the real `advance` orchestration against
+it, while an *e2e* test runs the whole thing against a real git repo wired to a local remote.
 
 Inputs come from the environment (set by the workflow):
   SHA   the released commit to advance the tag to (required).
@@ -59,6 +59,9 @@ def push_tag(tag: str) -> None:
 
 # --- orchestration (runs for real under both test kinds; only git is mocked) ---
 
+WRITING_ACTIONS = frozenset({"bootstrap", "advance"})
+
+
 def decide(*, exists: bool, sha_behind_or_at_tag: bool) -> str:
     """The forward-only decision, as a pure function of two git facts.
 
@@ -76,19 +79,18 @@ def decide(*, exists: bool, sha_behind_or_at_tag: bool) -> str:
 def advance(tag: str, sha: str, *, push: bool = True) -> str:
     """Forward-only advance of `tag` to `sha`. Returns the action taken.
 
-    Fetches tags, decides via `decide`, then — unless the decision is "noop" — moves the tag
-    and (when `push`) force-pushes it. The ancestry check is skipped when the tag is absent:
+    Fetches tags, decides via `decide`, then — when the decision writes — moves the tag and
+    (when `push`) force-pushes it. The ancestry check is skipped when the tag is absent:
     there is nothing to compare against, and the first run simply bootstraps the tag.
     """
     fetch_tags()
     exists = tag_exists(tag)
     sha_behind_or_at_tag = exists and is_ancestor(sha, tag)
     action = decide(exists=exists, sha_behind_or_at_tag=sha_behind_or_at_tag)
-    if action == "noop":
-        return action
-    move_tag(tag, sha)
-    if push:
-        push_tag(tag)
+    if action in WRITING_ACTIONS:
+        move_tag(tag, sha)
+        if push:
+            push_tag(tag)
     return action
 
 

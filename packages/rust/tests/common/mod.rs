@@ -112,6 +112,25 @@ impl Staged {
         )
     }
 
+    /// Stage the Python fixture whose colocated suite is nested a directory below the scan
+    /// path (`nested_tests`), the shape a package with submodules has.
+    pub fn python_nested(project: &str) -> Self {
+        Self::stage(
+            "python",
+            project,
+            &[
+                "pyproject.toml",
+                "src/calc.py",
+                "src/calc_test.py",
+                "src/pkg/__init__.py",
+                "src/pkg/deep.py",
+                "src/pkg/deep_test.py",
+                "tests/integration/tiers_test.py",
+            ],
+            false,
+        )
+    }
+
     /// Stage a loose Python fixture (`loose_killed` / `loose_survivors`): the flat,
     /// no-manifest case, where the staged path is both package root and scan path.
     pub fn python_loose(project: &str) -> Self {

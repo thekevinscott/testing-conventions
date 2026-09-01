@@ -44,6 +44,31 @@ fn survivors_are_reported() {
 }
 
 #[test]
+fn a_test_file_nested_below_the_scan_path_is_never_mutated() {
+    let package = Staged::python_nested("nested_tests");
+    let (count, survivors) = expect_tested(
+        measure_python(
+            &package.path().join("src"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+        )
+        .expect("cosmic-ray runs"),
+    );
+    assert!(count > 0, "the engine ran, so the count is non-zero");
+    assert!(
+        survivors
+            .iter()
+            .all(|m| !m.file.ends_with("_test.py") && !m.file.starts_with("test_")),
+        "the suite judges the mutants and is never mutated itself; got {survivors:?}"
+    );
+    assert!(
+        survivors.is_empty(),
+        "every mutant should be caught; got {survivors:?}"
+    );
+}
+
+#[test]
 fn a_loose_tree_with_no_manifest_reports_root_relative_survivors() {
     let project = Staged::python_loose("loose_survivors");
     let (_, survivors) = expect_tested(

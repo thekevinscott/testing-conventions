@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'testing-conventions version to verify against, e.g. 0.0.67. Empty (the default, on pull_request / push) runs the #356 hermetic build-from-HEAD path unchanged; the verify-and-promote workflow (#357) dispatches this at the release SHA with the just-published version pinned, forcing the published consumer path.'
+        description: 'testing-conventions version to verify against, e.g. 0.0.67. Empty (the default, on pull_request / push) runs the hermetic build-from-HEAD path. The verify-and-promote workflow dispatches this at the release SHA with the just-published version pinned, forcing the published consumer path.'
         type: string
         default: ''
 
@@ -32,7 +32,7 @@ concurrency:
 
 jobs:
   build-cli:
-    name: Build the CLI from HEAD (hermetic, #356)
+    name: Build the CLI from HEAD (hermetic)
     # The hermetic CLI is built here, in a repo-only caller: a guarded job in the reusable
     # workflow would render a skipped row in every consumer's checks UI. One build per run —
     # the artifact is run-scoped and every `uses:` call shares it via `needs: [build-cli]`.

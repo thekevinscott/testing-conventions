@@ -43,9 +43,9 @@ jobs:
     # on the caller's token being empty, so forwarding a secret here selects the classic
     # long-lived-token path. See docs/internals/repo.md, "Release credentials".
 
-  # PyPI Trusted Publishers reject an OIDC token minted from a cross-repo reusable workflow
-  # (pypi/warehouse#11096), so the upload runs here, in the caller's context. See
-  # docs/internals/repo.md, "The delegated PyPI upload".
+  # PyPI Trusted Publishers reject an OIDC token minted from a cross-repo reusable workflow, so
+  # the upload runs here, in the caller's context. See docs/internals/repo.md, "The delegated
+  # PyPI upload".
   pypi-publish:
     needs: release
     if: ${{ !cancelled() && needs.release.outputs.pypi_pending == 'true' }}

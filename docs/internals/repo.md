@@ -167,6 +167,21 @@ newline ends the file-command line early, and the value's remaining lines are pa
 (bogus) outputs. `render_github_output` is a pure function with its own colocated test, so the
 rendering is exercised in isolation, not only through a full action run.
 
+## Workflow prose names the constraint
+
+A `.github/workflows/` file states its constraints in prose the reader resolves on the spot. That
+holds for comments and equally for the `name:` and `description:` strings GitHub renders — in every
+consumer's checks UI, and as the reusable workflow's own input documentation.
+
+So the prose names the breakage it prevents — the `uses:`-cannot-be-dynamic split, the quoted
+`fetch-depth` falsy-zero trap, cargo-before-uv ordering, the trailing-token subcommand-drift guard —
+and carries no issue or PR number. A number sends the reader out of the file to resolve it, goes
+stale the moment the issue is superseded, and duplicates what git blame already records. Where a
+reference stood in for a constraint the prose did not carry, the constraint moves into the prose or
+into this file, and the number drops either way: `release.yml`'s delegated PyPI upload is the worked
+case, naming the upstream Trusted Publishers restriction inline and citing it in full under "The
+delegated PyPI upload" below.
+
 ## Self-test and the `@v0` path
 
 `testing-conventions-selftest.yml` smoke-tests the reusable workflow end to end, so a regression in

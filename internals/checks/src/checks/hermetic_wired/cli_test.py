@@ -186,8 +186,9 @@ def test_declares_the_workflow_argument_and_variadic_callers():
 
 def test_raises_when_one_of_two_fallback_steps_lacks_its_own_cli_command_env(tmp_path):
     workflow = _write(tmp_path, "wf.yml", UNWIRED_STEP)
+    caller = _write(tmp_path, "caller.yml", CALLER_WIRED)
     try:
-        cli.callback(workflow=workflow, callers=())
+        cli.callback(workflow=workflow, callers=(caller,))
     except Exception as error:  # noqa: BLE001
         assert "Check colocated-test" in error.message
         assert "Check lint" not in error.message
@@ -201,8 +202,9 @@ def test_the_file_wide_fallback_needle_survives_a_single_unwired_step(tmp_path):
     # tell one unwired step from none.
     assert "${CLI_COMMAND:-" in UNWIRED_STEP
     workflow = _write(tmp_path, "wf.yml", UNWIRED_STEP)
+    caller = _write(tmp_path, "caller.yml", CALLER_WIRED)
     try:
-        cli.callback(workflow=workflow, callers=())
+        cli.callback(workflow=workflow, callers=(caller,))
     except Exception as error:  # noqa: BLE001
         assert "Check colocated-test" in error.message
     else:
@@ -212,8 +214,9 @@ def test_the_file_wide_fallback_needle_survives_a_single_unwired_step(tmp_path):
 def test_raises_when_a_step_sets_cli_command_from_something_other_than_detect(tmp_path):
     hardcoded = WIRED.replace(ENV_LINE, "          CLI_COMMAND: ./hermetic-cli/testing-conventions\n", 1)
     workflow = _write(tmp_path, "wf.yml", hardcoded)
+    caller = _write(tmp_path, "caller.yml", CALLER_WIRED)
     try:
-        cli.callback(workflow=workflow, callers=())
+        cli.callback(workflow=workflow, callers=(caller,))
     except Exception as error:  # noqa: BLE001
         assert "Check lint" in error.message
     else:
@@ -225,8 +228,9 @@ def test_a_neighbouring_steps_env_does_not_satisfy_an_unwired_step(tmp_path):
     # the fallback line instead of bounding each step would find the neighbour's env line.
     trailing_job = "  packaging:\n    steps:\n      - run: echo hi\n"
     workflow = _write(tmp_path, "wf.yml", UNWIRED_STEP + trailing_job)
+    caller = _write(tmp_path, "caller.yml", CALLER_WIRED)
     try:
-        cli.callback(workflow=workflow, callers=())
+        cli.callback(workflow=workflow, callers=(caller,))
     except Exception as error:  # noqa: BLE001
         assert "Check colocated-test" in error.message
     else:

@@ -214,12 +214,12 @@ fn push_ts_bindings(
 ) {
     for declarator in &node.declarations {
         let body = match &declarator.init {
-            Some(Expression::ArrowFunctionExpression(arrow)) => &arrow.body,
-            Some(Expression::FunctionExpression(function)) => match &function.body {
-                Some(body) => body,
-                None => continue,
-            },
-            _ => continue,
+            Some(Expression::ArrowFunctionExpression(arrow)) => Some(arrow.body.as_ref()),
+            Some(Expression::FunctionExpression(function)) => function.body.as_deref(),
+            _ => None,
+        };
+        let Some(body) = body else {
+            continue;
         };
         let Some(name) = declarator.id.get_identifier_name() else {
             continue;
@@ -482,6 +482,136 @@ mod tests {
     fn rust_counts_an_empty_body_as_no_lines() {
         let found = rust("pub fn stub() {}\n");
         assert_eq!(found, vec![("stub".to_string(), 0)]);
+    }
+
+    #[test]
+    fn typescript_counts_a_plain_function_declaration() {
+        let found = typescript(
+            "function alpha(value: number): number {\n  const total = value + 1;\n  return total;\n}\n",
+        );
+        assert_eq!(found, vec![("alpha".to_string(), 2)]);
+    }
+
+    #[test]
+    fn typescript_skips_non_function_defaults_and_imports() {
+        let found = typescript(
+            "import { x } from './x';\nexport default class Widget {}\n\
+             const beta = (value: number): number => value;\n",
+        );
+        assert_eq!(found, vec![("beta".to_string(), 1)]);
+    }
+
+    #[test]
+    fn typescript_skips_a_destructured_function_binding() {
+        let found = typescript("const { a } = () => {};\n");
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    #[test]
+    fn typescript_counts_an_empty_arrow_body_as_no_lines() {
+        let found = typescript("const stub = () => {};\n");
+        assert_eq!(found, vec![("stub".to_string(), 0)]);
+    }
+
+    #[test]
+    fn typescript_parse_error_is_reported() {
+        let err = typescript_functions("const x = ;\n", Path::new("bad.ts")).unwrap_err();
+        assert!(err.to_string().contains("parsing"), "got: {err}");
+    }
+
+    fn unique_tmp(slug: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        std::env::temp_dir().join(format!(
+            "tc-one-function-{slug}-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ))
+    }
+
+    #[test]
+    fn suite_tier_files_are_not_judged() {
+        let root = unique_tmp("suite");
+        std::fs::create_dir_all(root.join("tests")).unwrap();
+        std::fs::write(root.join("pyproject.toml"), "[project]\nname = \"w\"\n").unwrap();
+        let two_functions = "def alpha():\n    return 1\n\ndef beta():\n    return 2\n";
+        std::fs::write(root.join("widget.py"), two_functions).unwrap();
+        std::fs::write(root.join("tests").join("helper.py"), two_functions).unwrap();
+        let found = find_violations(&root, Language::Python, 0).expect("the tree scans");
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(found[0].file.ends_with("widget.py"), "got: {found:?}");
+    }
+
+    #[test]
+    fn a_root_without_a_manifest_judges_every_source_file() {
+        let root = unique_tmp("no-manifest");
+        std::fs::create_dir_all(&root).unwrap();
+        let two_functions = "def alpha():\n    return 1\n\ndef beta():\n    return 2\n";
+        std::fs::write(root.join("widget.py"), two_functions).unwrap();
+        let found = find_violations(&root, Language::Python, 0).expect("the tree scans");
+        assert_eq!(found.len(), 1, "got: {found:?}");
+    }
+
+    #[test]
+    fn a_typescript_suite_tier_is_not_judged() {
+        let root = unique_tmp("ts-suite");
+        std::fs::create_dir_all(root.join("tests")).unwrap();
+        std::fs::write(root.join("package.json"), "{ \"name\": \"w\" }\n").unwrap();
+        let two = "const alpha = () => {\n  return 1;\n};\nconst beta = () => {\n  return 2;\n};\n";
+        std::fs::write(root.join("widget.ts"), two).unwrap();
+        std::fs::write(root.join("tests").join("helper.ts"), two).unwrap();
+        let found = find_violations(&root, Language::TypeScript, 0).expect("the tree scans");
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(found[0].file.ends_with("widget.ts"), "got: {found:?}");
+    }
+
+    #[test]
+    fn a_rust_root_collects_only_rust_sources() {
+        let root = unique_tmp("rust-root");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("widget.rs"), "pub fn one() -> u8 {\n    1\n}\n").unwrap();
+        let found = find_violations(&root, Language::Rust, 0).expect("the tree scans");
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    #[test]
+    fn an_unreadable_source_names_the_file() {
+        let root = unique_tmp("unreadable");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("widget.rs"), [0xFF, 0xFE]).unwrap();
+        let err = find_violations(&root, Language::Rust, 0).unwrap_err();
+        assert!(
+            err.to_string().contains("reading source file"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn an_unparsable_python_source_names_the_file() {
+        let err = python_functions("def broken(:\n", Path::new("widget.py")).unwrap_err();
+        assert!(err.to_string().contains("parsing"), "got: {err}");
+    }
+
+    #[test]
+    fn an_extension_without_a_source_type_is_an_error() {
+        let err = typescript_functions("", Path::new("widget.txt")).unwrap_err();
+        assert!(
+            err.to_string().contains("reading the source type"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn an_unnamed_default_export_is_reported_as_default() {
+        let found =
+            typescript("export default function (value: number): number {\n  return value;\n}\n");
+        assert_eq!(found, vec![("default".to_string(), 1)]);
+    }
+
+    #[test]
+    fn an_unparsable_rust_source_names_the_file() {
+        let err = rust_functions("fn broken( {\n", Path::new("widget.rs")).unwrap_err();
+        assert!(err.to_string().contains("parsing"), "got: {err}");
     }
 
     #[test]

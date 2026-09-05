@@ -103,7 +103,43 @@ pub fn install(path: &Path) -> anyhow::Result<()> {
             name.to_string_lossy(),
             std::process::id()
         ));
-    fs::write(&tmp, &new).with_context(|| format!("writing {}", tmp.display()))?;
-    fs::rename(&tmp, path)
+    persist(&tmp, path, &new)
+}
+
+/// Write `contents` to `tmp`, then rename it over `path`.
+fn persist(tmp: &Path, path: &Path, contents: &str) -> anyhow::Result<()> {
+    fs::write(tmp, contents).with_context(|| format!("writing {}", tmp.display()))?;
+    fs::rename(tmp, path)
         .with_context(|| format!("renaming {} over {}", tmp.display(), path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{install, persist};
+    use std::path::Path;
+
+    #[test]
+    fn an_empty_path_reports_no_file_name() {
+        let err = install(Path::new("")).unwrap_err();
+        assert!(format!("{err:#}").contains("has no file name"));
+    }
+
+    #[test]
+    fn a_failed_temp_write_names_the_temp_path() {
+        let missing = Path::new("/nonexistent-tc/agents.tmp");
+        let err = persist(missing, Path::new("/nonexistent-tc/AGENTS.md"), "x").unwrap_err();
+        assert!(format!("{err:#}").contains("writing /nonexistent-tc/agents.tmp"));
+    }
+
+    #[test]
+    fn a_failed_rename_names_both_paths() {
+        let dir = std::env::temp_dir().join(format!("tc-agents-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let tmp = dir.join("block.tmp");
+        let err = persist(&tmp, &dir.join("missing/AGENTS.md"), "x").unwrap_err();
+        let message = format!("{err:#}");
+        assert!(message.contains("renaming"), "{message}");
+        assert!(message.contains("missing/AGENTS.md"), "{message}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

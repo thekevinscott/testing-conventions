@@ -72,12 +72,7 @@ pub fn attest(repo: &Path, command: &str) -> Result<Attestation> {
         .context("resolving HEAD — `e2e attest` must run inside a git repo with a commit")?;
     let branch = current_branch(repo)?;
 
-    let status = Command::new("sh")
-        .arg("-c")
-        .arg(command)
-        .current_dir(repo)
-        .status()
-        .with_context(|| format!("running e2e command `{command}`"))?;
+    let status = run_shell(repo, command)?;
     let exit_code = status.code().unwrap_or(-1);
 
     let ran_at = SystemTime::now()
@@ -113,6 +108,16 @@ pub fn attest(repo: &Path, command: &str) -> Result<Attestation> {
     git_run(repo, &["commit", "-q", "-m", message.as_str()])?;
 
     Ok(attestation)
+}
+
+/// Run `command` through `sh -c` in `repo`, returning its exit status.
+fn run_shell(repo: &Path, command: &str) -> Result<std::process::ExitStatus> {
+    Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .current_dir(repo)
+        .status()
+        .with_context(|| format!("running e2e command `{command}`"))
 }
 
 /// The outcome of [`verify`] — whether a committed receipt answers the branch's e2e nudge.
@@ -188,17 +193,16 @@ pub fn verify_extra_scoped(
 
     // Question 2 — does the branch's diff add or update a receipt? The filter drops
     // deletions, so sweeping a stale receipt by hand never counts as a decision.
-    let out = git_capture(
-        repo,
-        &[
-            "diff",
-            "--name-only",
-            "--diff-filter=ACMRT",
-            &format!("{base}...HEAD"),
-            "--",
-            RECEIPTS_DIR,
-        ],
-    )?;
+    let range = format!("{base}...HEAD");
+    let receipt_diff = [
+        "diff",
+        "--name-only",
+        "--diff-filter=ACMRT",
+        &range,
+        "--",
+        RECEIPTS_DIR,
+    ];
+    let out = git_capture(repo, &receipt_diff)?;
     Ok(if out.is_empty() {
         Verification::Missing
     } else {
@@ -317,7 +321,42 @@ fn git_run(repo: &Path, args: &[&str]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::branch_slug;
+    use super::{
+        branch_slug, git_capture, git_diff_changed, git_run, pathspec_matches_tracked, run_shell,
+    };
+    use std::path::Path;
+
+    const NOWHERE: &str = "/nonexistent-tc-e2e";
+
+    #[test]
+    fn run_shell_reports_a_spawn_failure_with_the_command() {
+        let err = run_shell(Path::new(NOWHERE), "true").unwrap_err();
+        assert!(format!("{err:#}").contains("running e2e command `true`"));
+    }
+
+    #[test]
+    fn pathspec_check_reports_a_spawn_failure() {
+        let err = pathspec_matches_tracked(Path::new(NOWHERE), "src").unwrap_err();
+        assert!(format!("{err:#}").contains("git ls-files -- src"));
+    }
+
+    #[test]
+    fn diff_check_reports_a_spawn_failure() {
+        let err = git_diff_changed(Path::new(NOWHERE), &["diff", "--quiet"]).unwrap_err();
+        assert!(format!("{err:#}").contains("running `git diff --quiet`"));
+    }
+
+    #[test]
+    fn capture_reports_a_spawn_failure() {
+        let err = git_capture(Path::new(NOWHERE), &["rev-parse", "HEAD"]).unwrap_err();
+        assert!(format!("{err:#}").contains("running `git rev-parse HEAD`"));
+    }
+
+    #[test]
+    fn run_reports_a_spawn_failure() {
+        let err = git_run(Path::new(NOWHERE), &["add", "-A"]).unwrap_err();
+        assert!(format!("{err:#}").contains("running `git add -A`"));
+    }
 
     #[test]
     fn slug_lowercases_and_maps_separators() {

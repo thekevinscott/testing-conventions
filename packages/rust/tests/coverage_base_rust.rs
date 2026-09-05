@@ -267,6 +267,16 @@ fn rust_an_unknown_base_ref_is_an_error() {
 }
 
 #[test]
+fn rust_cli_surfaces_an_unknown_base_ref_as_an_error() {
+    let repo = TempRepo::new("cli-bad-base");
+    let _ = baseline(&repo);
+    assert!(
+        run_coverage_base(&repo, "no-such-ref", None).is_err(),
+        "an unresolvable base ref must error through the CLI"
+    );
+}
+
+#[test]
 fn rust_cli_exits_nonzero_on_a_below_floor_diff() {
     let repo = TempRepo::new("cli-red");
     repo.write("testing-conventions.toml", &config_toml(80));

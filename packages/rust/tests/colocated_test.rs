@@ -171,6 +171,22 @@ fn rust_cfg_not_test_tree_exits_nonzero() {
 }
 
 #[test]
+fn rust_has_no_twin_file_subjects() {
+    assert!(
+        relative_orphans(&fixture("rust/red"), Language::Rust).is_empty(),
+        "Rust colocation is the inline `#[cfg(test)]` check, so the twin scan tracks no files"
+    );
+}
+
+#[test]
+fn rust_an_exemption_lifts_a_file_without_inline_tests() {
+    let root = fixture("rust/cfg_not_test");
+    let orphans = missing_inline_tests(&root, &exempt(&["src/gated.rs"]))
+        .expect("walking a readable tree should succeed");
+    assert!(orphans.is_empty(), "got: {orphans:?}");
+}
+
+#[test]
 fn empty_init_is_a_non_subject_but_content_and_shims_are_orphans() {
     assert_eq!(
         relative_orphans(&fixture("python_exempt"), Language::Python),
@@ -305,5 +321,60 @@ fn typescript_suite_helpers_are_not_colocated_subjects() {
     assert_eq!(
         unit_colocated_test_exit("typescript_tiers", "typescript"),
         0
+    );
+}
+
+fn unique_tmp(slug: &str) -> PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "tc-colocated-{slug}-{}-{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed),
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+#[test]
+fn an_unreadable_python_source_names_the_file() {
+    let dir = unique_tmp("nonutf8-py");
+    std::fs::write(dir.join("widget.py"), [0xFF, 0xFE, 0x00]).unwrap();
+    let err = missing_unit_tests(&dir, Language::Python, &BTreeSet::new()).unwrap_err();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        format!("{err:#}").contains("reading source file"),
+        "got: {err:#}"
+    );
+}
+
+#[test]
+fn an_unreadable_rust_source_names_the_file() {
+    let dir = unique_tmp("nonutf8-rs");
+    std::fs::write(dir.join("widget.rs"), [0xFF, 0xFE, 0x00]).unwrap();
+    let err = missing_inline_tests(&dir, &BTreeSet::new()).unwrap_err();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        format!("{err:#}").contains("reading source file"),
+        "got: {err:#}"
+    );
+}
+
+#[test]
+fn an_unparsable_rust_source_names_the_file() {
+    let dir = unique_tmp("badsyntax-rs");
+    std::fs::write(dir.join("widget.rs"), "fn broken( {\n").unwrap();
+    let err = missing_inline_tests(&dir, &BTreeSet::new()).unwrap_err();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(format!("{err:#}").contains("parsing"), "got: {err:#}");
+}
+
+#[test]
+fn rust_missing_root_is_an_error() {
+    let root = fixture("does_not_exist");
+    let err = missing_inline_tests(&root, &BTreeSet::new()).unwrap_err();
+    assert!(
+        format!("{err:#}").contains("reading directory"),
+        "got: {err:#}"
     );
 }

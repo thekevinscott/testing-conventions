@@ -379,10 +379,7 @@ pub fn measure_rust(
             match write_base_diff(root, &workspace_root, prefix.as_deref(), base, &out)? {
                 None => return Ok(Measurement::EngineNotRun),
                 Some(path) => {
-                    let parsed =
-                        parse_base_diff(&std::fs::read_to_string(&path).with_context(|| {
-                            format!("reading the written base diff `{}`", path.display())
-                        })?);
+                    let parsed = parse_base_diff(&read_base_diff(&path)?);
                     if !parsed.files.iter().any(|file| file.ends_with(".rs")) {
                         return Ok(Measurement::EngineNotRun);
                     }
@@ -593,9 +590,10 @@ fn run_ts_adapter(
     if let Some(globs) = test_files {
         command.arg("--test-files").arg(globs.join(","));
     }
-    let output = command
-        .output()
-        .with_context(|| spawn_context("node", &adapter.display().to_string(), cwd))?;
+    let output =
+        command
+            .output()
+            .context(spawn_context("node", &adapter.display().to_string(), cwd))?;
     if !output.status.success() {
         bail!(
             "the TypeScript mutation adapter failed in `{}`:\n{}{}",
@@ -604,9 +602,14 @@ fn run_ts_adapter(
             String::from_utf8_lossy(&output.stderr),
         );
     }
-    std::fs::read_to_string(&results).with_context(|| {
+    read_adapter_results(&results, "TypeScript")
+}
+
+/// The adapter's written results JSON, read back after a successful run.
+fn read_adapter_results(results: &Path, engine: &str) -> Result<String> {
+    std::fs::read_to_string(results).with_context(|| {
         format!(
-            "reading the TypeScript mutation adapter's results from `{}`",
+            "reading the {engine} mutation adapter's results from `{}`",
             results.display()
         )
     })
@@ -740,7 +743,7 @@ fn run_py_adapter(root: &Path, modules: &[String]) -> Result<String> {
     }
     let output = command
         .output()
-        .with_context(|| spawn_context("python3", ENTRY, cwd))?;
+        .context(spawn_context("python3", ENTRY, cwd))?;
     if !output.status.success() {
         bail!(
             "the Python mutation adapter failed in `{}`:\n{}{}",
@@ -749,12 +752,7 @@ fn run_py_adapter(root: &Path, modules: &[String]) -> Result<String> {
             String::from_utf8_lossy(&output.stderr),
         );
     }
-    std::fs::read_to_string(&results).with_context(|| {
-        format!(
-            "reading the Python mutation adapter's results from `{}`",
-            results.display()
-        )
-    })
+    read_adapter_results(&results, "Python")
 }
 
 /// Whether a changed file is a mutatable Python *source* — a `.py` that is not a test
@@ -806,6 +804,11 @@ fn cargo_workspace_root(root: &Path) -> Result<PathBuf> {
         );
     }
     let manifest = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+    manifest_dir(&manifest)
+}
+
+/// The directory holding the workspace manifest `cargo locate-project` reported.
+fn manifest_dir(manifest: &Path) -> Result<PathBuf> {
     manifest.parent().map(Path::to_path_buf).with_context(|| {
         format!(
             "no parent dir for the workspace manifest `{}`",
@@ -859,6 +862,12 @@ fn write_base_diff(
     let path = out.0.join("base.diff");
     std::fs::write(&path, &output.stdout).context("writing the base diff")?;
     Ok(Some(path))
+}
+
+/// The written base diff, read back for parsing.
+fn read_base_diff(path: &Path) -> Result<String> {
+    std::fs::read_to_string(path)
+        .with_context(|| format!("reading the written base diff `{}`", path.display()))
 }
 
 /// The tool's own reading of a base diff: the changed files (new-side paths, `b/` stripped)
@@ -960,23 +969,31 @@ const CARGO_MUTANTS_VERSION: &str = "27.1.0";
 /// provisioning it on first use. cargo ships no library form, so — unlike the in-process
 /// TS/Python adapters — a pinned `cargo install` runs into the tool's own cache directory.
 fn ensure_cargo_mutants() -> Result<PathBuf> {
-    let root = cargo_mutants_cache_root();
-    let bin = root.join("bin").join(cargo_mutants_bin_name());
+    provision_pinned(&cargo_mutants_cache_root(), execute)
+}
+
+/// Provision the pinned cargo-mutants under `root`, executing its `cargo install` with `run`.
+fn provision_pinned(
+    root: &Path,
+    run: impl FnOnce(&mut Command) -> std::io::Result<Output>,
+) -> Result<PathBuf> {
+    let bin = root.join("bin").join(CARGO_MUTANTS_BIN_NAME);
     let lock_path = root.join(".install.lock");
-    provision(&bin, &lock_path, || {
-        run_install(&root, |command| command.output())
-    })
+    provision(&bin, &lock_path, || run_install(root, run))
+}
+
+/// Execute a prepared command, capturing its output.
+fn execute(command: &mut Command) -> std::io::Result<Output> {
+    command.output()
 }
 
 /// The cargo-mutants binary's file name (`.exe` on Windows), as `cargo install --root`
 /// lays it out under `<root>/bin/`.
-fn cargo_mutants_bin_name() -> &'static str {
-    if cfg!(windows) {
-        "cargo-mutants.exe"
-    } else {
-        "cargo-mutants"
-    }
-}
+const CARGO_MUTANTS_BIN_NAME: &str = if cfg!(windows) {
+    "cargo-mutants.exe"
+} else {
+    "cargo-mutants"
+};
 
 /// The tool-owned, version-scoped cache directory cargo-mutants is installed under, so a
 /// version bump provisions cleanly beside the old one and never clobbers a user's own
@@ -1424,6 +1441,105 @@ mod tests {
         assert_eq!(unexplained_survivors(&report, &exempt).len(), 1);
     }
 
+    const BASELINE_ONLY: &str = r#"{
+        "outcomes": [
+            {"scenario": "Baseline", "summary": "MissedMutant", "phase_results": []},
+            {"scenario": "Baseline", "summary": "CaughtMutant", "phase_results": []}
+        ],
+        "total_mutants": 0
+    }"#;
+
+    #[test]
+    fn a_baseline_outcome_is_never_a_survivor() {
+        let report = parse_mutants_report(BASELINE_ONLY).unwrap();
+        assert!(unexplained_survivors(&report, &[]).is_empty());
+    }
+
+    #[test]
+    fn a_baseline_outcome_is_never_a_mutated_line() {
+        let report = parse_mutants_report(BASELINE_ONLY).unwrap();
+        assert!(mutated_lines(&report).is_empty());
+    }
+
+    #[test]
+    fn parse_base_diff_skips_a_malformed_hunk_header() {
+        let diff = "\
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ junk @@
+";
+        let parsed = parse_base_diff(diff);
+        assert_eq!(parsed.files, vec!["src/lib.rs"]);
+        assert!(parsed.inserted.is_empty());
+    }
+
+    #[test]
+    fn a_missing_base_diff_read_reports_its_path() {
+        let missing = unique_tmp().join("base.diff");
+        let err = read_base_diff(&missing).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("reading the written base diff"), "{msg}");
+    }
+
+    #[test]
+    fn a_missing_adapter_results_read_names_the_engine_and_path() {
+        let missing = unique_tmp().join("results.json");
+        let err = read_adapter_results(&missing, "TypeScript").unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("TypeScript mutation adapter's results"),
+            "{msg}"
+        );
+    }
+
+    #[test]
+    fn manifest_dir_is_the_manifest_parent() {
+        let dir = manifest_dir(Path::new("/w/Cargo.toml")).unwrap();
+        assert_eq!(dir, Path::new("/w"));
+    }
+
+    #[test]
+    fn a_rootless_manifest_path_is_an_error() {
+        let err = manifest_dir(Path::new("/")).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("no parent dir"), "{msg}");
+    }
+
+    #[test]
+    fn a_directory_outside_any_workspace_fails_locate_project() {
+        let dir = unique_tmp();
+        let err = cargo_workspace_root(&dir).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("cargo locate-project failed"), "{msg}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_bad_base_ref_fails_the_base_diff() {
+        let dir = unique_tmp();
+        let init = Command::new("git")
+            .current_dir(&dir)
+            .args(["init", "-q"])
+            .output()
+            .unwrap();
+        assert!(init.status.success());
+        let out = MutantsOut::new();
+        let err = write_base_diff(&dir, &dir, None, "tc-no-such-ref", &out).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("git diff"), "{msg}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_python_adapter_failure_reports_the_adapter_output() {
+        let dir = unique_tmp();
+        let err = run_py_adapter(&dir, &[]).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("the Python mutation adapter failed"), "{msg}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn rebase_report_paths_strips_the_workspace_prefix() {
         let report = parse_mutants_report(SAMPLE).unwrap();
@@ -1694,22 +1810,66 @@ mod tests {
         dir
     }
 
+    enum Install {
+        MustNotRun,
+        WritesNothing,
+        WritesBin,
+        Fails,
+        CountsSleepsAndWritesBin(std::sync::Arc<AtomicU64>),
+    }
+
+    fn write_bin(bin: &Path) {
+        std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
+        std::fs::write(bin, b"binary").unwrap();
+    }
+
+    fn drive_provision(bin: &Path, lock: &Path, install: Install) -> Result<PathBuf> {
+        provision(bin, lock, || match install {
+            Install::MustNotRun => panic!("must not reinstall"),
+            Install::WritesNothing => Ok(()),
+            Install::WritesBin => {
+                write_bin(bin);
+                Ok(())
+            }
+            Install::Fails => bail!("install blew up"),
+            Install::CountsSleepsAndWritesBin(count) => {
+                count.fetch_add(1, Ordering::SeqCst);
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                write_bin(bin);
+                Ok(())
+            }
+        })
+    }
+
     #[test]
     fn provision_returns_an_existing_binary_without_installing() {
         let tmp = unique_tmp();
         let bin = tmp.join("bin").join("cargo-mutants");
         let lock = tmp.join(".install.lock");
-        std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
-        std::fs::write(&bin, b"binary").unwrap();
-        let mut installed = false;
-        let got = provision(&bin, &lock, || {
-            installed = true;
-            Ok(())
-        })
-        .unwrap();
+        write_bin(&bin);
+        let got = drive_provision(&bin, &lock, Install::MustNotRun).unwrap();
         assert_eq!(got, bin);
-        assert!(!installed, "a present binary must not be reinstalled");
         std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn the_must_not_run_sentinel_panics_when_installation_runs() {
+        let tmp = unique_tmp();
+        std::fs::create_dir_all(&tmp).unwrap();
+        let bin = tmp.join("bin").join("cargo-mutants");
+        let lock = tmp.join(".install.lock");
+        let panicked =
+            std::panic::catch_unwind(|| drive_provision(&bin, &lock, Install::MustNotRun)).is_err();
+        std::fs::remove_dir_all(&tmp).unwrap();
+        assert!(panicked);
+    }
+
+    #[test]
+    fn provision_with_a_rootless_lock_path_fails_to_open_the_lock() {
+        let bin = unique_tmp().join("bin").join("cargo-mutants");
+        let err = drive_provision(&bin, Path::new("/"), Install::WritesNothing).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("opening the provisioning lock"), "{msg}");
     }
 
     #[test]
@@ -1717,16 +1877,13 @@ mod tests {
         let tmp = unique_tmp();
         let bin = tmp.join("bin").join("cargo-mutants");
         let lock = tmp.join(".install.lock");
-        let mut installed = false;
-        let got = provision(&bin, &lock, || {
-            installed = true;
-            std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
-            std::fs::write(&bin, b"binary").unwrap();
-            Ok(())
-        })
-        .unwrap();
-        assert!(installed, "an absent binary must be installed");
+        let got = drive_provision(&bin, &lock, Install::WritesBin).unwrap();
         assert_eq!(got, bin);
+        assert_eq!(
+            std::fs::read(&bin).unwrap(),
+            b"binary",
+            "an absent binary must be installed"
+        );
         std::fs::remove_dir_all(&tmp).unwrap();
     }
 
@@ -1735,7 +1892,7 @@ mod tests {
         let tmp = unique_tmp();
         let bin = tmp.join("bin").join("cargo-mutants");
         let lock = tmp.join(".install.lock");
-        let err = provision(&bin, &lock, || Ok(())).unwrap_err();
+        let err = drive_provision(&bin, &lock, Install::WritesNothing).unwrap_err();
         assert!(
             err.to_string().contains("cargo-mutants is not at"),
             "got: {err}"
@@ -1748,7 +1905,7 @@ mod tests {
         let tmp = unique_tmp();
         let bin = tmp.join("bin").join("cargo-mutants");
         let lock = tmp.join(".install.lock");
-        let err = provision(&bin, &lock, || bail!("install blew up")).unwrap_err();
+        let err = drive_provision(&bin, &lock, Install::Fails).unwrap_err();
         assert!(err.to_string().contains("install blew up"), "got: {err}");
         std::fs::remove_dir_all(&tmp).unwrap();
     }
@@ -1760,7 +1917,6 @@ mod tests {
         // the sleeping installer widen the race window so this reproduces deterministically.
         use std::sync::{Arc, Barrier};
         use std::thread;
-        use std::time::Duration;
 
         let tmp = unique_tmp();
         let bin = tmp.join("bin").join("cargo-mutants");
@@ -1776,13 +1932,11 @@ mod tests {
                 let barrier = Arc::clone(&barrier);
                 thread::spawn(move || {
                     barrier.wait();
-                    provision(&bin, &lock, || {
-                        install_count.fetch_add(1, Ordering::SeqCst);
-                        thread::sleep(Duration::from_millis(50));
-                        std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
-                        std::fs::write(&bin, b"binary").unwrap();
-                        Ok(())
-                    })
+                    drive_provision(
+                        &bin,
+                        &lock,
+                        Install::CountsSleepsAndWritesBin(install_count),
+                    )
                 })
             })
             .collect();
@@ -2013,28 +2167,44 @@ diff --git a/src/lib.rs b/src/lib.rs
     }
 
     #[cfg(unix)]
+    enum FakeRun {
+        AssertsVersionAndSucceeds,
+        FailsWith(&'static str),
+        SpawnError,
+    }
+
+    #[cfg(unix)]
+    fn drive_install(root: &Path, run: FakeRun) -> Result<()> {
+        run_install(root, |command| match run {
+            FakeRun::AssertsVersionAndSucceeds => {
+                let argv: Vec<String> = command
+                    .get_args()
+                    .map(|arg| arg.to_string_lossy().into_owned())
+                    .collect();
+                assert!(argv.contains(&CARGO_MUTANTS_VERSION.to_string()));
+                Ok(fake_output(0, ""))
+            }
+            FakeRun::FailsWith(stderr) => Ok(fake_output(1, stderr)),
+            FakeRun::SpawnError => Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "no cargo",
+            )),
+        })
+    }
+
+    #[cfg(unix)]
     #[test]
     fn run_install_succeeds_on_a_zero_exit() {
-        let mut ran = false;
-        run_install(Path::new("/cache/root"), |command| {
-            ran = true;
-            let argv: Vec<String> = command
-                .get_args()
-                .map(|arg| arg.to_string_lossy().into_owned())
-                .collect();
-            assert!(argv.contains(&CARGO_MUTANTS_VERSION.to_string()));
-            Ok(fake_output(0, ""))
-        })
-        .unwrap();
-        assert!(ran);
+        drive_install(Path::new("/cache/root"), FakeRun::AssertsVersionAndSucceeds).unwrap();
     }
 
     #[cfg(unix)]
     #[test]
     fn run_install_reports_a_nonzero_exit_with_the_engine_output() {
-        let err = run_install(Path::new("/cache/root"), |_| {
-            Ok(fake_output(1, "error: could not compile cargo-mutants"))
-        })
+        let err = drive_install(
+            Path::new("/cache/root"),
+            FakeRun::FailsWith("error: could not compile cargo-mutants"),
+        )
         .unwrap_err();
         assert!(
             err.to_string()
@@ -2047,17 +2217,32 @@ diff --git a/src/lib.rs b/src/lib.rs
     #[cfg(unix)]
     #[test]
     fn run_install_propagates_a_spawn_failure() {
-        let err = run_install(Path::new("/cache/root"), |_| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "no cargo",
-            ))
-        })
-        .unwrap_err();
+        let err = drive_install(Path::new("/cache/root"), FakeRun::SpawnError).unwrap_err();
         assert!(
             err.to_string().contains("is cargo installed?"),
             "got: {err}"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn provision_pinned_installs_via_the_injected_runner() {
+        let root = unique_tmp();
+        let bin = root.join("bin").join(CARGO_MUTANTS_BIN_NAME);
+        let expected = bin.clone();
+        let got = provision_pinned(&root, |_| {
+            write_bin(&bin);
+            Ok(fake_output(0, ""))
+        })
+        .unwrap();
+        assert_eq!(got, expected);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn execute_surfaces_a_spawn_failure() {
+        let err = execute(&mut Command::new("/nonexistent-tc-cargo")).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
     }
 
     #[cfg(unix)]
@@ -2071,26 +2256,48 @@ diff --git a/src/lib.rs b/src/lib.rs
     }
 
     #[cfg(unix)]
+    enum FakeList {
+        AssertsArgvAndReturns(&'static str, Vec<&'static str>),
+        FailsWith(&'static str),
+        SpawnError,
+    }
+
+    #[cfg(unix)]
+    fn drive_list(features: &[String], run: FakeList) -> Result<Vec<MutantInfo>> {
+        list_cargo_mutants(
+            Path::new("/cache/bin/cargo-mutants"),
+            Path::new("/crate"),
+            features,
+            |command| match run {
+                FakeList::AssertsArgvAndReturns(json, expected) => {
+                    let argv: Vec<String> = command
+                        .get_args()
+                        .map(|arg| arg.to_string_lossy().into_owned())
+                        .collect();
+                    assert_eq!(argv, expected);
+                    assert_eq!(command.get_current_dir(), Some(Path::new("/crate")));
+                    Ok(fake_stdout(0, json))
+                }
+                FakeList::FailsWith(stderr) => Ok(fake_output(1, stderr)),
+                FakeList::SpawnError => Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "no engine",
+                )),
+            },
+        )
+    }
+
+    #[cfg(unix)]
     #[test]
     fn list_cargo_mutants_parses_the_listing_from_a_clean_run() {
         let json = r#"[{"file": "src/lib.rs", "name": "replace add -> 0",
             "span": {"start": {"line": 3, "column": 1}, "end": {"line": 5, "column": 2}}}]"#;
-        let listed = list_cargo_mutants(
-            Path::new("/cache/bin/cargo-mutants"),
-            Path::new("/crate"),
+        let listed = drive_list(
             &["cli".to_string()],
-            |command| {
-                let argv: Vec<String> = command
-                    .get_args()
-                    .map(|arg| arg.to_string_lossy().into_owned())
-                    .collect();
-                assert_eq!(
-                    argv,
-                    vec!["mutants", "--list", "--json", "--features", "cli"]
-                );
-                assert_eq!(command.get_current_dir(), Some(Path::new("/crate")));
-                Ok(fake_stdout(0, json))
-            },
+            FakeList::AssertsArgvAndReturns(
+                json,
+                vec!["mutants", "--list", "--json", "--features", "cli"],
+            ),
         )
         .unwrap();
         assert_eq!(listed.len(), 1);
@@ -2103,13 +2310,7 @@ diff --git a/src/lib.rs b/src/lib.rs
     #[cfg(unix)]
     #[test]
     fn list_cargo_mutants_reports_a_nonzero_exit_with_the_engine_output() {
-        let err = list_cargo_mutants(
-            Path::new("/cache/bin/cargo-mutants"),
-            Path::new("/crate"),
-            &[],
-            |_| Ok(fake_output(1, "error: no such option")),
-        )
-        .unwrap_err();
+        let err = drive_list(&[], FakeList::FailsWith("error: no such option")).unwrap_err();
         assert!(
             err.to_string().contains("cargo-mutants --list failed")
                 && err.to_string().contains("no such option"),
@@ -2120,18 +2321,7 @@ diff --git a/src/lib.rs b/src/lib.rs
     #[cfg(unix)]
     #[test]
     fn list_cargo_mutants_propagates_a_spawn_failure() {
-        let err = list_cargo_mutants(
-            Path::new("/cache/bin/cargo-mutants"),
-            Path::new("/crate"),
-            &[],
-            |_| {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "no engine",
-                ))
-            },
-        )
-        .unwrap_err();
+        let err = drive_list(&[], FakeList::SpawnError).unwrap_err();
         assert!(
             err.to_string()
                 .contains("listing the crate's mutants with cargo-mutants"),
@@ -2246,11 +2436,9 @@ diff --git a/src/lib.rs b/src/lib.rs
 
     #[test]
     fn cargo_mutants_bin_name_matches_the_platform() {
-        let name = cargo_mutants_bin_name();
-        if cfg!(windows) {
-            assert_eq!(name, "cargo-mutants.exe");
-        } else {
-            assert_eq!(name, "cargo-mutants");
-        }
+        #[cfg(windows)]
+        assert_eq!(CARGO_MUTANTS_BIN_NAME, "cargo-mutants.exe");
+        #[cfg(not(windows))]
+        assert_eq!(CARGO_MUTANTS_BIN_NAME, "cargo-mutants");
     }
 }

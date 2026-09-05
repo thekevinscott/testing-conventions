@@ -51,8 +51,7 @@ fn collect_workflow_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries = std::fs::read_dir(path)
         .with_context(|| format!("reading directory `{}`", path.display()))?;
     for entry in entries {
-        let entry =
-            entry.with_context(|| format!("reading an entry under `{}`", path.display()))?;
+        let entry = crate::walk::dir_entry(entry, path)?;
         let child = entry.path();
         if child.is_dir() {
             collect_workflow_files(&child, out)?;
@@ -359,15 +358,39 @@ mod tests {
             .subcommand(clap::Command::new("unit").subcommand(clap::Command::new("coverage")));
         let flagged = unknown_subcommands(&[inv(1, &["--config", "x", "unit", "location"])], &root);
         assert_eq!(flagged.len(), 1, "{flagged:?}");
-        assert!(
-            flagged[0].message.contains("location"),
-            "{}",
-            flagged[0].message
-        );
+        let m = &flagged[0].message;
+        assert!(m.contains("location"), "{m}");
         assert!(
             unknown_subcommands(&[inv(2, &["--config", "x", "unit", "coverage"])], &root)
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn a_flag_carrying_its_value_inline_consumes_no_extra_token() {
+        let root = clap::Command::new("tc").arg(
+            clap::Arg::new("config")
+                .long("config")
+                .action(clap::ArgAction::Set),
+        );
+        assert!(flag_takes_value(&root, "--config"));
+        assert!(!flag_takes_value(&root, "--config=x"));
+    }
+
+    #[test]
+    fn a_boolean_flag_consumes_no_value() {
+        let root = clap::Command::new("tc").arg(
+            clap::Arg::new("verbose")
+                .long("verbose")
+                .action(clap::ArgAction::SetTrue),
+        );
+        assert!(!flag_takes_value(&root, "--verbose"));
+    }
+
+    #[test]
+    fn a_line_starting_with_the_binary_is_an_invocation() {
+        let line = "testing-conventions install";
+        assert_eq!(line_invocation(line), Some(vec!["install".to_string()]));
     }
 
     #[test]
@@ -422,11 +445,30 @@ mod tests {
             &crate::command(),
         );
         assert_eq!(v.len(), 1);
-        assert!(v[0].message.contains("`unit-location`"), "{}", v[0].message);
+        let m = &v[0].message;
+        assert!(m.contains("`unit-location`"), "{m}");
+        assert!(m.contains("`testing-conventions`"), "{m}");
+    }
+
+    #[test]
+    fn a_short_flag_consumes_its_value() {
+        let root = clap::Command::new("tc").arg(
+            clap::Arg::new("config")
+                .short('c')
+                .action(clap::ArgAction::Set),
+        );
+        assert!(flag_takes_value(&root, "-c"));
+        assert!(!flag_takes_value(&root, "-x"));
+    }
+
+    #[test]
+    fn an_unreadable_workflow_names_the_file() {
+        let tree = TempTree::new(&[("ci.yml", "")]);
+        std::fs::write(tree.path().join("ci.yml"), [0xFF, 0xFE]).unwrap();
+        let err = invocations(tree.path()).unwrap_err();
         assert!(
-            v[0].message.contains("`testing-conventions`"),
-            "{}",
-            v[0].message
+            format!("{err:#}").contains("reading workflow"),
+            "got: {err:#}"
         );
     }
 

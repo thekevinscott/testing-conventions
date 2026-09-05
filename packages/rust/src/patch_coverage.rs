@@ -698,6 +698,12 @@ mod tests {
     }
 
     #[test]
+    fn changed_lines_reports_a_spawn_failure() {
+        let err = changed_lines(Path::new("/nonexistent-tc-patch-coverage"), "main").unwrap_err();
+        assert!(err.to_string().contains("running `git diff`"), "got: {err}");
+    }
+
+    #[test]
     fn parses_added_lines_from_a_hunk() {
         let diff = "diff --git a/widget.py b/widget.py\n\
                     index abc..def 100644\n\
@@ -1268,6 +1274,22 @@ mod tests {
         assert!(missed_no_branch.is_empty());
         let (_, missed_branch) = python_measured_missed(&partial, true);
         assert_eq!(missed_branch, [5].into_iter().collect());
+    }
+
+    #[test]
+    fn python_measured_missed_skips_an_arc_from_an_unmeasured_line() {
+        let partial = cov(&[1], &[], &[], &[[99, 1]]);
+        let (measured, missed) = python_measured_missed(&partial, true);
+        assert_eq!(measured, [1].into_iter().collect());
+        assert!(missed.is_empty(), "got: {missed:?}");
+    }
+
+    #[test]
+    fn python_measured_missed_skips_an_arc_with_a_negative_source() {
+        let partial = cov(&[1], &[], &[], &[[-1, 1]]);
+        let (measured, missed) = python_measured_missed(&partial, true);
+        assert_eq!(measured, [1].into_iter().collect());
+        assert!(missed.is_empty(), "got: {missed:?}");
     }
 
     #[test]

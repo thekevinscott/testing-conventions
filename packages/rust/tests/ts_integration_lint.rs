@@ -64,6 +64,38 @@ fn clean_exits_zero() {
 }
 
 #[test]
+fn a_config_waiver_lifts_the_red_fixtures_violations() {
+    let dir = std::env::temp_dir().join(format!("tc-ts-int-waiver-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let config_path = dir.join("testing-conventions.toml");
+    std::fs::write(
+        &config_path,
+        "[[typescript.exempt]]\npath = \"charge.test.ts\"\n\
+         rules = [\"no-first-party-mock\"]\nreason = \"synthetic waiver for this test\"\n\
+         [[typescript.exempt]]\npath = \"notify.test.mts\"\n\
+         rules = [\"no-first-party-mock\"]\nreason = \"synthetic waiver for this test\"\n",
+    )
+    .unwrap();
+    let argv: Vec<OsString> = vec![
+        "testing-conventions".into(),
+        "integration".into(),
+        "lint".into(),
+        "--language".into(),
+        "typescript".into(),
+        "--config".into(),
+        config_path.clone().into_os_string(),
+        fixture("no_first_party_mock/red").into_os_string(),
+    ];
+    let exit = run(argv);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        exit.expect("a readable tree should not error"),
+        0,
+        "both violations sit in exempted files"
+    );
+}
+
+#[test]
 fn tier_layout_integration_suite_is_linted_from_a_src_scan() {
     assert_eq!(lint_exit("tier_layout/red/src"), 1);
 }

@@ -8,8 +8,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, bail, Context, Result};
 use oxc::allocator::Allocator;
 use oxc::ast::ast::{
-    Argument, CallExpression, Declaration, Expression, ImportDeclaration, ImportOrExportKind,
-    Statement,
+    Argument, CallExpression, Expression, ImportDeclaration, ImportOrExportKind, Statement,
 };
 use oxc::ast_visit::{walk, Visit};
 use oxc::parser::Parser;
@@ -462,18 +461,9 @@ fn is_type_only_statement(statement: &Statement) -> bool {
         Statement::TSTypeAliasDeclaration(_) | Statement::TSInterfaceDeclaration(_) => true,
         Statement::ImportDeclaration(decl) => decl.import_kind.is_type(),
         Statement::ExportAllDeclaration(decl) => decl.export_kind.is_type(),
-        Statement::ExportNamedDeclaration(decl) => {
-            if decl.export_kind.is_type() {
-                return true;
-            }
-            match &decl.declaration {
-                Some(Declaration::TSTypeAliasDeclaration(_))
-                | Some(Declaration::TSInterfaceDeclaration(_)) => true,
-                Some(_) => false,
-                // A specifier-only `export { … }` re-exports runtime bindings.
-                None => false,
-            }
-        }
+        // The parser marks an exported type alias or interface as a type export, so a
+        // value-kind named export always carries runtime bindings.
+        Statement::ExportNamedDeclaration(decl) => decl.export_kind.is_type(),
         _ => false,
     }
 }
@@ -514,9 +504,7 @@ fn collect_ts_test_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
     for entry in entries {
-        let path = entry
-            .with_context(|| format!("reading an entry under `{}`", dir.display()))?
-            .path();
+        let path = crate::walk::dir_entry(entry, dir)?.path();
         if path.is_dir() {
             collect_ts_test_files(&path, out)?;
         } else if is_ts_test_file(&path) {
@@ -905,5 +893,111 @@ mod tests {
         let err = integration_violations_in(Path::new("weird.test.bogus"), "vi.mock('./x');\n")
             .unwrap_err();
         assert!(err.to_string().contains("unsupported"), "got: {err}");
+    }
+
+    #[test]
+    fn unit_parse_error_is_reported() {
+        let err = unit_violations_in(Path::new("bad.test.ts"), "const x = ;\n").unwrap_err();
+        assert!(err.to_string().contains("parsing"), "got: {err}");
+    }
+
+    #[test]
+    fn unit_unsupported_extension_is_reported() {
+        let err =
+            unit_violations_in(Path::new("weird.test.bogus"), "vi.mock('./x');\n").unwrap_err();
+        assert!(err.to_string().contains("unsupported"), "got: {err}");
+    }
+
+    #[test]
+    fn type_only_is_false_for_an_unsupported_extension() {
+        assert!(!is_type_only_module(
+            "export type T = number;\n",
+            Path::new("foo.txt")
+        ));
+    }
+
+    #[test]
+    fn type_only_rejects_a_plain_runtime_statement() {
+        assert!(!type_only("const x = 1;\ntype T = number;\n"));
+    }
+
+    #[test]
+    fn a_factory_calling_a_plain_helper_is_untyped() {
+        let found = unit_violations(
+            "widget.test.ts",
+            "import { x } from './x';\nvi.mock('./x', () => makeDouble());\n",
+        );
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert_eq!(found[0].rule, "untyped-mock");
+    }
+
+    #[test]
+    fn a_package_without_a_tests_dir_has_no_suite_violations() {
+        let dir = unique_tmp("suite-test");
+        let found = find_suite_violations(&dir).expect("an empty package scans clean");
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    fn unique_tmp(slug: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "tc-ts-{slug}-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn suite_violations_cover_tiers_and_sort_stray_files() {
+        let dir = unique_tmp("suite-busy");
+        std::fs::create_dir_all(dir.join("tests/integration")).unwrap();
+        std::fs::write(
+            dir.join("tests/integration/flow.test.ts"),
+            "import { x } from './x';\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("tests/stray_b.test.ts"), "").unwrap();
+        std::fs::write(dir.join("tests/stray_a.test.ts"), "").unwrap();
+        let found = find_suite_violations(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(found.len(), 2, "got: {found:?}");
+        assert!(found.iter().all(|v| v.rule == "unknown-tier"));
+        assert!(found[0].file < found[1].file);
+    }
+
+    #[test]
+    fn an_unreadable_integration_test_file_names_the_file() {
+        let dir = unique_tmp("nonutf8-int");
+        std::fs::write(dir.join("flow.test.ts"), [0xFF, 0xFE]).unwrap();
+        let err = find_integration_violations(&dir).unwrap_err();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            format!("{err:#}").contains("reading test file"),
+            "got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn an_unreadable_unit_test_file_names_the_file() {
+        let dir = unique_tmp("nonutf8-unit");
+        std::fs::write(dir.join("widget.test.ts"), [0xFF, 0xFE]).unwrap();
+        let err = find_unit_violations(&dir).unwrap_err();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            format!("{err:#}").contains("reading test file"),
+            "got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn a_missing_root_is_an_error() {
+        let err = find_integration_violations(Path::new("/nonexistent-tc-ts")).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("reading directory"),
+            "got: {err:#}"
+        );
     }
 }

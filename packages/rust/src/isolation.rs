@@ -426,9 +426,7 @@ fn collect_rust_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
     for entry in entries {
-        let path = entry
-            .with_context(|| format!("reading an entry under `{}`", dir.display()))?
-            .path();
+        let path = crate::walk::dir_entry(entry, dir)?.path();
         if path.is_dir() {
             collect_rust_files(&path, out)?;
         } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
@@ -798,10 +796,10 @@ mod tests {
 ";
         let violations = violations_in(src, &[]);
         assert_eq!(violations.len(), 1, "got {violations:?}");
+        let m = &violations[0].message;
         assert!(
-            violations[0].message.contains("crate::other::Thing"),
-            "the message names the source path, not the alias: {}",
-            violations[0].message
+            m.contains("crate::other::Thing"),
+            "the message names the source path, not the alias: {m}"
         );
     }
 
@@ -816,18 +814,9 @@ mod tests {
 ";
         let violations = violations_in(src, &[]);
         assert_eq!(violations.len(), 2, "got {violations:?}");
-        assert!(
-            violations[0].message.contains("crate::other::Named"),
-            "{}",
-            violations[0].message
-        );
-        assert!(
-            violations[1]
-                .message
-                .contains("crate::other::deeper::Other"),
-            "{}",
-            violations[1].message
-        );
+        let (first, second) = (&violations[0].message, &violations[1].message);
+        assert!(first.contains("crate::other::Named"), "{first}");
+        assert!(second.contains("crate::other::deeper::Other"), "{second}");
     }
 
     #[test]
@@ -859,16 +848,112 @@ mod tests {
 ";
         let violations = violations_in(src, &[]);
         assert_eq!(violations.len(), 1, "got {violations:?}");
-        assert!(
-            violations[0].message.contains("`::std::fs::read`"),
-            "{}",
-            violations[0].message
-        );
+        let m = &violations[0].message;
+        assert!(m.contains("`::std::fs::read`"), "{m}");
     }
 
     #[test]
     fn a_bare_cfg_not_is_not_a_test_module() {
         let module = |s: &str| syn::parse_str::<syn::ItemMod>(s).expect("module parses");
         assert!(!has_cfg_test(&module("#[cfg(not)] mod t {}").attrs));
+    }
+
+    #[test]
+    fn an_unreadable_unit_source_names_the_file() {
+        let tree = TempTree::new(&[("src/widget.rs", "")]);
+        std::fs::write(tree.path().join("src/widget.rs"), [0xFF, 0xFE]).unwrap();
+        let err = find_violations(tree.path()).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("reading source file"),
+            "got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn an_unparsable_unit_source_names_the_file() {
+        let tree = TempTree::new(&[("src/widget.rs", "fn broken( {\n")]);
+        let err = find_violations(tree.path()).unwrap_err();
+        assert!(format!("{err:#}").contains("parsing"), "got: {err:#}");
+    }
+
+    #[test]
+    fn an_unreadable_integration_source_names_the_file() {
+        let tree = TempTree::new(&[("tests/int.rs", "")]);
+        std::fs::write(tree.path().join("tests/int.rs"), [0xFF, 0xFE]).unwrap();
+        let err = find_integration_violations(tree.path()).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("reading source file"),
+            "got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn an_unparsable_integration_source_names_the_file() {
+        let tree = TempTree::new(&[("tests/int.rs", "fn broken( {\n")]);
+        let err = find_integration_violations(tree.path()).unwrap_err();
+        assert!(format!("{err:#}").contains("parsing"), "got: {err:#}");
+    }
+
+    #[test]
+    fn integration_violations_are_sorted_by_file_and_line() {
+        let tree = TempTree::new(&[
+            (
+                "Cargo.toml",
+                "[package]\nname = \"widget\"\nversion = \"0.0.1\"\n",
+            ),
+            (
+                "tests/int.rs",
+                "#[double]\nuse widget::Renderer;\n#[double]\nuse widget::Store;\n",
+            ),
+        ]);
+        let violations = find_integration_violations(tree.path()).unwrap();
+        assert_eq!(violations.len(), 2, "got {violations:?}");
+        assert!(violations[0].line < violations[1].line);
+    }
+
+    #[test]
+    fn an_unreadable_manifest_is_an_error_for_both_crate_sets() {
+        let tree = TempTree::new(&[("Cargo.toml", "")]);
+        std::fs::write(tree.path().join("Cargo.toml"), [0xFF, 0xFE]).unwrap();
+        let first = format!("{:#}", first_party_crates(tree.path()).unwrap_err());
+        let external = format!("{:#}", external_deps(tree.path()).unwrap_err());
+        assert!(first.contains("reading"), "got: {first}");
+        assert!(external.contains("reading"), "got: {external}");
+    }
+
+    #[test]
+    fn an_unparsable_manifest_is_an_error_for_both_crate_sets() {
+        let tree = TempTree::new(&[("Cargo.toml", "not = toml =\n")]);
+        let first = format!("{:#}", first_party_crates(tree.path()).unwrap_err());
+        let external = format!("{:#}", external_deps(tree.path()).unwrap_err());
+        assert!(first.contains("parsing"), "got: {first}");
+        assert!(external.contains("parsing"), "got: {external}");
+    }
+
+    #[test]
+    fn a_manifest_without_dependency_tables_resolves_to_the_package_name_alone() {
+        let tree = TempTree::new(&[(
+            "Cargo.toml",
+            "[package]\nname = \"widget\"\nversion = \"0.0.1\"\n",
+        )]);
+        let first = first_party_crates(tree.path()).unwrap();
+        assert_eq!(first.iter().collect::<Vec<_>>(), ["widget"]);
+        assert!(external_deps(tree.path()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_registry_only_dependency_table_feeds_external_deps() {
+        let tree = TempTree::new(&[("Cargo.toml", "[dependencies]\nserde = \"1\"\n")]);
+        let external = external_deps(tree.path()).unwrap();
+        assert_eq!(external.iter().collect::<Vec<_>>(), ["serde"]);
+    }
+
+    #[test]
+    fn a_missing_root_is_an_error_for_integration_collection() {
+        let err = find_integration_violations(Path::new("/nonexistent-tc-isolation")).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("reading directory"),
+            "got: {err:#}"
+        );
     }
 }

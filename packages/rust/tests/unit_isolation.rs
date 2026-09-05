@@ -68,6 +68,36 @@ fn red_exits_nonzero() {
 }
 
 #[test]
+fn a_config_waiver_lifts_the_red_fixtures_violations() {
+    let dir = std::env::temp_dir().join(format!("tc-ts-lint-waiver-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let config_path = dir.join("testing-conventions.toml");
+    std::fs::write(
+        &config_path,
+        "[[typescript.exempt]]\npath = \"widget.test.ts\"\n\
+         rules = [\"unmocked-collaborator\"]\nreason = \"synthetic waiver for this test\"\n",
+    )
+    .unwrap();
+    let argv: Vec<OsString> = vec![
+        "testing-conventions".into(),
+        "unit".into(),
+        "lint".into(),
+        "--language".into(),
+        "typescript".into(),
+        "--config".into(),
+        config_path.clone().into_os_string(),
+        fixture("red").into_os_string(),
+    ];
+    let exit = run(argv);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        exit.expect("a readable tree should not error"),
+        0,
+        "both violations sit in the exempted file"
+    );
+}
+
+#[test]
 fn clean_exits_zero() {
     assert_eq!(isolation_exit("clean"), 0);
 }

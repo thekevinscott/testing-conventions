@@ -844,14 +844,12 @@ impl Visitor for LintVisitor<'_> {
 
     fn visit_stmt_import_from(&mut self, node: StmtImportFrom) {
         // A relative import names no absolute module, so its bindings resolve nothing.
-        if relative_level(&node) == 0 {
-            if let Some(module) = &node.module {
-                self.declare_module(module.as_str());
-                for alias in &node.names {
-                    let bound = alias.asname.as_ref().unwrap_or(&alias.name);
-                    self.imports
-                        .insert(bound.to_string(), format!("{module}.{}", alias.name));
-                }
+        if let (0, Some(module)) = (relative_level(&node), &node.module) {
+            self.declare_module(module.as_str());
+            for alias in &node.names {
+                let bound = alias.asname.as_ref().unwrap_or(&alias.name);
+                self.imports
+                    .insert(bound.to_string(), format!("{module}.{}", alias.name));
             }
         }
         self.generic_visit_stmt_import_from(node);
@@ -1358,9 +1356,7 @@ fn collect_python_files(
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
     for entry in entries {
-        let path = entry
-            .with_context(|| format!("reading an entry under `{}`", dir.display()))?
-            .path();
+        let path = crate::walk::dir_entry(entry, dir)?.path();
         if path.is_dir() {
             collect_python_files(&path, out, is_match)?;
         } else if is_match(&path) {
@@ -1773,6 +1769,31 @@ mod tests {
     #[test]
     fn module_scope_rejects_unparsable_source() {
         assert!(module_scope("def (\n", &[]).is_none());
+    }
+
+    #[test]
+    fn module_scope_binds_list_unpack_targets_as_opaque() {
+        let scope = scope_of("[c, d] = make()\n");
+        assert_eq!(scope.bindings.get("c"), Some(&Binding::Opaque));
+        assert_eq!(scope.bindings.get("d"), Some(&Binding::Opaque));
+    }
+
+    #[test]
+    fn module_scope_skips_an_attribute_target() {
+        let scope = scope_of("obj.attr = 1\n");
+        assert!(scope.bindings.is_empty(), "{:?}", scope.bindings);
+    }
+
+    #[test]
+    fn module_scope_ignores_non_binding_statements() {
+        let scope = scope_of("print(1)\n");
+        assert!(scope.bindings.is_empty(), "{:?}", scope.bindings);
+    }
+
+    #[test]
+    fn module_scope_treats_a_set_literal_as_defined() {
+        let scope = scope_of("NAMES = {1, 2}\n");
+        assert_eq!(scope.bindings.get("NAMES"), Some(&Binding::Defined));
     }
 
     /// The imports and declared modules a [`LintVisitor`] records for `src`.
@@ -2327,5 +2348,125 @@ mod tests {
         assert!(!is_upper_constant(""));
         assert!(!is_upper_constant("_"));
         assert!(!is_upper_constant("123"));
+    }
+
+    #[test]
+    fn an_unreadable_test_file_names_the_file() {
+        let tree = TempDir::new();
+        std::fs::write(tree.0.join("widget_test.py"), [0xFF, 0xFE]).unwrap();
+        let err = find_violations(&tree.0).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("reading test file"),
+            "got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn an_unparsable_test_file_names_the_file() {
+        let tree = TempDir::new();
+        tree.write("widget_test.py", "def broken(:\n");
+        let err = find_violations(&tree.0).unwrap_err();
+        assert!(format!("{err:#}").contains("parsing"), "got: {err:#}");
+    }
+
+    #[test]
+    fn a_missing_root_is_an_error() {
+        let err = find_violations(Path::new("/nonexistent-tc-lint")).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("reading directory"),
+            "got: {err:#}"
+        );
+    }
+
+    fn unit_isolation_tree() -> TempDir {
+        let tree = TempDir::new();
+        tree.write(
+            "pyproject.toml",
+            "[project]\nname = \"myproject\"\nversion = \"0.0.0\"\n",
+        );
+        tree
+    }
+
+    #[test]
+    fn an_unreadable_unit_test_file_names_the_file() {
+        let tree = unit_isolation_tree();
+        std::fs::write(tree.0.join("widget_test.py"), [0xFF, 0xFE]).unwrap();
+        let err = find_unit_isolation_violations(&tree.0).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("reading test file"),
+            "got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn an_unparsable_unit_test_file_names_the_file() {
+        let tree = unit_isolation_tree();
+        tree.write("widget_test.py", "def broken(:\n");
+        let err = find_unit_isolation_violations(&tree.0).unwrap_err();
+        assert!(format!("{err:#}").contains("parsing"), "got: {err:#}");
+    }
+
+    #[test]
+    fn the_unit_under_test_import_is_never_a_collaborator() {
+        let tree = unit_isolation_tree();
+        tree.write("widget_test.py", "from myproject.widget import build\n");
+        let violations = find_unit_isolation_violations(&tree.0).unwrap();
+        assert!(violations.is_empty(), "got {violations:?}");
+    }
+
+    #[test]
+    fn a_starred_monkeypatch_parameter_is_flagged() {
+        let tree = TempDir::new();
+        tree.write(
+            "widget_test.py",
+            "def test_widget(*monkeypatch):\n    pass\n",
+        );
+        let violations = find_violations(&tree.0).unwrap();
+        assert_eq!(violations.len(), 1, "got {violations:?}");
+        assert_eq!(violations[0].rule, "no-monkeypatch");
+    }
+
+    #[test]
+    fn a_double_starred_monkeypatch_parameter_is_flagged() {
+        let tree = TempDir::new();
+        tree.write(
+            "widget_test.py",
+            "def test_widget(**monkeypatch):\n    pass\n",
+        );
+        let violations = find_violations(&tree.0).unwrap();
+        assert_eq!(violations.len(), 1, "got {violations:?}");
+        assert_eq!(violations[0].rule, "no-monkeypatch");
+    }
+
+    /// Parse `src` (a single expression statement) and return the expression itself.
+    fn parse_expr(src: &str) -> Expr {
+        let suite = ast::Suite::parse(src, "t.py").expect("snippet should parse");
+        let stmt = suite.into_iter().next().expect("one statement");
+        *stmt.expect_expr_stmt().value
+    }
+
+    #[test]
+    fn a_called_fixture_decorator_is_recognized() {
+        assert!(is_fixture_decorator(&parse_expr("pytest.fixture()\n")));
+        assert!(is_fixture_decorator(&parse_expr("fixture()\n")));
+        assert!(!is_fixture_decorator(&parse_expr("staticmethod()\n")));
+    }
+
+    #[test]
+    fn object_target_walks_declared_submodules() {
+        let imports = HashMap::from([("myproject".to_string(), "myproject".to_string())]);
+        let declared = HashSet::from(["myproject.sub".to_string()]);
+        let ctx = naive_ctx(&imports, &declared);
+        let call = parse_call("patch.object(myproject.sub.helper, \"run\")\n");
+        assert_eq!(
+            patch_target(&call, &ctx).as_deref(),
+            Some("myproject.sub.helper.run")
+        );
+    }
+
+    #[test]
+    fn a_stdlib_from_import_is_not_a_collaborator() {
+        let found = unmocked("widget", "myproject", "from os import path\n");
+        assert!(found.is_empty(), "got {found:?}");
     }
 }

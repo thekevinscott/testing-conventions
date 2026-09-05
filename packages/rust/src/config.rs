@@ -639,6 +639,21 @@ mod tests {
     }
 
     #[test]
+    fn a_wrong_typed_line_spec_names_the_expected_forms() {
+        let err = parse(
+            "[python]\ncoverage = { branch = true, fail_under = 100 }\n\
+             [[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\"]\n\
+             lines = [true]\nreason = \"x\"\n",
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("a line number or a \"start-end\" range string"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
     fn default_python_coverage_is_the_strict_floor() {
         // The zero-config floor is strict by default: branch on, 100.
         // Locked here so it can't silently drift from the Defaults reference.
@@ -756,6 +771,36 @@ mod tests {
         let rust = config.exemptions(crate::colocated_test::Language::Rust);
         assert_eq!(rust.len(), 1);
         assert_eq!(rust[0].path, "build.rs");
+    }
+
+    #[test]
+    fn exemptions_reads_the_typescript_table() {
+        let config = parse(
+            "[[typescript.exempt]]\npath = \"cli.ts\"\nrules = [\"colocated-test\"]\n\
+             reason = \"thin launcher\"\n",
+        )
+        .unwrap();
+        let ts = config.exemptions(crate::colocated_test::Language::TypeScript);
+        assert_eq!(ts.len(), 1);
+        assert_eq!(ts[0].path, "cli.ts");
+    }
+
+    #[test]
+    fn a_line_number_past_u32_is_rejected() {
+        let err = toml_error(
+            "[[python.exempt]]\npath = \"shim.py\"\nrules = [\"coverage\"]\n\
+             lines = [4294967296]\nreason = \"dead branch\"\n",
+        );
+        assert!(err.to_string().contains("out of range"), "got: {err}");
+    }
+
+    #[test]
+    fn a_negative_line_number_is_rejected() {
+        let err = toml_error(
+            "[[python.exempt]]\npath = \"shim.py\"\nrules = [\"coverage\"]\n\
+             lines = [-1]\nreason = \"dead branch\"\n",
+        );
+        assert!(err.to_string().contains("must be positive"), "got: {err}");
     }
 
     /// A throwaway directory tree, removed on drop.

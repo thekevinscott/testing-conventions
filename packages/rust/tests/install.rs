@@ -81,6 +81,60 @@ fn reinstall_replaces_a_stale_block_carrying_the_removed_link() {
 }
 
 #[test]
+fn install_appends_after_existing_prose_without_a_marker() {
+    let dir = TempDir::new();
+    fs::write(dir.agents_md(), "# My project\n\nHouse rules stay.").unwrap();
+
+    install(&dir.agents_md()).expect("install should succeed");
+
+    let text = fs::read_to_string(dir.agents_md()).unwrap();
+    assert!(
+        text.starts_with("# My project\n\nHouse rules stay.\n\n<!-- testing-conventions:begin "),
+        "the block lands after the prose, separated by a blank line; got: {text}"
+    );
+    assert!(text.contains(CONTRACT));
+}
+
+#[test]
+fn a_rerun_leaves_an_installed_file_unchanged() {
+    let dir = TempDir::new();
+    install(&dir.agents_md()).expect("install should succeed");
+    let first = fs::read_to_string(dir.agents_md()).unwrap();
+
+    install(&dir.agents_md()).expect("a rerun should succeed");
+
+    assert_eq!(fs::read_to_string(dir.agents_md()).unwrap(), first);
+}
+
+#[cfg(unix)]
+#[test]
+fn install_refuses_to_write_through_a_symlink() {
+    let dir = TempDir::new();
+    let target = dir.0.join("real.md");
+    fs::write(&target, "# Elsewhere\n").unwrap();
+    std::os::unix::fs::symlink(&target, dir.agents_md()).unwrap();
+
+    let err = install(&dir.agents_md()).expect_err("a symlink target must be refused");
+    assert!(
+        err.to_string().contains("symlink"),
+        "the error names the symlink; got: {err:#}"
+    );
+    assert_eq!(fs::read_to_string(&target).unwrap(), "# Elsewhere\n");
+}
+
+#[test]
+fn an_unreadable_path_is_an_error_naming_the_read() {
+    let dir = TempDir::new();
+    fs::create_dir_all(dir.agents_md()).unwrap();
+
+    let err = install(&dir.agents_md()).expect_err("a directory cannot be read as a file");
+    assert!(
+        format!("{err:#}").contains("reading"),
+        "the error names the failed read; got: {err:#}"
+    );
+}
+
+#[test]
 fn install_refuses_a_begin_marker_with_no_end_marker() {
     let dir = TempDir::new();
     let damaged = "# My project\n\n\

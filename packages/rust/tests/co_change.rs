@@ -155,6 +155,39 @@ fn python_modified_source_with_its_test_is_clean() {
 }
 
 #[test]
+fn python_suite_tier_change_is_not_a_subject() {
+    let repo = TempRepo::new("py-suite-tier");
+    repo.write("pyproject.toml", "[project]\nname = \"widget\"\n");
+    repo.write("tests/helper.py", "def helper():\n    return 1\n");
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("tests/helper.py", "def helper():\n    return 2\n");
+    repo.commit("edit a suite-tier helper only");
+
+    assert!(
+        stale(&repo, &base, Language::Python).is_empty(),
+        "`<package root>/tests/` belongs to the suite tiers"
+    );
+}
+
+#[test]
+fn rust_diff_scope_tracks_no_files() {
+    let repo = TempRepo::new("rust-none");
+    repo.write("src/lib.rs", "pub fn widget() -> u32 {\n    1\n}\n");
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("src/lib.rs", "pub fn widget() -> u32 {\n    2\n}\n");
+    repo.commit("edit the source only");
+
+    assert!(
+        stale(&repo, &base, Language::Rust).is_empty(),
+        "Rust colocation is the inline `#[cfg(test)]` check, so the diff scope tracks no files"
+    );
+}
+
+#[test]
 fn python_nested_source_is_reported_with_its_relative_path() {
     let repo = TempRepo::new("py-nested");
     repo.write("pkg/helper.py", "def helper():\n    return 1\n");

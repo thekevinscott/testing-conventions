@@ -171,6 +171,24 @@ fn rust_cfg_not_test_tree_exits_nonzero() {
 }
 
 #[test]
+fn rust_has_no_twin_file_subjects() {
+    assert!(
+        relative_orphans(&fixture("rust/red"), Language::Rust).is_empty(),
+        "Rust colocation is the inline `#[cfg(test)]` check, so the twin scan tracks no files"
+    );
+}
+
+#[test]
+fn rust_an_exemption_lifts_a_file_without_inline_tests() {
+    let orphans = missing_inline_tests(
+        fixture("rust/cfg_not_test"),
+        &exempt(&["src/gated.rs"]),
+    )
+    .expect("walking a readable tree should succeed");
+    assert!(orphans.is_empty(), "got: {orphans:?}");
+}
+
+#[test]
 fn empty_init_is_a_non_subject_but_content_and_shims_are_orphans() {
     assert_eq!(
         relative_orphans(&fixture("python_exempt"), Language::Python),

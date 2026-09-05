@@ -1,0 +1,9 @@
+# Fixture crate `mut_no_mutants`: constants only, so cargo-mutants generates zero
+# mutants and writes no outcomes.json.
+# `[workspace]` keeps it standalone (not part of the repo's cargo workspace).
+[package]
+name = "mut_no_mutants"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

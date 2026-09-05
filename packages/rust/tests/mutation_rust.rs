@@ -83,6 +83,22 @@ fn survivor_descriptions_carry_no_location_prefix() {
 }
 
 #[test]
+fn a_crate_with_no_mutants_reports_a_zero_count() {
+    let (count, survivors) = expect_tested(
+        measure_rust(
+            &crate_dir("no_mutants"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &[],
+        )
+        .expect("cargo-mutants runs"),
+    );
+    assert_eq!(count, 0, "constants offer nothing to mutate");
+    assert!(survivors.is_empty(), "got {survivors:?}");
+}
+
+#[test]
 fn a_mutation_exemption_drops_the_survivors() {
     let exempt = vec!["src/lib.rs".to_string()];
     let (_, survivors) = expect_tested(

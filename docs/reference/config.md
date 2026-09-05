@@ -226,8 +226,13 @@ held to the same floor CI enforces:
 - **TypeScript** — the npm package exports `vitestConfig` from its root; extend it with
   `mergeConfig` from `vitest/config`. It carries the v8 provider, the `src/**` coverage scope
   (declaration files excluded), the `100/100/100/100` thresholds, and `src/**/*.test.ts` as the
-  test include, so a local run collects the same colocated unit suite the checks scan. `vitest` is
-  an optional peer dependency, and the import resolves to the library entry, separate from the CLI.
+  test include, so a local run collects the same colocated unit suite the checks scan. It also
+  declares the `text` coverage reporter with `skipFull: false`, so the coverage table lists every
+  file at the floor: Vitest 4 injects `skipFull: true` into the text reporter when an agent
+  environment variable is present, and at 100% across the board that omits every row — the
+  declared value wins. `mergeConfig` concatenates reporter lists, so declare only the reporters
+  you add (`reporter: ['lcov']`) and the base's `text` entry stays. `vitest` is an optional peer
+  dependency, and the import resolves to the library entry, separate from the CLI.
 - **Python** — the `testing-conventions` wheel auto-loads a pytest plugin that holds a
   `pytest --cov` run to the same floor: branch coverage on, `fail_under = 100`, and test files
   (`*_test.py` / `conftest.py`) omitted from the denominator. It acts only when a coverage run is

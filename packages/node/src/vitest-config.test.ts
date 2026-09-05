@@ -29,4 +29,10 @@ describe('vitestConfig', () => {
   it('scopes the unit run to colocated src tests', () => {
     expect(test?.include).toEqual(['src/**/*.test.ts']);
   });
+
+  it('declares the text reporter with skipFull false so agent runs print the table at 100%', () => {
+    expect(coverage && 'reporter' in coverage ? coverage.reporter : undefined).toEqual([
+      ['text', { skipFull: false }],
+    ]);
+  });
 });

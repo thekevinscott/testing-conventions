@@ -9,6 +9,8 @@ export const vitestConfig = defineConfig({
       provider: 'v8',
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.d.ts'],
+      // Undeclared, Vitest injects skipFull: true under agent env vars, emptying the table at 100%.
+      reporter: [['text', { skipFull: false }]],
       thresholds: { lines: 100, branches: 100, functions: 100, statements: 100 },
     },
   },

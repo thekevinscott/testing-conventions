@@ -1,20 +1,11 @@
-"""Colocated unit tests for the static-gates-wired check (isolation — no `CliRunner`).
+"""Colocated unit tests for the static-gates-wired command (isolation — no `CliRunner`).
 
-The `cli` command is driven through its `.callback` (the undecorated function), so no
-`click.testing` collaborator is imported. `violations` — the pure decision — is exercised directly:
-a fully-wired sample yields no problems, each legacy job header or missing required substring yields
-exactly one. The raise path is asserted against the propagated exception's `.message` rather than
-importing `CheckFailed`.
+The consolidation decision is pinned in `violations_test.py`; here the `cli` command is driven
+through its `.callback` (the undecorated function), and the raise path is asserted against the
+propagated exception's `.message`.
 """
-from checks.static_gates_wired.cli import (
-    _LEGACY_JOBS,
-    _REQUIRED,
-    REUSABLE_WORKFLOW,
-    cli,
-    violations,
-)
+from checks.static_gates_wired.cli import REUSABLE_WORKFLOW, cli
 
-# A minimal `static` job carrying every required substring and none of the legacy job headers.
 WIRED = """\
 jobs:
   detect:
@@ -42,10 +33,6 @@ jobs:
 """
 
 
-def test_violations_empty_on_a_fully_wired_workflow():
-    assert violations(WIRED) == []
-
-
 def test_echoes_on_a_wired_workflow(tmp_path, capsys):
     workflow = tmp_path / "wf.yml"
     workflow.write_text(WIRED)
@@ -63,28 +50,6 @@ def test_raises_listing_every_problem_on_an_unwired_workflow(tmp_path):
         assert "the legacy `colocated-test` job still exists" in error.message
     else:
         raise AssertionError("an unwired workflow must raise")
-
-
-def test_each_legacy_job_header_is_a_violation():
-    for job in _LEGACY_JOBS:
-        text = WIRED + f"  {job}:\n    runs-on: ubuntu-latest\n"
-        assert f"the legacy `{job}` job still exists" in violations(text)
-
-
-def test_a_workflow_without_the_one_function_step_is_a_violation():
-    text = WIRED.replace("unit one-function-per-file --language", "REMOVED")
-    assert "the one-function-per-file gate step is missing" in violations(text)
-
-
-def test_a_workflow_without_the_one_function_guard_is_a_violation():
-    text = WIRED.replace("contains(inputs.gates, '\"one-function-per-file\"')", "REMOVED")
-    assert "the one-function-per-file gate-membership guard is missing" in violations(text)
-
-
-def test_each_missing_required_substring_is_a_violation():
-    for needle, message in _REQUIRED:
-        text = WIRED.replace(needle, "REMOVED")
-        assert message in violations(text)
 
 
 def test_declares_the_workflow_argument_defaulting_to_the_reusable_workflow():

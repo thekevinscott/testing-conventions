@@ -18,7 +18,7 @@ from pathlib import Path
 import click
 
 from checks.config import REUSABLE_WORKFLOW
-from checks.e2e_verify_checks_out_pr_head.block import pins_pr_head
+from checks.e2e_verify_checks_out_pr_head.pins_pr_head import pins_pr_head
 from checks.utils.check_failed import CheckFailed
 
 

@@ -1,15 +1,11 @@
-"""Colocated unit tests for the cli-node-engine-wired check (isolation — no `CliRunner`)."""
+"""Colocated unit tests for the cli-node-engine-wired command (isolation — no `CliRunner`).
+
+The job finder, floor parse, and violation decisions are pinned beside their own modules; here the
+command's own read-decide-report path is driven through `.callback()` over real files.
+"""
 import json
 
-from checks.cli_node_engine_wired.cli import (
-    CLI_INVOCATION,
-    NODE_PACKAGE_MANIFEST,
-    REUSABLE_WORKFLOW,
-    cli,
-    cli_jobs,
-    engine_floor,
-    violations,
-)
+from checks.cli_node_engine_wired.cli import CLI_INVOCATION, NODE_PACKAGE_MANIFEST, REUSABLE_WORKFLOW, cli
 
 WIRED = """\
 jobs:
@@ -31,64 +27,6 @@ GATED = WIRED.replace(
     "      - uses: actions/setup-node@v6",
     "      - if: matrix.language == 'typescript'\n        uses: actions/setup-node@v6",
 )
-
-TWO_NODES = WIRED.replace(
-    "      - name: Check colocated test",
-    "      - uses: actions/setup-node@v6\n        with:\n          node-version: 20\n"
-    "      - name: Check colocated test",
-)
-
-
-def test_a_job_pinning_exactly_the_floor_is_no_violation():
-    assert violations(WIRED, 24) == []
-
-
-def test_a_job_with_no_setup_node_is_a_violation():
-    text = WIRED.replace("      - uses: actions/setup-node@v6\n        with:\n          node-version: 24\n", "")
-    assert violations(text, 24) == ["`static` invokes the CLI with no unconditional `setup-node` step"]
-
-
-def test_a_setup_node_gated_by_an_if_does_not_count():
-    assert violations(GATED, 24) == ["`static` invokes the CLI with no unconditional `setup-node` step"]
-
-
-def test_a_job_pinning_above_the_floor_is_no_violation():
-    assert violations(WIRED.replace("node-version: 24", "node-version: 26"), 24) == []
-
-
-def test_a_job_pinning_below_the_floor_is_a_violation():
-    text = WIRED.replace("node-version: 24", "node-version: 22")
-    assert violations(text, 24) == ["`static` pins node 22, below the floor of 24"]
-
-
-def test_the_highest_pinned_node_in_a_job_decides():
-    assert violations(TWO_NODES, 24) == []
-    assert violations(TWO_NODES, 26) == ["`static` pins node 24, below the floor of 26"]
-
-
-def test_a_job_that_invokes_no_cli_needs_no_setup_node():
-    assert violations("jobs:\n  detect:\n    runs-on: ubuntu-latest\n", 24) == []
-
-
-def test_cli_jobs_names_only_the_jobs_that_invoke_the_cli():
-    assert [name for name, _ in cli_jobs(WIRED)] == ["static"]
-
-
-def test_engine_floor_reads_a_bare_major():
-    assert engine_floor(">=24") == 24
-
-
-def test_engine_floor_reads_a_dotted_floor_and_surrounding_space():
-    assert engine_floor(" >= 20.20.0 ") == 20
-
-
-def test_engine_floor_rejects_a_requirement_it_cannot_read():
-    try:
-        engine_floor("^24")
-    except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
-        assert "`engines.node` is `^24`" in error.message
-    else:
-        raise AssertionError("an unreadable requirement must raise")
 
 
 def test_echoes_the_floor_on_a_wired_workflow(tmp_path, capsys):

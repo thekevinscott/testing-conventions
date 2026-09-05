@@ -18,10 +18,10 @@ from pathlib import Path
 
 import click
 
-from checks.rolling_release_wired.decide import (
-    check_move_major_tag,
+from checks.rolling_release_wired.check_release_no_inline_tag_move import (
     check_release_no_inline_tag_move,
 )
+from checks.rolling_release_wired.decide import check_move_major_tag
 from checks.utils.check_failed import CheckFailed
 
 DEFAULT_MOVE_TAG = ".github/workflows/move-major-tag.yml"

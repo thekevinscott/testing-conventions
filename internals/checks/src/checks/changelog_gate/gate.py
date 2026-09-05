@@ -1,4 +1,4 @@
-"""The changelog-gate orchestration — repo-only (#496).
+"""The changelog-gate orchestration — repo-only.
 
 Reads the PR's diff and commit bodies, then reports every package that changed source without
 adding the fragments that document it. The three git reads are injected, so the orchestration is
@@ -12,23 +12,22 @@ from __future__ import annotations
 
 import click
 
-from checks.changelog_gate import git_ops
-from checks.changelog_gate.decide import (
-    changed_packages,
-    code_touched,
-    has_skip_line,
-    malformed_fragments,
-    missing_kinds,
-)
+from checks.changelog_gate.changed_files import changed_files as read_changed_files
+from checks.changelog_gate.code_touched import code_touched
+from checks.changelog_gate.commit_messages import commit_messages as read_commit_messages
+from checks.changelog_gate.decide import changed_packages, has_skip_line
+from checks.changelog_gate.git_ops import added_files as read_added_files
+from checks.changelog_gate.malformed_fragments import malformed_fragments
+from checks.changelog_gate.missing_kinds import missing_kinds
 
 
 def run(
     base_sha: str,
     head_sha: str,
     *,
-    changed_files=git_ops.changed_files,
-    added_files=git_ops.added_files,
-    commit_messages=git_ops.commit_messages,
+    changed_files=read_changed_files,
+    added_files=read_added_files,
+    commit_messages=read_commit_messages,
 ) -> int:
     """Exit code for the range: 0 when the gate holds, 1 with an annotation per finding."""
     if has_skip_line(commit_messages(base_sha, head_sha)):

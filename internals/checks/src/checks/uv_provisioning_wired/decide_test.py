@@ -1,5 +1,5 @@
 """Colocated unit tests for the uv-provisioning-wired decision (isolation — pure text in/out)."""
-from checks.uv_provisioning_wired.decide import SUITE_JOBS, decide, python_steps
+from checks.uv_provisioning_wired.decide import SUITE_JOBS, decide
 
 PYTHON_ARM = (
     "      - if: matrix.language == 'python'\n"
@@ -68,33 +68,6 @@ def test_jobs_with_no_python_arm_fail():
 def test_a_comment_only_difference_still_passes():
     commented = "      # the same steps, annotated for this job\n" + PYTHON_ARM
     assert decide(workflow(unit_coverage=commented))
-
-
-def test_python_steps_picks_only_python_gated_step_chunks():
-    block = (
-        "  unit-coverage:\n"
-        "    steps:\n"
-        "      - uses: actions/checkout@v6\n"
-        "      - if: matrix.language == 'python'\n"
-        "        run: uv sync\n"
-        "      - if: matrix.language == 'typescript'\n"
-        "        run: npm ci\n"
-    )
-    assert python_steps(block) == "      - if: matrix.language == 'python'\n        run: uv sync"
-
-
-def test_python_steps_drops_comment_and_blank_lines_inside_a_chunk():
-    block = (
-        "      - if: matrix.language == 'python'\n"
-        "        # provision with uv\n"
-        "\n"
-        "        run: uv sync\n"
-    )
-    assert python_steps(block) == "      - if: matrix.language == 'python'\n        run: uv sync"
-
-
-def test_python_steps_is_empty_when_no_chunk_is_python_gated():
-    assert python_steps("      - uses: actions/checkout@v6\n") == ""
 
 
 def test_suite_jobs_name_the_three_suite_executing_jobs_with_their_successors():

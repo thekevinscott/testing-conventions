@@ -4,7 +4,23 @@ The three git reads are injected as hand-rolled fakes, so the orchestration is e
 a repo or a subprocess. Each fake records the SHAs it saw, which pins that `run` threads its own
 arguments through rather than reading some other range.
 """
+import inspect
+
 from checks.changelog_gate.gate import run
+
+
+def test_the_default_reads_are_the_real_git_reads():
+    # Pinned by module and name rather than identity, so no git-read collaborator is imported.
+    defaults = {
+        name: (parameter.default.__module__, parameter.default.__name__)
+        for name, parameter in inspect.signature(run).parameters.items()
+        if parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    }
+    assert defaults == {
+        "changed_files": ("checks.changelog_gate.changed_files", "changed_files"),
+        "added_files": ("checks.changelog_gate.git_ops", "added_files"),
+        "commit_messages": ("checks.changelog_gate.commit_messages", "commit_messages"),
+    }
 
 
 def _ops(changed=(), added=(), messages=""):

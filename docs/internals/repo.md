@@ -576,8 +576,8 @@ properties hold the ratchet:
   with its own colocated test. An `exempt` entry would waive the rule instead of satisfying it, so
   the ratchet adds none.
 
-`packages/python`, `internals/move-major-tag`, and `internals/detect` sit at the default and carry
-no config for it. One override remains, naming what pins it: `internals/checks` at `max_lines = 11`.
+`packages/python`, `internals/move-major-tag`, `internals/detect`, and `internals/checks` all sit
+at the default and carry no config for it — the ratchet's end state.
 
 ## The move-major-tag helper's package (`internals/move-major-tag`)
 

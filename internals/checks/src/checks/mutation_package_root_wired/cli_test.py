@@ -6,8 +6,8 @@ asserted against the propagated exception's `.message` rather than importing `Ch
 command inlines the single-block check: the wired fixture puts the reference inside the mutation
 job, and the neighbour fixture puts it only in the surrounding jobs (before `mutation:` and inside
 the next `integration-lint:` job), so the block-boundary — start included, next job excluded — is
-what makes the difference. The shared `extract_job_block` is exercised through this real call, and
-has its own colocated test.
+what makes the difference. The shared `checks/utils/extract_job_block.py` is exercised through
+this real call, and has its own colocated test.
 """
 from checks.mutation_package_root_wired.cli import REUSABLE_WORKFLOW, cli
 

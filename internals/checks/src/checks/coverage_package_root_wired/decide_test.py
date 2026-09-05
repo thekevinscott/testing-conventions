@@ -3,7 +3,7 @@
 `decide` ANDs two block checks, so both a unit-coverage-only-missing and a
 coverage-changed-only-missing fixture appear: each leaves the other operand true, forcing the
 `and` to carry weight (dropping either condition, or flipping `and`→`or`, fails a distinct case).
-The block extraction it calls is the shared `job_block` util, exercised through this real call
+The block extraction it calls is the shared `extract_job_block` util, exercised through this real call
 (not imported here — that would read as a collaborator).
 """
 from checks.coverage_package_root_wired.decide import decide

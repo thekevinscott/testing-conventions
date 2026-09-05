@@ -7,22 +7,12 @@ attributes off the passed objects, so it needs no ``cosmic_ray`` import.
 """
 from __future__ import annotations
 
+from testing_conventions.mutation.replacement_from_diff import replacement_from_diff
+
 # cosmic-ray's ``TestOutcome`` values to the normalized ``MutantStatus`` vocabulary.
 # ``incompetent`` means the interpreter rejected the mutation, never a viable mutant. cosmic-ray
 # has no no-coverage outcome: an uncovered mutant's suite passes, so it reports ``survived``.
 STATUS = {"survived": "survived", "killed": "killed", "incompetent": "compile_error"}
-
-
-def replacement_from_diff(diff):
-    """The source line(s) a work result's unified ``diff`` adds, or ``None`` when it adds none."""
-    added = []
-    in_hunk = False
-    for line in (diff or "").splitlines():
-        if line.startswith("@@"):
-            in_hunk = True
-        elif in_hunk and line.startswith("+"):
-            added.append(line[1:].strip())
-    return "\n".join(added) or None
 
 
 def normalize(mutation, result):

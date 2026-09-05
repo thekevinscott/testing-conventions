@@ -30,6 +30,9 @@ Run the check over a Rust crate with a surviving mutant:
 npx testing-conventions unit mutation --language rust <crate>
 ```
 
+The CLI runs on node 24 or newer — npm resolves a bare name to the newest release the running node
+satisfies.
+
 Each survivor line carries one location:
 
 ```

@@ -39,3 +39,6 @@ testing-conventions unit mutation --language typescript packages/<pkg>/src
 
 against a package whose `vitest.config.ts` names a root-relative `include`. The run reports a
 mutant count rather than `No tests were executed`.
+
+The CLI runs on node 24 or newer — npm resolves a bare name to the newest release the running node
+satisfies.

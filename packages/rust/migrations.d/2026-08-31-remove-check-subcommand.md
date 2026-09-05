@@ -24,6 +24,9 @@ own subcommand under its test-kind group; `testing-conventions --help` lists the
 - run: npx testing-conventions unit coverage --language python src
 ```
 
+The CLI runs on node 24 or newer — npm resolves a bare name to the newest release the running node
+satisfies.
+
 Consumers on the reusable workflow (`uses: thekevinscott/testing-conventions/.github/workflows/testing-conventions.yml@v0`)
 have nothing to change: it never invoked `check`.
 

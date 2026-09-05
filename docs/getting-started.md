@@ -85,12 +85,14 @@ names the file and the rule; you fix the code, or record a reasoned exemption in
 
 ## Teach your agent
 
-Run `npx testing-conventions install` to write the contract into your repo's `AGENTS.md`, so a
-coding agent knows the rules before it writes code. The managed block carries the contract's
-non-negotiables and points at this site and its machine-readable digest (`llms.txt`). Re-running
-refreshes the block; everything outside its markers stays yours. `install` reads the block by its
-`begin`/`end` marker pair — if the `end` marker is missing (a hand edit deleted or fenced it),
-`install` stops and names it so you can restore the marker, keeping your surrounding prose intact.
+Run `npx testing-conventions install` on node 24 or newer, the engine the package declares
+([why it matters](./reference/checks/#the-engine-the-cli-runs-on)). It writes the contract into
+your repo's `AGENTS.md`, so a coding agent knows the rules before it writes code. The managed
+block carries the contract's non-negotiables and points at this site and its machine-readable
+digest (`llms.txt`). Re-running refreshes the block; everything outside its markers stays yours.
+`install` reads the block by its `begin`/`end` marker pair — if the `end` marker is missing (a hand
+edit deleted or fenced it), `install` stops and names it so you can restore the marker, keeping
+your surrounding prose intact.
 Pass a path to manage a different file: `npx testing-conventions install CLAUDE.md`.
 
 ## Next

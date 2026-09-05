@@ -52,6 +52,9 @@ The write half runs locally (by you or your agent) on the branch carrying the wo
 testing-conventions e2e attest 'pnpm run e2e'
 ```
 
+Run it on node 24 or newer, the engine the package declares
+([details](/reference/checks/#the-engine-the-cli-runs-on)).
+
 It runs your command with output streamed through, then writes and commits
 `e2e-attestations/<branch>.json` — the command, a timestamp, the exit code, and the commit it ran
 against. **The command is yours to choose, and the choice is the judgment the receipt records**:

@@ -34,6 +34,9 @@ form:
 npx testing-conventions integration lint --language python tests/integration
 ```
 
+The CLI runs on node 24 or newer — npm resolves a bare name to the newest release the running node
+satisfies.
+
 The run names the patch and exits 1:
 
 ```

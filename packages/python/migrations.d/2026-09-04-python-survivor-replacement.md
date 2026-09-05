@@ -40,4 +40,7 @@ Run the gate over a package with a surviving mutant:
 testing-conventions unit mutation --language python src
 ```
 
+The CLI runs on node 24 or newer — npm resolves a bare name to the newest release the running node
+satisfies.
+
 Every listed survivor whose mutation replaced source carries a `(-> …)` naming the mutated line.

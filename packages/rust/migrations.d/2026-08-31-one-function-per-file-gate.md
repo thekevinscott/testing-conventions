@@ -59,6 +59,9 @@ npx testing-conventions unit one-function-per-file --language python \
   --config testing-conventions.toml src
 ```
 
+The CLI runs on node 24 or newer — npm resolves a bare name to the newest release the running node
+satisfies.
+
 A green tree exits 0 and prints only the version banner. A red one names each violation and the
 function already holding the file:
 

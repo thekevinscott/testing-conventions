@@ -31,7 +31,10 @@ passes today can go red on its next run. That red is accurate: the newer rule is
 workflow means to run.
 
 The manifest entry keeps its other jobs. Local runs (`npx testing-conventions …` in the repo) still
-resolve it, and so does anything else that depends on it. The workflow simply stops reading it.
+resolve it, and so does anything else that depends on it. The workflow simply stops reading it. A
+local run reaching the registry instead — no such entry in the repo — needs node 24 or newer, the
+engine the package declares: npm resolves a bare name to the newest release the running node
+satisfies.
 
 To choose the version yourself, name it on the call:
 

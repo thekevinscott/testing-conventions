@@ -207,6 +207,12 @@ that changes the code is one visible decision, recorded locally:
 testing-conventions e2e attest '<the e2e command you choose>'
 ```
 
+Run the CLI on node 24 or newer, the engine the package declares. npm resolves a bare name
+engine-aware, so node 24 resolves the current release and an older node resolves the last one
+published before that floor rose; [Running a check
+directly](https://thekevinscott.github.io/testing-conventions/reference/checks/#the-engine-the-cli-runs-on)
+carries the detail.
+
 The command is the judgment — the full suite, the one suite covering the changed
 contract, or a no-op for a change that needs none. `attest` runs it and, when it
 passes, commits a receipt under `e2e-attestations/`, keyed by branch, recording the

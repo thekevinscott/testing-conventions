@@ -38,5 +38,8 @@ Run the gate over a package whose test files sit below the scanned path:
 testing-conventions unit mutation --language python src
 ```
 
+The CLI runs on node 24 or newer — npm resolves a bare name to the newest release the running node
+satisfies.
+
 Every reported survivor names a production source. No line of the output names a `*_test.py`,
 `test_*.py`, or `conftest.py` path.

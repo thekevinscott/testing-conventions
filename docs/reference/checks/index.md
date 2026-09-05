@@ -56,3 +56,22 @@ and these flags:
 
 `e2e verify` also takes `--scope`, `--extra-scope`, and `--exclude`; [its page](./e2e-verify)
 carries them. `testing-conventions --help` prints the full command tree.
+
+### The engine the CLI runs on
+
+The binary ships as the `testing-conventions` npm package, which declares `engines.node` `>=24`.
+npm resolves a bare name engine-aware — it installs the newest release the running node satisfies —
+so **node 24 or newer** resolves the current release, and an older node resolves the last release
+published before that floor rose (0.0.86, from July 2026), reporting that build's rules under the
+current name. Provision node 24 in the step or shell that runs the CLI:
+
+```sh
+node --version   # v24.x or newer
+npx testing-conventions unit colocated-test src --language python
+```
+
+Every check names its own version on stderr before doing anything else, so the first line of a run
+states which build produced the result below it. An explicit spec resolves as written instead —
+`npx testing-conventions@0.0.92 …` — and npm reports `EBADENGINE` and continues when the running
+node sits below the floor. Every job the [reusable workflow](/reference/workflow) runs provisions
+node 24 for the CLI, so a repository adopting the workflow has the floor already.

@@ -15,8 +15,8 @@ decision** — a receipt in the branch's own diff, checked deterministically.
 
 The mechanism is a pair:
 
-- **`e2e attest`** — the write half, run locally (by you or your agent) from the repository root
-  (or a package's own root, in a monorepo), on the branch carrying the work:
+- **`e2e attest`** — the write half, run locally (by you or your agent) on node 24 or newer, from
+  the repository root (or a package's own root, in a monorepo), on the branch carrying the work:
 
   ```sh
   testing-conventions e2e attest 'pnpm run e2e'

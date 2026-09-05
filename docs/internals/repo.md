@@ -250,6 +250,25 @@ mutable external reference inside a required check, which the CI-hermeticity inv
 Pinning the `version` input freezes a consumer on one release. Provisioning the engine is what
 resolves the newest one.
 
+The same resolution reaches every invocation outside the reusable workflow — a consumer's
+hand-rolled CI step, a local shell, a command copied from a doc — and the `cli-node-engine-wired`
+gate covers none of those. Each documented invocation therefore states the floor beside it:
+`docs/reference/checks/index.md` ("The engine the CLI runs on") is the canonical statement, and the
+getting-started tutorial, the two e2e pages, `README.md`, and every migration fragment carrying a
+command name it too.
+
+The launcher carries no engine check of its own. Comparing `process.version` against the package's
+own `engines.node` inside `packages/node/src/bin/index.ts` cannot fire on the path that motivates
+it: an old node resolves 0.0.86, so the build that runs is the one predating any such check, and no
+future release changes that. Where a current build *does* run on an old engine — an explicit
+`@<version>`, or `@latest` — npm already prints `EBADENGINE` naming both the required and the
+running engine, at install time, before the launcher's first line.
+
+`npm deprecate 'testing-conventions@<0.0.87' '<message>'` is the one lever that reaches the
+bare-name path. `npm-pick-manifest` sorts engine-ok ahead of not-deprecated, so resolution still
+lands on 0.0.86 and npm prints the deprecation message alongside it — a maintainer-run registry
+operation, outside any release artifact this repo builds.
+
 ### The CLI resolves outside the checkout
 
 `npx <name>` runs a binary already present in the checkout's `node_modules/.bin` in preference to

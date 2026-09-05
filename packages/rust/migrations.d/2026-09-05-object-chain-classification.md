@@ -38,6 +38,9 @@ module attribute:
 npx testing-conventions integration lint --language python tests/integration
 ```
 
+The CLI runs on node 24 or newer — npm resolves a bare name to the newest release the running node
+satisfies.
+
 The run prints nothing and exits 0, where it previously named the patch:
 
 ```

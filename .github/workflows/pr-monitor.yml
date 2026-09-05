@@ -21,7 +21,3 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: thekevinscott/pr-monitor@v1
-        with:
-          # The grant names the callee repo for a reusable workflow — see docs/internals/repo.md,
-          # "Our own PRs need the same resolution".
-          execute: thekevinscott/testing-conventions:detect

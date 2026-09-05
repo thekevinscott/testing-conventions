@@ -1,8 +1,4 @@
-"""Colocated unit tests for the shared constants.
-
-Each literal is asserted where it is defined, so an edit that changes one without changing its
-consumers co-changes this file — and a string mutant on it dies here.
-"""
+"""Colocated unit tests for the shared constants."""
 from checks.config import (
     DOGFOOD_WORKFLOW,
     HERMETIC_CLI,

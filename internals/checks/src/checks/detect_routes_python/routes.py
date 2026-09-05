@@ -1,4 +1,4 @@
-"""The detect-routes-python decision — repo-only (#189; epic #302, #305, #324)."""
+"""The detect-routes-python decision."""
 from __future__ import annotations
 
 import json

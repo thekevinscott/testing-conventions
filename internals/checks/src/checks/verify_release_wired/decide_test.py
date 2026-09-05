@@ -1,9 +1,4 @@
-"""Colocated unit tests for the verify-release-wired decision (isolation — pure, no I/O).
-
-The decision is driven directly across each branch (missing file, no layout check, no suite
-dispatch, a suite workflow un-dispatched, no move job, the move job ungated, clean), so every
-early-return and the clean path are pinned. Only the unit under test is imported.
-"""
+"""Colocated unit tests for the verify-release-wired decision."""
 from checks.verify_release_wired.decide import check_move_gated_on_verification
 
 # A fully-wired move-major-tag.yml: a verified move job that needs the two verification jobs, both

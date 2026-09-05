@@ -1,4 +1,4 @@
-"""Colocated unit test for CheckFailed — it prints a GitHub `::error::` annotation (isolation)."""
+"""Colocated unit test for CheckFailed — it prints a GitHub `::error::` annotation."""
 from checks.utils.check_failed import CheckFailed
 
 

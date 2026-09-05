@@ -1,8 +1,5 @@
-"""A check failure — repo-only (#321).
-
-Raised by a check when the wiring it asserts is missing. It is a `click.ClickException`, so click
-exits non-zero and calls `show`; `show` prints a GitHub Actions `::error::` annotation.
-"""
+"""A check failure: a `click.ClickException` whose `show` prints a GitHub Actions `::error::`
+annotation."""
 from __future__ import annotations
 
 import click

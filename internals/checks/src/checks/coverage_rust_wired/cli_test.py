@@ -1,9 +1,4 @@
-"""Colocated unit tests for the coverage-rust-wired check (isolation — no `CliRunner`).
-
-The `cli` command is driven through its `.callback`, so no `click.testing` collaborator is
-imported. Only the unit under test is imported — the raise path is asserted against the
-propagated exception's `.message`.
-"""
+"""Colocated unit tests for the coverage-rust-wired check."""
 from checks.coverage_rust_wired.cli import REUSABLE_WORKFLOW, cli
 
 

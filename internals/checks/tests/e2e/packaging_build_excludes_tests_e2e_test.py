@@ -1,12 +1,5 @@
-"""End-to-end: the built distributions for this package ship no colocated `*_test.py` files.
-
-Real `uv build` against the real `pyproject.toml`, real archive inspection — no mocks. This package
-colocates 18 `*_test.py` units beside their source (see `AGENTS.md`), so a distribution built
-without an exclude rule ships them, which the packaging gate's scan rejects (#354). `uv build`
-produces both a wheel and an sdist, and hatchling's wheel/sdist targets exclude independently — an
-exclude scoped to only one target still leaves the other shipping every test file, exactly what
-happened when `[tool.hatch.build.targets.wheel]`'s `exclude` alone left the sdist unfixed.
-"""
+"""End-to-end: neither distribution `uv build` produces ships a colocated `*_test.py`. See
+docs/internals/repo.md, "The self-test checks package"."""
 import shutil
 import subprocess
 import tarfile

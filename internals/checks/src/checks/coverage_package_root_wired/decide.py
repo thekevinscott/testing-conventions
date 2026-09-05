@@ -1,10 +1,5 @@
-"""The coverage-package-root-wired decision — repo-only (#278, #321).
-
-Both coverage jobs — `unit-coverage` (whole-tree) and `coverage-changed` (changed-line) — must
-reference detect's derived `package_root` inside their own YAML region, so a reference in a
-neighbouring job can't satisfy either. The decision ANDs the two block checks; the shared
-`extract_job_block` confines each search to one job.
-"""
+"""Decide whether both coverage jobs reference `package_root` inside their own YAML region, so a
+neighbouring job's reference satisfies neither."""
 from __future__ import annotations
 
 from checks.utils.extract_job_block import extract_job_block

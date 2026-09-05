@@ -1,7 +1,4 @@
-"""Colocated unit test for `failure_reason` — the pure exit-code decision (isolation).
-
-Driven directly over the four (expect_fail, returncode) quadrants; no subprocess, no click.
-"""
+"""Colocated unit test for `failure_reason` — the pure exit-code decision."""
 from checks.utils.failure_reason import failure_reason
 
 

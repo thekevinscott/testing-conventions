@@ -1,10 +1,4 @@
-"""Colocated unit tests for the changelog-gate command (isolation — the gate is patched out).
-
-The command is one delegation: thread the two SHAs into `gate.run`, then turn its verdict into
-the process's exit code. Both halves are asserted here against a `run` patched by string, so no
-collaborator is imported and no git subprocess is spawned. The decisions are covered in
-`decide_test.py`, the orchestration in `gate_test.py`, and the real git path in the e2e suite.
-"""
+"""Colocated unit tests for the changelog-gate command."""
 from checks.changelog_gate.cli import cli
 
 

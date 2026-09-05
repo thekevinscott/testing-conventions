@@ -1,10 +1,4 @@
-"""Colocated unit tests for the hermetic-wired check (isolation — no `CliRunner`).
-
-The `cli` command is driven through its `.callback` (the undecorated function), so no
-`click.testing` collaborator is imported. Only the unit under test is imported — the raise path is
-asserted against the propagated exception's `.message`. The per-step `CLI_COMMAND` scan itself is
-pinned in `unwired_steps_test.py`.
-"""
+"""Colocated unit tests for the hermetic-wired check."""
 from checks.hermetic_wired.cli import GUARD, REUSABLE_WORKFLOW, cli
 
 ENV_LINE = "          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}\n"

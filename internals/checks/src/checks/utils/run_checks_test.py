@@ -1,9 +1,4 @@
-"""Colocated unit test for `run_checks` — the shared failure-path orchestrator (isolation).
-
-The subprocess boundary is injected as `run`, so a fake stands in for it — no real process. The
-raise path is asserted against the propagated exception's `.message`, so `CheckFailed` is never
-imported as a collaborator.
-"""
+"""Colocated unit test for `run_checks` — the shared failure-path orchestrator."""
 from checks.utils.run_checks import run_checks
 
 

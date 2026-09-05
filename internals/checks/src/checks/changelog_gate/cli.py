@@ -1,12 +1,4 @@
-"""The changelog-gate check — repo-only (#496).
-
-Backs the `tc-checks changelog-gate` subcommand, which `.github/workflows/changelog.yml` runs on
-every PR: a package whose source changed must add a changelog fragment and a migration fragment
-under its own `changelog.d/` / `migrations.d/`.
-
-The PR's base and head SHAs arrive as CLI arguments rather than an environment side-channel, and
-git runs in the working directory — the checkout the workflow already made.
-"""
+"""Assert a package whose source changed adds both a changelog fragment and a migration fragment."""
 from __future__ import annotations
 
 import click

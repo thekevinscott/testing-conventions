@@ -3,12 +3,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-# Repo-only: the forward-only `@v0` tag-advance helper (#235), invoked by the `Move major tag`
-# workflow as a plain script (`python3 <path>/move_major_tag.py`, stdlib only, no install step).
-# Never published to an index.
+# The Move major tag workflow runs this as a plain script, so a runtime dependency here breaks it.
 name = "testing-conventions-move-major-tag"
 version = "0"
-description = "Repo-only implementation of the move-major-tag helper for testing-conventions (#452)."
+description = "Repo-only implementation of the move-major-tag helper for testing-conventions."
 requires-python = ">=3.11"
 
 [dependency-groups]

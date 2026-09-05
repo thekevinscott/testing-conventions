@@ -1,9 +1,4 @@
-"""Colocated unit tests for the wiring-packaging-default-on check (isolation — no `CliRunner`).
-
-The `cli` command is driven through its `.callback` (the undecorated function), so no
-`click.testing` collaborator is imported. Only the unit under test is imported — the raise path
-is asserted against the propagated exception's `.message` rather than importing `CheckFailed`.
-"""
+"""Colocated unit tests for the wiring-packaging-default-on check."""
 from checks.wiring_packaging_default_on.cli import REUSABLE_WORKFLOW, cli
 
 WIRED = "  packaging:\n    if: needs.detect.outputs.packaging_dist == 'true'\n"

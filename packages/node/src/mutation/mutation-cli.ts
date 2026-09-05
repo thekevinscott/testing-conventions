@@ -4,14 +4,8 @@ import { parseArgs } from './parse-args.js';
 import { runStryker } from './run-stryker.js';
 
 /**
- * The TypeScript mutation adapter (#239 / #246). The rust binary spawns the built executable
- * (`main.ts` → `dist/mutation/main.js`) on the TS arm — its path comes from the launcher's
- * `--ts-mutation-adapter` argument, so the binary never hunts the filesystem for it. This runs
- * Stryker through the Node API and emits the normalized results as JSON. `--out <path>` writes
- * them to a file (the rule passes a temp file, so Stryker's own stdout logging can't corrupt
- * them); without it, the JSON goes to stdout. `--mutate <a,b,...>` scopes the run to those Stryker
- * mutate patterns, and `--test-files <a,b,...>` narrows the suites that judge them to the scan
- * path within the package. Rejects on a failed run; `main.ts` maps that onto a non-zero exit code.
+ * The TypeScript mutation adapter: run Stryker over `argv`'s scope and emit the normalized results
+ * as JSON, to `--out <path>` when given and to stdout otherwise.
  */
 export async function mutationCLI(argv: string[]): Promise<void> {
   const { mutate, out, testFiles } = parseArgs(argv);

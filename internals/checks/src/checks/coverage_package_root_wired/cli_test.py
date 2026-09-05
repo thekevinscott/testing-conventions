@@ -1,10 +1,4 @@
-"""Colocated unit tests for the coverage-package-root-wired command (isolation — no `CliRunner`).
-
-The `cli` command is driven through its `.callback` (the undecorated function), so no
-`click.testing` collaborator is imported. Only the unit under test is imported — the raise path is
-asserted against the propagated exception's `.message` rather than importing `CheckFailed`; the
-pure decision has its own `decide_test.py`.
-"""
+"""Colocated unit tests for the coverage-package-root-wired command."""
 from checks.coverage_package_root_wired.cli import REUSABLE_WORKFLOW, cli
 
 WIRED = """\

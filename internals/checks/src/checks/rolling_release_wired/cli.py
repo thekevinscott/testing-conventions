@@ -1,17 +1,5 @@
-"""The rolling-release-wired check — repo-only (#235, #321).
-
-Backs the `tc-checks rolling-release-wired` subcommand. `@v0` is a moving tag, but the reusable
-workflow runs the *published* npm binary while its own file is frozen at the tag — so the tag must
-advance only AFTER that binary publishes, or a consumer gets new-workflow + old-binary (the #55
-`unrecognized subcommand` stranding). The two static invariants that back that guarantee are the
-pure decisions in `decide.py`; this command reads the two workflow files and reports their
-combined failures.
-
-A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
-untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:` text is
-templated before the shell sees it, so a literal `${{ ... }}` in a grep pattern is silently
-evaluated).
-"""
+"""Assert `@v0` advances only after the binary it names publishes, so no consumer gets a new workflow
+against an old binary."""
 from __future__ import annotations
 
 from pathlib import Path

@@ -1,10 +1,4 @@
-"""Colocated unit tests for the detect-package-root-ts decision (isolation — pure, no I/O).
-
-The correct outputs are hardcoded here (not imported from config), so a mutated config constant
-makes a "matches" case mismatch and fails — killing the constant's mutant. The single
-`actual != expected` comparison is pinned from both sides — a lexically greater and a lexically
-lesser wrong input — so a mutation to `<` / `>` / `==` / `is` changes an asserted outcome.
-"""
+"""Colocated unit tests for the detect-package-root-ts decision."""
 from checks.detect_package_root_ts.evaluate import evaluate
 
 ROOT = ".github/selftest/monorepo/packages/ts"

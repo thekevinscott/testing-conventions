@@ -1,16 +1,4 @@
-"""The build-command-wired check — repo-only (#302 #306, #321).
-
-Backs the `tc-checks build-command-wired` subcommand: the reusable workflow
-(`.github/workflows/testing-conventions.yml`) runs a derived `build_command` step — read from
-detect's `build_command` output (the package's own `[python].build_command`, #289) — before the
-suite-executing jobs, so a native-binding consumer's compiled module is built before the suite
-imports it.
-
-A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
-untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:` text is
-templated before the shell sees it, so a literal `${{ ... }}` in a grep pattern is silently
-evaluated).
-"""
+"""Assert the reusable workflow runs detect's derived `build_command` before the suite-executing jobs."""
 from __future__ import annotations
 
 from pathlib import Path

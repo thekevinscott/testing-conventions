@@ -1,10 +1,4 @@
-"""Colocated unit tests for the detect-package-root-ts command (isolation — no `CliRunner`).
-
-The `cli` command is driven through its `.callback` (the undecorated function), so no
-`click.testing` collaborator is imported. Only the unit under test is imported — the raise path is
-asserted against the propagated exception's `.message`. The pure decision is tested in
-`evaluate_test.py`; each declared `@click.argument` is pinned via `cli.params`.
-"""
+"""Colocated unit tests for the detect-package-root-ts command."""
 from checks.detect_package_root_ts.cli import cli
 
 GOOD = (

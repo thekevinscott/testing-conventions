@@ -1,4 +1,4 @@
-"""Colocated unit tests for the red-path-hermetic-wired decision (isolation — pure text in/out)."""
+"""Colocated unit tests for the red-path-hermetic-wired decision."""
 from checks.red_path_hermetic_wired.decide import RED_PATH_JOBS, unwired_jobs
 
 WIRED_STEPS = (

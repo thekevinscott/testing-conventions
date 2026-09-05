@@ -1,18 +1,5 @@
-"""The red-path-hermetic-wired check — repo-only (#379, #356).
-
-Backs the `tc-checks red-path-hermetic-wired` subcommand: every direct-drive failure-path job in
-`.github/workflows/testing-conventions-selftest.yml` must download the `hermetic-cli` artifact and
-run the HEAD binary, not the published `npx testing-conventions` — so a same-PR change to the CLI's
-rule logic these jobs exercise is validated by that PR, closing the last npm-latest dependency in
-the merge gate (#379). The `decide` module confirms each red-path job carries both a
-`needs: [... build-cli ...]` edge and the `./.github/actions/download-hermetic-cli` step, bounded to
-its own YAML region.
-
-A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
-untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:` text is
-templated before the shell sees it, so a literal `${{ ... }}` in a grep pattern is silently
-evaluated).
-"""
+"""Assert every direct-drive failure-path job downloads the `hermetic-cli` artifact and runs the HEAD
+binary."""
 from __future__ import annotations
 
 from pathlib import Path

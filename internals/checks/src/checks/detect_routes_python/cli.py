@@ -1,15 +1,4 @@
-"""The detect-routes-python check — repo-only (#189; epic #302, #305, #324).
-
-Backs the `tc-checks detect-routes-python` subcommand: the self-test workflow runs the repo-only
-`detect` composite action over the `clean` fixture and hands this check the action's
-`isolation_languages` output — a compact JSON array such as `["python"]` or `["python","rust"]`
-— which this check asserts routes Python into the unit-lint matrix.
-
-The value arrives as a CLI argument (never an environment side-channel: the workflow templates
-`${{ steps.detect.outputs.isolation_languages }}` into the argument, single-quoted). A standalone,
-colocated-tested check rather than inline `run: |` bash keeps the routing assertion off the
-untested, `${{ }}`-templated `run:` path.
-"""
+"""Assert detect's `isolation_languages` output routes Python into the unit-lint matrix."""
 from __future__ import annotations
 
 import click

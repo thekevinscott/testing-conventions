@@ -178,6 +178,15 @@ into this file, and the number drops either way: `release.yml`'s delegated PyPI 
 case, naming the upstream Trusted Publishers restriction inline and citing it in full under "The
 delegated PyPI upload" below.
 
+### The same bar in source
+
+Comments and docstrings under `internals/`, `packages/`, and the crates hold to it too. A module
+opens with one line naming what it does, a surviving comment names the breakage it prevents, and
+neither carries an issue or PR number. Reasoning longer than that lives on this page and the file
+keeps at most a one-line pointer: `internals/checks` is the worked case, its per-check mechanics
+under "The self-test checks package (`internals/checks`)" below rather than recopied into forty
+file headers.
+
 ## Self-test and the `@v0` path
 
 `testing-conventions-selftest.yml` smoke-tests the reusable workflow end to end, so a regression in

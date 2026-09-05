@@ -1,7 +1,4 @@
-"""Colocated unit test for `stage_hermetic_cli` — the shared build-and-stage orchestrator
-(isolation — no CliRunner, no real subprocess: the boundary is the injected `run`, the
-`run_checks` pattern, #328).
-"""
+"""Colocated unit test for `stage_hermetic_cli` — the shared build-and-stage orchestrator."""
 from checks.utils.build_hermetic_cli import stage_hermetic_cli
 
 

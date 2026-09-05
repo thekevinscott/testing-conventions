@@ -1,11 +1,4 @@
-"""Colocated unit tests for the integration-lint-new-arms-trip check (isolation — no CliRunner, no subprocess mocks).
-
-Imports only the unit under test: this check's own `CHECKS` data and `cli` command. The shared
-orchestration and exit-code decision are covered once beside `run_checks` / `failure_reason`.
-Here we pin this check's `CHECKS` and drive `cli` through its `.callback` over the benign
-`true`/`false` builtins (the trailing-command seam), asserting the raise path against the
-propagated exception's `.message` — so no `click.testing` or `CheckFailed` is imported.
-"""
+"""Colocated unit tests for the integration-lint-new-arms-trip check."""
 from checks.integration_lint_new_arms_trip.cli import CHECKS, cli
 
 

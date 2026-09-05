@@ -1,10 +1,4 @@
-"""Colocated unit tests for the e2e-verify-wired check (isolation — no `CliRunner`).
-
-The `cli` command is driven through its `.callback`, so no `click.testing` collaborator is
-imported. The decision itself is covered in `decide_test.py`; here the wired and unwired fixtures
-cover the command's echo and raise branches. The raise path is asserted against the exception's
-`.message`.
-"""
+"""Colocated unit tests for the e2e-verify-wired check."""
 from checks.e2e_verify_wired.cli import REUSABLE_WORKFLOW, cli
 
 BOTH = "inputs:\n  run_e2e:\n    default: false\nrun: e2e verify\n"

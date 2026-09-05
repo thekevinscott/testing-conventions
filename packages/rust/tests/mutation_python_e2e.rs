@@ -138,6 +138,29 @@ fn survivors_fail_the_gate_by_default() {
 }
 
 #[test]
+fn each_survivor_line_names_the_source_the_mutation_produced() {
+    let package = Staged::python("survivors");
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "python"])
+        .arg(package.path().join("src"))
+        .output()
+        .expect("the built binary should run");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let listed: Vec<&str> = stderr
+        .lines()
+        .filter(|line| line.trim_start().starts_with("calc.py:"))
+        .collect();
+    assert!(
+        !listed.is_empty(),
+        "the assertion-light suite leaves survivors to list; got: {stderr}"
+    );
+    assert!(
+        listed.iter().all(|line| line.contains("(-> ")),
+        "each listed survivor names its replacement, not the operator alone; got: {stderr}"
+    );
+}
+
+#[test]
 fn a_loose_tree_fails_the_gate_on_survivors() {
     let project = Staged::python_loose("loose_survivors");
     assert_eq!(unit_mutation_exit(project.path(), None), 1);

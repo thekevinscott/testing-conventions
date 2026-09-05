@@ -54,6 +54,10 @@ fn survivors_are_reported() {
         count >= survivors.len(),
         "every survivor was judged, so the count covers them"
     );
+    assert!(
+        survivors.iter().all(|m| m.description.contains(" with ")),
+        "each survivor names the source its mutation produced; got {survivors:?}"
+    );
 }
 
 #[test]

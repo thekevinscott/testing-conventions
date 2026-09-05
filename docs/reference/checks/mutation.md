@@ -42,8 +42,20 @@ measured runtime, so a legitimately slow suite keeps a proportional budget.
 
 ### Reporting
 
-A failing run lists each survivor with its file, line, and mutation. A passing run states which
-fact made it green:
+A failing run lists each survivor as `<file>:<line>: <mutation>`, where the mutation names the
+engine's mutator and the source that mutator produced:
+
+| Language | Survivor line |
+| --- | --- |
+| TypeScript | `index.ts:6: EqualityOperator (-> n >= 0)` |
+| Python | `calc.py:6: core/ReplaceComparisonOperator_Gt_GtE (-> return n >= 0)` |
+| Rust | `src/lib.rs:7: src/lib.rs:7:7: replace > with == in is_positive` |
+
+Stryker and cosmic-ray name their mutator and then the source it replaced; cargo-mutants states
+both in one description of its own. A mutant whose engine reports no replacement is listed by its
+mutator name alone.
+
+A passing run states which fact made it green:
 
 - `unit mutation: no surviving mutants — every mutation was caught (6 mutant(s) tested)` — the
   engine ran, judged that many mutants conclusively (always at least one), and the suite (or a

@@ -43,6 +43,10 @@ fn survivors_are_reported() {
         survivors.iter().all(|m| m.file == "index.ts"),
         "survivors are reported relative to the scan path; got {survivors:?}"
     );
+    assert!(
+        survivors.iter().all(|m| m.description.contains("(-> ")),
+        "each survivor names the source its mutation produced; got {survivors:?}"
+    );
 }
 
 #[test]

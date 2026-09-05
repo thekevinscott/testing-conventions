@@ -9,7 +9,7 @@ export default mergeConfig(
   defineConfig({
     test: {
       coverage: {
-        reporter: ['text', 'json', 'lcov'],
+        reporter: ['json', 'lcov'],
       },
     },
   }),

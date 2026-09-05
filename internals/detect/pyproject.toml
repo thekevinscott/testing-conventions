@@ -15,12 +15,12 @@ dev = ["pytest"]
 exclude = ["**/*_test.py"]
 
 [tool.hatch.build.targets.wheel]
-# A single top-level module, not a package dir: map src/detect.py -> detect.py in the wheel.
-include = ["src/detect.py"]
+# Top-level modules, not a package dir: map src/*.py to the wheel root.
+include = ["src/*.py"]
 
 [tool.hatch.build.targets.wheel.sources]
 src = ""
 
 [tool.pytest.ini_options]
-# `src` layout: on the path so detect.py and its tests import it as `import detect`.
+# `src` layout: on the path so the modules and their tests import as top-level names.
 pythonpath = ["src"]

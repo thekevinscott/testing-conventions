@@ -16,7 +16,8 @@ from unittest.mock import patch
 
 import pytest
 
-import detect
+import cargo_workspace
+import derive_package_root
 
 SCRIPT = Path(__file__).resolve().parents[2] / "src" / "detect.py"
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -469,7 +470,7 @@ def test_e2e_provision_rust_false_by_default(run_detect):
 def test_derive_package_root_falls_back_to_repo_root_when_scan_root_is_unrelated(tmp_path_factory):
     scan_root = tmp_path_factory.mktemp("scan-tree")
     repo_root = tmp_path_factory.mktemp("repo-tree")
-    assert detect.derive_package_root(scan_root, repo_root) == repo_root.resolve()
+    assert derive_package_root.derive_package_root(scan_root, repo_root) == repo_root.resolve()
 
 
 def test_derive_package_root_never_searches_outside_repo_root(tmp_path_factory):
@@ -478,7 +479,7 @@ def test_derive_package_root_never_searches_outside_repo_root(tmp_path_factory):
     repo_root = base / "repo"
     scan_root = repo_root / "src"
     scan_root.mkdir(parents=True)
-    assert detect.derive_package_root(scan_root, repo_root) == repo_root.resolve()
+    assert derive_package_root.derive_package_root(scan_root, repo_root) == repo_root.resolve()
 
 
 def test_derive_package_root_boundary_is_an_exact_match_not_an_ordering(tmp_path):
@@ -489,7 +490,7 @@ def test_derive_package_root_boundary_is_an_exact_match_not_an_ordering(tmp_path
     repo_root = tmp_path / "zzz"
     repo_root.mkdir()
     assert scan_root.resolve() <= repo_root.resolve()  # pins the ordering this test relies on
-    assert detect.derive_package_root(scan_root, repo_root) == base.resolve()
+    assert derive_package_root.derive_package_root(scan_root, repo_root) == base.resolve()
 
 
 def test_e2e_config_default_falls_back_when_no_package_root_file(run_detect):
@@ -854,18 +855,18 @@ def test_is_workspace_member_true_when_an_ancestor_up_to_repo_root_declares_a_wo
     (repo_root / "Cargo.toml").write_text('[workspace]\nmembers = ["packages/rust"]\n')
     package_root = repo_root / "packages" / "rust"
     package_root.mkdir(parents=True)
-    assert detect.is_workspace_member(package_root, repo_root) is True
+    assert cargo_workspace.is_workspace_member(package_root, repo_root) is True
 
 
 def test_is_workspace_member_false_when_no_ancestor_up_to_repo_root_declares_one(tmp_path):
     repo_root = tmp_path
     package_root = repo_root / "packages" / "rust"
     package_root.mkdir(parents=True)
-    assert detect.is_workspace_member(package_root, repo_root) is False
+    assert cargo_workspace.is_workspace_member(package_root, repo_root) is False
 
 
 def test_is_workspace_member_false_when_package_root_is_the_repo_root(tmp_path):
-    assert detect.is_workspace_member(tmp_path, tmp_path) is False
+    assert cargo_workspace.is_workspace_member(tmp_path, tmp_path) is False
 
 
 def test_is_workspace_member_false_for_repo_root_package_even_with_an_outer_workspace(tmp_path_factory):
@@ -873,7 +874,7 @@ def test_is_workspace_member_false_for_repo_root_package_even_with_an_outer_work
     (base / "Cargo.toml").write_text('[workspace]\nmembers = ["repo"]\n')
     repo_root = base / "repo"
     repo_root.mkdir()
-    assert detect.is_workspace_member(repo_root, repo_root) is False
+    assert cargo_workspace.is_workspace_member(repo_root, repo_root) is False
 
 
 def test_is_workspace_member_true_when_an_intermediate_ancestor_declares_a_workspace(tmp_path):
@@ -883,14 +884,14 @@ def test_is_workspace_member_true_when_an_intermediate_ancestor_declares_a_works
     (mid / "Cargo.toml").write_text('[workspace]\nmembers = ["packages/rust"]\n')
     package_root = mid / "packages" / "rust"
     package_root.mkdir(parents=True)
-    assert detect.is_workspace_member(package_root, repo_root) is True
+    assert cargo_workspace.is_workspace_member(package_root, repo_root) is True
 
 
 def test_is_workspace_member_falls_back_to_repo_root_when_package_root_is_unrelated(tmp_path_factory):
     package_root = tmp_path_factory.mktemp("package-tree")
     repo_root = tmp_path_factory.mktemp("repo-tree")
     (repo_root / "Cargo.toml").write_text('[workspace]\nmembers = ["x"]\n')
-    assert detect.is_workspace_member(package_root, repo_root) is True
+    assert cargo_workspace.is_workspace_member(package_root, repo_root) is True
 
 
 def test_is_workspace_member_never_searches_outside_repo_root(tmp_path_factory):
@@ -899,7 +900,7 @@ def test_is_workspace_member_never_searches_outside_repo_root(tmp_path_factory):
     repo_root = base / "repo"
     package_root = repo_root / "packages" / "rust"
     package_root.mkdir(parents=True)
-    assert detect.is_workspace_member(package_root, repo_root) is False
+    assert cargo_workspace.is_workspace_member(package_root, repo_root) is False
 
 
 def test_e2e_cargo_target_dir_unredirected_for_a_standalone_crate_with_no_workspace(run_detect):

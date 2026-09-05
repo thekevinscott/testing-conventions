@@ -91,9 +91,13 @@ struct TempDir(PathBuf);
 
 impl TempDir {
     fn new() -> Result<Self> {
+        Self::new_in(&std::env::temp_dir())
+    }
+
+    fn new_in(base: &Path) -> Result<Self> {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let path = std::env::temp_dir().join(format!(
+        let path = base.join(format!(
             "testing-conventions-pkg-{}-{}",
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed),
@@ -317,13 +321,115 @@ mod tests {
     #[test]
     fn inspect_rejects_an_unrecognized_artifact() {
         let tree = TempTree::new(&["not-an-archive.txt"]);
-        let err = inspect(
-            tree.path().join("not-an-archive.txt"),
-            &["*_test.py".to_string()],
-        )
-        .unwrap_err();
+        let artifact = tree.path().join("not-an-archive.txt");
+        let err = inspect(artifact.as_path(), &["*_test.py".to_string()]).unwrap_err();
         assert!(
             err.to_string().contains("not a directory or a recognized"),
+            "got: {err}"
+        );
+    }
+
+    fn write_zip(path: &Path, entries: &[&str]) {
+        use std::io::Write;
+        let file = std::fs::File::create(path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        for entry in entries {
+            writer.start_file(*entry, options).unwrap();
+            writer.write_all(b"x").unwrap();
+        }
+        writer.finish().unwrap();
+    }
+
+    fn write_tar_gz(path: &Path, entries: &[&str]) {
+        let file = std::fs::File::create(path).unwrap();
+        let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+        let mut builder = tar::Builder::new(encoder);
+        for entry in entries {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(1);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder.append_data(&mut header, *entry, &b"x"[..]).unwrap();
+        }
+        builder.into_inner().unwrap().finish().unwrap();
+    }
+
+    #[test]
+    fn inspect_unpacks_a_wheel_and_reports_relative_offenders() {
+        let tree = TempTree::new(&[]);
+        std::fs::create_dir_all(tree.path()).unwrap();
+        let wheel = tree.path().join("pkg.whl");
+        write_zip(&wheel, &["pkg/widget.py", "pkg/widget_test.py"]);
+        let offenders = inspect(wheel.as_path(), &["*_test.py".to_string()]).unwrap();
+        assert_eq!(offenders, vec![PathBuf::from("pkg/widget_test.py")]);
+    }
+
+    #[test]
+    fn inspect_unpacks_a_tarball_and_reports_relative_offenders() {
+        let tree = TempTree::new(&[]);
+        std::fs::create_dir_all(tree.path()).unwrap();
+        let tarball = tree.path().join("pkg.tgz");
+        write_tar_gz(&tarball, &["pkg/widget.py", "pkg/widget_test.py"]);
+        let offenders = inspect(tarball.as_path(), &["*_test.py".to_string()]).unwrap();
+        assert_eq!(offenders, vec![PathBuf::from("pkg/widget_test.py")]);
+    }
+
+    #[test]
+    fn a_missing_wheel_reports_the_open_failure() {
+        let Err(err) = unzip_to_temp(Path::new("/nonexistent-tc-packaging/pkg.whl")) else {
+            panic!("expected an open failure");
+        };
+        assert!(err.to_string().contains("opening artifact"), "got: {err}");
+    }
+
+    #[test]
+    fn a_wheel_that_is_not_a_zip_reports_the_read_failure() {
+        let tree = TempTree::new(&["pkg.whl"]);
+        let Err(err) = unzip_to_temp(&tree.path().join("pkg.whl")) else {
+            panic!("expected a zip read failure");
+        };
+        assert!(err.to_string().contains("as a zip archive"), "got: {err}");
+    }
+
+    #[test]
+    fn a_wheel_that_cannot_be_unpacked_reports_the_failure() {
+        let tree = TempTree::new(&[]);
+        std::fs::create_dir_all(tree.path()).unwrap();
+        let wheel = tree.path().join("pkg.whl");
+        write_zip(&wheel, &["a", "a/b"]);
+        let Err(err) = unzip_to_temp(&wheel) else {
+            panic!("expected an unpack failure");
+        };
+        assert!(err.to_string().contains("unpacking"), "got: {err}");
+    }
+
+    #[test]
+    fn a_missing_tarball_reports_the_open_failure() {
+        let Err(err) = untar_gz_to_temp(Path::new("/nonexistent-tc-packaging/pkg.tgz")) else {
+            panic!("expected an open failure");
+        };
+        assert!(err.to_string().contains("opening artifact"), "got: {err}");
+    }
+
+    #[test]
+    fn a_tarball_that_cannot_be_unpacked_reports_the_failure() {
+        let tree = TempTree::new(&["pkg.tgz"]);
+        let Err(err) = untar_gz_to_temp(&tree.path().join("pkg.tgz")) else {
+            panic!("expected an unpack failure");
+        };
+        assert!(err.to_string().contains("unpacking"), "got: {err}");
+    }
+
+    #[test]
+    fn an_uncreatable_scratch_directory_is_an_error() {
+        let tree = TempTree::new(&["occupied"]);
+        let Err(err) = TempDir::new_in(&tree.path().join("occupied")) else {
+            panic!("expected a scratch-directory failure");
+        };
+        assert!(
+            err.to_string().contains("creating scratch directory"),
             "got: {err}"
         );
     }

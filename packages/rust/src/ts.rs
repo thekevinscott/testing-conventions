@@ -8,8 +8,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, bail, Context, Result};
 use oxc::allocator::Allocator;
 use oxc::ast::ast::{
-    Argument, CallExpression, Declaration, Expression, ImportDeclaration, ImportOrExportKind,
-    Statement,
+    Argument, CallExpression, Expression, ImportDeclaration, ImportOrExportKind, Statement,
 };
 use oxc::ast_visit::{walk, Visit};
 use oxc::parser::Parser;
@@ -462,18 +461,9 @@ fn is_type_only_statement(statement: &Statement) -> bool {
         Statement::TSTypeAliasDeclaration(_) | Statement::TSInterfaceDeclaration(_) => true,
         Statement::ImportDeclaration(decl) => decl.import_kind.is_type(),
         Statement::ExportAllDeclaration(decl) => decl.export_kind.is_type(),
-        Statement::ExportNamedDeclaration(decl) => {
-            if decl.export_kind.is_type() {
-                return true;
-            }
-            match &decl.declaration {
-                Some(Declaration::TSTypeAliasDeclaration(_))
-                | Some(Declaration::TSInterfaceDeclaration(_)) => true,
-                Some(_) => false,
-                // A specifier-only `export { … }` re-exports runtime bindings.
-                None => false,
-            }
-        }
+        // The parser marks an exported type alias or interface as a type export, so a
+        // value-kind named export always carries runtime bindings.
+        Statement::ExportNamedDeclaration(decl) => decl.export_kind.is_type(),
         _ => false,
     }
 }
@@ -905,5 +895,55 @@ mod tests {
         let err = integration_violations_in(Path::new("weird.test.bogus"), "vi.mock('./x');\n")
             .unwrap_err();
         assert!(err.to_string().contains("unsupported"), "got: {err}");
+    }
+
+    #[test]
+    fn unit_parse_error_is_reported() {
+        let err = unit_violations_in(Path::new("bad.test.ts"), "const x = ;\n").unwrap_err();
+        assert!(err.to_string().contains("parsing"), "got: {err}");
+    }
+
+    #[test]
+    fn unit_unsupported_extension_is_reported() {
+        let err =
+            unit_violations_in(Path::new("weird.test.bogus"), "vi.mock('./x');\n").unwrap_err();
+        assert!(err.to_string().contains("unsupported"), "got: {err}");
+    }
+
+    #[test]
+    fn type_only_is_false_for_an_unsupported_extension() {
+        assert!(!is_type_only_module(
+            "export type T = number;\n",
+            Path::new("foo.txt")
+        ));
+    }
+
+    #[test]
+    fn type_only_rejects_a_plain_runtime_statement() {
+        assert!(!type_only("const x = 1;\ntype T = number;\n"));
+    }
+
+    #[test]
+    fn a_factory_calling_a_plain_helper_is_untyped() {
+        let found = unit_violations(
+            "widget.test.ts",
+            "import { x } from './x';\nvi.mock('./x', () => makeDouble());\n",
+        );
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert_eq!(found[0].rule, "untyped-mock");
+    }
+
+    #[test]
+    fn a_package_without_a_tests_dir_has_no_suite_violations() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "tc-ts-suite-test-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let found = find_suite_violations(&dir).expect("an empty package scans clean");
+        assert!(found.is_empty(), "got: {found:?}");
     }
 }

@@ -639,6 +639,21 @@ mod tests {
     }
 
     #[test]
+    fn a_wrong_typed_line_spec_names_the_expected_forms() {
+        let err = parse(
+            "[python]\ncoverage = { branch = true, fail_under = 100 }\n\
+             [[python.exempt]]\npath = \"cli.py\"\nrules = [\"colocated-test\"]\n\
+             lines = [true]\nreason = \"x\"\n",
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("a line number or a \"start-end\" range string"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
     fn default_python_coverage_is_the_strict_floor() {
         // The zero-config floor is strict by default: branch on, 100.
         // Locked here so it can't silently drift from the Defaults reference.

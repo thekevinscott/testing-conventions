@@ -844,14 +844,12 @@ impl Visitor for LintVisitor<'_> {
 
     fn visit_stmt_import_from(&mut self, node: StmtImportFrom) {
         // A relative import names no absolute module, so its bindings resolve nothing.
-        if relative_level(&node) == 0 {
-            if let Some(module) = &node.module {
-                self.declare_module(module.as_str());
-                for alias in &node.names {
-                    let bound = alias.asname.as_ref().unwrap_or(&alias.name);
-                    self.imports
-                        .insert(bound.to_string(), format!("{module}.{}", alias.name));
-                }
+        if let (0, Some(module)) = (relative_level(&node), &node.module) {
+            self.declare_module(module.as_str());
+            for alias in &node.names {
+                let bound = alias.asname.as_ref().unwrap_or(&alias.name);
+                self.imports
+                    .insert(bound.to_string(), format!("{module}.{}", alias.name));
             }
         }
         self.generic_visit_stmt_import_from(node);
@@ -1773,6 +1771,31 @@ mod tests {
     #[test]
     fn module_scope_rejects_unparsable_source() {
         assert!(module_scope("def (\n", &[]).is_none());
+    }
+
+    #[test]
+    fn module_scope_binds_list_unpack_targets_as_opaque() {
+        let scope = scope_of("[c, d] = make()\n");
+        assert_eq!(scope.bindings.get("c"), Some(&Binding::Opaque));
+        assert_eq!(scope.bindings.get("d"), Some(&Binding::Opaque));
+    }
+
+    #[test]
+    fn module_scope_skips_an_attribute_target() {
+        let scope = scope_of("obj.attr = 1\n");
+        assert!(scope.bindings.is_empty(), "{:?}", scope.bindings);
+    }
+
+    #[test]
+    fn module_scope_ignores_non_binding_statements() {
+        let scope = scope_of("print(1)\n");
+        assert!(scope.bindings.is_empty(), "{:?}", scope.bindings);
+    }
+
+    #[test]
+    fn module_scope_treats_a_set_literal_as_defined() {
+        let scope = scope_of("NAMES = {1, 2}\n");
+        assert_eq!(scope.bindings.get("NAMES"), Some(&Binding::Defined));
     }
 
     /// The imports and declared modules a [`LintVisitor`] records for `src`.

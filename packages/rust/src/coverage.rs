@@ -231,10 +231,15 @@ fn vitest_default_excludes(root: &Path) -> Result<Vec<String>> {
             String::from_utf8_lossy(&run.stderr),
         );
     }
-    let excludes: Vec<String> = serde_json::from_slice(&run.stdout).with_context(|| {
+    parse_default_excludes(&run.stdout)
+}
+
+/// The exclude patterns node printed, parsed and pared to the passable ones.
+fn parse_default_excludes(stdout: &[u8]) -> Result<Vec<String>> {
+    let excludes: Vec<String> = serde_json::from_slice(stdout).with_context(|| {
         format!(
             "vitest's default coverage excludes were not a JSON string array — got: {}",
-            String::from_utf8_lossy(&run.stdout)
+            String::from_utf8_lossy(stdout)
         )
     })?;
     // A few of vitest's default patterns embed a literal NUL (its virtual-module
@@ -442,8 +447,12 @@ fn run_vitest_coverage(
         );
     }
 
-    let path = reports.0.join(report_file);
-    std::fs::read_to_string(&path).with_context(|| {
+    read_vitest_report(&reports.0.join(report_file), reporter)
+}
+
+/// The report the vitest run wrote, read back for parsing.
+fn read_vitest_report(path: &Path, reporter: &str) -> Result<String> {
+    std::fs::read_to_string(path).with_context(|| {
         format!(
             "reading vitest coverage report `{}` (did the run produce a {reporter} report?)",
             path.display()
@@ -835,13 +844,8 @@ pub fn measure_patch_rust_detail(
     features: &[String],
 ) -> Result<BTreeMap<String, RustPatchCoverage>> {
     // The diff-scoped floor judges regions + lines, so its run never adds `--branch`.
-    llvm_cov_patch_detail(&run_cargo_llvm_cov(
-        root,
-        ignore,
-        &["--json"],
-        features,
-        false,
-    )?)
+    let json = run_cargo_llvm_cov(root, ignore, &["--json"], features, false)?;
+    llvm_cov_patch_detail(&json)
 }
 
 /// Pure: per-file [`RustPatchCoverage`] from a `cargo llvm-cov --json` export, keyed
@@ -1512,6 +1516,73 @@ mod tests {
     }
 
     #[test]
+    fn llvm_cov_patch_detail_skips_a_negative_file_id() {
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/a.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/a.rs"],
+                    "regions": [[1, 1, 1, 5, 1, -1, 0, 0]]
+                }]
+            }]
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert!(out.is_empty(), "got: {out:?}");
+    }
+
+    #[test]
+    fn llvm_cov_patch_detail_skips_an_out_of_range_file_id() {
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/a.rs"}],
+                "functions": [{
+                    "filenames": ["/abs/a.rs"],
+                    "regions": [[1, 1, 1, 5, 1, 7, 0, 0]]
+                }]
+            }]
+        }"#;
+        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        assert!(out.is_empty(), "got: {out:?}");
+    }
+
+    #[test]
+    fn istanbul_patch_detail_keeps_a_branch_without_counts() {
+        let json = r#"{
+            "/abs/a.ts": {
+                "statementMap": {},
+                "s": {},
+                "branchMap": {"0": {"loc": {"start": {"line": 3}, "end": {"line": 3}}}},
+                "b": {},
+                "fnMap": {},
+                "f": {}
+            }
+        }"#;
+        let out = istanbul_patch_detail(json).expect("valid Istanbul report");
+        assert!(out["/abs/a.ts"].branch_arms.is_empty(), "got: {out:?}");
+    }
+
+    #[test]
+    fn default_excludes_that_are_not_json_name_the_output() {
+        let err = parse_default_excludes(b"vitest warmed up first").unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("not a JSON string array"), "got: {msg}");
+        assert!(msg.contains("vitest warmed up first"), "got: {msg}");
+    }
+
+    #[test]
+    fn default_excludes_drop_a_nul_bearing_pattern() {
+        let parsed = parse_default_excludes(br#"["**/dist/**", "**/\u0000*"]"#).unwrap();
+        assert_eq!(parsed, vec!["**/dist/**".to_string()]);
+    }
+
+    #[test]
+    fn a_missing_vitest_report_names_the_reporter() {
+        let path = std::env::temp_dir().join("tc-no-such-report/coverage-final.json");
+        let err = read_vitest_report(&path, "json").unwrap_err();
+        assert!(format!("{err:#}").contains("json report"), "got: {err:#}");
+    }
+
+    #[test]
     fn rust_ignore_regex_is_none_when_nothing_is_exempt() {
         assert_eq!(ignore_filename_regex(Path::new("/repo"), &[]), None);
     }
@@ -1541,6 +1612,12 @@ mod tests {
                 filename.contains(&lit)
             }
         })
+    }
+
+    #[test]
+    fn llvm_would_ignore_matches_an_unanchored_literal_anywhere() {
+        assert!(llvm_would_ignore("/repo/src", "/repo/src/a.rs"));
+        assert!(!llvm_would_ignore("/elsewhere", "/repo/src/a.rs"));
     }
 
     #[test]

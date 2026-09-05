@@ -86,6 +86,39 @@ fn a_suite_that_cannot_run_is_an_error_not_a_silent_pass() {
 }
 
 #[test]
+fn a_failing_suite_is_an_error_naming_the_vitest_run() {
+    let staged = std::env::temp_dir().join(format!("tc-ts-cov-failing-{}", std::process::id()));
+    let src = staged.join("src");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::copy(codebase("full").join("package.json"), staged.join("package.json")).unwrap();
+    std::fs::write(
+        src.join("widget.ts"),
+        "export const widget = (): number => 1;\n",
+    )
+    .unwrap();
+    std::fs::write(
+        src.join("widget.test.ts"),
+        "import { expect, test } from 'vitest';\nimport { widget } from './widget';\n\ntest('widget', () => {\n  expect(widget()).toBe(2);\n});\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/unit_coverage/typescript/node_modules"),
+        staged.join("node_modules"),
+    )
+    .unwrap();
+
+    let result = measure_typescript(&src, MID, &[]);
+    let _ = std::fs::remove_file(staged.join("node_modules"));
+    let _ = std::fs::remove_dir_all(&staged);
+    let err = result.expect_err("a red suite must error, not report a floor");
+    assert!(
+        format!("{err:#}").contains("did not run cleanly under vitest"),
+        "got: {err:#}"
+    );
+}
+
+#[test]
 fn a_package_root_vitest_config_governs_a_src_scan() {
     assert_eq!(
         measure_typescript(&codebase("pkg_config").join("src"), FULL, &[]).unwrap(),

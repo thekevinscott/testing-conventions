@@ -214,12 +214,12 @@ fn push_ts_bindings(
 ) {
     for declarator in &node.declarations {
         let body = match &declarator.init {
-            Some(Expression::ArrowFunctionExpression(arrow)) => &arrow.body,
-            Some(Expression::FunctionExpression(function)) => match &function.body {
-                Some(body) => body,
-                None => continue,
-            },
-            _ => continue,
+            Some(Expression::ArrowFunctionExpression(arrow)) => Some(arrow.body.as_ref()),
+            Some(Expression::FunctionExpression(function)) => function.body.as_deref(),
+            _ => None,
+        };
+        let Some(body) = body else {
+            continue;
         };
         let Some(name) = declarator.id.get_identifier_name() else {
             continue;
@@ -482,6 +482,60 @@ mod tests {
     fn rust_counts_an_empty_body_as_no_lines() {
         let found = rust("pub fn stub() {}\n");
         assert_eq!(found, vec![("stub".to_string(), 0)]);
+    }
+
+    #[test]
+    fn typescript_counts_a_plain_function_declaration() {
+        let found = typescript(
+            "function alpha(value: number): number {\n  const total = value + 1;\n  return total;\n}\n",
+        );
+        assert_eq!(found, vec![("alpha".to_string(), 2)]);
+    }
+
+    #[test]
+    fn typescript_skips_non_function_defaults_and_imports() {
+        let found = typescript(
+            "import { x } from './x';\nexport default class Widget {}\n\
+             const beta = (value: number): number => value;\n",
+        );
+        assert_eq!(found, vec![("beta".to_string(), 1)]);
+    }
+
+    #[test]
+    fn typescript_skips_a_destructured_function_binding() {
+        let found = typescript("const { a } = () => {};\n");
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    #[test]
+    fn typescript_counts_an_empty_arrow_body_as_no_lines() {
+        let found = typescript("const stub = () => {};\n");
+        assert_eq!(found, vec![("stub".to_string(), 0)]);
+    }
+
+    #[test]
+    fn typescript_parse_error_is_reported() {
+        let err = typescript_functions("const x = ;\n", Path::new("bad.ts")).unwrap_err();
+        assert!(err.to_string().contains("parsing"), "got: {err}");
+    }
+
+    #[test]
+    fn suite_tier_files_are_not_judged() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "tc-one-function-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(root.join("tests")).unwrap();
+        std::fs::write(root.join("pyproject.toml"), "[project]\nname = \"w\"\n").unwrap();
+        let two_functions = "def alpha():\n    return 1\n\ndef beta():\n    return 2\n";
+        std::fs::write(root.join("widget.py"), two_functions).unwrap();
+        std::fs::write(root.join("tests").join("helper.py"), two_functions).unwrap();
+        let found = find_violations(&root, Language::Python, 0).expect("the tree scans");
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(found[0].file.ends_with("widget.py"), "got: {found:?}");
     }
 
     #[test]

@@ -1,18 +1,4 @@
-"""The mutation-package-root-wired check — repo-only (#279, #321).
-
-Backs the `tc-checks mutation-package-root-wired` subcommand: the reusable workflow
-(`.github/workflows/testing-conventions.yml`) `mutation` job must reference
-`needs.detect.outputs.package_root` — in its install steps, its `build_command` step, and its
-Rust-build cache path — or it installs and builds at the checkout root, so a per-package-lockfile
-monorepo (or a non-pnpm TS package, or a uv-managed Python package) fails the job. The shared
-`extract_job_block` confines the search to the `mutation` job's own YAML region — a reference in a
-neighbouring job must not satisfy it.
-
-A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
-untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:` text is
-templated before the shell sees it, so a literal `${{ ... }}` in a grep pattern is silently
-evaluated).
-"""
+"""Assert the `mutation` job references detect's derived `package_root` inside its own YAML region."""
 from __future__ import annotations
 
 from pathlib import Path

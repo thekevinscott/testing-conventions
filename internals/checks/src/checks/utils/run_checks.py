@@ -1,13 +1,5 @@
-"""The shared orchestrator for the failure-path checks (#328).
-
-`run_checks(checks, command, run=subprocess.run)` runs each `(argv, expect_fail, label)` in
-`checks` — or, when a trailing `command` is passed, that single red-path check (the e2e seam that
-stands in for the real npx invocation) — through `run`, applies `failure_reason`, echoes
-`[label] ok` for every check that holds, and raises `CheckFailed` on the first violation.
-
-The subprocess boundary is injected as `run` (defaulting to `subprocess.run`), so the colocated
-test drives a fake with no real subprocess, while the check commands run npx for real in CI.
-"""
+"""Run each `(argv, expect_fail, label)` through the injected `run`, echo every check that holds, and
+raise `CheckFailed` on the first that does not."""
 from __future__ import annotations
 
 import subprocess

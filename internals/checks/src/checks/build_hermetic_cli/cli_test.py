@@ -1,11 +1,4 @@
-"""Colocated unit tests for the build-hermetic-cli check (isolation — no CliRunner, no real
-subprocess).
-
-Imports only the unit under test: this check's own `COMMANDS`/`BINARY`/`NODE_DIST` data, the `cli`
-command's declared argument, and the wiring between them, driven through `.callback()` with
-`stage_hermetic_cli` patched by string target. The staging orchestration behind that seam is
-covered once beside it, in `checks/utils/build_hermetic_cli_test.py`.
-"""
+"""Colocated unit tests for the build-hermetic-cli check."""
 from checks.build_hermetic_cli.cli import BINARY, COMMANDS, NODE_DIST, cli
 
 

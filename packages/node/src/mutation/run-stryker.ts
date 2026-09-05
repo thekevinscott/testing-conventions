@@ -23,12 +23,8 @@ export interface RunStrykerOptions {
 const vitestRunnerPlugin = createRequire(import.meta.url).resolve('@stryker-mutator/vitest-runner');
 
 /**
- * Run Stryker over the project in the current working directory via its Node API (#239) and
- * return the normalized results. Selects the **bundled** vitest runner explicitly by path (so
- * the unit-scoped runner is always used rather than Stryker's default `npm test` command
- * runner, #240, and resolves regardless of the project's location); results come from
- * `runMutationTest()` directly, so there is no report file. Because this runs inside the npm
- * package, `@stryker-mutator/core` resolves natively.
+ * Run Stryker over the project in the current working directory via its Node API and return the
+ * normalized results.
  */
 export async function runStryker(options: RunStrykerOptions = {}): Promise<NormalizedMutant[]> {
   const cliOptions: PartialStrykerOptions = {

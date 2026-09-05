@@ -1,10 +1,4 @@
-"""Colocated unit tests for the diff-scoped-wired check (isolation — no `CliRunner`).
-
-The `cli` command is driven through its `.callback`, so no `click.testing` collaborator is
-imported. The decision itself is covered in `decide_test.py`; here the wired and unwired
-fixtures cover the command's echo and raise branches. The raise path is asserted against the
-exception's `.message`.
-"""
+"""Colocated unit tests for the diff-scoped-wired check."""
 from checks.diff_scoped_wired.cli import REUSABLE_WORKFLOW, cli
 
 BOTH = "run: unit colocated-test --base $BASE\nrun: unit coverage --base $BASE\n"

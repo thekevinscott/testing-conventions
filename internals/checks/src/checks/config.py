@@ -1,6 +1,4 @@
-"""Shared paths and expected values the checks target (#321) — one source of truth, so a literal
-isn't copied into every check module.
-"""
+"""Shared paths and expected values the checks target, so no literal is copied into a check module."""
 REUSABLE_WORKFLOW = ".github/workflows/testing-conventions.yml"
 NODE_PACKAGE_MANIFEST = "packages/node/package.json"
 

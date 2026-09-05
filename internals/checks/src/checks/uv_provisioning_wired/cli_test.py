@@ -1,9 +1,4 @@
-"""Colocated unit tests for the uv-provisioning-wired check (isolation — no `CliRunner`).
-
-The `cli` command is driven through its `.callback` (the undecorated function), so no
-`click.testing` collaborator is imported. Only the unit under test is imported — the raise path
-is asserted against the propagated exception's `.message` rather than importing `CheckFailed`.
-"""
+"""Colocated unit tests for the uv-provisioning-wired check."""
 from checks.uv_provisioning_wired.cli import REUSABLE_WORKFLOW, cli
 
 PYTHON_ARM = (

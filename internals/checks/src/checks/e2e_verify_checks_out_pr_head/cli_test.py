@@ -1,9 +1,4 @@
-"""Colocated unit tests for the e2e-verify-checks-out-pr-head check (isolation — no `CliRunner`).
-
-The block-scoping decision is covered in `pins_pr_head_test.py`; here the pinned and unpinned fixtures
-cover the command's echo and raise branches, driven through `.callback` so no `click.testing`
-collaborator is imported. The raise path is asserted against the exception's `.message`.
-"""
+"""Colocated unit tests for the e2e-verify-checks-out-pr-head check."""
 from checks.e2e_verify_checks_out_pr_head.cli import REUSABLE_WORKFLOW, cli
 
 PINNED = (

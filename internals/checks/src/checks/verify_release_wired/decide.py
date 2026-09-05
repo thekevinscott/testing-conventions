@@ -1,21 +1,6 @@
-"""The verify-release-wired decision — repo-only (#357, #321).
-
-The pure invariant behind the `tc-checks verify-release-wired` command. Publish-gating
-(`rolling-release-wired`, #235) proves the binary published; it does not prove the combination the
-tag move is about to bless — the *new* workflow file, the *published* binary, the *current* `@v0`
-detect — is green over the consumer surface. #357 gates the promotion on a verification run before
-the tag moves, and this asserts that gate stays wired:
-
-  * the layout check (`tc-checks verify-release check-layout`) runs — the remote-action-fetch provenance
-    the version-pinned suite can't cover;
-  * the version-pinned suite is dispatched (`tc-checks verify-release dispatch-and-wait`) over *both* the
-    self-test and dogfood workflows; and
-  * the job that advances `@v0` (`move_major_tag.py`) `needs:` the verification jobs, so a red
-    layout check or a red suite leaves `@v0` where it is (fail closed) rather than promoting anyway.
-
-The last point is checked per job with `iter_job_blocks` (#356): the move job's own block must name
-the verification jobs in its `needs:`, so a `needs:` edge on some *other* job can't satisfy it.
-"""
+"""Decide whether the layout check and the version-pinned suite run and the tag-move job `needs:`
+them, checked inside the move job's own block so a `needs:` edge on another job satisfies none of
+it."""
 from __future__ import annotations
 
 from typing import Optional

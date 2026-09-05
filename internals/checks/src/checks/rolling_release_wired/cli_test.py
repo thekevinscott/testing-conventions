@@ -1,11 +1,4 @@
-"""Colocated unit tests for the rolling-release-wired check (isolation — no `CliRunner`).
-
-The two decisions are covered in `decide_test.py` and
-`check_release_no_inline_tag_move_test.py`; here the `cli` command is driven through its
-`.callback` — once with both files present and clean, once with the move-tag file absent and an
-inline-moving release — so both the `exists()` and the `errors` branches run. The raise path is
-asserted against the propagated exception's `.message`.
-"""
+"""Colocated unit tests for the rolling-release-wired check."""
 from checks.rolling_release_wired.cli import DEFAULT_MOVE_TAG, DEFAULT_RELEASE, cli
 
 GATED = "on:\n  workflow_run:\n    workflows: [Release]\nconcurrency:\n  group: move-major-tag\n"

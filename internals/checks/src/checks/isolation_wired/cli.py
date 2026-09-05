@@ -1,14 +1,4 @@
-"""The isolation-wired check — repo-only (#125, #321).
-
-Backs the `tc-checks isolation-wired` subcommand: the reusable workflow
-(`.github/workflows/testing-conventions.yml`) must actually invoke `unit lint`, or the shipped
-isolation rule is not enforced on the `@v0` path.
-
-A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
-untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:` text is
-templated before the shell sees it, so a literal `${{ ... }}` in a grep pattern is silently
-evaluated).
-"""
+"""Assert the reusable workflow invokes `unit lint`."""
 from __future__ import annotations
 
 from pathlib import Path

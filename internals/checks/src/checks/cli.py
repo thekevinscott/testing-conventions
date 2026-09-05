@@ -1,8 +1,4 @@
-"""The single console entry point: the click group that composes the checks (#321).
-
-Repo-only. `tc-checks` is one command; each check is a `@click.command()` in its own subfolder,
-registered here as a subcommand. Adding a check is a folder plus one `add_command` line.
-"""
+"""The `tc-checks` console entry point: the click group that composes each check as a subcommand."""
 from __future__ import annotations
 
 import click
@@ -53,7 +49,7 @@ from checks.wiring_packaging_default_on.cli import cli as wiring_packaging_defau
 
 @click.group()
 def main() -> None:
-    """Repo-only self-test wiring/assertion checks (#321)."""
+    """Repo-only self-test wiring and assertion checks."""
 
 
 main.add_command(below_floor, name="below-floor")

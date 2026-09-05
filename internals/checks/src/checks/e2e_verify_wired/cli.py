@@ -1,14 +1,4 @@
-"""The e2e-verify-wired check — repo-only (#173, #321).
-
-Backs the `tc-checks e2e-verify-wired` subcommand: the reusable workflow must offer the e2e
-freshness gate (#68) behind an opt-in `run_e2e` input, or consumers cannot enforce it on the
-`@v0` path. Both the input (`run_e2e`) and the command (`e2e verify`) must appear.
-
-A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
-untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:` text is
-templated before the shell sees it, so a literal `${{ ... }}` in a grep pattern is silently
-evaluated).
-"""
+"""Assert the reusable workflow offers the e2e freshness gate behind the opt-in `run_e2e` input."""
 from __future__ import annotations
 
 from pathlib import Path

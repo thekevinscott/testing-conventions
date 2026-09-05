@@ -1,4 +1,4 @@
-"""Colocated unit tests for the routes-python decision (isolation — pure, no I/O)."""
+"""Colocated unit tests for the routes-python decision."""
 from checks.detect_routes_python.routes import routes_python
 
 

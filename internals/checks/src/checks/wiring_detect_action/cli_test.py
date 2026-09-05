@@ -1,9 +1,4 @@
-"""Colocated unit tests for the wiring-detect-action check (isolation — no `CliRunner`).
-
-The `cli` command is driven through its `.callback` (the undecorated function), so no
-`click.testing` collaborator is imported. Only the unit under test is imported — the raise path is
-asserted against the propagated exception's `.message`.
-"""
+"""Colocated unit tests for the wiring-detect-action check."""
 from checks.wiring_detect_action.cli import REUSABLE_WORKFLOW, cli
 
 WIRED = "      - uses: ./.github/actions/detect@v0\n"

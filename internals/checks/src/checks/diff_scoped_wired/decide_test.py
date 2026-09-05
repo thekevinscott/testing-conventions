@@ -1,9 +1,4 @@
-"""Colocated unit tests for the diff-scoped-wired decision (isolation — pure, no I/O).
-
-A fixture missing each `--base` check in turn pins the `and` joining them, and a fixture with
-each check present but *without* `--base` pins the regexes (the `.*--base` tail, not the bare
-command name).
-"""
+"""Colocated unit tests for the diff-scoped-wired decision."""
 from checks.diff_scoped_wired.decide import wires_diff_scoped
 
 BOTH = "run: unit colocated-test --base $BASE\nrun: unit coverage --base $BASE\n"

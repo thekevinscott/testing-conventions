@@ -1,10 +1,4 @@
-"""Colocated unit tests for the red-path-hermetic-wired check (isolation — no `CliRunner`).
-
-The `cli` command is driven through its `.callback` (the undecorated function), so no
-`click.testing` collaborator is imported. Only the unit under test is imported — the raise path
-is asserted against the propagated exception's `.message` rather than importing `CheckFailed`; the
-pure decision (and the `RED_PATH_JOBS` list it iterates) has its own `decide_test.py`.
-"""
+"""Colocated unit tests for the red-path-hermetic-wired check."""
 from checks.red_path_hermetic_wired.cli import SELFTEST_WORKFLOW, cli
 
 # Every red-path job wired: a `needs: [build-cli]` edge and the download step. Written inline (not

@@ -1,10 +1,4 @@
-"""Colocated unit tests for the detect-routes-python command (isolation — no `CliRunner`).
-
-The `cli` command is driven through its `.callback` (the undecorated function), so no
-`click.testing` collaborator is imported. Only the unit under test is imported — the raise path is
-asserted against the propagated exception's `.message`. The pure decision is tested in
-`routes_test.py`.
-"""
+"""Colocated unit tests for the detect-routes-python command."""
 from checks.detect_routes_python.cli import DEFAULT_ISOLATION_LANGUAGES, cli
 
 

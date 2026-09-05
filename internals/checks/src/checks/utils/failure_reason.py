@@ -1,9 +1,5 @@
-"""The pure exit-code decision shared by the failure-path checks (#328).
-
-`failure_reason(expect_fail, returncode)` returns `None` when `returncode` met the expectation, else
-the reason it did not. Truthiness — not `== 0` — so no comparison operator can mutate into an
-equivalent (`<= 0` never differs for a real exit code; `is 0` never differs for a small cached int).
-"""
+"""The pure exit-code decision shared by the failure-path checks — truthiness, not `== 0`, so no
+comparison mutant of it is behaviorally identical."""
 from __future__ import annotations
 
 from typing import Optional

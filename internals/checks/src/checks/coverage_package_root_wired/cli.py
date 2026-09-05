@@ -1,17 +1,4 @@
-"""The coverage-package-root-wired check — repo-only (#278, #321).
-
-Backs the `tc-checks coverage-package-root-wired` subcommand: both coverage jobs of the reusable
-workflow (`.github/workflows/testing-conventions.yml`) — `unit-coverage` (whole-tree) and
-`coverage-changed` (changed-line) — must reference `needs.detect.outputs.package_root` so their TS
-install, Python-env provisioning, and `build_command` step run at the derived package root, not the
-checkout root. The `decide` module isolates each job's own YAML region — a reference in a
-neighbouring job must not satisfy it — and confirms the wiring lives inside both.
-
-A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
-untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:` text is
-templated before the shell sees it, so a literal `${{ ... }}` in a grep pattern is silently
-evaluated).
-"""
+"""Assert both coverage jobs reference detect's derived `package_root`."""
 from __future__ import annotations
 
 from pathlib import Path

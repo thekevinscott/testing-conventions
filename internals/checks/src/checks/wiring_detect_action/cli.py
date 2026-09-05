@@ -1,14 +1,4 @@
-"""The wiring-detect-action check — repo-only (#185; epic #302, #305, #324).
-
-Backs the `tc-checks wiring-detect-action` subcommand: it asserts the reusable workflow
-(`.github/workflows/testing-conventions.yml`) wires detection to the tested `detect` action,
-rather than running detection as inline bash off the tested engine.
-
-A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
-untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:` text is
-templated before the shell sees it, so a literal `${{ ... }}` in a grep pattern is silently
-evaluated).
-"""
+"""Assert the reusable workflow wires detection to the tested `detect` action."""
 from __future__ import annotations
 
 import re

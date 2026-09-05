@@ -1,40 +1,6 @@
-"""Assert the hermetic (build-from-HEAD) mode is derived, caller-built, and fully wired —
-repo-only (#356, #353).
-
-Backs the `tc-checks hermetic-wired` subcommand, the red->green wiring signal for #356. Hermetic
-mode is derived, never declared: detect receives `caller_repository` (the reusable workflow's
-`github.repository`, which belongs to the *caller* of a reusable workflow) and `version`, and
-emits `cli_command` only when this repo gates itself with no pinned version. The build lives in
-the repo-only caller workflows (self-test, dogfood), never in the consumer-facing reusable
-workflow: a guarded job still renders a skipped row in every consumer's checks UI, so the
-reusable workflow may carry hermetic *steps* only. In the reusable workflow, five pieces must
-exist:
-
-- the derivation guard, as an exact literal, on the detect step pair (the only YAML residue —
-  which action ref runs is a scheduling decision expressions alone can make);
-- a local (`./.github/actions/detect`) detect step alongside the published `@v0` one;
-- a `cli_command` detect output;
-- the `${CLI_COMMAND:-` fallback (transition-safe: an old `@v0` detect emits no `cli_command`,
-  and the consumer path must stay today's published-CLI line), with its `CLI_COMMAND` env
-  line present in each step that runs it — the value is step-local, so a step missing the line
-  expands to the published binary while the file-wide fallback text survives on its neighbours;
-- a `hermetic-cli` artifact download, via the shared `./.github/actions/download-hermetic-cli`
-  composite action (the download + chmod trio the nine rule jobs would otherwise each repeat).
-
-And two must not: any `inputs.hermetic` reference (the rejected flag design), and any
-`build-cli:` job (the rejected consumer-visible-row design). In each caller workflow, a
-`build-cli:` job must exist and every job that `uses:` the reusable workflow must carry
-`needs: [... build-cli ...]` on that same job — without the edge the build races the download and
-fails flaky instead of deterministically. Checked per job (`iter_job_blocks`), not as two
-file-wide counts: counting `uses:` lines against `needs: [... build-cli ...]` lines separately
-would pass on a false negative — an unrelated job's edge, or a duplicated edge on one job,
-numerically balances a different job that's missing its edge entirely, while the race stays real.
-
-A standalone, colocated-tested check rather than inline `run: |` bash: inline workflow bash is
-untested prose and exposed to the GitHub Actions `${{ }}` templating trap (the `run:` text is
-templated before the shell sees it, so a literal `${{ ... }}` in a grep pattern is silently
-evaluated).
-"""
+"""Assert hermetic (build-from-HEAD) mode is derived, caller-built, and fully wired — checked per
+step and per job, since a neighbour's `CLI_COMMAND` env line or `build-cli` edge would otherwise
+cover a block missing its own."""
 from __future__ import annotations
 
 import re

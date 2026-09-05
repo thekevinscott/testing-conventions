@@ -1,8 +1,4 @@
-"""Colocated unit tests for the e2e-verify-wired decision (isolation — pure, no I/O).
-
-A fixture missing the input and one missing the command in turn pin the `and` joining them; the
-both-present fixture pins the true arm.
-"""
+"""Colocated unit tests for the e2e-verify-wired decision."""
 from checks.e2e_verify_wired.decide import wires_e2e_verify
 
 BOTH = "inputs:\n  run_e2e:\n    default: false\nrun: e2e verify\n"

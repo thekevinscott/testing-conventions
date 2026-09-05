@@ -1,4 +1,4 @@
-"""The detect-package-root-ts decision — repo-only (#277 #327)."""
+"""The detect-package-root-ts decision."""
 from __future__ import annotations
 
 from typing import Optional

@@ -2,7 +2,8 @@
 //! arm of `unit lint`. Each test file is parsed with `rustpython_parser` and walked with a
 //! [`Visitor`]; the rules themselves are documented under `docs/reference/checks/`.
 
-use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
@@ -23,7 +24,7 @@ pub use crate::violation::Violation;
 pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     let root = root.as_ref();
     // Resolved once for the whole tree; `None` means `no-first-party-patch` flags nothing.
-    let first_party = first_party_package(root);
+    let manifest = first_party_manifest(root);
     let mut files = Vec::new();
     collect_python_files(root, &mut files, is_python_test_file)?;
     files.sort();
@@ -38,8 +39,10 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
             file,
             source: &source,
             fixture_depth: 0,
-            first_party: first_party.as_deref(),
+            first_party: manifest.as_ref().map(|(name, _)| name.as_str()),
+            source_root: manifest.as_ref().map(|(_, dir)| dir.as_path()),
             imports: HashMap::new(),
+            declared_modules: HashSet::new(),
             violations: Vec::new(),
         };
         for stmt in suite {
@@ -710,8 +713,12 @@ struct LintVisitor<'a> {
     fixture_depth: usize,
     /// The dist's own top-level package, or `None` when undiscoverable.
     first_party: Option<&'a str>,
+    /// The directory holding the dist's `pyproject.toml`, where module sources live.
+    source_root: Option<&'a Path>,
     /// Local name → the dotted module path its import binds, for object patch targets.
     imports: HashMap<String, String>,
+    /// Every dotted prefix of an imported module path, each a module by construction.
+    declared_modules: HashSet<String>,
     violations: Vec<Violation>,
 }
 
@@ -744,6 +751,26 @@ impl LintVisitor<'_> {
         }
 
         decorators.iter().any(is_fixture_decorator)
+    }
+
+    fn declare_module(&mut self, module: &str) {
+        let mut path = String::new();
+        for segment in module.split('.') {
+            if !path.is_empty() {
+                path.push('.');
+            }
+            path.push_str(segment);
+            self.declared_modules.insert(path.clone());
+        }
+    }
+
+    fn resolve_ctx(&self) -> ResolveCtx<'_> {
+        ResolveCtx {
+            imports: &self.imports,
+            declared_modules: &self.declared_modules,
+            first_party: self.first_party,
+            source_root: self.source_root,
+        }
     }
 }
 
@@ -781,7 +808,7 @@ impl Visitor for LintVisitor<'_> {
         }
         // Both target rules fire regardless of fixture depth — a config constant is usually
         // patched in one — and only on a statically resolved target.
-        if let Some(target) = patch_target(&node, &self.imports) {
+        if let Some(target) = patch_target(&node, &self.resolve_ctx()) {
             if patches_constant(&target) {
                 self.report(node.range, "no-constant-patch", CONSTANT_PATCH_MSG);
             }
@@ -799,6 +826,7 @@ impl Visitor for LintVisitor<'_> {
 
     fn visit_stmt_import(&mut self, node: StmtImport) {
         for alias in &node.names {
+            self.declare_module(alias.name.as_str());
             match &alias.asname {
                 // `import X.Y as A` binds `A`; a plain `import X.Y` binds only the head `X`.
                 Some(asname) => {
@@ -818,6 +846,7 @@ impl Visitor for LintVisitor<'_> {
         // A relative import names no absolute module, so its bindings resolve nothing.
         if relative_level(&node) == 0 {
             if let Some(module) = &node.module {
+                self.declare_module(module.as_str());
                 for alias in &node.names {
                     let bound = alias.asname.as_ref().unwrap_or(&alias.name);
                     self.imports
@@ -950,31 +979,263 @@ fn attr_chain_segments(expr: &Expr) -> Option<Vec<&str>> {
     }
 }
 
-/// The dotted module path an object target names, its head replaced by the module its import
-/// binds (`ledger` → `myproject.ledger` after `from myproject import ledger`). `None` when no
-/// import binds the head — a local name has no statically known module.
-fn resolve_object_target(expr: &Expr, imports: &HashMap<String, String>) -> Option<String> {
+/// What object-target resolution reads: the test file's bindings plus the tree's manifest.
+struct ResolveCtx<'a> {
+    /// Local name → the dotted module path its import binds.
+    imports: &'a HashMap<String, String>,
+    /// Every dotted prefix of an imported module path, each a module by construction.
+    declared_modules: &'a HashSet<String>,
+    first_party: Option<&'a str>,
+    source_root: Option<&'a Path>,
+}
+
+/// The dotted path an object target names, classified by what the chain ends at: the head is
+/// the module its import binds, and each trailing segment on a first-party path is read from
+/// that module's own top-level source. `None` when any step resists static resolution.
+fn resolve_object_target(expr: &Expr, ctx: &ResolveCtx) -> Option<String> {
     let segments = attr_chain_segments(expr)?;
     let (head, rest) = segments.split_first()?;
-    let mut target = imports.get(*head)?.clone();
-    for segment in rest {
-        target.push('.');
-        target.push_str(segment);
+    let mut target = ctx.imports.get(*head)?.clone();
+    for (index, segment) in rest.iter().enumerate() {
+        let candidate = format!("{target}.{segment}");
+        if ctx.declared_modules.contains(&candidate) {
+            target = candidate;
+            continue;
+        }
+        let first_party_root = ctx
+            .first_party
+            .zip(ctx.source_root)
+            .filter(|(pkg, _)| target.split('.').next() == Some(*pkg));
+        let Some((_, root)) = first_party_root else {
+            return Some(append_segments(target, &rest[index..]));
+        };
+        target = match module_attribute(root, &target, segment)? {
+            Attr::Module(absolute) => absolute,
+            Attr::Defined if index == rest.len() - 1 => candidate,
+            Attr::Defined => return None,
+        };
     }
     Some(target)
 }
 
+fn append_segments(mut target: String, segments: &[&str]) -> String {
+    for segment in segments {
+        target.push('.');
+        target.push_str(segment);
+    }
+    target
+}
+
+/// What a module attribute resolves to, read from the module's own top-level source.
+enum Attr {
+    /// The attribute names another module, by import binding or by submodule file.
+    Module(String),
+    /// The module defines the attribute itself: a `def`, `class`, or literal assignment.
+    Defined,
+}
+
+/// Classify `module`'s attribute `name`. `None` when the source leaves it unnamed: a missing
+/// or unparsable file, a dynamic or conflicting binding, or a star import over an unbound name.
+fn module_attribute(root: &Path, module: &str, name: &str) -> Option<Attr> {
+    let file = locate_module(root, module)?;
+    let source = std::fs::read_to_string(&file.path).ok()?;
+    let scope = module_scope(&source, &file.package)?;
+    match scope.bindings.get(name) {
+        Some(Binding::Module(absolute)) => Some(Attr::Module(absolute.clone())),
+        Some(Binding::Defined) => Some(Attr::Defined),
+        Some(Binding::Opaque) => None,
+        None if scope.has_star_import => None,
+        None => {
+            let submodule = format!("{module}.{name}");
+            locate_module(root, &submodule).map(|_| Attr::Module(submodule))
+        }
+    }
+}
+
+/// A module's source file plus the package its relative imports resolve against.
+struct ModuleFile {
+    path: PathBuf,
+    package: Vec<String>,
+}
+
+/// The file for dotted `module` under `root`, tried in flat and `src/` layouts.
+fn locate_module(root: &Path, module: &str) -> Option<ModuleFile> {
+    let segments: Vec<String> = module.split('.').map(str::to_owned).collect();
+    let rel: PathBuf = segments.iter().collect();
+    for base in [root.to_path_buf(), root.join("src")] {
+        let file = base.join(&rel).with_extension("py");
+        if file.is_file() {
+            let package = segments[..segments.len() - 1].to_vec();
+            return Some(ModuleFile {
+                path: file,
+                package,
+            });
+        }
+        let init = base.join(&rel).join("__init__.py");
+        if init.is_file() {
+            return Some(ModuleFile {
+                path: init,
+                package: segments,
+            });
+        }
+    }
+    None
+}
+
+/// What a module's own top-level source binds a name to.
+#[derive(Debug, PartialEq)]
+enum Binding {
+    /// An import binds the name to this absolute module path.
+    Module(String),
+    /// A `def`, `class`, or literal assignment defines the name in this module.
+    Defined,
+    /// A dynamic or conflicting binding, which static resolution declines to classify.
+    Opaque,
+}
+
+struct ModuleScope {
+    bindings: HashMap<String, Binding>,
+    has_star_import: bool,
+}
+
+impl ModuleScope {
+    fn bind(&mut self, name: String, binding: Binding) {
+        match self.bindings.entry(name) {
+            Entry::Occupied(mut entry) => {
+                if *entry.get() != binding {
+                    entry.insert(Binding::Opaque);
+                }
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(binding);
+            }
+        }
+    }
+
+    fn bind_import_from(&mut self, node: &StmtImportFrom, package: &[String]) {
+        let base = match relative_level(node) {
+            0 => node.module.as_ref().map(|module| module.to_string()),
+            // A level beyond the package walks above the top-level package, which Python rejects.
+            level if level <= package.len() => {
+                let parent = package[..package.len() + 1 - level].join(".");
+                Some(match &node.module {
+                    Some(module) => format!("{parent}.{module}"),
+                    None => parent,
+                })
+            }
+            _ => None,
+        };
+        for alias in &node.names {
+            if alias.name.as_str() == "*" {
+                self.has_star_import = true;
+                continue;
+            }
+            let bound = alias.asname.as_ref().unwrap_or(&alias.name).to_string();
+            let binding = match &base {
+                Some(base) => Binding::Module(format!("{base}.{}", alias.name)),
+                None => Binding::Opaque,
+            };
+            self.bind(bound, binding);
+        }
+    }
+
+    fn bind_assign_target(&mut self, target: &Expr, literal: bool) {
+        match target {
+            Expr::Name(name) => {
+                let binding = if literal {
+                    Binding::Defined
+                } else {
+                    Binding::Opaque
+                };
+                self.bind(name.id.to_string(), binding);
+            }
+            Expr::Tuple(tuple) => {
+                for elt in &tuple.elts {
+                    self.bind_assign_target(elt, false);
+                }
+            }
+            Expr::List(list) => {
+                for elt in &list.elts {
+                    self.bind_assign_target(elt, false);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The top-level name bindings of a module's source. `package` is the dotted package its
+/// relative imports resolve against. `None` when the source does not parse.
+fn module_scope(source: &str, package: &[String]) -> Option<ModuleScope> {
+    let suite = ast::Suite::parse(source, "module.py").ok()?;
+    let mut scope = ModuleScope {
+        bindings: HashMap::new(),
+        has_star_import: false,
+    };
+    for stmt in &suite {
+        match stmt {
+            ast::Stmt::Import(node) => {
+                for alias in &node.names {
+                    match &alias.asname {
+                        Some(asname) => {
+                            scope.bind(asname.to_string(), Binding::Module(alias.name.to_string()));
+                        }
+                        None => {
+                            let head = import_head(alias.name.as_str());
+                            scope.bind(head.to_string(), Binding::Module(head.to_string()));
+                        }
+                    }
+                }
+            }
+            ast::Stmt::ImportFrom(node) => scope.bind_import_from(node, package),
+            ast::Stmt::FunctionDef(node) => scope.bind(node.name.to_string(), Binding::Defined),
+            ast::Stmt::AsyncFunctionDef(node) => {
+                scope.bind(node.name.to_string(), Binding::Defined);
+            }
+            ast::Stmt::ClassDef(node) => scope.bind(node.name.to_string(), Binding::Defined),
+            ast::Stmt::Assign(node) => {
+                let literal = is_literal(&node.value);
+                for target in &node.targets {
+                    scope.bind_assign_target(target, literal);
+                }
+            }
+            ast::Stmt::AnnAssign(node) => {
+                if let Some(value) = &node.value {
+                    scope.bind_assign_target(&node.target, is_literal(value));
+                }
+            }
+            _ => {}
+        }
+    }
+    Some(scope)
+}
+
+/// `true` for an expression built of literals alone — data the module itself defines.
+fn is_literal(expr: &Expr) -> bool {
+    match expr {
+        Expr::Constant(_) => true,
+        Expr::UnaryOp(op) => is_literal(&op.operand),
+        Expr::Dict(dict) => {
+            dict.keys.iter().flatten().all(is_literal) && dict.values.iter().all(is_literal)
+        }
+        Expr::List(list) => list.elts.iter().all(is_literal),
+        Expr::Tuple(tuple) => tuple.elts.iter().all(is_literal),
+        Expr::Set(set) => set.elts.iter().all(is_literal),
+        _ => false,
+    }
+}
+
 /// The dotted target a patch call names, resolved statically: the string literal for
-/// `patch(...)` (and a string-target `patch.dict`), the import-resolved first argument for
-/// the object forms. `None` when the target resists static resolution — nothing fires.
-fn patch_target(call: &ExprCall, imports: &HashMap<String, String>) -> Option<String> {
+/// `patch(...)` (and a string-target `patch.dict`), the resolved first argument for the
+/// object forms. `None` when the target resists static resolution — nothing fires.
+fn patch_target(call: &ExprCall, ctx: &ResolveCtx) -> Option<String> {
     match patch_form(call)? {
         PatchForm::Target => patch_string_target(call).map(str::to_owned),
         PatchForm::Dict => patch_string_target(call)
             .map(str::to_owned)
-            .or_else(|| resolve_object_target(call.args.first()?, imports)),
+            .or_else(|| resolve_object_target(call.args.first()?, ctx)),
         PatchForm::Object => {
-            let base = resolve_object_target(call.args.first()?, imports)?;
+            let base = resolve_object_target(call.args.first()?, ctx)?;
             Some(match string_arg(call, 1) {
                 Some(attr) => format!("{base}.{attr}"),
                 None => base,
@@ -1054,10 +1315,16 @@ fn line_of(source: &str, offset: TextSize) -> usize {
 /// [normalized](normalize_dist_name). The walk up stops at a `.git` boundary so it can't
 /// escape into an unrelated project, and `None` means nothing is flagged rather than guessed.
 fn first_party_package(root: &Path) -> Option<String> {
+    first_party_manifest(root).map(|(name, _)| name)
+}
+
+/// [`first_party_package`] plus the directory holding the manifest, where module sources live.
+fn first_party_manifest(root: &Path) -> Option<(String, PathBuf)> {
     for dir in root.ancestors() {
         let candidate = dir.join("pyproject.toml");
         if candidate.is_file() {
-            return read_project_name(&candidate).map(|name| normalize_dist_name(&name));
+            return read_project_name(&candidate)
+                .map(|name| (normalize_dist_name(&name), dir.to_path_buf()));
         }
         if dir.join(".git").exists() {
             break;
@@ -1173,21 +1440,36 @@ mod tests {
         (*stmt.expect_expr_stmt().value).expect_call_expr()
     }
 
+    /// A ctx with no manifest, where trailing segments append without classification.
+    fn naive_ctx<'a>(
+        imports: &'a HashMap<String, String>,
+        declared: &'a HashSet<String>,
+    ) -> ResolveCtx<'a> {
+        ResolveCtx {
+            imports,
+            declared_modules: declared,
+            first_party: None,
+            source_root: None,
+        }
+    }
+
     #[test]
     fn patch_target_only_reads_string_literals_for_the_string_form() {
         let imports = HashMap::new();
+        let declared = HashSet::new();
+        let ctx = naive_ctx(&imports, &declared);
         let str_call = parse_call("patch(\"pkg.mod.attr\")\n");
         assert_eq!(
-            patch_target(&str_call, &imports).as_deref(),
+            patch_target(&str_call, &ctx).as_deref(),
             Some("pkg.mod.attr")
         );
         // A name in `patch(...)` holds a string, which static resolution cannot read.
         let name_call = parse_call("patch(target)\n");
-        assert_eq!(patch_target(&name_call, &imports), None);
+        assert_eq!(patch_target(&name_call, &ctx), None);
         let int_call = parse_call("patch(42)\n");
-        assert_eq!(patch_target(&int_call, &imports), None);
+        assert_eq!(patch_target(&int_call, &ctx), None);
         let empty_call = parse_call("patch()\n");
-        assert_eq!(patch_target(&empty_call, &imports), None);
+        assert_eq!(patch_target(&empty_call, &ctx), None);
     }
 
     /// An import map binding the names the object-form snippets use.
@@ -1202,30 +1484,32 @@ mod tests {
     #[test]
     fn patch_target_resolves_object_forms_through_imports() {
         let imports = object_form_imports();
+        let declared = HashSet::new();
+        let ctx = naive_ctx(&imports, &declared);
         let imported_name = parse_call("patch.object(ledger, \"record\")\n");
         assert_eq!(
-            patch_target(&imported_name, &imports).as_deref(),
+            patch_target(&imported_name, &ctx).as_deref(),
             Some("myproject.ledger.record")
         );
         let dotted_module = parse_call("patch.object(myproject.ledger, \"record\")\n");
         assert_eq!(
-            patch_target(&dotted_module, &imports).as_deref(),
+            patch_target(&dotted_module, &ctx).as_deref(),
             Some("myproject.ledger.record")
         );
         // A non-literal attribute still names the base module, enough for the first-party rule.
         let name_attr = parse_call("patch.object(ledger, attr)\n");
         assert_eq!(
-            patch_target(&name_attr, &imports).as_deref(),
+            patch_target(&name_attr, &ctx).as_deref(),
             Some("myproject.ledger")
         );
         let dict_object = parse_call("patch.dict(cfg.SETTINGS, {})\n");
         assert_eq!(
-            patch_target(&dict_object, &imports).as_deref(),
+            patch_target(&dict_object, &ctx).as_deref(),
             Some("myproject.cfg.SETTINGS")
         );
         let dict_string = parse_call("patch.dict(\"pkg.cfg.FLAGS\", {})\n");
         assert_eq!(
-            patch_target(&dict_string, &imports).as_deref(),
+            patch_target(&dict_string, &ctx).as_deref(),
             Some("pkg.cfg.FLAGS")
         );
     }
@@ -1233,29 +1517,285 @@ mod tests {
     #[test]
     fn patch_target_declines_a_base_bound_by_no_import() {
         let imports = object_form_imports();
+        let declared = HashSet::new();
+        let ctx = naive_ctx(&imports, &declared);
         let call_base = parse_call("patch.object(get_mod(), \"x\")\n");
-        assert_eq!(patch_target(&call_base, &imports), None);
+        assert_eq!(patch_target(&call_base, &ctx), None);
         let unbound_name = parse_call("patch.object(client, \"send\")\n");
-        assert_eq!(patch_target(&unbound_name, &imports), None);
+        assert_eq!(patch_target(&unbound_name, &ctx), None);
         let empty = parse_call("patch.object()\n");
-        assert_eq!(patch_target(&empty, &imports), None);
+        assert_eq!(patch_target(&empty, &ctx), None);
     }
 
-    /// The imports a [`LintVisitor`] records for `src`.
-    fn collect_imports(src: &str) -> HashMap<String, String> {
+    /// A tree holding `pyproject.toml` (`name = "myproject"`) plus one integration test
+    /// whose fixture patches `patch.object(<base>, "<attr>")`.
+    fn object_patch_tree(base: &str, attr: &str) -> TempDir {
+        let tree = TempDir::new();
+        tree.write(
+            "pyproject.toml",
+            "[project]\nname = \"myproject\"\nversion = \"0.0.0\"\n",
+        );
+        tree.write(
+            "tests/integration/spy_test.py",
+            &format!(
+                "from unittest.mock import patch\n\
+                 import pytest\n\
+                 from myproject import async_mod\n\
+                 @pytest.fixture\n\
+                 def spy():\n\
+                 \x20   with patch.object({base}, \"{attr}\") as s:\n\
+                 \x20       yield s\n"
+            ),
+        );
+        tree
+    }
+
+    fn first_party_patch_count(tree: &TempDir) -> usize {
+        find_violations(&tree.0)
+            .expect("walking a readable tree should succeed")
+            .iter()
+            .filter(|v| v.rule == "no-first-party-patch")
+            .count()
+    }
+
+    #[test]
+    fn object_form_stdlib_reached_through_first_party_is_not_flagged() {
+        let tree = object_patch_tree("async_mod.asyncio", "to_thread");
+        tree.write("myproject/async_mod.py", "import asyncio\n");
+        assert_eq!(first_party_patch_count(&tree), 0);
+    }
+
+    #[test]
+    fn object_form_unnamed_module_attribute_declines_to_fire() {
+        let missing_source = object_patch_tree("async_mod.transport", "send");
+        assert_eq!(first_party_patch_count(&missing_source), 0);
+        let dynamic = object_patch_tree("async_mod.transport", "send");
+        dynamic.write("myproject/async_mod.py", "transport = build()\n");
+        assert_eq!(first_party_patch_count(&dynamic), 0);
+    }
+
+    #[test]
+    fn object_form_first_party_module_attribute_still_fires() {
+        let tree = object_patch_tree("async_mod.helper", "run");
+        tree.write("myproject/async_mod.py", "from . import helper\n");
+        assert_eq!(first_party_patch_count(&tree), 1);
+    }
+
+    #[test]
+    fn object_form_resolves_in_a_src_layout() {
+        let tree = object_patch_tree("async_mod.helper", "run");
+        tree.write("src/myproject/async_mod.py", "from . import helper\n");
+        assert_eq!(first_party_patch_count(&tree), 1);
+    }
+
+    #[test]
+    fn object_form_star_import_over_an_unbound_name_declines() {
+        let tree = object_patch_tree("async_mod.walk", "call");
+        tree.write("myproject/async_mod.py", "from os import *\n");
+        assert_eq!(first_party_patch_count(&tree), 0);
+    }
+
+    #[test]
+    fn object_form_conflicting_binding_declines() {
+        let tree = object_patch_tree("async_mod.helper", "run");
+        tree.write(
+            "myproject/async_mod.py",
+            "from . import helper\nhelper = None\n",
+        );
+        assert_eq!(first_party_patch_count(&tree), 0);
+    }
+
+    #[test]
+    fn object_form_defined_name_mid_chain_declines() {
+        let tree = object_patch_tree("async_mod.Client.send", "retry");
+        tree.write("myproject/async_mod.py", "class Client:\n    pass\n");
+        assert_eq!(first_party_patch_count(&tree), 0);
+    }
+
+    #[test]
+    fn object_form_package_attribute_resolves_through_init() {
+        let tree = TempDir::new();
+        tree.write(
+            "pyproject.toml",
+            "[project]\nname = \"myproject\"\nversion = \"0.0.0\"\n",
+        );
+        tree.write("myproject/sub/__init__.py", "from . import leaf\n");
+        tree.write("myproject/sub/leaf.py", "def run():\n    pass\n");
+        tree.write(
+            "tests/integration/spy_test.py",
+            "from unittest.mock import patch\n\
+             import pytest\n\
+             from myproject import sub\n\
+             @pytest.fixture\n\
+             def spy():\n\
+             \x20   with patch.object(sub.leaf, \"run\") as s:\n\
+             \x20       yield s\n",
+        );
+        assert_eq!(first_party_patch_count(&tree), 1);
+    }
+
+    #[test]
+    fn object_form_unbound_name_falls_back_to_the_submodule_file() {
+        let tree = TempDir::new();
+        tree.write(
+            "pyproject.toml",
+            "[project]\nname = \"myproject\"\nversion = \"0.0.0\"\n",
+        );
+        tree.write("myproject/sub/__init__.py", "");
+        tree.write("myproject/sub/leaf.py", "def run():\n    pass\n");
+        tree.write(
+            "tests/integration/spy_test.py",
+            "from unittest.mock import patch\n\
+             import pytest\n\
+             from myproject import sub\n\
+             @pytest.fixture\n\
+             def spy():\n\
+             \x20   with patch.object(sub.leaf, \"run\") as s:\n\
+             \x20       yield s\n",
+        );
+        assert_eq!(first_party_patch_count(&tree), 1);
+    }
+
+    #[test]
+    fn resolve_appends_naively_past_a_third_party_head() {
+        let tree = TempDir::new();
+        let imports = HashMap::from([("requests".to_string(), "requests".to_string())]);
+        let declared = HashSet::new();
+        let ctx = ResolveCtx {
+            imports: &imports,
+            declared_modules: &declared,
+            first_party: Some("myproject"),
+            source_root: Some(&tree.0),
+        };
+        let call = parse_call("patch.object(requests.utils, \"default_headers\")\n");
+        assert_eq!(
+            patch_target(&call, &ctx).as_deref(),
+            Some("requests.utils.default_headers")
+        );
+    }
+
+    #[test]
+    fn locate_module_tries_flat_and_src_layouts() {
+        let tree = TempDir::new();
+        tree.write("myproject/flat.py", "");
+        tree.write("myproject/pkg/__init__.py", "");
+        tree.write("src/myproject/nested.py", "");
+        let flat = locate_module(&tree.0, "myproject.flat").expect("flat module");
+        assert_eq!(flat.path, tree.0.join("myproject/flat.py"));
+        assert_eq!(flat.package, vec!["myproject".to_string()]);
+        let pkg = locate_module(&tree.0, "myproject.pkg").expect("package module");
+        assert_eq!(pkg.path, tree.0.join("myproject/pkg/__init__.py"));
+        assert_eq!(
+            pkg.package,
+            vec!["myproject".to_string(), "pkg".to_string()]
+        );
+        let nested = locate_module(&tree.0, "myproject.nested").expect("src module");
+        assert_eq!(nested.path, tree.0.join("src/myproject/nested.py"));
+        assert!(locate_module(&tree.0, "myproject.absent").is_none());
+    }
+
+    fn scope_of(source: &str) -> ModuleScope {
+        module_scope(source, &["myproject".to_string()]).expect("source should parse")
+    }
+
+    #[test]
+    fn module_scope_classifies_import_bindings() {
+        let scope = scope_of(
+            "import asyncio\n\
+             import myproject.util as util\n\
+             from . import helper\n\
+             from .sub import leaf\n\
+             from myproject.vendor import client as vc\n",
+        );
+        assert_eq!(
+            scope.bindings.get("asyncio"),
+            Some(&Binding::Module("asyncio".to_string()))
+        );
+        assert_eq!(
+            scope.bindings.get("util"),
+            Some(&Binding::Module("myproject.util".to_string()))
+        );
+        assert_eq!(
+            scope.bindings.get("helper"),
+            Some(&Binding::Module("myproject.helper".to_string()))
+        );
+        assert_eq!(
+            scope.bindings.get("leaf"),
+            Some(&Binding::Module("myproject.sub.leaf".to_string()))
+        );
+        assert_eq!(
+            scope.bindings.get("vc"),
+            Some(&Binding::Module("myproject.vendor.client".to_string()))
+        );
+    }
+
+    #[test]
+    fn module_scope_classifies_definitions_and_assignments() {
+        let scope = scope_of(
+            "def run():\n    pass\n\
+             async def poll():\n    pass\n\
+             class Client:\n    pass\n\
+             LIMITS = [1, 2]\n\
+             OFFSET = -1\n\
+             registry = {\"on\": True}\n\
+             PAIR: tuple = (1, 2)\n\
+             transport = build()\n\
+             alias = registry\n\
+             a, b = make()\n",
+        );
+        for name in [
+            "run", "poll", "Client", "LIMITS", "OFFSET", "registry", "PAIR",
+        ] {
+            assert_eq!(scope.bindings.get(name), Some(&Binding::Defined), "{name}");
+        }
+        for name in ["transport", "alias", "a", "b"] {
+            assert_eq!(scope.bindings.get(name), Some(&Binding::Opaque), "{name}");
+        }
+    }
+
+    #[test]
+    fn module_scope_marks_conflicts_opaque_and_dedupes_repeats() {
+        let scope = scope_of("import asyncio\nimport asyncio\nfrom . import helper\nhelper = 1\n");
+        assert_eq!(
+            scope.bindings.get("asyncio"),
+            Some(&Binding::Module("asyncio".to_string()))
+        );
+        assert_eq!(scope.bindings.get("helper"), Some(&Binding::Opaque));
+    }
+
+    #[test]
+    fn module_scope_flags_star_imports_and_rejects_deep_relatives() {
+        let scope = scope_of("from os import *\nfrom .. import escape\n");
+        assert!(scope.has_star_import);
+        assert_eq!(scope.bindings.get("escape"), Some(&Binding::Opaque));
+    }
+
+    #[test]
+    fn module_scope_rejects_unparsable_source() {
+        assert!(module_scope("def (\n", &[]).is_none());
+    }
+
+    /// The imports and declared modules a [`LintVisitor`] records for `src`.
+    fn collect_bindings(src: &str) -> (HashMap<String, String>, HashSet<String>) {
         let suite = ast::Suite::parse(src, "t.py").expect("snippet should parse");
         let mut visitor = LintVisitor {
             file: Path::new("t.py"),
             source: src,
             fixture_depth: 0,
             first_party: None,
+            source_root: None,
             imports: HashMap::new(),
+            declared_modules: HashSet::new(),
             violations: Vec::new(),
         };
         for stmt in suite {
             visitor.visit_stmt(stmt);
         }
-        visitor.imports
+        (visitor.imports, visitor.declared_modules)
+    }
+
+    fn collect_imports(src: &str) -> HashMap<String, String> {
+        collect_bindings(src).0
     }
 
     #[test]
@@ -1284,6 +1824,25 @@ mod tests {
             Some("myproject.charge")
         );
         assert_eq!(imports.get("rel"), None);
+    }
+
+    #[test]
+    fn lint_visitor_declares_every_import_prefix() {
+        let (_, declared) = collect_bindings(
+            "import myproject.sub.ledger\n\
+             from myproject.api import charge\n\
+             from . import rel\n",
+        );
+        for module in [
+            "myproject",
+            "myproject.sub",
+            "myproject.sub.ledger",
+            "myproject.api",
+        ] {
+            assert!(declared.contains(module), "{module}");
+        }
+        assert!(!declared.contains("myproject.api.charge"));
+        assert!(!declared.contains("rel"));
     }
 
     /// Build a `from <source> import <symbols>` record (`source: None` → relative).
@@ -1673,7 +2232,9 @@ mod tests {
             source,
             fixture_depth: 0,
             first_party: Some("myproject"),
+            source_root: None,
             imports: HashMap::new(),
+            declared_modules: HashSet::new(),
             violations: Vec::new(),
         };
         for stmt in suite {

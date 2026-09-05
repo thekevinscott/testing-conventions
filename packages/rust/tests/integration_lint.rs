@@ -332,8 +332,54 @@ fn first_party_patch_red_object_flags_the_dict_form() {
 }
 
 #[test]
+fn first_party_patch_red_object_flags_a_first_party_module_attribute() {
+    let violations = find_violations(fixture("no_first_party_patch/red_object"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "no-first-party-patch"
+                && v.file.ends_with("object_module_attr_test.py")),
+        "`patch.object(async_mod.helper, ...)` where `async_mod.py` holds \
+         `from . import helper` patches first-party `myproject.helper` and must be \
+         flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn first_party_patch_red_object_flags_a_class_the_module_defines() {
+    let violations = find_violations(fixture("no_first_party_patch/red_object"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.rule == "no-first-party-patch"
+                && v.file.ends_with("object_class_attr_test.py")),
+        "`patch.object(async_mod.Client, ...)` where `async_mod.py` defines `Client` \
+         patches a first-party class and must be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn first_party_patch_clean_module_attr_reports_no_violations() {
+    let violations = find_violations(fixture("no_first_party_patch/clean_module_attr"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "an object-form target reaching stdlib through a first-party module \
+         (`patch.object(async_mod.asyncio, ...)`) or one the module's source leaves \
+         unnamed is not a first-party patch; got {violations:?}"
+    );
+}
+
+#[test]
 fn first_party_patch_red_object_exits_nonzero() {
     assert_eq!(lint_exit("no_first_party_patch/red_object"), 1);
+}
+
+#[test]
+fn first_party_patch_clean_module_attr_exits_zero() {
+    assert_eq!(lint_exit("no_first_party_patch/clean_module_attr"), 0);
 }
 
 #[test]

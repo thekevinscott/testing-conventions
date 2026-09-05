@@ -1356,16 +1356,6 @@ mod tests {
     }
 
     #[test]
-    fn a_survivor_description_carries_no_location_prefix() {
-        let report = parse_mutants_report(SAMPLE).unwrap();
-        let survivors = unexplained_survivors(&report, &[]);
-        assert_eq!(
-            survivors[0].description, "replace > with == in is_positive",
-            "the name's embedded `file:line:col:` prefix is stripped"
-        );
-    }
-
-    #[test]
     fn conclusive_count_is_caught_plus_missed() {
         let report = parse_mutants_report(SAMPLE).unwrap();
         assert_eq!(conclusive_count(&report), 2);

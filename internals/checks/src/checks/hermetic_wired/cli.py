@@ -43,7 +43,7 @@ from pathlib import Path
 import click
 
 from checks.config import DOGFOOD_WORKFLOW, REUSABLE_WORKFLOW, SELFTEST_WORKFLOW
-from checks.hermetic_wired.cli_command_env import unwired_steps
+from checks.hermetic_wired.unwired_steps import unwired_steps
 from checks.utils.check_failed import CheckFailed
 from checks.utils.job_block import iter_job_blocks
 

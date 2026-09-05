@@ -1,10 +1,10 @@
-"""Colocated unit tests for the changelog-gate git reads (isolation — injected runner).
+"""Colocated unit tests for the added-paths git read (isolation — injected runner).
 
-The subprocess boundary is injected as `runner`, so a hand-rolled fake stands in for it. Each
-test pins the exact argv, because the diff semantics live entirely in those flags: three-dot for
-the merge-base range, `--diff-filter=A` for added-only, two-dot for the commit bodies.
+The subprocess boundary is injected as `runner`, so a hand-rolled fake stands in for it. The exact
+argv is pinned, because the diff semantics live entirely in those flags: three-dot for the
+merge-base range, `--diff-filter=A` for added-only.
 """
-from checks.changelog_gate.git_ops import added_files, changed_files, commit_messages
+from checks.changelog_gate.git_ops import added_files
 
 
 class _Result:
@@ -26,22 +26,6 @@ def _runner_returning(stdout):
     return runner
 
 
-def test_changed_files_diffs_from_the_merge_base():
-    runner = _runner_returning("a.rs\nb.rs\n")
-    assert changed_files("base", "head", runner=runner) == ["a.rs", "b.rs"]
-    (argv, kwargs) = runner.seen[0]
-    assert argv == ["git", "diff", "--name-only", "base...head"]
-    assert kwargs == {"capture_output": True, "text": True, "check": True}
-
-
-def test_changed_files_drops_blank_lines():
-    assert changed_files("base", "head", runner=_runner_returning("a.rs\n\n")) == ["a.rs"]
-
-
-def test_changed_files_is_empty_for_an_empty_diff():
-    assert changed_files("base", "head", runner=_runner_returning("")) == []
-
-
 def test_added_files_filters_the_diff_to_additions():
     runner = _runner_returning("new.md\n")
     assert added_files("base", "head", runner=runner) == ["new.md"]
@@ -54,9 +38,5 @@ def test_added_files_drops_blank_lines():
     assert added_files("base", "head", runner=_runner_returning("new.md\n\n")) == ["new.md"]
 
 
-def test_commit_messages_returns_raw_bodies_over_the_two_dot_range():
-    runner = _runner_returning("fix: x\n\nskip-changelog: y\n")
-    assert commit_messages("base", "head", runner=runner) == "fix: x\n\nskip-changelog: y\n"
-    (argv, kwargs) = runner.seen[0]
-    assert argv == ["git", "log", "--format=%B", "base..head"]
-    assert kwargs == {"capture_output": True, "text": True, "check": True}
+def test_added_files_is_empty_for_an_empty_diff():
+    assert added_files("base", "head", runner=_runner_returning("")) == []

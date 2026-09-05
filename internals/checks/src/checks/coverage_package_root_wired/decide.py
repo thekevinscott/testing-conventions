@@ -7,7 +7,7 @@ neighbouring job can't satisfy either. The decision ANDs the two block checks; t
 """
 from __future__ import annotations
 
-from checks.utils.job_block import extract_job_block
+from checks.utils.extract_job_block import extract_job_block
 
 
 def decide(text: str) -> bool:

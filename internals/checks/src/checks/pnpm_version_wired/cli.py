@@ -1,27 +1,5 @@
-"""The pnpm-version-wired check — repo-only (#475).
-
-Backs the `tc-checks pnpm-version-wired` subcommand: every `pnpm/action-setup` step in the
-reusable workflow (`.github/workflows/testing-conventions.yml`) must take its `version:` from
-`needs.detect.outputs.ts_pnpm_version`, never a literal, and must carry a `||` fallback for a
-detect that predates that output.
-
-A literal there breaks every consumer that pins `packageManager`. `action-setup` throws
-`Multiple versions of pnpm specified` whenever `version` is set and the field is not
-*string-equal* to it — which no real pin ever is against a range — so the job dies before
-installing anything. This repo pins its floors through `engines` and carries no
-`packageManager` field, so dogfooding never walks that path and cannot catch the regression at
-runtime. This check stands in for it.
-
-The fallback is the other half. `@v0` is rolling, so a release is gated on running this
-workflow against the *published* detect, which for one release does not emit a new output yet
-and hands back an empty string. An unguarded `version:` then resolves to empty against a
-manifest with no pin, and the action errors `No pnpm version is specified` — which is how the
-first attempt at #475 blocked its own promotion.
-
-A standalone, colocated-tested check rather than inline `run: |` bash, for the reason
-[`checks.packaging_package_root_wired`] gives: inline workflow bash is untested prose and
-exposed to the `${{ }}` templating trap.
-"""
+"""The pnpm-version-wired check: every `pnpm/action-setup` step takes its `version:` from
+detect's `ts_pnpm_version` output, with a fallback for a published detect that predates it."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,43 +7,14 @@ from pathlib import Path
 import click
 
 from checks.config import REUSABLE_WORKFLOW
+from checks.pnpm_version_wired.pnpm_steps import PNPM_SETUP
+from checks.pnpm_version_wired.setup_versions import setup_versions
 from checks.utils.check_failed import CheckFailed
 
-PNPM_SETUP = "pnpm/action-setup"
 DERIVED = "needs.detect.outputs.ts_pnpm_version"
 # The floor a step falls back to when detect emits nothing for the output. Matched as a
 # substring, so the literal has to appear.
 FALLBACK = "|| '>=11'"
-
-
-def pnpm_steps(text: str) -> list[list[str]]:
-    """Every step chunk in `text` that uses `pnpm/action-setup` — a line opening a list item
-    (`- `) through the line before the next one.
-
-    Chunking on the step boundary, rather than scanning a fixed number of lines ahead, is what
-    keeps a step that sets no version from borrowing the next step's: the two land in different
-    chunks whatever the gap between them. The real steps open with `- if:` and carry their
-    `uses:` a line later, so the chunk — not the `uses:` line — is the unit to search. Lines
-    before the first step belong to no chunk and are dropped, which puts the workflow's own
-    `version:` input declaration out of scope.
-    """
-    chunks: list[list[str]] = []
-    for line in text.splitlines():
-        if line.lstrip().startswith("- "):
-            chunks.append([])
-        if chunks:
-            chunks[-1].append(line)
-    return [chunk for chunk in chunks if any(PNPM_SETUP in line for line in chunk)]
-
-
-def setup_versions(text: str) -> list[str]:
-    """The `version:` value of every `pnpm/action-setup` step in `text`, in file order."""
-    return [
-        stripped.removeprefix("version:").strip()
-        for chunk in pnpm_steps(text)
-        for stripped in (line.strip() for line in chunk)
-        if stripped.startswith("version:")
-    ]
 
 
 @click.command()

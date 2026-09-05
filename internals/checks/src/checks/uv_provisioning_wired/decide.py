@@ -1,4 +1,4 @@
-"""The uv-provisioning-wired decision — repo-only (#399).
+"""The uv-provisioning-wired decision — repo-only.
 
 The reusable workflow provisions Python one way — uv — so the decision holds two facts at once:
 the file carries no second provisioning tool (`actions/setup-python` / `python -m pip install`),
@@ -9,7 +9,8 @@ prose around them is per-job context.
 """
 from __future__ import annotations
 
-from checks.utils.job_block import extract_job_block
+from checks.utils.extract_job_block import extract_job_block
+from checks.uv_provisioning_wired.python_steps import python_steps
 
 # Each suite-executing job, paired with the job header that bounds its own YAML region (its
 # successor in file order), for `extract_job_block`.
@@ -18,24 +19,6 @@ SUITE_JOBS = (
     ("coverage-changed", "mutation"),
     ("mutation", "integration-lint"),
 )
-
-
-def python_steps(job_block: str) -> str:
-    """The job's python-arm provisioning: every step chunk (a line opening `      - ` through the
-    line before the next one) that mentions `matrix.language == 'python'`, with comment and blank
-    lines dropped."""
-    steps: list[list[str]] = []
-    for line in job_block.splitlines():
-        if line.startswith("      - "):
-            steps.append([])
-        if steps:
-            steps[-1].append(line)
-    picked = [
-        "\n".join(line for line in step if line.strip() and not line.lstrip().startswith("#"))
-        for step in steps
-        if any("matrix.language == 'python'" in line for line in step)
-    ]
-    return "\n".join(picked)
 
 
 def decide(text: str) -> bool:

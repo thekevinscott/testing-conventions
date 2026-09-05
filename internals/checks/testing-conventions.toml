@@ -1,10 +1,7 @@
-# Repo-only checks package config. Coverage/lint floors stay at the zero-config defaults
+# Repo-only checks package config. Everything stays at the zero-config defaults
 # (branch coverage on, fail_under = 100). One exemption remains, its reason below.
-[python]
-one_function_per_file = { max_lines = 11 }
-
 [[python.exempt]]
 path = "checks/utils/job_block.py"
 rules = ["mutation"]
-lines = ["50"]
-reason = "i + 1 < len(headers) on job_block.py:50: i is bound only by enumerate(headers), so i + 1 can never exceed len(headers) on any reachable execution, making the NotEq mutant (i + 1 != len(headers)) behaviorally identical to < for every input — and the IsNot mutant additionally equivalent via CPython's small-int interning (job counts are always far below 256). Neither is killable without fabricating an unreachable i, which would test a contract this function doesn't have. The sibling Add_LShift mutant on the same line is a real gap, killed by asserting on the first job's own block boundary."
+lines = ["20"]
+reason = "i + 1 < len(headers) on job_block.py:20: i is bound only by enumerate(headers), so i + 1 can never exceed len(headers) on any reachable execution, making the NotEq mutant (i + 1 != len(headers)) behaviorally identical to < for every input — and the IsNot mutant additionally equivalent via CPython's small-int interning (job counts are always far below 256). Neither is killable without fabricating an unreachable i, which would test a contract this function doesn't have. The sibling Add_LShift mutant on the same line is a real gap, killed by asserting on the first job's own block boundary."

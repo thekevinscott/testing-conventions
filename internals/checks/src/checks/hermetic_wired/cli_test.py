@@ -2,7 +2,8 @@
 
 The `cli` command is driven through its `.callback` (the undecorated function), so no
 `click.testing` collaborator is imported. Only the unit under test is imported — the raise path is
-asserted against the propagated exception's `.message`.
+asserted against the propagated exception's `.message`. The per-step `CLI_COMMAND` scan itself is
+pinned in `unwired_steps_test.py`.
 """
 from checks.hermetic_wired.cli import GUARD, REUSABLE_WORKFLOW, cli
 

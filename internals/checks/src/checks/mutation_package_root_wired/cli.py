@@ -21,7 +21,7 @@ import click
 
 from checks.config import REUSABLE_WORKFLOW
 from checks.utils.check_failed import CheckFailed
-from checks.utils.job_block import extract_job_block
+from checks.utils.extract_job_block import extract_job_block
 
 
 @click.command()

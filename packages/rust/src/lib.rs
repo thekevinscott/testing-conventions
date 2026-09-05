@@ -1007,6 +1007,56 @@ mod tests {
     }
 
     #[test]
+    fn a_missing_config_keeps_every_violation() {
+        let violation = lint::Violation {
+            file: PathBuf::from("/tree/widget_test.py"),
+            line: 1,
+            rule: "no-monkeypatch",
+            message: "synthetic".to_string(),
+        };
+        let kept = apply_waivers(
+            vec![violation.clone()],
+            Path::new("/tree"),
+            Path::new("/nonexistent-tc-lib.toml"),
+            |c| c.exemptions(colocated_test::Language::Python),
+        );
+        assert_eq!(kept.unwrap(), vec![violation]);
+    }
+
+    #[test]
+    fn waivers_resolve_each_rule_once_and_keep_out_of_root_files() {
+        let dir = std::env::temp_dir().join(format!("tc-lib-waiver-full-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("widget_test.py"), "def test_widget():\n    pass\n").unwrap();
+        let config_path = dir.join("testing-conventions.toml");
+        std::fs::write(
+            &config_path,
+            "[[python.exempt]]\n\
+             path = \"widget_test.py\"\n\
+             rules = [\"no-monkeypatch\"]\n\
+             reason = \"synthetic waiver for the resolution paths\"\n",
+        )
+        .unwrap();
+        let violation = |file: PathBuf| lint::Violation {
+            file,
+            line: 1,
+            rule: "no-monkeypatch",
+            message: "synthetic".to_string(),
+        };
+        let waived = violation(dir.join("widget_test.py"));
+        let kept_in_root = violation(dir.join("other_test.py"));
+        let outside_root = violation(PathBuf::from("/elsewhere/widget_test.py"));
+        let kept = apply_waivers(
+            vec![waived, kept_in_root.clone(), outside_root.clone()],
+            &dir,
+            &config_path,
+            |c| c.exemptions(colocated_test::Language::Python),
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(kept.unwrap(), vec![kept_in_root, outside_root]);
+    }
+
+    #[test]
     fn help_flag_returns_clap_display_help() {
         let err = run(["testing-conventions", "--help"]).expect_err("--help should bubble");
         let clap_err = err

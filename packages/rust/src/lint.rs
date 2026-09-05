@@ -2349,4 +2349,118 @@ mod tests {
         assert!(!is_upper_constant("_"));
         assert!(!is_upper_constant("123"));
     }
+
+    #[test]
+    fn an_unreadable_test_file_names_the_file() {
+        let tree = TempDir::new();
+        std::fs::write(tree.0.join("widget_test.py"), [0xFF, 0xFE]).unwrap();
+        let err = find_violations(&tree.0).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("reading test file"),
+            "got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn an_unparsable_test_file_names_the_file() {
+        let tree = TempDir::new();
+        tree.write("widget_test.py", "def broken(:\n");
+        let err = find_violations(&tree.0).unwrap_err();
+        assert!(format!("{err:#}").contains("parsing"), "got: {err:#}");
+    }
+
+    #[test]
+    fn a_missing_root_is_an_error() {
+        let err = find_violations(Path::new("/nonexistent-tc-lint")).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("reading directory"),
+            "got: {err:#}"
+        );
+    }
+
+    fn unit_isolation_tree() -> TempDir {
+        let tree = TempDir::new();
+        tree.write(
+            "pyproject.toml",
+            "[project]\nname = \"myproject\"\nversion = \"0.0.0\"\n",
+        );
+        tree
+    }
+
+    #[test]
+    fn an_unreadable_unit_test_file_names_the_file() {
+        let tree = unit_isolation_tree();
+        std::fs::write(tree.0.join("widget_test.py"), [0xFF, 0xFE]).unwrap();
+        let err = find_unit_isolation_violations(&tree.0).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("reading test file"),
+            "got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn an_unparsable_unit_test_file_names_the_file() {
+        let tree = unit_isolation_tree();
+        tree.write("widget_test.py", "def broken(:\n");
+        let err = find_unit_isolation_violations(&tree.0).unwrap_err();
+        assert!(format!("{err:#}").contains("parsing"), "got: {err:#}");
+    }
+
+    #[test]
+    fn the_unit_under_test_import_is_never_a_collaborator() {
+        let tree = unit_isolation_tree();
+        tree.write("widget_test.py", "from myproject.widget import build\n");
+        let violations = find_unit_isolation_violations(&tree.0).unwrap();
+        assert!(violations.is_empty(), "got {violations:?}");
+    }
+
+    #[test]
+    fn a_starred_monkeypatch_parameter_is_flagged() {
+        let tree = TempDir::new();
+        tree.write("widget_test.py", "def test_widget(*monkeypatch):\n    pass\n");
+        let violations = find_violations(&tree.0).unwrap();
+        assert_eq!(violations.len(), 1, "got {violations:?}");
+        assert_eq!(violations[0].rule, "no-monkeypatch");
+    }
+
+    #[test]
+    fn a_double_starred_monkeypatch_parameter_is_flagged() {
+        let tree = TempDir::new();
+        tree.write("widget_test.py", "def test_widget(**monkeypatch):\n    pass\n");
+        let violations = find_violations(&tree.0).unwrap();
+        assert_eq!(violations.len(), 1, "got {violations:?}");
+        assert_eq!(violations[0].rule, "no-monkeypatch");
+    }
+
+    /// Parse `src` (a single expression statement) and return the expression itself.
+    fn parse_expr(src: &str) -> Expr {
+        let suite = ast::Suite::parse(src, "t.py").expect("snippet should parse");
+        let stmt = suite.into_iter().next().expect("one statement");
+        *stmt.expect_expr_stmt().value
+    }
+
+    #[test]
+    fn a_called_fixture_decorator_is_recognized() {
+        assert!(is_fixture_decorator(&parse_expr("pytest.fixture()\n")));
+        assert!(is_fixture_decorator(&parse_expr("fixture()\n")));
+        assert!(!is_fixture_decorator(&parse_expr("staticmethod()\n")));
+    }
+
+    #[test]
+    fn object_target_walks_declared_submodules() {
+        let imports = HashMap::from([("myproject".to_string(), "myproject".to_string())]);
+        let declared = HashSet::from(["myproject.sub".to_string()]);
+        let ctx = naive_ctx(&imports, &declared);
+        let call = parse_call("patch.object(myproject.sub.helper, \"run\")\n");
+        assert_eq!(
+            patch_target(&call, &ctx).as_deref(),
+            Some("myproject.sub.helper.run")
+        );
+    }
+
+    #[test]
+    fn a_stdlib_from_import_is_not_a_collaborator() {
+        let found = unmocked("widget", "myproject", "from os import path\n");
+        assert!(found.is_empty(), "got {found:?}");
+    }
 }

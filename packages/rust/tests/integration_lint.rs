@@ -440,3 +440,8 @@ fn tier_layout_test_outside_a_standard_tier_is_flagged() {
 fn tier_layout_clean_suites_exit_zero() {
     assert_eq!(lint_exit("tier_layout/clean/src"), 0);
 }
+
+#[test]
+fn tier_layout_package_without_a_tests_dir_exits_zero() {
+    assert_eq!(lint_exit("tier_layout/no_tests/src"), 0);
+}

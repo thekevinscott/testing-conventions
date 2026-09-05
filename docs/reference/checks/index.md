@@ -1,10 +1,10 @@
 ---
-description: The eight checks the workflow runs — one page per check, each carrying its motivation, per-language behavior, run conditions, and configuration surface.
+description: The checks the workflow runs — one page per check, each carrying its motivation, per-language behavior, run conditions, and configuration surface.
 ---
 
-# The eight checks
+# Checks
 
-The workflow runs eight checks, and each has one page here carrying its complete picture: why the
+Every check the workflow runs has one page here carrying its complete picture: why the
 check exists, what it enforces per language, when it runs, and every configuration key and
 exemption rule that touches it. Land on a check's page and you have everything you need for that
 check.

@@ -3,19 +3,21 @@
 `testing-conventions` enforces testing conventions in libraries (Python, TypeScript, and Rust).
 Primarily useful for enforcing agent (LLM) behavior.
 
-<!-- Single source of truth for the rule list: docs/index.md pulls the region below via VitePress @include. Keep it in sync with the #3 checklist. -->
+<!-- Single source of truth for the rule list: docs/index.md pulls the region below via VitePress @include. Every link inside it is absolute, because a site-root path renders dead in this file on GitHub. -->
 <!-- #region rules -->
 ## Rules at a glance
 
-Every rule is a CLI command that fails CI on a violation.
+Every rule is a CLI command that fails CI on a violation. The
+[checks reference](https://thekevinscott.github.io/testing-conventions/reference/checks/) carries
+one page per check, with its per-language behavior, run conditions, and configuration surface.
 
 **Unit**
 
-- [`unit colocated-test`](https://thekevinscott.github.io/testing-conventions/explanation/colocated-test) — every source file has a colocated, matching-named unit test (Python, TypeScript, Rust); with `--base`, a source changed in the diff must also change its colocated test (co-change; Python, TypeScript; [#33](https://github.com/thekevinscott/testing-conventions/issues/33)).
-- [`unit one-function-per-file`](https://thekevinscott.github.io/testing-conventions/explanation/one-function-per-file) — a file holds at most one module-scope function whose body runs longer than the configured `max_lines` (Python and TypeScript by default, Rust on opt-in; default `1`, so a one-line function is trivial and shares freely, [#488](https://github.com/thekevinscott/testing-conventions/issues/488)).
-- [`unit coverage`](https://thekevinscott.github.io/testing-conventions/explanation/coverage) — enforce a coverage floor on the unit suite (Python, TypeScript, Rust); with `--base`, the same floor is measured over the changed lines of a `<base>...HEAD` diff instead of the whole tree ([#162](https://github.com/thekevinscott/testing-conventions/issues/162)).
+- [`unit colocated-test`](https://thekevinscott.github.io/testing-conventions/explanation/colocated-test) — every source file has a colocated, matching-named unit test (Python, TypeScript, Rust); with `--base`, a source changed in the diff must also change its colocated test (co-change; Python, TypeScript).
+- [`unit one-function-per-file`](https://thekevinscott.github.io/testing-conventions/explanation/one-function-per-file) — a file holds at most one module-scope function whose body runs longer than the configured `max_lines` (Python and TypeScript by default, Rust on opt-in; default `1`, so a one-line function is trivial and shares freely).
+- [`unit coverage`](https://thekevinscott.github.io/testing-conventions/explanation/coverage) — enforce a coverage floor on the unit suite (Python, TypeScript, Rust); with `--base`, the same floor is measured over the changed lines of a `<base>...HEAD` diff instead of the whole tree.
 - [`unit lint`](https://thekevinscott.github.io/testing-conventions/explanation/isolation) — a unit test mocks every collaborator: no out-of-module calls or imports (Rust); no un-mocked first-party or external collaborators (Python, TypeScript); typed mocks (TypeScript).
-- [`unit mutation`](https://thekevinscott.github.io/testing-conventions/explanation/mutation) — every line a change touches is *verified*, not just executed: mutation testing breaks the code and requires a test to fail. The gate is binary and diff-scoped — no unexplained surviving mutant on the diff — not a score percentage (Python, TypeScript, Rust; wired into the reusable workflow as a diff-scoped, PR-only job, [#204](https://github.com/thekevinscott/testing-conventions/issues/204)).
+- [`unit mutation`](https://thekevinscott.github.io/testing-conventions/explanation/mutation) — every line a change touches is *verified*, not just executed: mutation testing breaks the code and requires a test to fail. The gate is binary and diff-scoped — no unexplained surviving mutant on the diff — not a score percentage (Python, TypeScript, Rust; wired into the reusable workflow as a diff-scoped, PR-only job).
 
 **Integration**
 
@@ -27,7 +29,7 @@ Every rule is a CLI command that fails CI on a violation.
 
 **E2E**
 
-- [`e2e attest`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) / [`e2e verify`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) — `attest` runs the e2e command of your choosing locally and records a branch-keyed receipt; `verify` checks in CI that a branch changing the scoped source carries a receipt in its diff, and never runs e2e; an `[e2e]` config table joins shared source trees beside the package into the scoped diff ([#333](https://github.com/thekevinscott/testing-conventions/issues/333)).
+- [`e2e attest`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) / [`e2e verify`](https://thekevinscott.github.io/testing-conventions/explanation/e2e) — `attest` runs the e2e command of your choosing locally and, when it passes, records a branch-keyed receipt; `verify` reads the diff alone in CI, asking a branch that changed the scoped source for a receipt. An `[e2e]` config table joins shared source trees beside the package into the scoped diff, and carves feature-gated subtrees back out.
 <!-- #endregion rules -->
 
 ## The three kinds of tests

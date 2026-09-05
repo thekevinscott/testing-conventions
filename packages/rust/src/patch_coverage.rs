@@ -698,6 +698,12 @@ mod tests {
     }
 
     #[test]
+    fn changed_lines_reports_a_spawn_failure() {
+        let err = changed_lines(Path::new("/nonexistent-tc-patch-coverage"), "main").unwrap_err();
+        assert!(err.to_string().contains("running `git diff`"), "got: {err}");
+    }
+
+    #[test]
     fn parses_added_lines_from_a_hunk() {
         let diff = "diff --git a/widget.py b/widget.py\n\
                     index abc..def 100644\n\

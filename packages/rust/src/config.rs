@@ -773,6 +773,36 @@ mod tests {
         assert_eq!(rust[0].path, "build.rs");
     }
 
+    #[test]
+    fn exemptions_reads_the_typescript_table() {
+        let config = parse(
+            "[[typescript.exempt]]\npath = \"cli.ts\"\nrules = [\"colocated-test\"]\n\
+             reason = \"thin launcher\"\n",
+        )
+        .unwrap();
+        let ts = config.exemptions(crate::colocated_test::Language::TypeScript);
+        assert_eq!(ts.len(), 1);
+        assert_eq!(ts[0].path, "cli.ts");
+    }
+
+    #[test]
+    fn a_line_number_past_u32_is_rejected() {
+        let err = toml_error(
+            "[[python.exempt]]\npath = \"shim.py\"\nrules = [\"coverage\"]\n\
+             lines = [4294967296]\nreason = \"dead branch\"\n",
+        );
+        assert!(err.to_string().contains("out of range"), "got: {err}");
+    }
+
+    #[test]
+    fn a_negative_line_number_is_rejected() {
+        let err = toml_error(
+            "[[python.exempt]]\npath = \"shim.py\"\nrules = [\"coverage\"]\n\
+             lines = [-1]\nreason = \"dead branch\"\n",
+        );
+        assert!(err.to_string().contains("must be positive"), "got: {err}");
+    }
+
     /// A throwaway directory tree, removed on drop.
     struct TempTree(std::path::PathBuf);
 

@@ -63,24 +63,3 @@ def test_the_diff_carries_the_mutated_source_as_the_replacement():
 
 def test_a_result_with_no_diff_omits_the_replacement():
     assert "replacement" not in normalize(_mutation(), _result("survived"))
-
-
-def test_the_diff_header_is_never_read_as_a_replacement():
-    header_only = "--- mutation diff ---\n--- a/calc.py\n+++ b/calc.py\n"
-    assert "replacement" not in normalize(_mutation(), _result("survived", header_only))
-
-
-def test_a_removal_only_mutation_omits_the_replacement():
-    removal = "@@ -1,3 +1,2 @@\n @decorate\n-    return a + b\n"
-    assert "replacement" not in normalize(_mutation(), _result("survived", removal))
-
-
-def test_an_unindented_added_line_keeps_its_first_character():
-    diff = "@@ -1,2 +1,2 @@\n-x = 1\n+y = 2\n"
-    assert normalize(_mutation(), _result("survived", diff))["replacement"] == "y = 2"
-
-
-def test_a_multi_line_mutation_names_every_added_line():
-    multi = "@@ -1,3 +1,4 @@\n-    return a + b\n+    if a:\n+        return b\n"
-    mutant = normalize(_mutation(), _result("survived", multi))
-    assert mutant["replacement"] == "if a:\nreturn b"

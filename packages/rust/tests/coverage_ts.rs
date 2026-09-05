@@ -90,7 +90,11 @@ fn a_failing_suite_is_an_error_naming_the_vitest_run() {
     let staged = std::env::temp_dir().join(format!("tc-ts-cov-failing-{}", std::process::id()));
     let src = staged.join("src");
     std::fs::create_dir_all(&src).unwrap();
-    std::fs::copy(codebase("full").join("package.json"), staged.join("package.json")).unwrap();
+    std::fs::copy(
+        codebase("full").join("package.json"),
+        staged.join("package.json"),
+    )
+    .unwrap();
     std::fs::write(
         src.join("widget.ts"),
         "export const widget = (): number => 1;\n",

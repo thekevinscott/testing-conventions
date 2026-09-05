@@ -378,18 +378,18 @@ mod tests {
 
     #[test]
     fn a_missing_wheel_reports_the_open_failure() {
-        let Err(err) = unzip_to_temp(Path::new("/nonexistent-tc-packaging/pkg.whl")) else {
-            panic!("expected an open failure");
-        };
+        let err = unzip_to_temp(Path::new("/nonexistent-tc-packaging/pkg.whl"))
+            .err()
+            .expect("the missing wheel errors");
         assert!(err.to_string().contains("opening artifact"), "got: {err}");
     }
 
     #[test]
     fn a_wheel_that_is_not_a_zip_reports_the_read_failure() {
         let tree = TempTree::new(&["pkg.whl"]);
-        let Err(err) = unzip_to_temp(&tree.path().join("pkg.whl")) else {
-            panic!("expected a zip read failure");
-        };
+        let err = unzip_to_temp(&tree.path().join("pkg.whl"))
+            .err()
+            .expect("the non-zip wheel errors");
         assert!(err.to_string().contains("as a zip archive"), "got: {err}");
     }
 
@@ -399,35 +399,33 @@ mod tests {
         std::fs::create_dir_all(tree.path()).unwrap();
         let wheel = tree.path().join("pkg.whl");
         write_zip(&wheel, &["a", "a/b"]);
-        let Err(err) = unzip_to_temp(&wheel) else {
-            panic!("expected an unpack failure");
-        };
+        let err = unzip_to_temp(&wheel).err().expect("the unpack errors");
         assert!(err.to_string().contains("unpacking"), "got: {err}");
     }
 
     #[test]
     fn a_missing_tarball_reports_the_open_failure() {
-        let Err(err) = untar_gz_to_temp(Path::new("/nonexistent-tc-packaging/pkg.tgz")) else {
-            panic!("expected an open failure");
-        };
+        let err = untar_gz_to_temp(Path::new("/nonexistent-tc-packaging/pkg.tgz"))
+            .err()
+            .expect("the missing tarball errors");
         assert!(err.to_string().contains("opening artifact"), "got: {err}");
     }
 
     #[test]
     fn a_tarball_that_cannot_be_unpacked_reports_the_failure() {
         let tree = TempTree::new(&["pkg.tgz"]);
-        let Err(err) = untar_gz_to_temp(&tree.path().join("pkg.tgz")) else {
-            panic!("expected an unpack failure");
-        };
+        let err = untar_gz_to_temp(&tree.path().join("pkg.tgz"))
+            .err()
+            .expect("the unpack errors");
         assert!(err.to_string().contains("unpacking"), "got: {err}");
     }
 
     #[test]
     fn an_uncreatable_scratch_directory_is_an_error() {
         let tree = TempTree::new(&["occupied"]);
-        let Err(err) = TempDir::new_in(&tree.path().join("occupied")) else {
-            panic!("expected a scratch-directory failure");
-        };
+        let err = TempDir::new_in(&tree.path().join("occupied"))
+            .err()
+            .expect("the occupied base errors");
         assert!(
             err.to_string().contains("creating scratch directory"),
             "got: {err}"

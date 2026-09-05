@@ -17,7 +17,10 @@ mod tests {
     fn a_read_failure_names_the_directory_being_walked() {
         let result = dir_entry(Err(std::io::Error::other("boom")), Path::new("/some/dir"));
         let message = format!("{:#}", result.unwrap_err());
-        assert!(message.contains("reading an entry under `/some/dir`"), "{message}");
+        assert!(
+            message.contains("reading an entry under `/some/dir`"),
+            "{message}"
+        );
         assert!(message.contains("boom"), "{message}");
     }
 

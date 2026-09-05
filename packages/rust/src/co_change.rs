@@ -314,9 +314,9 @@ mod tests {
 
     #[test]
     fn changed_entries_reports_a_spawn_failure() {
-        let Err(err) = changed_entries(Path::new(NOWHERE), "main") else {
-            panic!("expected the missing repo to error");
-        };
+        let err = changed_entries(Path::new(NOWHERE), "main")
+            .err()
+            .expect("the missing repo errors");
         assert!(format!("{err:#}").contains("running `git diff`"));
     }
 
@@ -329,9 +329,8 @@ mod tests {
         repo.commit("widget.py", "def widget():\n    return 2\n");
         std::fs::remove_file(repo.0.join("widget.py")).unwrap();
 
-        let Err(err) = stale_sources(&repo.0, "trunk", Language::Python, &BTreeSet::new()) else {
-            panic!("expected the missing worktree file to error");
-        };
+        let err = stale_sources(&repo.0, "trunk", Language::Python, &BTreeSet::new())
+            .expect_err("the missing worktree file errors");
         assert!(
             format!("{err:#}").contains("reading changed source `widget.py`"),
             "got: {err:#}"

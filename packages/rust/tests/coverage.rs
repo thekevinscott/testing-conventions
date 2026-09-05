@@ -67,16 +67,9 @@ fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
 
 #[test]
 fn an_omit_that_swallows_every_source_is_an_error() {
-    let err = measure(
-        &codebase("full").join("src"),
-        FLOOR_100,
-        &["*".to_string()],
-    )
-    .expect_err("with every file omitted the report step has nothing to report");
-    assert!(
-        format!("{err:#}").contains("coverage json"),
-        "got: {err:#}"
-    );
+    let err = measure(&codebase("full").join("src"), FLOOR_100, &["*".to_string()])
+        .expect_err("with every file omitted the report step has nothing to report");
+    assert!(format!("{err:#}").contains("coverage json"), "got: {err:#}");
 }
 
 #[test]

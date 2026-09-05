@@ -590,9 +590,10 @@ fn run_ts_adapter(
     if let Some(globs) = test_files {
         command.arg("--test-files").arg(globs.join(","));
     }
-    let output = command
-        .output()
-        .context(spawn_context("node", &adapter.display().to_string(), cwd))?;
+    let output =
+        command
+            .output()
+            .context(spawn_context("node", &adapter.display().to_string(), cwd))?;
     if !output.status.success() {
         bail!(
             "the TypeScript mutation adapter failed in `{}`:\n{}{}",
@@ -1486,7 +1487,10 @@ diff --git a/src/lib.rs b/src/lib.rs
         let missing = unique_tmp().join("results.json");
         let err = read_adapter_results(&missing, "TypeScript").unwrap_err();
         let msg = format!("{err:#}");
-        assert!(msg.contains("TypeScript mutation adapter's results"), "{msg}");
+        assert!(
+            msg.contains("TypeScript mutation adapter's results"),
+            "{msg}"
+        );
     }
 
     #[test]
@@ -1514,7 +1518,11 @@ diff --git a/src/lib.rs b/src/lib.rs
     #[test]
     fn a_bad_base_ref_fails_the_base_diff() {
         let dir = unique_tmp();
-        let init = Command::new("git").current_dir(&dir).args(["init", "-q"]).output().unwrap();
+        let init = Command::new("git")
+            .current_dir(&dir)
+            .args(["init", "-q"])
+            .output()
+            .unwrap();
         assert!(init.status.success());
         let out = MutantsOut::new();
         let err = write_base_diff(&dir, &dir, None, "tc-no-such-ref", &out).unwrap_err();
@@ -1842,6 +1850,18 @@ diff --git a/src/lib.rs b/src/lib.rs
         let got = drive_provision(&bin, &lock, Install::MustNotRun).unwrap();
         assert_eq!(got, bin);
         std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn the_must_not_run_sentinel_panics_when_installation_runs() {
+        let tmp = unique_tmp();
+        std::fs::create_dir_all(&tmp).unwrap();
+        let bin = tmp.join("bin").join("cargo-mutants");
+        let lock = tmp.join(".install.lock");
+        let panicked =
+            std::panic::catch_unwind(|| drive_provision(&bin, &lock, Install::MustNotRun)).is_err();
+        std::fs::remove_dir_all(&tmp).unwrap();
+        assert!(panicked);
     }
 
     #[test]
@@ -2175,11 +2195,7 @@ diff --git a/src/lib.rs b/src/lib.rs
     #[cfg(unix)]
     #[test]
     fn run_install_succeeds_on_a_zero_exit() {
-        drive_install(
-            Path::new("/cache/root"),
-            FakeRun::AssertsVersionAndSucceeds,
-        )
-        .unwrap();
+        drive_install(Path::new("/cache/root"), FakeRun::AssertsVersionAndSucceeds).unwrap();
     }
 
     #[cfg(unix)]

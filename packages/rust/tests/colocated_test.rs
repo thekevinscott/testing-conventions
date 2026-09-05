@@ -180,11 +180,9 @@ fn rust_has_no_twin_file_subjects() {
 
 #[test]
 fn rust_an_exemption_lifts_a_file_without_inline_tests() {
-    let orphans = missing_inline_tests(
-        &fixture("rust/cfg_not_test"),
-        &exempt(&["src/gated.rs"]),
-    )
-    .expect("walking a readable tree should succeed");
+    let root = fixture("rust/cfg_not_test");
+    let orphans = missing_inline_tests(&root, &exempt(&["src/gated.rs"]))
+        .expect("walking a readable tree should succeed");
     assert!(orphans.is_empty(), "got: {orphans:?}");
 }
 
@@ -373,7 +371,8 @@ fn an_unparsable_rust_source_names_the_file() {
 
 #[test]
 fn rust_missing_root_is_an_error() {
-    let err = missing_inline_tests(&fixture("does_not_exist"), &BTreeSet::new()).unwrap_err();
+    let root = fixture("does_not_exist");
+    let err = missing_inline_tests(&root, &BTreeSet::new()).unwrap_err();
     assert!(
         format!("{err:#}").contains("reading directory"),
         "got: {err:#}"

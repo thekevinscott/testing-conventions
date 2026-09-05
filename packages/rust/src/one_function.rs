@@ -543,6 +543,16 @@ mod tests {
     }
 
     #[test]
+    fn a_root_without_a_manifest_judges_every_source_file() {
+        let root = unique_tmp("no-manifest");
+        std::fs::create_dir_all(&root).unwrap();
+        let two_functions = "def alpha():\n    return 1\n\ndef beta():\n    return 2\n";
+        std::fs::write(root.join("widget.py"), two_functions).unwrap();
+        let found = find_violations(&root, Language::Python, 0).expect("the tree scans");
+        assert_eq!(found.len(), 1, "got: {found:?}");
+    }
+
+    #[test]
     fn a_typescript_suite_tier_is_not_judged() {
         let root = unique_tmp("ts-suite");
         std::fs::create_dir_all(root.join("tests")).unwrap();
@@ -570,7 +580,10 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("widget.rs"), [0xFF, 0xFE]).unwrap();
         let err = find_violations(&root, Language::Rust, 0).unwrap_err();
-        assert!(err.to_string().contains("reading source file"), "got: {err}");
+        assert!(
+            err.to_string().contains("reading source file"),
+            "got: {err}"
+        );
     }
 
     #[test]

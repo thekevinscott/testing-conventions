@@ -2417,7 +2417,10 @@ mod tests {
     #[test]
     fn a_starred_monkeypatch_parameter_is_flagged() {
         let tree = TempDir::new();
-        tree.write("widget_test.py", "def test_widget(*monkeypatch):\n    pass\n");
+        tree.write(
+            "widget_test.py",
+            "def test_widget(*monkeypatch):\n    pass\n",
+        );
         let violations = find_violations(&tree.0).unwrap();
         assert_eq!(violations.len(), 1, "got {violations:?}");
         assert_eq!(violations[0].rule, "no-monkeypatch");
@@ -2426,7 +2429,10 @@ mod tests {
     #[test]
     fn a_double_starred_monkeypatch_parameter_is_flagged() {
         let tree = TempDir::new();
-        tree.write("widget_test.py", "def test_widget(**monkeypatch):\n    pass\n");
+        tree.write(
+            "widget_test.py",
+            "def test_widget(**monkeypatch):\n    pass\n",
+        );
         let violations = find_violations(&tree.0).unwrap();
         assert_eq!(violations.len(), 1, "got {violations:?}");
         assert_eq!(violations[0].rule, "no-monkeypatch");

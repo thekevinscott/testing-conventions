@@ -321,7 +321,9 @@ fn git_run(repo: &Path, args: &[&str]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{branch_slug, git_capture, git_diff_changed, git_run, pathspec_matches_tracked, run_shell};
+    use super::{
+        branch_slug, git_capture, git_diff_changed, git_run, pathspec_matches_tracked, run_shell,
+    };
     use std::path::Path;
 
     const NOWHERE: &str = "/nonexistent-tc-e2e";

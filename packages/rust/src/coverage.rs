@@ -1546,6 +1546,25 @@ mod tests {
     }
 
     #[test]
+    fn istanbul_patch_detail_reads_statements_arms_and_functions() {
+        let json = r#"{
+            "/abs/a.ts": {
+                "statementMap": {"0": {"start": {"line": 1}, "end": {"line": 2}}},
+                "s": {"0": 1},
+                "branchMap": {"0": {"loc": {"start": {"line": 3}, "end": {"line": 3}}}},
+                "b": {"0": [1, 0]},
+                "fnMap": {"0": {"decl": {"start": {"line": 7}, "end": {"line": 7}}}},
+                "f": {"0": 0}
+            }
+        }"#;
+        let out = istanbul_patch_detail(json).expect("valid Istanbul report");
+        let detail = &out["/abs/a.ts"];
+        assert_eq!(detail.statements, vec![(1, 2, true)]);
+        assert_eq!(detail.branch_arms, vec![(3, true), (3, false)]);
+        assert_eq!(detail.functions, vec![(7, false)]);
+    }
+
+    #[test]
     fn istanbul_patch_detail_keeps_a_branch_without_counts() {
         let json = r#"{
             "/abs/a.ts": {

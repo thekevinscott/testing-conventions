@@ -556,8 +556,7 @@ fn run_unit_coverage(
                 functions: coverage.functions,
                 branch: coverage.branch,
             };
-            let scopes =
-                config::resolve_exempt_scoped(root, &rust.exempt, config::Rule::Coverage)?;
+            let scopes = config::resolve_exempt_scoped(root, &rust.exempt, config::Rule::Coverage)?;
             let (ignore, exempt_lines) = split_scopes(scopes);
             match base {
                 Some(base) => patch_coverage::measure_rust(
@@ -607,8 +606,7 @@ fn run_unit_mutation(
     let measurement = match language {
         colocated_test::Language::Rust => {
             let rust = config.rust.unwrap_or_default();
-            let scopes =
-                config::resolve_exempt_scoped(root, &rust.exempt, config::Rule::Mutation)?;
+            let scopes = config::resolve_exempt_scoped(root, &rust.exempt, config::Rule::Mutation)?;
             let (exempt, exempt_lines) = split_scopes(scopes);
             mutation::measure_rust(root, &exempt, &exempt_lines, base, &rust.features)?
         }
@@ -987,6 +985,10 @@ mod tests {
         );
     }
 
+    fn python_exemptions(config: &config::Config) -> &[config::Exemption] {
+        config.exemptions(colocated_test::Language::Python)
+    }
+
     #[test]
     fn a_violation_with_an_unwaivable_rule_id_is_kept() {
         let dir = std::env::temp_dir().join(format!("tc-lib-waiver-{}", std::process::id()));
@@ -999,9 +1001,12 @@ mod tests {
             rule: "not-a-waivable-rule",
             message: "synthetic".to_string(),
         };
-        let kept = apply_waivers(vec![violation.clone()], &dir, &config_path, |c| {
-            c.exemptions(colocated_test::Language::Python)
-        });
+        let kept = apply_waivers(
+            vec![violation.clone()],
+            &dir,
+            &config_path,
+            python_exemptions,
+        );
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(kept.unwrap(), vec![violation]);
     }
@@ -1018,7 +1023,7 @@ mod tests {
             vec![violation.clone()],
             Path::new("/tree"),
             Path::new("/nonexistent-tc-lib.toml"),
-            |c| c.exemptions(colocated_test::Language::Python),
+            python_exemptions,
         );
         assert_eq!(kept.unwrap(), vec![violation]);
     }
@@ -1050,7 +1055,7 @@ mod tests {
             vec![waived, kept_in_root.clone(), outside_root.clone()],
             &dir,
             &config_path,
-            |c| c.exemptions(colocated_test::Language::Python),
+            python_exemptions,
         );
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(kept.unwrap(), vec![kept_in_root, outside_root]);

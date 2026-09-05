@@ -125,10 +125,25 @@ fn cargo_mutants_survivors(report: &MutantsReport) -> Vec<Survivor> {
             Some(Survivor {
                 file: mutant.file.clone(),
                 line: mutant.span.start.line,
-                description: mutant.name.clone(),
+                description: strip_embedded_location(&mutant.name).to_string(),
             })
         })
         .collect()
+}
+
+/// Strip the `file:line:col: ` prefix cargo-mutants embeds in a mutant's name; the survivor
+/// line already leads with `file:line:`, so keeping the prefix prints the location twice.
+fn strip_embedded_location(name: &str) -> &str {
+    let Some((location, description)) = name.split_once(": ") else {
+        return name;
+    };
+    let mut parts = location.rsplitn(3, ':');
+    let numeric = |part: Option<&str>| part.is_some_and(|p| p.parse::<u32>().is_ok());
+    if numeric(parts.next()) && numeric(parts.next()) && parts.next().is_some() {
+        description
+    } else {
+        name
+    }
 }
 
 /// The `(file, line)` locations cargo-mutants produced a **viable, conclusive** mutant for —
@@ -1353,6 +1368,37 @@ mod tests {
         assert_eq!(survivors[0].file, "src/lib.rs");
         assert_eq!(survivors[0].line, 7);
         assert!(survivors[0].description.contains("replace > with =="));
+    }
+
+    #[test]
+    fn a_survivor_description_carries_no_location_prefix() {
+        let report = parse_mutants_report(SAMPLE).unwrap();
+        let survivors = unexplained_survivors(&report, &[]);
+        assert_eq!(
+            survivors[0].description, "replace > with == in is_positive",
+            "the name's embedded `file:line:col:` prefix is stripped"
+        );
+    }
+
+    #[test]
+    fn strip_embedded_location_removes_a_file_line_col_prefix() {
+        assert_eq!(
+            strip_embedded_location("src/lib.rs:7:5: replace > with == in is_positive"),
+            "replace > with == in is_positive"
+        );
+    }
+
+    #[test]
+    fn strip_embedded_location_keeps_a_name_without_one() {
+        for name in [
+            "replace add -> 0",
+            "note: no location segment",
+            "7:5: no file segment",
+            "src/lib.rs:7:x: non-numeric column",
+            "src/lib.rs:x:5: non-numeric line",
+        ] {
+            assert_eq!(strip_embedded_location(name), name);
+        }
     }
 
     #[test]

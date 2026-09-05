@@ -1,0 +1,7 @@
+{
+  "command": "pnpm run test:e2e",
+  "ran_at": 1788609818,
+  "exit_code": 0,
+  "commit": "27ad1b34d534dfae386e7e0f43f37c57512e720e",
+  "branch": "chore/526-archaeology-internals"
+}

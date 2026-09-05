@@ -1,10 +1,8 @@
-"""Unit tests for the coverage-config detection.
+"""Unit tests for the precedence rule, across every config source coverage.py reads.
 
-Pin the precedence contract — the plugin applies a default only where the
-consumer set nothing — across every config source coverage.py reads, plus the
-malformed/unset paths.
+The contract: a default applies only where the consumer set nothing.
 """
-from testing_conventions.config.detect import ini_has, pyproject_has, user_set
+from testing_conventions.config.user_set import user_set
 
 
 def test_pyproject_table_is_detected(tmp_path):
@@ -79,29 +77,3 @@ def test_malformed_ini_is_treated_as_unset(tmp_path):
 def test_malformed_toml_is_treated_as_unset(tmp_path):
     (tmp_path / "pyproject.toml").write_text("this is = not valid toml ===\n")
     assert user_set(tmp_path, None, "fail_under", "report") is False
-
-
-def testini_has_reports_presence(tmp_path):
-    path = tmp_path / ".coveragerc"
-    path.write_text("[run]\nbranch = true\n")
-    assert ini_has(str(path), ["run"], "branch") is True
-    assert ini_has(str(path), ["run"], "omit") is False
-
-
-def testini_has_on_a_malformed_file_is_false(tmp_path):
-    path = tmp_path / "bad.cfg"
-    path.write_text("no section header here\n")
-    assert ini_has(str(path), ["run"], "branch") is False
-
-
-def testpyproject_has_reports_presence(tmp_path):
-    path = tmp_path / "pyproject.toml"
-    path.write_text("[tool.coverage.report]\nfail_under = 90\n")
-    assert pyproject_has(str(path), "report", "fail_under") is True
-    assert pyproject_has(str(path), "run", "branch") is False
-
-
-def testpyproject_has_on_malformed_toml_is_false(tmp_path):
-    path = tmp_path / "pyproject.toml"
-    path.write_text("= broken =\n")
-    assert pyproject_has(str(path), "report", "fail_under") is False

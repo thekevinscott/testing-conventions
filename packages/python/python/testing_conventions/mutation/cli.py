@@ -9,7 +9,8 @@ import json
 import sys
 
 from testing_conventions.mutation.baseline import check_baseline
-from testing_conventions.mutation.config import MEASURE_TIMEOUT, build_config, derive_timeout
+from testing_conventions.mutation.build_config import build_config
+from testing_conventions.mutation.config import MEASURE_TIMEOUT, derive_timeout
 from testing_conventions.mutation.normalize import normalize
 from testing_conventions.mutation.parse_args import parse_args
 from testing_conventions.mutation.session import run_session

@@ -1,11 +1,4 @@
-"""Build the cosmic-ray configuration the adapter drives.
-
-[`render_config`] is the pure TOML-rendering half; [`build_config`] parses it into
-cosmic-ray's ``ConfigDict`` (the object ``init`` / ``execute`` consume). ``cosmic_ray`` is
-imported lazily so the module imports without the engine installed — the pure renderer stays
-testable anywhere, and the dogfood coverage job (which installs only coverage + pytest) can
-collect this package.
-"""
+"""Render the cosmic-ray configuration the adapter drives, and derive the timing it carries."""
 from __future__ import annotations
 
 # Test files cosmic-ray must never mutate, which would mutate the suite itself. cosmic-ray
@@ -49,10 +42,3 @@ def render_config(modules, timeout):
         "[cosmic-ray.distributor]\n"
         'name = "local"\n'
     )
-
-
-def build_config(modules, timeout):
-    """The parsed cosmic-ray ``ConfigDict`` for a run over ``modules`` with ``timeout``."""
-    from cosmic_ray.config import deserialize_config
-
-    return deserialize_config(render_config(modules, timeout))

@@ -564,13 +564,32 @@ Publish-gating is necessary but not sufficient. It proves the binary published; 
 
 **Mechanism.** The direct `Release`-success → `move-major-tag` chain becomes `Release`-success → **verify-and-promote**. On a successful publish, verify-and-promote: (1) resolves the release SHA and the just-published npm version from the tags reachable there; (2) runs the layout check against the release SHA; (3) dispatches `testing-conventions-selftest.yml` and `dogfood.yml` at a throwaway tag on the release SHA with the pinned `version`, and polls until both conclude; (4) advances `@v0` via the unchanged forward-only `move_major_tag.py` **only** when the layout check and both dispatched runs are green. Every non-trivial step is the colocated-tested `tc-checks verify-release` command (`internals/checks`, `checks/utils/verify_release.py` behind an injected git/`gh` boundary — the `build-hermetic-cli` pattern); the workflow YAML wires triggers, checkouts, and env, and holds no logic. The injected `run` fake records each call's keyword arguments alongside its argv, so the subprocess boundary flags (`capture_output=`, `text=`) are asserted like any other decision, and the group's own raise-or-echo branches are driven through `.callback()` against a patched `vr` — `tc-checks verify-release` carries no exemption. The `rolling-release-wired`/`verify-release-wired` static checks guard that the tag move stays gated on verification, so a regression that re-introduces a bare publish-only promotion fails the self-test.
 
+## The one-function-per-file ratchet
+
+The shipped default is `max_lines = 1`, and this repo's own packages are walked toward it. Two
+properties hold the ratchet:
+
+- **Monotonic.** A package's threshold only ever moves down. The end state is no
+  `one_function_per_file` line in its `testing-conventions.toml` at all — the flag is deleted, not
+  set to `1`.
+- **Honest.** A lowering is earned by splitting each over-threshold function into its own module,
+  with its own colocated test. An `exempt` entry would waive the rule instead of satisfying it, so
+  the ratchet adds none.
+
+`packages/python` and `internals/move-major-tag` sit at the default and carry no config for it.
+Two overrides remain, each naming what pins it: `internals/checks` at `max_lines = 11` and
+`internals/detect` at `max_lines = 19`, where `compute_outputs` runs 55 lines.
+
 ## The move-major-tag helper's package (`internals/move-major-tag`)
 
-`move_major_tag.py` (the forward-only `@v0` tag-advance helper, #235) lives in its own uv package, `internals/move-major-tag` (#452), mirroring `internals/detect`: `src/move_major_tag.py` with its colocated `move_major_tag_test.py`, integration tests (the git boundary mocked) and e2e tests (a real repo with a local remote) under `tests/`, and pytest a dev-dependency pinned in the package's `uv.lock`. `move-major-tag.yml` invokes it as a plain stdlib script (`python3 internals/move-major-tag/src/move_major_tag.py`, no install step); `move-major-tag-tests.yml` runs the three-tier suite from the package's own lock.
+`move_major_tag.py` (the forward-only `@v0` tag-advance helper, #235) lives in its own uv package, `internals/move-major-tag` (#452), mirroring `internals/detect`. `src/` holds four top-level modules, each with its colocated `_test.py`: the git boundary (`git_ops.py`), the pure decision (`decide.py`), the orchestration (`advance.py`), and the entry point (`move_major_tag.py`, which reads the environment and calls `advance`). Integration tests (the git boundary mocked) and e2e tests (a real repo with a local remote) sit under `tests/`, and pytest is a dev-dependency pinned in the package's `uv.lock`. `move-major-tag.yml` invokes the entry point as a plain stdlib script (`python3 internals/move-major-tag/src/move_major_tag.py`, no install step) — sibling imports resolve because the script's own directory leads `sys.path`; `move-major-tag-tests.yml` runs the three-tier suite from the package's own lock.
 
-It is dogfooded through the **shipped reusable workflow** (`dogfood.yml`, `source: internals/move-major-tag/src`) like `internals/checks` — every gate, including the coverage floor and diff-scoped mutation. `source` is the inner module dir, so the unit-tier gates recurse `src/` while the suite tiers derive from the package root. The colocated `move_major_tag_test.py` mocks one external — `subprocess.run`, through a fake that dispatches on argv and records every call — and runs the git boundary helpers and `advance` for real against it, so the unit suite alone clears the floor and the asserted argv kills the mutants on each boundary call. The package carries a
-`testing-conventions.toml` holding one line — `one_function_per_file = { max_lines = 9 }`, the
-lowest threshold the module passes today — and **no exemptions**: the unit tier reaches 100%
+It is dogfooded through the **shipped reusable workflow** (`dogfood.yml`, `source: internals/move-major-tag/src`) like `internals/checks` — every gate, including the coverage floor and diff-scoped mutation. `source` is the inner module dir, so the unit-tier gates recurse `src/` while the suite tiers derive from the package root. The colocated `git_ops_test.py` mocks one external — `subprocess.run`, through a fake that
+dispatches on argv and records every call — and runs the git boundary helpers for real against it,
+so the asserted argv kills the mutants on each boundary call; `decide_test.py` drives the pure
+decision directly, and `advance_test.py` and `move_major_tag_test.py` each mock the module below
+them. The package carries **no `testing-conventions.toml`**: every module holds the shipped
+`one_function_per_file` default, and there are **no exemptions** — the unit tier reaches 100%
 line-and-branch coverage and kills all 60 whole-tree mutants. `move-major-tag-tests.yml` still runs
 the three tiers together.
 

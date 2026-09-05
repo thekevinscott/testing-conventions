@@ -18,13 +18,13 @@ dev = ["pytest"]
 exclude = ["**/*_test.py"]
 
 [tool.hatch.build.targets.wheel]
-# A single top-level module, not a package dir: map src/move_major_tag.py -> move_major_tag.py.
-include = ["src/move_major_tag.py"]
+# Top-level modules, not a package dir: map src/<module>.py -> <module>.py.
+include = ["src/*.py"]
 
 [tool.hatch.build.targets.wheel.sources]
 src = ""
 
 [tool.pytest.ini_options]
-# `src` layout: put it on the path so move_major_tag.py and its colocated/integration/e2e tests
-# import it normally (`import move_major_tag`) — no per-file `sys.path.insert` hack.
+# `src` layout: put it on the path so the modules and their colocated/integration/e2e tests
+# import each other normally (`import move_major_tag`) — no per-file `sys.path.insert` hack.
 pythonpath = ["src"]

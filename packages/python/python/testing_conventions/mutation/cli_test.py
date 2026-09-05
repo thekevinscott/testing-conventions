@@ -52,6 +52,18 @@ def test_writes_the_normalized_results_to_out(cosmic_ray, tmp_path):
     assert any("timeout = 10.0\n" in toml for toml in rendered)
 
 
+def test_an_empty_session_writes_an_empty_list(cosmic_ray, tmp_path):
+    cosmic_ray.deserialize_config.return_value = _config()
+    cosmic_ray.db.results = _baseline("survived")
+    cosmic_ray.find_modules.return_value = []
+    cosmic_ray.db.completed_work_items = []
+    out = tmp_path / "r.json"
+
+    mutation_cli(["--out", str(out)])
+
+    assert json.loads(out.read_text()) == []
+
+
 def test_a_baseline_failure_exits_nonzero_and_writes_nothing(cosmic_ray, tmp_path, capsys):
     cosmic_ray.deserialize_config.return_value = _config()
     cosmic_ray.db.results = _baseline("killed", output="boom")

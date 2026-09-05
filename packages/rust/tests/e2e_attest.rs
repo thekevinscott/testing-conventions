@@ -248,6 +248,32 @@ fn attest_leaves_another_branchs_receipt_in_place() {
 }
 
 #[test]
+fn attest_errors_when_a_file_blocks_the_receipts_dir() {
+    let repo = TempRepo::new();
+    std::fs::write(repo.0.join(RECEIPTS_DIR), "block\n").unwrap();
+
+    let err = attest(&repo.0, "true").unwrap_err();
+
+    assert!(
+        format!("{err:#}").contains("creating"),
+        "the error names the directory it could not create: {err:#}"
+    );
+}
+
+#[test]
+fn attest_errors_when_a_directory_blocks_the_receipt_path() {
+    let repo = TempRepo::new();
+    std::fs::create_dir_all(repo.0.join(RECEIPT)).unwrap();
+
+    let err = attest(&repo.0, "true").unwrap_err();
+
+    assert!(
+        format!("{err:#}").contains("writing"),
+        "the error names the receipt it could not write: {err:#}"
+    );
+}
+
+#[test]
 fn receipts_dir_is_the_public_location() {
     assert_eq!(RECEIPTS_DIR, "e2e-attestations");
 }

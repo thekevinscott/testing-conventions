@@ -504,9 +504,7 @@ fn collect_ts_test_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
     for entry in entries {
-        let path = entry
-            .with_context(|| format!("reading an entry under `{}`", dir.display()))?
-            .path();
+        let path = crate::walk::dir_entry(entry, dir)?.path();
         if path.is_dir() {
             collect_ts_test_files(&path, out)?;
         } else if is_ts_test_file(&path) {

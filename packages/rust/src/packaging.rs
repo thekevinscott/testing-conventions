@@ -125,9 +125,7 @@ fn collect_offenders(
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
     for entry in entries {
-        let path = entry
-            .with_context(|| format!("reading an entry under `{}`", dir.display()))?
-            .path();
+        let path = crate::walk::dir_entry(entry, dir)?.path();
         if path.is_dir() {
             collect_offenders(&path, root, patterns, out)?;
         } else if matches_any(&path, root, patterns) {

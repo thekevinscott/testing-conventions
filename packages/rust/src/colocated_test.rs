@@ -165,9 +165,7 @@ pub(crate) fn collect_files(dir: &Path, language: Language, out: &mut Vec<PathBu
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
     for entry in entries {
-        let path = entry
-            .with_context(|| format!("reading an entry under `{}`", dir.display()))?
-            .path();
+        let path = crate::walk::dir_entry(entry, dir)?.path();
         if path.is_dir() {
             collect_files(&path, language, out)?;
         } else if language.tracks(&path) {
@@ -220,9 +218,7 @@ pub(crate) fn collect_rust_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> R
     let entries =
         std::fs::read_dir(dir).with_context(|| format!("reading directory `{}`", dir.display()))?;
     for entry in entries {
-        let path = entry
-            .with_context(|| format!("reading an entry under `{}`", dir.display()))?
-            .path();
+        let path = crate::walk::dir_entry(entry, dir)?.path();
         if path.is_dir() {
             let skip = matches!(
                 path.file_name().and_then(|name| name.to_str()),

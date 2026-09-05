@@ -51,8 +51,7 @@ fn collect_workflow_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries = std::fs::read_dir(path)
         .with_context(|| format!("reading directory `{}`", path.display()))?;
     for entry in entries {
-        let entry =
-            entry.with_context(|| format!("reading an entry under `{}`", path.display()))?;
+        let entry = crate::walk::dir_entry(entry, path)?;
         let child = entry.path();
         if child.is_dir() {
             collect_workflow_files(&child, out)?;

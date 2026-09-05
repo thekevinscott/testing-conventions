@@ -13,6 +13,7 @@ pub mod patch_coverage;
 pub mod tiers;
 pub mod ts;
 pub mod violation;
+mod walk;
 pub mod workflow;
 
 use std::path::{Path, PathBuf};

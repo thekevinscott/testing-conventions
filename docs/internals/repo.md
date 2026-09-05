@@ -52,9 +52,8 @@ Public-API surface for the purpose of these files: every exported value/type, ev
 Every subcommand `--help` lists runs a rule and can fail. A command that parses and exits `0`
 without doing work hands a consumer a pass they never earned, and it reads as a documented feature
 because it sits in the help output next to real ones. The `check` umbrella was the one such
-scaffold — declared in the repo's first commit, dispatched into the no-subcommand arm, and left
-unwired when #56 closed as not planned — and it is gone; nothing replaces it. A new command lands
-wired.
+scaffold — declared in the repo's first commit, dispatched into the no-subcommand arm, never
+wired — and it is gone; nothing replaces it. A new command lands wired.
 
 Two shapes sit outside that rule, both deliberate:
 
@@ -73,7 +72,7 @@ invoke commands the binary still exposes, or the fixture stops meaning "clean" a
 ## Monorepo package-root derivation
 
 `detect.py` derives seven outputs a suite-executing job needs to install, build, run, and
-configure at the right directory (#277, #289, #475): `package_root`, `ts_package_manager`,
+configure at the right directory: `package_root`, `ts_package_manager`,
 `ts_pnpm_version`, `python_env`, `provision_rust`, `config`, `build_command`. A `working_directory` input was considered and
 rejected — it would
 add a second, consumer-facing coordinate system against the documented rule that `source` is the
@@ -92,7 +91,7 @@ package's own manifest instead.
   `action-setup` throws `Multiple versions of pnpm specified` whenever `version` is set and
   `packageManager` is not string-equal to it, which no range ever is, so echoing the pin back is the
   only non-empty value it accepts; it resolves to `pnpm@<pin>`, exactly what passing nothing would
-  install (#475). Never empty, which is what lets the workflow read empty as "this detect predates
+  install. Never empty, which is what lets the workflow read empty as "this detect predates
   the output" and fall back to the floor — a rolling `@v0` gates each release on the *published*
   detect, so every new output spends one release absent. This repo pins floors through
   `engines` and carries no `packageManager` field, so the conflicting path is invisible to
@@ -112,7 +111,7 @@ package's own manifest instead.
   unchanged when `package_root` is `.`. Every suite/lint job's `CONFIG` env reads this output
   instead of `inputs.config` directly, so a per-package call's own config file is discovered,
   never named.
-- **`build_command`** (`derive_build_command`, #289/#335): the `[<language>].build_command` shell
+- **`build_command`** (`derive_build_command`): the `[<language>].build_command` shell
   command read from the discovered `config` file, keyed off the package's `primary_language` — so
   `[python]`, `[typescript]`, and `[rust]` are all read. This is the only detect function that
   opens and parses a `testing-conventions.toml`'s *contents*, not just resolves its path; `''` when
@@ -139,7 +138,7 @@ It also emits two presence flags the packaging and e2e-verify jobs gate on — *
 receipts sit in `e2e-attestations/` there) — so both gates run by default and skip, never fail,
 when absent.
 
-**`cargo_target_dir`** (#410) is the workspace-aware Rust build-cache location: the workspace
+**`cargo_target_dir`** is the workspace-aware Rust build-cache location: the workspace
 root's `target/` for a workspace-member crate, else the package root's own. cargo resolves the
 target directory at the workspace root regardless of the invoking directory, so a cache keyed on
 `package_root` alone would archive and restore a directory cargo never writes to.
@@ -147,17 +146,13 @@ target directory at the workspace root regardless of the invoking directory, so 
 Each language-set output spends one release absent, exactly as `ts_pnpm_version` describes above,
 so the workflow's matrix expressions carry a `|| <older set>` fallback until `@v0` advances.
 
-These are the primitive the four gate fixes (#278–#281) consume; deriving them is out of scope
-for what those jobs *do* with them (installing, building, discovering `dist/`, discovering
-e2e receipts) — see each issue for its own gate-specific wiring.
-
 The `.github/selftest/monorepo/` fixture (no manifest or lockfile at its own root, mirroring a
 real per-package-lockfile monorepo) exercises the derivation end to end via the local
 `./.github/actions/detect` action — the same pattern `detect-routes-python` in
 `testing-conventions-selftest.yml` already uses, so it isn't blocked by the `@v0` lag described
 below.
 
-**Writing the outputs to `GITHUB_OUTPUT` (#396).** `main` renders the outputs through
+**Writing the outputs to `GITHUB_OUTPUT`.** `main` renders the outputs through
 `render_github_output` before appending them to the `GITHUB_OUTPUT` file. A single-line value is a
 plain `name=value` line; a value that carries a newline — a `build_command` declared as a TOML
 `"""…"""` multi-line string — is written in the runner's heredoc form (`name<<DELIM`, the value,
@@ -201,7 +196,7 @@ Its jobs follow a three-name convention, and a rule earns as many of the three a
   The red path cannot ride a `uses:` call, because a failing call fails the whole run.
 
 The fixtures live under `.github/selftest/`, and the `-red` jobs drive the hermetic binary
-(`./hermetic-cli/testing-conventions`) rather than npm-latest (#379, below). Two fixture trees are
+(`./hermetic-cli/testing-conventions`) rather than npm-latest (see "Hermetic mode" below). Two fixture trees are
 worth knowing about: `.github/selftest/monorepo/` carries no manifest or lockfile at its own root,
 the per-package-lockfile shape the package-root derivation runs against, and
 `.github/selftest/packaging-package-root/` is generated — regenerate it with `python
@@ -222,9 +217,9 @@ Worked example (#206): making Rust coverage zero-config routed every detected Ru
 
 A second #206 follow-up: zero-config Rust coverage also routed `packages/python` into the rust matrix, because `detect.has_rust_crate` matched a bare `Cargo.toml`. `packages/python` carries a `Cargo.toml` but generates its Rust sources at wheel-build time, so a plain checkout has no `.rs` — and the rust coverage/mutation jobs then ran `cargo` over absent sources and failed (`can't find … src/main.rs`). This stayed latent until a PR touched `testing-conventions.yml` (the only `dogfood.yml` trigger that re-runs the `packages/python` reusable-workflow call). The fix: `has_rust_crate` now requires a `Cargo.toml` **and** at least one `.rs` source, so a manifest with nothing to measure is not treated as a crate. Like any detection change, it only reaches the self-test / dogfood once a release moves `@v0`.
 
-A third worked example, and a caution against over-attributing reds to `@v0` lag (#355): after the #351 `@v0` flip, `build-command-clean` and `rust-toolchain-clean` (the `[python].build_command` runtime fixtures, #243/#263/#289) still failed — `ModuleNotFoundError: No module named 'generated'`, the build step silently skipped. The workflow's own comments blamed the usual `@v0`/published-binary lag, but `@v0` was already current (it points at the same commit as `main`). The real cause: #335 generalized `build_command`'s config lookup to key off `primary_language(package_root)`, which returns `''` without a manifest (`pyproject.toml`/`package.json`/`Cargo.toml`) — but both fixtures are deliberately manifest-less (a bare pip Python package, #289's original case), so the lookup silently dropped the build step regardless of `@v0`. Fixed in `detect.compute_outputs`: `build_command`'s language falls back to the single present language when no manifest names a primary one (still empty, never guessed, when more than one language is present with no manifest to disambiguate). The lesson: a self-test red after a `@v0` flip is only actually *just* `@v0` lag if the *local* source (this PR's own `detect.py`, not the tag) also passes — check that first, per **Layer 1** in #353, rather than assuming the documented lag and waiting for the next release. Fixing the source doesn't make `build-command-clean` / `rust-toolchain-clean` green in *this* PR's own CI, though: `detect` here is still `actions/detect@v0`, so the fix only reaches this job once a release moves the tag — the ordinary pre-release lag, now with a real bug it had been masking underneath it.
+A third worked example, and a caution against over-attributing reds to `@v0` lag (#355): after the #351 `@v0` flip, `build-command-clean` and `rust-toolchain-clean` (the `[python].build_command` runtime fixtures) still failed — `ModuleNotFoundError: No module named 'generated'`, the build step silently skipped. The workflow's own comments blamed the usual `@v0`/published-binary lag, but `@v0` was already current (it points at the same commit as `main`). The real cause: #335 generalized `build_command`'s config lookup to key off `primary_language(package_root)`, which returns `''` without a manifest (`pyproject.toml`/`package.json`/`Cargo.toml`) — but both fixtures are deliberately manifest-less (a bare pip Python package), so the lookup silently dropped the build step regardless of `@v0`. Fixed in `detect.compute_outputs`: `build_command`'s language falls back to the single present language when no manifest names a primary one (still empty, never guessed, when more than one language is present with no manifest to disambiguate). The lesson: a self-test red after a `@v0` flip is only actually *just* `@v0` lag if the *local* source (this PR's own `detect.py`, not the tag) also passes — check that first, per **Layer 1** in #353, rather than assuming the documented lag and waiting for the next release. Fixing the source doesn't make `build-command-clean` / `rust-toolchain-clean` green in *this* PR's own CI, though: `detect` here is still `actions/detect@v0`, so the fix only reaches this job once a release moves the tag — the ordinary pre-release lag, now with a real bug it had been masking underneath it.
 
-Each self-test job's assertion — run a CLI command over a fixture, then pass/fail on its exit code — lives as a standalone, colocated-tested check (epic #302). The failure-path jobs (#309) — `isolation-red`, `below-floor`, `mutation-gate`, `python-mutation-clean`, `packaging-red`, `coverage-rust-red`, `integration-lint-new-arms-trip`, `packaging-package-root-red`, and `colocated-rust-red` (#379) — have moved into the `internals/checks` package as `tc-checks <name>` subcommands (#328): each holds its hardcoded invocations in a `CHECKS` list and hands them to the shared `run_checks` orchestrator (`checks/utils/`), which runs each invocation — or a single trailing command, the benign `true`/`false` e2e seam — and decides pass/fail through the pure `failure_reason`; colocated `cli_test.py`, `run_checks_test.py`, and `failure_reason_test.py` cover the logic while a sibling e2e suite drives the real subprocess boundary through `CliRunner`. The workflow step runs `uv run --project internals/checks tc-checks <name>`; the tested Python holds the invocation and the exit-code logic, so it earns the same dogfood gate as the rest of the checks package and stays clear of the `${{ }}` templating trap an inline `run:` body carries. Each `CHECKS` list holds the **hermetic** binary (`./hermetic-cli/testing-conventions`), shared from `checks/config.py`'s `HERMETIC_CLI`, and each red-path job downloads the `hermetic-cli` artifact (`needs: [build-cli]` + `./.github/actions/download-hermetic-cli`) so it validates this branch's CLI, not npm-latest (#379) — the `red-path-hermetic-wired` check gates that wiring.
+Each self-test job's assertion — run a CLI command over a fixture, then pass/fail on its exit code — lives as a standalone, colocated-tested check. The failure-path jobs — `isolation-red`, `below-floor`, `mutation-gate`, `python-mutation-clean`, `packaging-red`, `coverage-rust-red`, `integration-lint-new-arms-trip`, `packaging-package-root-red`, and `colocated-rust-red` — live in the `internals/checks` package as `tc-checks <name>` subcommands: each holds its hardcoded invocations in a `CHECKS` list and hands them to the shared `run_checks` orchestrator (`checks/utils/`), which runs each invocation — or a single trailing command, the benign `true`/`false` e2e seam — and decides pass/fail through the pure `failure_reason`; colocated `cli_test.py`, `run_checks_test.py`, and `failure_reason_test.py` cover the logic while a sibling e2e suite drives the real subprocess boundary through `CliRunner`. The workflow step runs `uv run --project internals/checks tc-checks <name>`; the tested Python holds the invocation and the exit-code logic, so it earns the same dogfood gate as the rest of the checks package and stays clear of the `${{ }}` templating trap an inline `run:` body carries. Each `CHECKS` list holds the **hermetic** binary (`./hermetic-cli/testing-conventions`), shared from `checks/config.py`'s `HERMETIC_CLI`, and each red-path job downloads the `hermetic-cli` artifact (`needs: [build-cli]` + `./.github/actions/download-hermetic-cli`) so it validates this branch's CLI, not npm-latest — the `red-path-hermetic-wired` check gates that wiring.
 
 ### The CLI runs on its own engine
 
@@ -289,19 +284,19 @@ The isolation and the engine pin ("The CLI runs on its own engine", above) answe
 the same question. The engine pin decides *which release the registry offers*; the prefix decides
 *whether the registry is asked at all*. A job needs both to run the release the workflow intends.
 
-## CI provisions from disk: uv, and the source mutation adapter (#352)
+## CI provisions from disk: uv, and the source mutation adapter
 
 Inside CI jobs the Python toolchain comes from **uv, and this repo's own mutation adapter comes from the source tree** — never `pip install`, and never a fetch of the published `testing-conventions` wheel. Two separable facts sit behind that one rule:
 
 - **The engines are third-party, and each is a pinned dependency of the package whose job runs it.** `coverage`, `pytest`, `cosmic-ray`, and `maturin` live nowhere in this repo, and an engine resolved from index-latest at run time is a mutable external reference inside a required check — a new engine release can red the check, or change the shipped wheel, with no commit to blame (AGENTS.md, "CI hermeticity"). So an engine is declared where a dependency belongs: in the owning uv package's dev dependency group, pinned in that package's existing `uv.lock`, with the job running through the project (`uv run --project <pkg> …`) so the version a run resolves is a function of the commit. Bumping an engine is a committed `uv lock --upgrade` diff, and setup-uv's cache (keyed on the lock) reuses the environment across runs. Where that stands per engine site:
-  - `internals/detect` — `pytest` (its only engine; `detect.py` is stdlib-only) is a dev-dependency pinned in its lock, and `detect-action.yml` runs the suite from the package directory (#445).
-  - `internals/checks` — `coverage`, `pytest`, and `cosmic-ray` are dev-dependencies pinned in its lock; the selftest jobs that shell out to them (`below-floor`, `python-mutation-clean`) already run `--project internals/checks` and pick them up from the sync. The one job with no uv project of its own (`rust.yml` integration — a Rust crate) **borrows** that environment (#446), syncing it once and putting its `.venv/bin` on `PATH`: a deliberate coupling, accepted because the checks package is the repo's test-tooling home; if a cleaner home emerges for the borrowing job, prefer it.
-  - the `packages/python` wheel build (`python.yml`) — `maturin` is not a test engine but the PEP 517 build backend, so its pin lives where a build backend is declared: `[build-system].requires`, pinned exactly (#448). The job builds through it (`uv build --wheel`), so the toolchain that builds the shipped wheel is a function of the commit.
-  - the reusable workflow's suite jobs (the consumer path) — **the consumer's own lock is the pin** (#438). No lock of this repo's can reach that runner (the workflow executes in the consumer's checkout, and published wheels carry ranges, not locks), so the provisioning line installs only `pytest` (the runner fallback — a synced uv project's own locked pytest is already satisfied and wins) plus the `testing-conventions` wheel, whose dependencies carry the coverage/mutation engines. The float that remains — the wheel's ranges, for lock-less consumers — is the consumer-path exception below, gated at promotion (Layer 2).
+  - `internals/detect` — `pytest` (its only engine; `detect.py` is stdlib-only) is a dev-dependency pinned in its lock, and `detect-action.yml` runs the suite from the package directory.
+  - `internals/checks` — `coverage`, `pytest`, and `cosmic-ray` are dev-dependencies pinned in its lock; the selftest jobs that shell out to them (`below-floor`, `python-mutation-clean`) already run `--project internals/checks` and pick them up from the sync. The one job with no uv project of its own (`rust.yml` integration — a Rust crate) **borrows** that environment, syncing it once and putting its `.venv/bin` on `PATH`: a deliberate coupling, accepted because the checks package is the repo's test-tooling home; if a cleaner home emerges for the borrowing job, prefer it.
+  - the `packages/python` wheel build (`python.yml`) — `maturin` is not a test engine but the PEP 517 build backend, so its pin lives where a build backend is declared: `[build-system].requires`, pinned exactly. The job builds through it (`uv build --wheel`), so the toolchain that builds the shipped wheel is a function of the commit.
+  - the reusable workflow's suite jobs (the consumer path) — **the consumer's own lock is the pin**. No lock of this repo's can reach that runner (the workflow executes in the consumer's checkout, and published wheels carry ranges, not locks), so the provisioning line installs only `pytest` (the runner fallback — a synced uv project's own locked pytest is already satisfied and wins) plus the `testing-conventions` wheel, whose dependencies carry the coverage/mutation engines. The float that remains — the wheel's ranges, for lock-less consumers — is the consumer-path exception below, gated at promotion (Layer 2).
 
-- **The adapter is this repo's code, so it resolves from source, not the wheel.** `unit mutation --language python` spawns `python3 -m testing_conventions.mutation.main` (#248). Installing the published `testing-conventions` wheel to supply that module — `pip install testing-conventions`, or `uv run --with testing-conventions` — runs the *last release's* adapter over this PR's fixtures, the same `@v0`/npm version-skew class the hermetic merge gate (#356) closes for the CLI binary. The `hermetic-cli` artifact stages the Rust binary and the node `dist/`, not the Python adapter, so it does not reach this. The fix, which `rust.yml`'s integration job already models, is `PYTHONPATH: ${{ github.workspace }}/packages/python/python` — the adapter's source tree, ahead of any installed copy — so the adapter under test is the PR's. `cosmic-ray` (its engine, otherwise pulled in transitively by the wheel) then comes from `internals/checks`'s synced environment, pinned in its lock.
+- **The adapter is this repo's code, so it resolves from source, not the wheel.** `unit mutation --language python` spawns `python3 -m testing_conventions.mutation.main`. Installing the published `testing-conventions` wheel to supply that module — `pip install testing-conventions`, or `uv run --with testing-conventions` — runs the *last release's* adapter over this PR's fixtures, the same `@v0`/npm version-skew class the hermetic merge gate (#356) closes for the CLI binary. The `hermetic-cli` artifact stages the Rust binary and the node `dist/`, not the Python adapter, so it does not reach this. The fix, which `rust.yml`'s integration job already models, is `PYTHONPATH: ${{ github.workspace }}/packages/python/python` — the adapter's source tree, ahead of any installed copy — so the adapter under test is the PR's. `cosmic-ray` (its engine, otherwise pulled in transitively by the wheel) then comes from `internals/checks`'s synced environment, pinned in its lock.
 
-The consumer-path surface is the deliberate exception, and only for the artifact it validates: `python.yml` still `pip install`s the built `dist/*.whl` to load the pytest plugin the way an installed consumer does, and the reusable workflow's own jobs run the published binary for consumers. The direct-drive red-path self-test jobs route through `hermetic-cli` rather than ad-hoc `npx` (#379), and the reusable workflow's own Python provisioning is uv-only (#399).
+The consumer-path surface is the deliberate exception, and only for the artifact it validates: `python.yml` still `pip install`s the built `dist/*.whl` to load the pytest plugin the way an installed consumer does, and the reusable workflow's own jobs run the published binary for consumers. The direct-drive red-path self-test jobs route through `hermetic-cli` rather than ad-hoc `npx`, and the reusable workflow's own Python provisioning is uv-only.
 
 Every job that provisions uv pins `astral-sh/setup-uv@v7`, whose bundled Node 24 runtime runs the action natively on the GitHub-hosted runner.
 
@@ -327,7 +322,7 @@ An external consumer's call carries their own repository and can never match; an
 `version` always names the published artifact (which is what #357's post-publish verification
 does) and wins even in-repo. When the derivation holds, detect emits `cli_command`
 (`./hermetic-cli/testing-conventions`) and `ts_mutation_adapter_args` (the `--ts-mutation-adapter`
-argument the npm launcher normally appends, pre-rendered like `e2e_extra_scope`, #333); for every
+argument the npm launcher normally appends, pre-rendered like `e2e_extra_scope`); for every
 other caller both are empty. (Rejected alternatives, in order: a `hermetic` boolean input —
 `workflow_call` inputs have no visibility modifier, so a testing-only flag is public surface any
 consumer can flip; and a guarded `build-cli` job inside the reusable workflow — a job with a
@@ -361,7 +356,7 @@ checks rows, so a consumer's checks UI is unchanged):
   `cli_command` is non-empty via the shared `./.github/actions/download-hermetic-cli` composite
   action — one `uses:` line instead of the download-artifact-plus-chmod pair repeated across all
   six rule jobs (`static`, `unit-coverage`, `coverage-changed`, `mutation`, `e2e-verify`,
-  `packaging` — the five static gates share the one `static` job since #410) — and runs
+  `packaging` — the five static gates share the one `static` job) — and runs
   `${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} <subcommand> …`.
   That
   `cli_command` guard is load-bearing for the `uses:` line itself, not just for whether the
@@ -396,7 +391,7 @@ lines and reports each one that runs the fallback without the env line, naming i
 needle stays as the non-vacuity guard: a workflow that runs the fallback nowhere would satisfy
 the per-step rule vacuously.
 
-The acceptance bar (#356): a PR that changes `detect`'s behavior, or a rule's, goes **red in its
+The acceptance bar: a PR that changes `detect`'s behavior, or a rule's, goes **red in its
 own CI** before merge when that change breaks something. There is no dedicated acceptance job —
 hermetic mode has no input, so every `uses:` call in the two caller workflows is the acceptance
 test, exercising this branch's own `detect` and compiled CLI. Consumer-facing documentation never
@@ -405,8 +400,8 @@ mentions hermetic mode: there is nothing to document — no input exists and no 
 Edges: a fork PR *into* this repo runs in base-repo context, so it is gated hermetically (the
 point of the gate). A fork *of* this repo carries the fork's `github.repository`, so it exercises
 the published path. The direct-drive red-path self-test jobs (isolation-red, below-floor, …) drive
-the CLI in their own `run:` steps rather than through a `uses:` call, so #356's caller-derivation
-didn't reach them; #379 closes that by staging them off the same `hermetic-cli` artifact the
+the CLI in their own `run:` steps rather than through a `uses:` call, so the caller-derivation
+above doesn't reach them; they stage off the same `hermetic-cli` artifact the
 `uses:`-called jobs download — each `needs: [build-cli]` and runs `./hermetic-cli/testing-conventions`,
 validating this branch's binary, not npm-latest.
 
@@ -435,7 +430,7 @@ looks like whatever the registry says at that moment, and there is no commit to 
 "green (or red) gate that tested the wrong thing" the hermeticity invariant rules out for required
 checks. A per-run OIDC token lives exactly as long as the job that minted it.
 
-### The worked case: the 08-20 → 08-30 release outage (#489)
+### The worked case: the 08-20 → 08-30 release outage
 
 Every push to `main` between 2026-08-20 and 2026-08-30 had a failed `Release` run, so nothing
 published past `0.0.91`. The npm platform-build failures were fixed first; the last blocker was the
@@ -536,7 +531,7 @@ itself (see AGENTS.md, "Wiring gates are earned").
 
 The tag is advanced by a dedicated workflow, `.github/workflows/move-major-tag.yml`, **not** inline in `release.yml`. It is **gated on a successful publish**: it triggers via `workflow_run` on the `Release` workflow completing and runs only when `conclusion == 'success'` (on `main`). That gate is the one place this repo departs from the generic "move the tag on every push to `main`" recipe, and it is non-negotiable:
 
-The reusable workflow runs the **published** binary (`npm exec -- testing-conventions` → the newest release the job's node satisfies), but the workflow *file* is frozen at `@v0`. If `@v0` advanced to a commit whose workflow invokes a subcommand the npm-latest binary doesn't expose yet (a rename/addition — the #55 class of break), every consumer running in the publish window would get new-workflow + old-binary → `unrecognized subcommand`. Publishing the binary is this repo's analog of committing a built `dist/`: ship the runtime first, then move the tag. `needs: release` (#92) did this inline; `move-major-tag.yml` does it as a named, single-responsibility workflow.
+The reusable workflow runs the **published** binary (`npm exec -- testing-conventions` → the newest release the job's node satisfies), but the workflow *file* is frozen at `@v0`. If `@v0` advanced to a commit whose workflow invokes a subcommand the npm-latest binary doesn't expose yet (a rename or an addition), every consumer running in the publish window would get new-workflow + old-binary → `unrecognized subcommand`. Publishing the binary is this repo's analog of committing a built `dist/`: ship the runtime first, then move the tag. An inline `needs: release` gate did this once; `move-major-tag.yml` does it as a named, single-responsibility workflow.
 
 Two safety properties:
 
@@ -581,7 +576,7 @@ at the default and carry no config for it — the ratchet's end state.
 
 ## The move-major-tag helper's package (`internals/move-major-tag`)
 
-`move_major_tag.py` (the forward-only `@v0` tag-advance helper, #235) lives in its own uv package, `internals/move-major-tag` (#452), mirroring `internals/detect`. `src/` holds four top-level modules, each with its colocated `_test.py`: the git boundary (`git_ops.py`), the pure decision (`decide.py`), the orchestration (`advance.py`), and the entry point (`move_major_tag.py`, which reads the environment and calls `advance`). Integration tests (the git boundary mocked) and e2e tests (a real repo with a local remote) sit under `tests/`, and pytest is a dev-dependency pinned in the package's `uv.lock`. `move-major-tag.yml` invokes the entry point as a plain stdlib script (`python3 internals/move-major-tag/src/move_major_tag.py`, no install step) — sibling imports resolve because the script's own directory leads `sys.path`; `move-major-tag-tests.yml` runs the three-tier suite from the package's own lock.
+`move_major_tag.py` (the forward-only `@v0` tag-advance helper) lives in its own uv package, `internals/move-major-tag`, mirroring `internals/detect`. `src/` holds four top-level modules, each with its colocated `_test.py`: the git boundary (`git_ops.py`), the pure decision (`decide.py`), the orchestration (`advance.py`), and the entry point (`move_major_tag.py`, which reads the environment and calls `advance`). Integration tests (the git boundary mocked) and e2e tests (a real repo with a local remote) sit under `tests/`, and pytest is a dev-dependency pinned in the package's `uv.lock`. `move-major-tag.yml` invokes the entry point as a plain stdlib script (`python3 internals/move-major-tag/src/move_major_tag.py`, no install step) — sibling imports resolve because the script's own directory leads `sys.path`; `move-major-tag-tests.yml` runs the three-tier suite from the package's own lock.
 
 It is dogfooded through the **shipped reusable workflow** (`dogfood.yml`, `source: internals/move-major-tag/src`) like `internals/checks` — every gate, including the coverage floor and diff-scoped mutation. `source` is the inner module dir, so the unit-tier gates recurse `src/` while the suite tiers derive from the package root. The colocated `git_ops_test.py` mocks one external — `subprocess.run`, through a fake that
 dispatches on argv and records every call — and runs the git boundary helpers for real against it,
@@ -598,15 +593,15 @@ behaviourally identical to `==` for every value `decide` can return — equivale
 only by removing the comparison. `if action in WRITING_ACTIONS` states the same decision as a
 membership test, where every comparison mutant flips an observable outcome.
 
-It was the last loose script under `.github/scripts/`, held to the conventions by `dogfood-github-helpers.yml` — a job that ran the published binary via `npx`, the n-1 skew class (#206, #351, #355) the hermetic gates exist to close. The migration emptied `.github/scripts/`, so that workflow and its `github-helpers-wired` selftest guard (#329) retired with it: no code lives under `.github/`, and no required check outside the reusable workflow's consumer path invokes an unpinned `npx testing-conventions`.
+It was the last loose script under `.github/scripts/`, held to the conventions by `dogfood-github-helpers.yml` — a job that ran the published binary via `npx`, the n-1 skew class the hermetic gates exist to close (the worked examples under "Self-test and the `@v0` path"). The migration emptied `.github/scripts/`, so that workflow and its `github-helpers-wired` selftest guard retired with it: no code lives under `.github/`, and no required check outside the reusable workflow's consumer path invokes an unpinned `npx testing-conventions`.
 
 ## The self-test checks package (`internals/checks`)
 
-The #302 wiring/assertion checks are consolidated into a single uv package at `internals/checks/` — `pyproject.toml` + `uv.lock` + a `src/checks/` layout (epic #321, complete). `checks/cli.py` is a `@click.group()` (`tc-checks`) that composes each check as a subcommand; each check lives in its own subpackage — `checks/<check>/cli.py` holds a pure predicate (or, for the failure-path group, a hardcoded `CHECKS` list) and a `@click.command()`, with a colocated `cli_test.py`. Shared code lives in `checks/utils/`: `check_failed.py` (the `CheckFailed` `click.ClickException` that prints a `::error::` annotation), `run_checks.py` + `failure_reason.py` (the failure-path orchestrator and its exit-code decision), and `job_block.py` (isolating a named job's YAML region). A self-test job runs `uv run --project internals/checks tc-checks <check>`.
+The self-test wiring/assertion checks are consolidated into a single uv package at `internals/checks/` — `pyproject.toml` + `uv.lock` + a `src/checks/` layout. `checks/cli.py` is a `@click.group()` (`tc-checks`) that composes each check as a subcommand; each check lives in its own subpackage — `checks/<check>/cli.py` holds a pure predicate (or, for the failure-path group, a hardcoded `CHECKS` list) and a `@click.command()`, with a colocated `cli_test.py`. Shared code lives in `checks/utils/`: `check_failed.py` (the `CheckFailed` `click.ClickException` that prints a `::error::` annotation), `run_checks.py` + `failure_reason.py` (the failure-path orchestrator and its exit-code decision), and `job_block.py` (isolating a named job's YAML region). A self-test job runs `uv run --project internals/checks tc-checks <check>`.
 
 The layout mirrors `packages/python`, whose importable package sits in `packages/python/python` while `packages/python/tests` holds the integration/e2e suite: `source` for the dogfood points at the **inner** `internals/checks/src`, not the package root, so the static gates recurse only the source tree. The colocated `cli_test.py` units drive each check's `@click.command` through its `.callback` (no `CliRunner`, which is a third-party collaborator the isolation lint flags) and import only the unit under test — so the colocated suite alone reaches the 100% coverage floor. The full e2e suite (`CliRunner` over the real workflow file) lives at `internals/checks/tests/e2e`, a sibling **outside** the scanned `src/`; a `*_test.py` e2e file *inside* the scan would be read as an un-isolated unit test and red the lint. The package root (`internals/checks`, where the `pyproject.toml` lives) is still derived for the coverage/mutation venv.
 
-The packaging gate's `packaging_build` derivation covers `internals/checks` too (a plain `uv build`, #335), so the dogfood packaging job builds this package's own distributions and scans them — and both must exclude the colocated `*_test.py` units the same way any other zero-config Python package would, or the scan rejects the artifact as shipping its tests (#354). `uv build` produces a wheel *and* an sdist, and hatchling's `[tool.hatch.build.targets.wheel]` / `[tool.hatch.build.targets.sdist]` exclude independently of each other — an exclude scoped to only the wheel target leaves the sdist (`.tar.gz`) shipping every test file untouched. The top-level `[tool.hatch.build] exclude = ["**/*_test.py"]` applies to both targets at once. Tests still run from the source tree (`.venv`/`uv run pytest`), never from a built artifact, so the exclude has no effect on execution — only on what `uv build` packages.
+The packaging gate's `packaging_build` derivation covers `internals/checks` too (a plain `uv build`), so the dogfood packaging job builds this package's own distributions and scans them — and both must exclude the colocated `*_test.py` units the same way any other zero-config Python package would, or the scan rejects the artifact as shipping its tests. `uv build` produces a wheel *and* an sdist, and hatchling's `[tool.hatch.build.targets.wheel]` / `[tool.hatch.build.targets.sdist]` exclude independently of each other — an exclude scoped to only the wheel target leaves the sdist (`.tar.gz`) shipping every test file untouched. The top-level `[tool.hatch.build] exclude = ["**/*_test.py"]` applies to both targets at once. Tests still run from the source tree (`.venv`/`uv run pytest`), never from a built artifact, so the exclude has no effect on execution — only on what `uv build` packages.
 
 It lives under `internals/` with the repo's other first-party helper packages. As a real package it is dogfooded through the **shipped reusable workflow** (`dogfood.yml`, `path: internals/checks/src`) — colocated-test, isolation, coverage, integration-lint, and diff-scoped mutation — exactly like `packages/python`.
 
@@ -635,7 +630,7 @@ re-read a line-scoped mutation entry against its source whenever the file around
 
 ## The detect action's package (`internals/detect`)
 
-`detect.py` (the `detect` composite action's implementation, #189/#277 onward) moved out of `.github/actions/detect/` into its own uv package, `internals/detect/` (#363), mirroring `internals/checks`: custom logic earns a real package with real test tiers, not a loose script under `.github/`. `src/` holds flat sibling modules, one derivation per file, each with its colocated `_test.py`; `detect.py` is the entry point, reading the environment, calling `compute_outputs` (the orchestrator that imports every derivation), and rendering `GITHUB_OUTPUT`. Sibling imports resolve because the script's own directory leads `sys.path`, so the plain-script invocation works from any working directory. The integration/e2e suites sit at `internals/detect/tests/`, a sibling outside `src/`, exactly like `internals/checks`.
+`detect.py` (the `detect` composite action's implementation) lives in its own uv package, `internals/detect/`, mirroring `internals/checks`: custom logic earns a real package with real test tiers, not a loose script under `.github/`. `src/` holds flat sibling modules, one derivation per file, each with its colocated `_test.py`; `detect.py` is the entry point, reading the environment, calling `compute_outputs` (the orchestrator that imports every derivation), and rendering `GITHUB_OUTPUT`. Sibling imports resolve because the script's own directory leads `sys.path`, so the plain-script invocation works from any working directory. The integration/e2e suites sit at `internals/detect/tests/`, a sibling outside `src/`, exactly like `internals/checks`.
 
 It is dogfooded through the **shipped reusable workflow** (`dogfood.yml`, `source: internals/detect/src`) like `internals/checks` — every gate, including the coverage floor and diff-scoped mutation. `source` is the inner module dir rather than the package root, and that scoping is forced: pointing it at `internals/detect` runs all three tiers together and fails `unit lint`'s `unmocked-collaborator` rule, which has no concept of test tiers — once a first-party package is declared (any `pyproject.toml`), it flags *every* `*_test.py` under the scanned root that imports the package unmocked, `detect_integration_test.py` and `detect_e2e_test.py` included. (This also explains why `detect.py` silently passed `dogfood-github-helpers.yml`'s isolation check for years despite the same nested layout: `.github/actions` never had a `pyproject.toml`, so the rule's first-party-package lookup found nothing and reported no violations at all — not because the layout satisfied it.) So the colocated `_test.py` modules carry the whole unit tier: they build real package trees under `tmp_path` and run each derivation against them, rather than mocking the filesystem. `detect-action.yml` still runs the three-tier suite together.
 
@@ -673,44 +668,42 @@ Each matrixed job carries an explicit `name:` whose only interpolation is `matri
 
 `.github/workflows/pr-monitor.yml` calls `thekevinscott/pr-monitor@v1` on its defaults, and the action's own lockfile pins the willfire release it installs — so the behavior above is whatever that pinned release does, and a pr-monitor release is what moves it.
 
-With epic #321 complete, every #302 wiring/assertion and failure-path check lives in `internals/checks` as a `tc-checks <check>` subcommand; the flat `.github/scripts/<check>/` dirs are gone, and each self-test job invokes `uv run --project internals/checks tc-checks <check>` after `astral-sh/setup-uv`. The full inventory, by original sub-issue:
+Every wiring/assertion and failure-path check lives in `internals/checks` as a `tc-checks <check>` subcommand; the flat `.github/scripts/<check>/` dirs are gone, and each self-test job invokes `uv run --project internals/checks tc-checks <check>` after `astral-sh/setup-uv`. The full inventory:
 
-- **Wiring assertions (#323):** `mutation-wired`, `isolation-wired`, `coverage-rust-wired`, `colocated-rust-wired`, `diff-scoped-wired`, `e2e-verify-wired`, `e2e-verify-checks-out-pr-head` (block-scoped to the `e2e-verify` job, replacing the old `awk` range), `e2e-verify-scope-wired`, `rolling-release-wired` (two selftest steps folded into one command over two file arguments).
-- **Detect wiring (#324):** `wiring-detect-action`, `wiring-packaging-default-on`, `wiring-e2e-default-on`, and `detect-routes-python` — the last keeps its `uses: ./.github/actions/detect` step in the job and passes the action's `isolation_languages` output as a single-quoted JSON CLI argument.
-- **Feature-input wiring (#325):** `build-command-wired`, `gates-wired`, `rust-toolchain-wired`.
-- **Package-root wiring (#326):** `coverage-package-root-wired`, `packaging-package-root-wired`, `mutation-package-root-wired` — each isolates a job's YAML region and asserts it references `needs.detect.outputs.package_root`.
-- **Detect-output validations (#327):** `detect-package-root-ts`, `detect-package-root-py` — each runs `./.github/actions/detect` against a monorepo fixture and hands the outputs to a pure `evaluate` returning the first mismatch's message.
-- **Failure-path (#328):** `isolation-red`, `below-floor`, `mutation-gate`, `python-mutation-clean`, `packaging-red`, `coverage-rust-red`, `integration-lint-new-arms-trip`, `packaging-package-root-red`, `colocated-rust-red` (#379) — each runs hermetic-CLI (`./hermetic-cli/testing-conventions`, from `config.HERMETIC_CLI`) invocations from a `CHECKS` list and asserts the exit code via `failure_reason`.
-- **github-helpers-wired (#329):** retired in #452 along with `dogfood-github-helpers.yml`, the workflow whose arms it pinned — `move_major_tag.py`, the last loose script it dogfooded, is a real package now (see "The move-major-tag helper's package").
-- **red-path-hermetic-wired (#379):** asserts every failure-path job downloads the `hermetic-cli` artifact (`needs: [build-cli]` + `./.github/actions/download-hermetic-cli`), so none drives npm-latest.
+- **Wiring assertions:** `mutation-wired`, `isolation-wired`, `coverage-rust-wired`, `colocated-rust-wired`, `diff-scoped-wired`, `e2e-verify-wired`, `e2e-verify-checks-out-pr-head` (block-scoped to the `e2e-verify` job, replacing the old `awk` range), `e2e-verify-scope-wired`, `rolling-release-wired` (two selftest steps folded into one command over two file arguments).
+- **Detect wiring:** `wiring-detect-action`, `wiring-packaging-default-on`, `wiring-e2e-default-on`, and `detect-routes-python` — the last keeps its `uses: ./.github/actions/detect` step in the job and passes the action's `isolation_languages` output as a single-quoted JSON CLI argument.
+- **Feature-input wiring:** `build-command-wired`, `gates-wired`, `rust-toolchain-wired`.
+- **Package-root wiring:** `coverage-package-root-wired`, `packaging-package-root-wired`, `mutation-package-root-wired` — each isolates a job's YAML region and asserts it references `needs.detect.outputs.package_root`.
+- **Detect-output validations:** `detect-package-root-ts`, `detect-package-root-py` — each runs `./.github/actions/detect` against a monorepo fixture and hands the outputs to a pure `evaluate` returning the first mismatch's message.
+- **Failure-path:** `isolation-red`, `below-floor`, `mutation-gate`, `python-mutation-clean`, `packaging-red`, `coverage-rust-red`, `integration-lint-new-arms-trip`, `packaging-package-root-red`, `colocated-rust-red` — each runs hermetic-CLI (`./hermetic-cli/testing-conventions`, from `config.HERMETIC_CLI`) invocations from a `CHECKS` list and asserts the exit code via `failure_reason`.
+- **github-helpers-wired:** retired along with `dogfood-github-helpers.yml`, the workflow whose arms it pinned — `move_major_tag.py`, the last loose script it dogfooded, is a real package now (see "The move-major-tag helper's package").
+- **red-path-hermetic-wired:** asserts every failure-path job downloads the `hermetic-cli` artifact (`needs: [build-cli]` + `./.github/actions/download-hermetic-cli`), so none drives npm-latest.
 - **cli-isolation-wired:** asserts every line naming the CLI package spec launches it through `npm --prefix "$RUNNER_TEMP" exec`, so resolution reads the registry rather than the checkout's `node_modules`. It also fails when it matches no line at all, so a rename of the spec surfaces as a failure rather than a vacuous pass. See "The CLI resolves outside the checkout".
 - **cli-node-engine-wired:** reads **both sides** — each CLI-invoking job's unconditional `setup-node` pin, and `engines.node` in `packages/node/package.json` — and fails when a pin sits below the floor. Raising the floor trips it without an edit, and adding a CLI-invoking job that forgets its `setup-node` trips it too. It also fails when it matches **no** job, so an edit to the `npx` invocation it keys on surfaces as a failure rather than a vacuous pass. See "The CLI runs on its own engine".
 
 The static checks hold their inspection in a pure predicate over the workflow file; the failure-path group holds a `CHECKS` list run through the shared `run_checks` orchestrator. Either way the colocated `cli_test.py` drives the pure logic in isolation, the `@click.command()` raises `CheckFailed` (a `::error::` annotation) on a failure, and a sibling `CliRunner` e2e suite exercises the real boundary — held to the same coverage and mutation bar as any shipped source.
 
-The two pre-existing first-party helpers were resolved per the #321 open question: `detect.py` moved to `internals/detect` (#363), and `move_major_tag.py` — which stayed a loose script under `.github/scripts/` until #452 — moved to `internals/move-major-tag`, emptying `.github/scripts/` entirely.
+## Rust CI: nextest, and why the coverage job's cache needed no change
 
-## Rust CI: nextest, and why the coverage job's cache needed no change (#370)
-
-`rust.yml`'s `integration` job ("Integration + e2e tests + coverage (96%)") runs the ~65 files under `packages/rust/tests/` through `cargo llvm-cov`. #370 (epic #366) asked for two things: a reliable, distinct cache for the coverage-instrumented build, and running under `nextest`. Only the second turned out to be real.
+`rust.yml`'s `integration` job ("Integration + e2e tests + coverage (96%)") runs the ~65 files under `packages/rust/tests/` through `cargo llvm-cov`. The job was asked for two things: a reliable, distinct cache for the coverage-instrumented build, and running under `nextest`. Only the second turned out to be real.
 
 **The cache ask was already satisfied.** `Swatinem/rust-cache@v2` bakes the GitHub Actions job name into its default key, so `lint`, `unit`, `integration`, and `build` already get four separate, non-colliding caches — confirmed by inspecting live cache-key strings in CI logs (`v0-rust-integration-Linux-x64-…` vs `v0-rust-lint-Linux-x64-…`). This separation isn't incidental: `cargo llvm-cov` compiles under `-C instrument-coverage` into a distinct `target/llvm-cov-target/` directory, so its build artifacts could never usefully share a cache with the other jobs' plain `cargo build`/`cargo test` output regardless of key tuning. The actual (occasional) cache misses trace to `dtolnay/rust-toolchain@stable` being unpinned — a rustc point-release bump invalidates all four jobs' caches simultaneously — but pinning it was out of scope here: the same action is used seven more times in the *shipped* reusable workflow (`testing-conventions.yml`), and pinning there is a consumer-facing toolchain-provisioning decision with its own maintenance cost, not an internal CI tweak. Cold-vs-warm compile time for this job also turned out to be a modest 15–30% gap in practice, not the dominant cost — so no cache changes were made.
 
 **`nextest` is the real fix.** The 65 integration-test files each compile to their own binary; the default harness runs them one at a time, and several cost multiple seconds to tens of seconds because they shell out to real subprocesses (pytest, `npx vitest`, `cargo-mutants`) — that serial cost, not compilation, is what dominates the job's wall clock. `cargo llvm-cov nextest …` is a direct drop-in for the previous `cargo llvm-cov …`: the report-gating flags (`--fail-under-lines`, and at the time `--ignore-filename-regex`) belong to `cargo-llvm-cov` itself and apply identically regardless of which test-runner subcommand executes the tests. The crate has zero doctests, so nextest's well-known "doesn't run doctests" gap costs nothing here.
 
-One correctness question was worth answering empirically before landing this, not assuming: `mutation.rs`'s `ensure_cargo_mutants()` provisions a shared, version-scoped binary cache (`~/.cache/testing-conventions/cargo-mutants-<version>`) with no file locking — a bare "does the binary exist, if not run `cargo install`" check. nextest runs each test *binary* in its own OS process, in parallel, which could mean several processes racing to provision that shared cache simultaneously on a cold cache. Verified locally: cleared the cache, ran the mutation-Rust tests concurrently — every run landed on an intact, correctly-sized binary, no corruption. **That verification checked the race's safety but not its cost, and cost was the actual gap**: PR #383's own first CI run hit an evicted provisioning cache and took 6m59s instead of the expected ~2m — not nextest overhead, but four concurrent full from-source `cargo install cargo-mutants` compiles racing on a 4-vCPU runner (the old harness's one-binary-at-a-time model meant a cold cache only ever paid one serial install; nextest's cross-binary parallelism was the first thing to run several cargo-mutants-driving tests concurrently for real). Fixed in #385 with an advisory file lock around the install, re-checking for the binary after acquiring it — concurrent callers now wait for one install instead of each duplicating it, restoring the old cold-cache cost profile regardless of test-runner concurrency.
+One correctness question was worth answering empirically before landing this, not assuming: `mutation.rs`'s `ensure_cargo_mutants()` provisions a shared, version-scoped binary cache (`~/.cache/testing-conventions/cargo-mutants-<version>`) with no file locking — a bare "does the binary exist, if not run `cargo install`" check. nextest runs each test *binary* in its own OS process, in parallel, which could mean several processes racing to provision that shared cache simultaneously on a cold cache. Verified locally: cleared the cache, ran the mutation-Rust tests concurrently — every run landed on an intact, correctly-sized binary, no corruption. **That verification checked the race's safety but not its cost, and cost was the actual gap**: the nextest PR's own first CI run hit an evicted provisioning cache and took 6m59s instead of the expected ~2m — not nextest overhead, but four concurrent full from-source `cargo install cargo-mutants` compiles racing on a 4-vCPU runner (the old harness's one-binary-at-a-time model meant a cold cache only ever paid one serial install; nextest's cross-binary parallelism was the first thing to run several cargo-mutants-driving tests concurrently for real). Fixed with an advisory file lock around the install, re-checking for the binary after acquiring it — concurrent callers now wait for one install instead of each duplicating it, restoring the old cold-cache cost profile regardless of test-runner concurrency.
 
-With that fixed, the real warm-cache comparison holds up: a subsequent PR's run (provisioning cache hit) measured the `cargo llvm-cov nextest` step at **2m08s**, against the pre-nextest baseline's 2m23s–2m54s — a modest, real win, not the dramatic cut the epic's original profiling hoped for (that number was dominated by `dogfood-github-helpers.yml`'s Python mutation step, addressed separately, and by the since-resolved #364 packaging-fixture bug).
+With that fixed, the real warm-cache comparison holds up: a subsequent PR's run (provisioning cache hit) measured the `cargo llvm-cov nextest` step at **2m08s**, against the pre-nextest baseline's 2m23s–2m54s — a modest, real win, not the dramatic cut the epic's original profiling hoped for (that number was dominated by `dogfood-github-helpers.yml`'s Python mutation step, addressed separately, and by a since-resolved packaging-fixture bug).
 
 ## The Rust crate's own coverage floor
 
 The `integration` job measures `packages/rust/src` over **all** cargo targets — the inline `#[cfg(test)]` units plus the suites under `packages/rust/tests/` — a wider slice than the `cargo llvm-cov --lib` the shipped Rust rule runs on a consumer's crate. That is deliberate: almost all of this crate's coverage comes from the integration and e2e tiers, so a `--lib` run would measure a small fraction of it. `just rust-cov` mirrors the same flags on the default test harness.
 
-`src/main.rs` is covered by that measurement like any other file. The e2e suites spawn the real binary through `env!("CARGO_BIN_EXE_testing-conventions")`, and llvm-cov attributes the child process's execution back to `main.rs` — three targets alone (`version_banner_e2e`, `config_unknown_key_e2e`, `workflow_e2e`) cover it at 100% lines, regions, and functions, one each for the `Ok` path, the `clap_err.exit()` path, and the `eprintln!` + `ExitCode::from(1)` path. The job carried `--ignore-filename-regex 'main\.rs'` until #557, which hid coverage the suite already had; `--ignore-filename-regex` is also a substring search, so the unanchored pattern would have silently dropped a future `domain.rs` or `subdomain.rs` from the denominator — the same over-match #396 anchored away on the consumer-facing path.
+`src/main.rs` is covered by that measurement like any other file. The e2e suites spawn the real binary through `env!("CARGO_BIN_EXE_testing-conventions")`, and llvm-cov attributes the child process's execution back to `main.rs` — three targets alone (`version_banner_e2e`, `config_unknown_key_e2e`, `workflow_e2e`) cover it at 100% lines, regions, and functions, one each for the `Ok` path, the `clap_err.exit()` path, and the `eprintln!` + `ExitCode::from(1)` path. The job once carried `--ignore-filename-regex 'main\.rs'`, which hid coverage the suite already had; `--ignore-filename-regex` is also a substring search, so the unanchored pattern would have silently dropped a future `domain.rs` or `subdomain.rs` from the denominator — the same over-match the consumer-facing path anchored away.
 
 The floor is **96**, against the 100 the shipped rule defaults to. The full suite measures **96.96% lines** (256 of 8,427 uncovered, across 15 of the crate's 17 source files; `agents.rs` is lowest at 75.38%). That shortfall is uncovered code rather than an exempt surface, so tests close it and a `reason` cannot — tracked in #562. 96 ratchets the floor to just under the measured figure, keeping a point of margin for the line-mapping drift between a local toolchain and CI's `stable`.
 
-## Python CI: build the wheel once (#371)
+## Python CI: build the wheel once
 
 `python.yml`'s `build` job used to run `maturin build --release` across the full `3.9`–`3.13`
 matrix, and `plugin` built it again for its own `3.9`/`3.13` matrix — seven Rust compiles of the
@@ -718,8 +711,8 @@ same crate per PR run. The package is maturin `bindings = "bin"`
 (`packages/python/pyproject.toml`): the wheel ships the Rust binary with no per-Python-version
 native extension, so every matrix leg was compiling and wrapping the identical artifact.
 
-Verified before implementing, per the issue's own caveat that this could collapse to a no-op if
-the wheel tag turned out to be version-specific: `maturin build --release` produces
+Verified before implementing, since this would collapse to a no-op if the wheel tag turned out
+to be version-specific: `maturin build --release` produces
 `testing_conventions-<version>-py3-none-manylinux_*.whl` — the `py3-none-` tag is Python's
 own marker for "any CPython 3.x on this platform," confirmed by installing and running the same
 `.whl` under real 3.10–3.13 venvs locally (3.9 wasn't available to test directly, but the tag
@@ -735,7 +728,7 @@ toolchain, `rust-cache`, or `maturin` installed anymore; they only need Python a
 already-built wheel. `plugin` still checks out the repo (unlike `build`) because it runs
 `pytest tests/` against the checked-out integration-test files, which aren't part of the wheel.
 
-## Node CI: cache the pnpm store (#372)
+## Node CI: cache the pnpm store
 
 `node.yml`'s four jobs (`lint`, `typecheck`, `test`, `build`) each ran `pnpm install
 --no-frozen-lockfile` from a cold store — the same dependency set fetched and linked four times
@@ -750,12 +743,12 @@ the lockfile (the obvious hash input, and what the action's docs lead with) and 
 `.gitignore` has a blanket `pnpm-lock.yaml` rule — **no pnpm lockfile is committed anywhere in
 this repo** — so there was nothing in the checkout for `cache-dependency-path` to hash
 ("Some specified paths were not resolved, unable to cache dependencies"). `package.json` is the
-closest committed proxy for "did the intended dependency set change." This also retroactively
-answers the issue's other question — whether `--no-frozen-lockfile` is deliberate: it has to be,
+closest committed proxy for "did the intended dependency set change." This also settles
+whether `--no-frozen-lockfile` is deliberate: it has to be,
 since `--frozen-lockfile` requires a lockfile to freeze against, and none is ever committed.
 Left untouched, now with a real reason on record rather than an absence of one.
 
-## Docs CI: ref-scoped concurrency (#599)
+## Docs CI: ref-scoped concurrency
 
 `docs.yml` uses the standard PR-concurrency block (AGENTS.md, "PR workflow concurrency") in its
 `push: [main]` variant: `group: ${{ github.workflow }}-${{ github.ref }}` with

@@ -221,8 +221,11 @@ The `rustpython` visitor recognises each rule through a fixed set of AST shapes:
 Deliberately **not** caught by the syntactic heuristic — left to review, and stated
 plainly (à la #19) so nobody over-trusts green:
 
-- A `patch.object(module, "attr")` whose first argument is a **module object**, not
-  a string — classifying it needs resolving the object back to an import.
+- A `patch.object` / `patch.dict` target the file's imports can't resolve. The base is
+  read from the test file's imports, and a module attribute one level past it from that
+  module's own top-level source; a base bound by no import (a call result, a local
+  variable) or an attribute the source leaves unnamed resolves to no target and is left
+  alone.
 - A **non-literal** patch target (`patch(target)`, `patch(f"{pkg}.fn")`) — can't be
   classified deterministically (mirrors TypeScript skipping `vi.mock(name)`).
 - A dist whose **import package name differs** from its normalized

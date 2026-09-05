@@ -1,14 +1,5 @@
-"""Generate the packaging self-test wheel fixtures.
-
-Two minimal wheels (a wheel is a zip) for the reusable workflow's `packaging` job:
-
-  clean/widget-0.1.0-py3-none-any.whl — no test file; the check passes.
-  red/widget-0.1.0-py3-none-any.whl   — ships widget/core_test.py; the check fails.
-
-`testing-conventions-selftest.yml` uploads `clean/` as an artifact and runs the
-reusable workflow's packaging job over it (must pass), and drives the published
-CLI on the red wheel directly (must fail).
-
+"""Generate the packaging self-test wheel fixtures: two minimal wheels (a wheel is a
+zip); clean/ ships no test file, red/ ships `widget/core_test.py`.
 Regenerate:  python make_fixtures.py
 """
 

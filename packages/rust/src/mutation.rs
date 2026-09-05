@@ -131,8 +131,8 @@ fn cargo_mutants_survivors(report: &MutantsReport) -> Vec<Survivor> {
         .collect()
 }
 
-/// Strip the `file:line:col: ` prefix cargo-mutants embeds in a mutant's name; the survivor
-/// line already leads with `file:line:`, so keeping the prefix prints the location twice.
+/// Strip the `file:line:col: ` prefix cargo-mutants embeds in a mutant's name; a rendered site
+/// already leads with `file:line:`, so keeping the prefix prints the location twice.
 fn strip_embedded_location(name: &str) -> &str {
     let Some((location, description)) = name.split_once(": ") else {
         return name;
@@ -1146,7 +1146,9 @@ fn zero_mutant_verdict(listed: &[MutantInfo], diff: &BaseDiff, run: &Output) -> 
         .map(|mutant| {
             format!(
                 "  {}:{}: {}",
-                mutant.file, mutant.span.start.line, mutant.name
+                mutant.file,
+                mutant.span.start.line,
+                strip_embedded_location(&mutant.name)
             )
         })
         .collect();

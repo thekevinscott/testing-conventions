@@ -451,6 +451,28 @@ mod tests {
     }
 
     #[test]
+    fn a_short_flag_consumes_its_value() {
+        let root = clap::Command::new("tc").arg(
+            clap::Arg::new("config")
+                .short('c')
+                .action(clap::ArgAction::Set),
+        );
+        assert!(flag_takes_value(&root, "-c"));
+        assert!(!flag_takes_value(&root, "-x"));
+    }
+
+    #[test]
+    fn an_unreadable_workflow_names_the_file() {
+        let tree = TempTree::new(&[("ci.yml", "")]);
+        std::fs::write(tree.path().join("ci.yml"), [0xFF, 0xFE]).unwrap();
+        let err = invocations(tree.path()).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("reading workflow"),
+            "got: {err:#}"
+        );
+    }
+
+    #[test]
     fn unknown_subcommands_accepts_every_live_invocation() {
         let invs = [
             inv(

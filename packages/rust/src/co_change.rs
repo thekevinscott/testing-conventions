@@ -291,4 +291,50 @@ mod tests {
         let err = blob_at(&repo.0, &repo.head(), "ghost.py").unwrap_err();
         assert!(err.to_string().contains("ghost.py"), "got: {err}");
     }
+
+    const NOWHERE: &str = "/nonexistent-tc-co-change";
+
+    #[test]
+    fn test_exists_in_base_reports_a_spawn_failure() {
+        let err = test_exists_in_base(Path::new(NOWHERE), "main", "widget_test.py").unwrap_err();
+        assert!(format!("{err:#}").contains("running `git cat-file`"));
+    }
+
+    #[test]
+    fn merge_base_reports_a_spawn_failure() {
+        let err = merge_base(Path::new(NOWHERE), "main").unwrap_err();
+        assert!(format!("{err:#}").contains("running `git merge-base`"));
+    }
+
+    #[test]
+    fn blob_at_reports_a_spawn_failure() {
+        let err = blob_at(Path::new(NOWHERE), "HEAD", "widget.py").unwrap_err();
+        assert!(format!("{err:#}").contains("running `git show "));
+    }
+
+    #[test]
+    fn changed_entries_reports_a_spawn_failure() {
+        let Err(err) = changed_entries(Path::new(NOWHERE), "main") else {
+            panic!("expected the missing repo to error");
+        };
+        assert!(format!("{err:#}").contains("running `git diff`"));
+    }
+
+    #[test]
+    fn a_changed_source_missing_from_the_worktree_is_an_error() {
+        let repo = TempRepo::new("gone");
+        repo.commit("widget.py", "def widget():\n    return 1\n");
+        repo.git(&["checkout", "-q", "-b", "trunk"]);
+        repo.git(&["checkout", "-q", "-b", "feature"]);
+        repo.commit("widget.py", "def widget():\n    return 2\n");
+        std::fs::remove_file(repo.0.join("widget.py")).unwrap();
+
+        let Err(err) = stale_sources(&repo.0, "trunk", Language::Python, &BTreeSet::new()) else {
+            panic!("expected the missing worktree file to error");
+        };
+        assert!(
+            format!("{err:#}").contains("reading changed source `widget.py`"),
+            "got: {err:#}"
+        );
+    }
 }

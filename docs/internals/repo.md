@@ -171,7 +171,8 @@ rendering is exercised in isolation, not only through a full action run.
 
 A `.github/workflows/` file states its constraints in prose the reader resolves on the spot. That
 holds for comments and equally for the `name:` and `description:` strings GitHub renders — in every
-consumer's checks UI, and as the reusable workflow's own input documentation.
+consumer's checks UI, and as the reusable workflow's own input documentation. The same bar covers
+the rest of `.github/`: the self-test fixture READMEs and generator docstrings.
 
 So the prose names the breakage it prevents — the `uses:`-cannot-be-dynamic split, the quoted
 `fetch-depth` falsy-zero trap, cargo-before-uv ordering, the trailing-token subcommand-drift guard —

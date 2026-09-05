@@ -75,6 +75,11 @@ def test_a_removal_only_mutation_omits_the_replacement():
     assert "replacement" not in normalize(_mutation(), _result("survived", removal))
 
 
+def test_an_unindented_added_line_keeps_its_first_character():
+    diff = "@@ -1,2 +1,2 @@\n-x = 1\n+y = 2\n"
+    assert normalize(_mutation(), _result("survived", diff))["replacement"] == "y = 2"
+
+
 def test_a_multi_line_mutation_names_every_added_line():
     multi = "@@ -1,3 +1,4 @@\n-    return a + b\n+    if a:\n+        return b\n"
     mutant = normalize(_mutation(), _result("survived", multi))

@@ -23,9 +23,13 @@ def _config():
     return cfg
 
 
+DIFF = "--- a/calc.py\n+++ b/calc.py\n@@ -6,3 +6,3 @@\n-    return a + b\n+    return a >> b\n"
+
+
 def _survivor():
     mutation = SimpleNamespace(module_path="calc.py", start_pos=(6, 0), operator_name="Op")
-    return (SimpleNamespace(mutations=[mutation]), SimpleNamespace(test_outcome="survived"))
+    result = SimpleNamespace(test_outcome="survived", diff=DIFF)
+    return (SimpleNamespace(mutations=[mutation]), result)
 
 
 def _baseline(outcome, output=""):
@@ -42,7 +46,13 @@ def test_writes_the_normalized_results_to_out(cosmic_ray, tmp_path):
     mutation_cli(["--out", str(out)])
 
     assert json.loads(out.read_text()) == [
-        {"file": "calc.py", "line": 6, "status": "survived", "mutator": "Op"}
+        {
+            "file": "calc.py",
+            "line": 6,
+            "status": "survived",
+            "mutator": "Op",
+            "replacement": "return a >> b",
+        }
     ]
     # The clean suite is measured under the generous ceiling (300s), then each mutant's
     # timeout is scoped to the observed runtime — a near-instant fake run floors to 10s — rather

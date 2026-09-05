@@ -24,7 +24,7 @@ def test_running_the_module_invokes_the_cli_over_argv(cosmic_ray, tmp_path):
     cosmic_ray.find_modules.return_value = []
     mutation = SimpleNamespace(module_path="calc.py", start_pos=(2, 0), operator_name="Op")
     cosmic_ray.db.completed_work_items = [
-        (SimpleNamespace(mutations=[mutation]), SimpleNamespace(test_outcome="survived"))
+        (SimpleNamespace(mutations=[mutation]), SimpleNamespace(test_outcome="survived", diff=None))
     ]
 
     saved_argv = sys.argv

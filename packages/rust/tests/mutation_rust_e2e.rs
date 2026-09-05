@@ -215,6 +215,29 @@ fn survivors_fail_the_gate_by_default() {
 }
 
 #[test]
+fn a_failing_run_lists_each_survivor_with_one_location() {
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "rust"])
+        .arg(fixtures().join("rust").join("survivors"))
+        .output()
+        .expect("the built binary should run");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "the survivors fail the gate; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("src/lib.rs:"),
+        "each survivor line names its location; stderr: {stderr}"
+    );
+    assert!(
+        !stderr.contains(": src/lib.rs:"),
+        "a survivor line carries one location; stderr: {stderr}"
+    );
+}
+
+#[test]
 fn an_exempted_survivor_passes_the_gate() {
     assert_eq!(
         unit_mutation_exit("survivors", Some("mutation_exempt.toml")),

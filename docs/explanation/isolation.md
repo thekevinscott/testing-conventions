@@ -96,7 +96,12 @@ The integration suite's side: first-party code runs for real.
 - **Python** — `no-first-party-patch`: a `patch(...)`, `patch.object(...)`, or `patch.dict(...)`
   whose target is the dist's own package. A string target is read directly; an object target is
   resolved through the file's imports — after `from myproject import ledger`,
-  `patch.object(ledger, "record")` names `myproject.ledger.record`. Patching `requests.post` or
+  `patch.object(ledger, "record")` names `myproject.ledger.record`. An attribute reached
+  *through* a first-party module is classified by what it names, read from that module's own
+  top-level source: with `async_mod.py` holding `import asyncio`,
+  `patch.object(async_mod.asyncio, "to_thread")` patches the stdlib `asyncio` module and passes;
+  with it holding `from . import helper`, `patch.object(async_mod.helper, "run")` patches
+  first-party `myproject.helper` and is flagged. Patching `requests.post` or
   `subprocess.run` is fine; patching `ourpkg.ledger.record` is the violation. Four hygiene lints
   ride along, keeping the *mechanism* of mocking disciplined: `no-monkeypatch` (use
   `unittest.mock` in a fixture, so patches are declared, not sprinkled), `no-inline-patch` (a
@@ -111,7 +116,10 @@ The integration suite's side: first-party code runs for real.
 A target that resists static reading is left alone — the checks are deterministic first.
 `vi.mock(name)` and `patch(target)` hold the target in a variable, and a `patch.object` /
 `patch.dict` base bound by no import (`patch.object(get_mod(), "x")`, a local variable, a fixture
-argument) resolves to no module, so neither is classified.
+argument) resolves to no module, so neither is classified. The same holds one level deeper: a
+module attribute whose module's top-level source leaves it unnamed — a dynamic assignment, a
+conflicting binding, a source file the scan cannot find — resolves to no target and is left
+alone.
 
 ## When a lint fires on a real design constraint
 

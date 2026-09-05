@@ -127,6 +127,11 @@ fn first_party_patch_red_object_exits_nonzero() {
 }
 
 #[test]
+fn first_party_patch_clean_module_attr_exits_zero() {
+    assert_eq!(lint_exit("no_first_party_patch/clean_module_attr"), 0);
+}
+
+#[test]
 fn constant_patch_red_object_exits_nonzero() {
     assert_eq!(lint_exit("constant_patch/red_object"), 1);
 }

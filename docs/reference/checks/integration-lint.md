@@ -37,7 +37,10 @@ tier is flagged as `unknown-tier`; a tree with no manifest — loose scripts —
 A mock target that resists static reading is left alone — the check is deterministic first.
 `vi.mock(name)` and `patch(target)` hold the target in a variable, and a `patch.object` /
 `patch.dict` base bound by no import (`patch.object(get_mod(), "x")`, a local variable, a fixture
-argument) resolves to no module, so neither is classified.
+argument) resolves to no module, so neither is classified. The same holds one level deeper: a
+module attribute whose module's top-level source leaves it unnamed — a dynamic assignment, a
+conflicting binding, a source file the scan cannot find — resolves to no target and is left
+alone.
 
 ## When it runs
 

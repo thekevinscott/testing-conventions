@@ -1241,6 +1241,60 @@ mod tests {
         assert_eq!(patch_target(&empty, &imports), None);
     }
 
+    /// A tree holding `pyproject.toml` (`name = "myproject"`) plus one integration test
+    /// whose fixture patches `patch.object(<base>, "<attr>")`.
+    fn object_patch_tree(base: &str, attr: &str) -> TempDir {
+        let tree = TempDir::new();
+        tree.write(
+            "pyproject.toml",
+            "[project]\nname = \"myproject\"\nversion = \"0.0.0\"\n",
+        );
+        tree.write(
+            "tests/integration/spy_test.py",
+            &format!(
+                "from unittest.mock import patch\n\
+                 import pytest\n\
+                 from myproject import async_mod\n\
+                 @pytest.fixture\n\
+                 def spy():\n\
+                 \x20   with patch.object({base}, \"{attr}\") as s:\n\
+                 \x20       yield s\n"
+            ),
+        );
+        tree
+    }
+
+    fn first_party_patch_count(tree: &TempDir) -> usize {
+        find_violations(&tree.0)
+            .expect("walking a readable tree should succeed")
+            .iter()
+            .filter(|v| v.rule == "no-first-party-patch")
+            .count()
+    }
+
+    #[test]
+    fn object_form_stdlib_reached_through_first_party_is_not_flagged() {
+        let tree = object_patch_tree("async_mod.asyncio", "to_thread");
+        tree.write("myproject/async_mod.py", "import asyncio\n");
+        assert_eq!(first_party_patch_count(&tree), 0);
+    }
+
+    #[test]
+    fn object_form_unnamed_module_attribute_declines_to_fire() {
+        let missing_source = object_patch_tree("async_mod.transport", "send");
+        assert_eq!(first_party_patch_count(&missing_source), 0);
+        let dynamic = object_patch_tree("async_mod.transport", "send");
+        dynamic.write("myproject/async_mod.py", "transport = build()\n");
+        assert_eq!(first_party_patch_count(&dynamic), 0);
+    }
+
+    #[test]
+    fn object_form_first_party_module_attribute_still_fires() {
+        let tree = object_patch_tree("async_mod.helper", "run");
+        tree.write("myproject/async_mod.py", "from . import helper\n");
+        assert_eq!(first_party_patch_count(&tree), 1);
+    }
+
     /// The imports a [`LintVisitor`] records for `src`.
     fn collect_imports(src: &str) -> HashMap<String, String> {
         let suite = ast::Suite::parse(src, "t.py").expect("snippet should parse");

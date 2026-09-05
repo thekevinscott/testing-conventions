@@ -130,3 +130,15 @@ fn a_mutation_exemption_drops_the_survivors() {
         "the exemption should drop every survivor; got {survivors:?}"
     );
 }
+
+#[test]
+fn an_adapter_failure_surfaces_its_output() {
+    let dir = std::env::temp_dir().join(format!("tc-mut-py-fail-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let err = measure_python(&dir, &[], &std::collections::BTreeMap::new(), None).unwrap_err();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        format!("{err:#}").contains("the Python mutation adapter failed"),
+        "got: {err:#}"
+    );
+}

@@ -116,3 +116,46 @@ fn a_mutation_exemption_drops_the_survivors() {
         "the exemption should drop every survivor; got {survivors:?}"
     );
 }
+
+#[test]
+fn a_scan_path_outside_any_workspace_is_an_error() {
+    let dir = std::env::temp_dir().join(format!("tc-mut-rust-nows-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let err = measure_rust(&dir, &[], &std::collections::BTreeMap::new(), None, &[]).unwrap_err();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        format!("{err:#}").contains("cargo locate-project failed"),
+        "got: {err:#}"
+    );
+}
+
+#[test]
+fn a_bad_base_ref_is_an_error() {
+    let dir = std::env::temp_dir().join(format!("tc-mut-rust-badref-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("Cargo.toml"),
+        "[package]\nname = \"probe\"\nversion = \"0.0.1\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/lib.rs"), "pub fn probe() {}\n").unwrap();
+    let init = std::process::Command::new("git")
+        .current_dir(&dir)
+        .args(["init", "-q"])
+        .status()
+        .unwrap();
+    assert!(init.success());
+    let err = measure_rust(
+        &dir,
+        &[],
+        &std::collections::BTreeMap::new(),
+        Some("tc-no-such-ref"),
+        &[],
+    )
+    .unwrap_err();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        format!("{err:#}").contains("git diff tc-no-such-ref...HEAD failed"),
+        "got: {err:#}"
+    );
+}

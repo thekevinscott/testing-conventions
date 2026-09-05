@@ -49,7 +49,7 @@ engine's mutator and the source that mutator produced:
 | --- | --- |
 | TypeScript | `index.ts:6: EqualityOperator (-> n >= 0)` |
 | Python | `calc.py:6: core/ReplaceComparisonOperator_Gt_GtE (-> return n >= 0)` |
-| Rust | `src/lib.rs:7: src/lib.rs:7:7: replace > with == in is_positive` |
+| Rust | `src/lib.rs:7: replace > with == in is_positive` |
 
 Stryker and cosmic-ray name their mutator and then the source it replaced; cargo-mutants states
 both in one description of its own. A mutant whose engine reports no replacement is listed by its

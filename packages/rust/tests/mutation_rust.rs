@@ -61,6 +61,28 @@ fn survivors_are_reported() {
 }
 
 #[test]
+fn survivor_descriptions_carry_no_location_prefix() {
+    let (_, survivors) = expect_tested(
+        measure_rust(
+            &crate_dir("survivors"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &[],
+        )
+        .expect("cargo-mutants runs"),
+    );
+    assert!(
+        !survivors.is_empty(),
+        "the assertion-light suite should leave survivors"
+    );
+    assert!(
+        survivors.iter().all(|m| !m.description.contains(&m.file)),
+        "a survivor's description carries no embedded location; got {survivors:?}"
+    );
+}
+
+#[test]
 fn a_mutation_exemption_drops_the_survivors() {
     let exempt = vec!["src/lib.rs".to_string()];
     let (_, survivors) = expect_tested(

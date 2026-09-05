@@ -1,20 +1,6 @@
-"""Generate the packaging-package-root self-test tarball fixtures (#280).
-
-Two minimal `npm pack`-shaped tarballs (a gzipped tar with a top-level `package/` dir), proving
-the packaging gate discovers a built distribution at the *derived package root* rather than only
-the checkout root:
-
-  clean/dist/packaging-package-root-fixture-0.0.0.tgz — no test file; ships alongside the
-      fixture's own `package.json`, so a per-package `uses:` call scoped to `clean/` finds and
-      passes it with no input beyond `source` (`packaging-package-root-clean` in
-      testing-conventions-selftest.yml).
-  red/dist/packaging-package-root-fixture-0.0.0.tgz — ships `package/dist/widget.test.js`, so
-      the published `packaging` command fails on it directly (a `uses:` call that fails would
-      fail the whole self-test run — see `packaging-red` for the same convention). Kept at a
-      `dist/` path too, mirroring the clean fixture and the shape a real per-package build
-      produces.
-
-Regenerate:  python make_fixtures.py
+"""Generate the packaging-package-root self-test tarball fixtures: two `npm pack`-shaped
+tarballs (gzipped tar, top-level `package/` dir); clean/ ships no test file, red/ ships
+`package/dist/widget.test.js`. Regenerate:  python make_fixtures.py
 """
 
 import gzip

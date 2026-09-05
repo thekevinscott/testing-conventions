@@ -21,7 +21,7 @@ one page per check, with its per-language behavior, run conditions, and configur
 
 **Integration**
 
-- [`integration lint`](https://thekevinscott.github.io/testing-conventions/explanation/isolation) — integration tests run first-party code for real: no first-party mock, double, or patch (Python, TypeScript, Rust); plus Python mock-mechanism hygiene (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`).
+- [`integration lint`](https://thekevinscott.github.io/testing-conventions/explanation/isolation) — integration tests run first-party code for real: no first-party mock, double, or patch (Python, TypeScript, Rust); plus Python mock-mechanism hygiene (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`) and the suite layout itself, where a test file under `tests/` outside a standard tier is flagged (`unknown-tier`; Python, TypeScript).
 
 **Packaging**
 
@@ -111,7 +111,7 @@ vi.mock('./service', async () => {
 });
 ```
 
-**Checked:** deterministic. Python/TS flag any un-mocked first-party/external import. Rust flags any call out of the test's own module (cross-module, external crate, or effectful `std`); [`dylint`](https://github.com/trailofbits/dylint) gives full name-resolution precision.
+**Checked:** deterministic. Python/TS flag any un-mocked first-party/external import. Rust flags any call or import out of the test's own module (cross-module, external crate, or effectful `std`); [`dylint`](https://github.com/trailofbits/dylint) gives full name-resolution precision.
 
 #### Co-change
 
@@ -172,15 +172,17 @@ tests at the SDK. Keep the CLI a thin wrapper.
 
 #### Mocking mechanism (Python only)
 
-**Rule:** Python integration tests get three additional mechanism-hygiene lints:
+**Rule:** Python integration tests get four additional mechanism-hygiene lints:
 
 - `no-monkeypatch`: patch with `unittest.mock` in a `pytest.fixture` rather than pytest's `monkeypatch`.
 - `no-inline-patch`: a `patch(...)` belongs in a fixture, not a test body.
 - `no-environ-mutation`: set env with `patch.dict(os.environ, {...})`, never mutate `os.environ` in place.
+- `no-constant-patch`: inject configuration rather than patching a module-global constant, in either patch form.
 
 **Why Python only:** each mechanism these target is a pytest/Python idiom with no
 TypeScript or Rust analog. `monkeypatch` is a pytest fixture, fixture-vs-inline
-patching is pytest's model, and in-place `os.environ` mutation is Python-specific.
+patching is pytest's model, in-place `os.environ` mutation is Python-specific, and
+rebinding a module-global constant is a `unittest.mock` idiom neither language has.
 TypeScript's "don't hand-roll an untyped mock" concern is already the `untyped-mock`
 unit rule, and Rust injects trait doubles the compiler checks. So TypeScript and Rust
 have no mechanism-hygiene integration lints: their `integration lint` is the

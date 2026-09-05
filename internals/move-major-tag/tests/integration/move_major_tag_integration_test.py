@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-import move_major_tag as m
+import advance as m
 
 
 @pytest.fixture

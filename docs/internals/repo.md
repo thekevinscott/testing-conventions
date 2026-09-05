@@ -755,3 +755,18 @@ closest committed proxy for "did the intended dependency set change." This also 
 answers the issue's other question — whether `--no-frozen-lockfile` is deliberate: it has to be,
 since `--frozen-lockfile` requires a lockfile to freeze against, and none is ever committed.
 Left untouched, now with a real reason on record rather than an absence of one.
+
+## Docs CI: ref-scoped concurrency (#599)
+
+`docs.yml` uses the standard PR-concurrency block (AGENTS.md, "PR workflow concurrency") in its
+`push: [main]` variant: `group: ${{ github.workflow }}-${{ github.ref }}` with
+`cancel-in-progress: ${{ github.event_name == 'pull_request' }}`. Each PR's build runs in its own
+group, cancelled only by a newer push to the same PR; every main push shares the
+`Docs-refs/heads/main` group with cancellation off, so main runs queue one at a time.
+
+That per-ref main queue is the whole serialization the Pages deploy needs. `deploy` runs only on
+`push` to main, and only this workflow deploys the site, so serializing main runs serializes
+deploys — a job-level `pages` group would re-couple nothing new and is omitted. The previous shape,
+one workflow-level `group: pages` shared by every PR and main, put all pending runs in a single
+queue where a newer pending run cancels the older one; a cancelled PR build then reads as a
+non-passing run to pr-monitor's CI Gate, failing PRs on repo-wide docs traffic they never touched.

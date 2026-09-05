@@ -18,8 +18,10 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Scope cancellation to PR pushes so the `push: [main]` run — the one that deploys Pages —
+  # is never cancelled out from under itself.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:

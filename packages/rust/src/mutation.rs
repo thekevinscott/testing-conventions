@@ -2188,6 +2188,36 @@ diff --git a/src/lib.rs b/src/lib.rs
 
     #[cfg(unix)]
     #[test]
+    fn zero_mutant_verdict_names_each_dropped_site_once() {
+        let listed = [
+            listed_mutant(
+                "src/lib.rs",
+                7,
+                7,
+                "src/lib.rs:7:7: replace > with == in is_positive",
+            ),
+            listed_mutant("src/lib.rs", 7, 7, "replace add -> 0"),
+        ];
+        let run = fake_stdout(0, "0 mutants tested");
+        let message = zero_mutant_verdict(&listed, &diff_with_inserted("src/lib.rs", &[7]), &run)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            message.contains("  src/lib.rs:7: replace > with == in is_positive"),
+            "the name's embedded `file:line:col:` prefix is stripped; got: {message}"
+        );
+        assert!(
+            !message.contains(": src/lib.rs:7:7:"),
+            "a dropped site carries one location; got: {message}"
+        );
+        assert!(
+            message.contains("  src/lib.rs:7: replace add -> 0"),
+            "a name with no embedded location keeps its rendered location; got: {message}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn classify_mutants_exit_accepts_the_caught_and_survivor_exits() {
         classify_mutants_exit(Path::new("/crate"), &fake_output(0, "")).unwrap();
         classify_mutants_exit(Path::new("/crate"), &fake_output(2, "")).unwrap();

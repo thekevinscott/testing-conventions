@@ -75,9 +75,10 @@ The Rust arm holds the zero-mutant outcome to proof. cargo-mutants applies the c
 filter itself, so when it reports no mutants the tool lists the crate's mutants
 (`cargo mutants --list`) and checks that none sits on a changed line of the diff it fed the
 engine; a filter that matched nothing while mutants exist on those lines is a hard error naming
-both counts, never a pass. The cross-check is Rust-only by construction: the TypeScript and
-Python arms compute the changed-line scope tool-side and hand their engines explicit ranges, so
-there is no engine-side filter to verify.
+both counts, never a pass. The error lists each dropped mutant in the survivor line's shape —
+`src/lib.rs:7: replace > with == in is_positive` — one location per site. The cross-check is
+Rust-only by construction: the TypeScript and Python arms compute the changed-line scope
+tool-side and hand their engines explicit ranges, so there is no engine-side filter to verify.
 
 ## When it runs
 

@@ -1285,6 +1285,14 @@ mod tests {
     }
 
     #[test]
+    fn python_measured_missed_skips_an_arc_with_a_negative_source() {
+        let partial = cov(&[1], &[], &[], &[[-1, 1]]);
+        let (measured, missed) = python_measured_missed(&partial, true);
+        assert_eq!(measured, [1].into_iter().collect());
+        assert!(missed.is_empty(), "got: {missed:?}");
+    }
+
+    #[test]
     fn ts_measured_missed_anchors_units_on_their_lines() {
         let cov = coverage::TsPatchCoverage {
             statements: vec![(1, 1, true), (3, 4, false)],

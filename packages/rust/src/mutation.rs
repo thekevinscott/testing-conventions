@@ -379,10 +379,7 @@ pub fn measure_rust(
             match write_base_diff(root, &workspace_root, prefix.as_deref(), base, &out)? {
                 None => return Ok(Measurement::EngineNotRun),
                 Some(path) => {
-                    let parsed =
-                        parse_base_diff(&std::fs::read_to_string(&path).with_context(|| {
-                            format!("reading the written base diff `{}`", path.display())
-                        })?);
+                    let parsed = parse_base_diff(&read_base_diff(&path)?);
                     if !parsed.files.iter().any(|file| file.ends_with(".rs")) {
                         return Ok(Measurement::EngineNotRun);
                     }
@@ -604,9 +601,14 @@ fn run_ts_adapter(
             String::from_utf8_lossy(&output.stderr),
         );
     }
-    std::fs::read_to_string(&results).with_context(|| {
+    read_adapter_results(&results, "TypeScript")
+}
+
+/// The adapter's written results JSON, read back after a successful run.
+fn read_adapter_results(results: &Path, engine: &str) -> Result<String> {
+    std::fs::read_to_string(results).with_context(|| {
         format!(
-            "reading the TypeScript mutation adapter's results from `{}`",
+            "reading the {engine} mutation adapter's results from `{}`",
             results.display()
         )
     })
@@ -749,12 +751,7 @@ fn run_py_adapter(root: &Path, modules: &[String]) -> Result<String> {
             String::from_utf8_lossy(&output.stderr),
         );
     }
-    std::fs::read_to_string(&results).with_context(|| {
-        format!(
-            "reading the Python mutation adapter's results from `{}`",
-            results.display()
-        )
-    })
+    read_adapter_results(&results, "Python")
 }
 
 /// Whether a changed file is a mutatable Python *source* — a `.py` that is not a test
@@ -806,6 +803,11 @@ fn cargo_workspace_root(root: &Path) -> Result<PathBuf> {
         );
     }
     let manifest = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+    manifest_dir(&manifest)
+}
+
+/// The directory holding the workspace manifest `cargo locate-project` reported.
+fn manifest_dir(manifest: &Path) -> Result<PathBuf> {
     manifest.parent().map(Path::to_path_buf).with_context(|| {
         format!(
             "no parent dir for the workspace manifest `{}`",
@@ -859,6 +861,12 @@ fn write_base_diff(
     let path = out.0.join("base.diff");
     std::fs::write(&path, &output.stdout).context("writing the base diff")?;
     Ok(Some(path))
+}
+
+/// The written base diff, read back for parsing.
+fn read_base_diff(path: &Path) -> Result<String> {
+    std::fs::read_to_string(path)
+        .with_context(|| format!("reading the written base diff `{}`", path.display()))
 }
 
 /// The tool's own reading of a base diff: the changed files (new-side paths, `b/` stripped)
@@ -961,22 +969,18 @@ const CARGO_MUTANTS_VERSION: &str = "27.1.0";
 /// TS/Python adapters — a pinned `cargo install` runs into the tool's own cache directory.
 fn ensure_cargo_mutants() -> Result<PathBuf> {
     let root = cargo_mutants_cache_root();
-    let bin = root.join("bin").join(cargo_mutants_bin_name());
+    let bin = root.join("bin").join(CARGO_MUTANTS_BIN_NAME);
     let lock_path = root.join(".install.lock");
-    provision(&bin, &lock_path, || {
-        run_install(&root, |command| command.output())
-    })
+    provision(&bin, &lock_path, || run_install(&root, |command| command.output()))
 }
 
 /// The cargo-mutants binary's file name (`.exe` on Windows), as `cargo install --root`
 /// lays it out under `<root>/bin/`.
-fn cargo_mutants_bin_name() -> &'static str {
-    if cfg!(windows) {
-        "cargo-mutants.exe"
-    } else {
-        "cargo-mutants"
-    }
-}
+const CARGO_MUTANTS_BIN_NAME: &str = if cfg!(windows) {
+    "cargo-mutants.exe"
+} else {
+    "cargo-mutants"
+};
 
 /// The tool-owned, version-scoped cache directory cargo-mutants is installed under, so a
 /// version bump provisions cleanly beside the old one and never clobbers a user's own
@@ -1424,6 +1428,98 @@ mod tests {
         assert_eq!(unexplained_survivors(&report, &exempt).len(), 1);
     }
 
+    const BASELINE_ONLY: &str = r#"{
+        "outcomes": [
+            {"scenario": "Baseline", "summary": "MissedMutant", "phase_results": []},
+            {"scenario": "Baseline", "summary": "CaughtMutant", "phase_results": []}
+        ],
+        "total_mutants": 0
+    }"#;
+
+    #[test]
+    fn a_baseline_outcome_is_never_a_survivor() {
+        let report = parse_mutants_report(BASELINE_ONLY).unwrap();
+        assert!(unexplained_survivors(&report, &[]).is_empty());
+    }
+
+    #[test]
+    fn a_baseline_outcome_is_never_a_mutated_line() {
+        let report = parse_mutants_report(BASELINE_ONLY).unwrap();
+        assert!(mutated_lines(&report).is_empty());
+    }
+
+    #[test]
+    fn parse_base_diff_skips_a_malformed_hunk_header() {
+        let diff = "\
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ junk @@
+";
+        let parsed = parse_base_diff(diff);
+        assert_eq!(parsed.files, vec!["src/lib.rs"]);
+        assert!(parsed.inserted.is_empty());
+    }
+
+    #[test]
+    fn a_missing_base_diff_read_reports_its_path() {
+        let missing = unique_tmp().join("base.diff");
+        let err = read_base_diff(&missing).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("reading the written base diff"), "{msg}");
+    }
+
+    #[test]
+    fn a_missing_adapter_results_read_names_the_engine_and_path() {
+        let missing = unique_tmp().join("results.json");
+        let err = read_adapter_results(&missing, "TypeScript").unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("TypeScript mutation adapter's results"), "{msg}");
+    }
+
+    #[test]
+    fn manifest_dir_is_the_manifest_parent() {
+        let dir = manifest_dir(Path::new("/w/Cargo.toml")).unwrap();
+        assert_eq!(dir, Path::new("/w"));
+    }
+
+    #[test]
+    fn a_rootless_manifest_path_is_an_error() {
+        let err = manifest_dir(Path::new("/")).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("no parent dir"), "{msg}");
+    }
+
+    #[test]
+    fn a_directory_outside_any_workspace_fails_locate_project() {
+        let dir = unique_tmp();
+        let err = cargo_workspace_root(&dir).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("cargo locate-project failed"), "{msg}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_bad_base_ref_fails_the_base_diff() {
+        let dir = unique_tmp();
+        let init = Command::new("git").current_dir(&dir).args(["init", "-q"]).output().unwrap();
+        assert!(init.status.success());
+        let out = MutantsOut::new();
+        let err = write_base_diff(&dir, &dir, None, "tc-no-such-ref", &out).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("git diff"), "{msg}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_python_adapter_failure_reports_the_adapter_output() {
+        let dir = unique_tmp();
+        let err = run_py_adapter(&dir, &[]).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("the Python mutation adapter failed"), "{msg}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn rebase_report_paths_strips_the_workspace_prefix() {
         let report = parse_mutants_report(SAMPLE).unwrap();
@@ -1701,15 +1797,17 @@ mod tests {
         let lock = tmp.join(".install.lock");
         std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
         std::fs::write(&bin, b"binary").unwrap();
-        let mut installed = false;
-        let got = provision(&bin, &lock, || {
-            installed = true;
-            Ok(())
-        })
-        .unwrap();
+        let got = provision(&bin, &lock, || panic!("must not reinstall")).unwrap();
         assert_eq!(got, bin);
-        assert!(!installed, "a present binary must not be reinstalled");
         std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn provision_with_a_rootless_lock_path_fails_to_open_the_lock() {
+        let bin = unique_tmp().join("bin").join("cargo-mutants");
+        let err = provision(&bin, Path::new("/"), || Ok(())).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("opening the provisioning lock"), "{msg}");
     }
 
     #[test]
@@ -2246,11 +2344,9 @@ diff --git a/src/lib.rs b/src/lib.rs
 
     #[test]
     fn cargo_mutants_bin_name_matches_the_platform() {
-        let name = cargo_mutants_bin_name();
-        if cfg!(windows) {
-            assert_eq!(name, "cargo-mutants.exe");
-        } else {
-            assert_eq!(name, "cargo-mutants");
-        }
+        #[cfg(windows)]
+        assert_eq!(CARGO_MUTANTS_BIN_NAME, "cargo-mutants.exe");
+        #[cfg(not(windows))]
+        assert_eq!(CARGO_MUTANTS_BIN_NAME, "cargo-mutants");
     }
 }

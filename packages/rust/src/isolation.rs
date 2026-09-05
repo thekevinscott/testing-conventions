@@ -798,10 +798,10 @@ mod tests {
 ";
         let violations = violations_in(src, &[]);
         assert_eq!(violations.len(), 1, "got {violations:?}");
+        let m = &violations[0].message;
         assert!(
-            violations[0].message.contains("crate::other::Thing"),
-            "the message names the source path, not the alias: {}",
-            violations[0].message
+            m.contains("crate::other::Thing"),
+            "the message names the source path, not the alias: {m}"
         );
     }
 
@@ -816,18 +816,9 @@ mod tests {
 ";
         let violations = violations_in(src, &[]);
         assert_eq!(violations.len(), 2, "got {violations:?}");
-        assert!(
-            violations[0].message.contains("crate::other::Named"),
-            "{}",
-            violations[0].message
-        );
-        assert!(
-            violations[1]
-                .message
-                .contains("crate::other::deeper::Other"),
-            "{}",
-            violations[1].message
-        );
+        let (first, second) = (&violations[0].message, &violations[1].message);
+        assert!(first.contains("crate::other::Named"), "{first}");
+        assert!(second.contains("crate::other::deeper::Other"), "{second}");
     }
 
     #[test]
@@ -859,11 +850,8 @@ mod tests {
 ";
         let violations = violations_in(src, &[]);
         assert_eq!(violations.len(), 1, "got {violations:?}");
-        assert!(
-            violations[0].message.contains("`::std::fs::read`"),
-            "{}",
-            violations[0].message
-        );
+        let m = &violations[0].message;
+        assert!(m.contains("`::std::fs::read`"), "{m}");
     }
 
     #[test]

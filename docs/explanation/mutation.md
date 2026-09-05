@@ -122,9 +122,9 @@ runner that runs your own suite:
 | Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray), driven via its library API by an adapter bundled in the wheel, with a baseline check that requires the clean suite to pass; each mutant's run ends at its first failing test | `pytest` |
 | Rust | [cargo-mutants](https://github.com/sourcefrog/cargo-mutants), provisioned on first use (a pinned `cargo install` into the tool's own cache) and run from there; concurrent invocations share one provisioning install rather than each racing to install their own | the cargo toolchain that builds and tests your crate |
 
-A run lists each survivor with its file, line, and mutation, and fails on any un-exempted one.
-Survivor paths are reported relative to the scanned path, so exemptions address the same paths
-every other check uses.
+A run lists each survivor with its file, line, and mutation — the engine's mutator and the source
+that mutator produced — and fails on any un-exempted one. Survivor paths are reported relative to
+the scanned path, so exemptions address the same paths every other check uses.
 
 Each engine runs where its ecosystem expects: cargo-mutants at the crate root, cosmic-ray at the
 scanned path, and Stryker at the **package root** — the nearest directory at or above the scanned

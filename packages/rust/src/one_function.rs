@@ -519,15 +519,19 @@ mod tests {
         assert!(err.to_string().contains("parsing"), "got: {err}");
     }
 
-    #[test]
-    fn suite_tier_files_are_not_judged() {
+    fn unique_tmp(slug: &str) -> PathBuf {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let root = std::env::temp_dir().join(format!(
-            "tc-one-function-{}-{}",
+        std::env::temp_dir().join(format!(
+            "tc-one-function-{slug}-{}-{}",
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed)
-        ));
+        ))
+    }
+
+    #[test]
+    fn suite_tier_files_are_not_judged() {
+        let root = unique_tmp("suite");
         std::fs::create_dir_all(root.join("tests")).unwrap();
         std::fs::write(root.join("pyproject.toml"), "[project]\nname = \"w\"\n").unwrap();
         let two_functions = "def alpha():\n    return 1\n\ndef beta():\n    return 2\n";
@@ -536,6 +540,65 @@ mod tests {
         let found = find_violations(&root, Language::Python, 0).expect("the tree scans");
         assert_eq!(found.len(), 1, "got: {found:?}");
         assert!(found[0].file.ends_with("widget.py"), "got: {found:?}");
+    }
+
+    #[test]
+    fn a_typescript_suite_tier_is_not_judged() {
+        let root = unique_tmp("ts-suite");
+        std::fs::create_dir_all(root.join("tests")).unwrap();
+        std::fs::write(root.join("package.json"), "{ \"name\": \"w\" }\n").unwrap();
+        let two = "const alpha = () => {\n  return 1;\n};\nconst beta = () => {\n  return 2;\n};\n";
+        std::fs::write(root.join("widget.ts"), two).unwrap();
+        std::fs::write(root.join("tests").join("helper.ts"), two).unwrap();
+        let found = find_violations(&root, Language::TypeScript, 0).expect("the tree scans");
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(found[0].file.ends_with("widget.ts"), "got: {found:?}");
+    }
+
+    #[test]
+    fn a_rust_root_collects_only_rust_sources() {
+        let root = unique_tmp("rust-root");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("widget.rs"), "pub fn one() -> u8 {\n    1\n}\n").unwrap();
+        let found = find_violations(&root, Language::Rust, 0).expect("the tree scans");
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    #[test]
+    fn an_unreadable_source_names_the_file() {
+        let root = unique_tmp("unreadable");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("widget.rs"), [0xFF, 0xFE]).unwrap();
+        let err = find_violations(&root, Language::Rust, 0).unwrap_err();
+        assert!(err.to_string().contains("reading source file"), "got: {err}");
+    }
+
+    #[test]
+    fn an_unparsable_python_source_names_the_file() {
+        let err = python_functions("def broken(:\n", Path::new("widget.py")).unwrap_err();
+        assert!(err.to_string().contains("parsing"), "got: {err}");
+    }
+
+    #[test]
+    fn an_extension_without_a_source_type_is_an_error() {
+        let err = typescript_functions("", Path::new("widget.txt")).unwrap_err();
+        assert!(
+            err.to_string().contains("reading the source type"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn an_unnamed_default_export_is_reported_as_default() {
+        let found =
+            typescript("export default function (value: number): number {\n  return value;\n}\n");
+        assert_eq!(found, vec![("default".to_string(), 1)]);
+    }
+
+    #[test]
+    fn an_unparsable_rust_source_names_the_file() {
+        let err = rust_functions("fn broken( {\n", Path::new("widget.rs")).unwrap_err();
+        assert!(err.to_string().contains("parsing"), "got: {err}");
     }
 
     #[test]

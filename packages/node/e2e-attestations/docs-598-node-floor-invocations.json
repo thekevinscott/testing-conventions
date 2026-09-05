@@ -1,0 +1,7 @@
+{
+  "command": "echo 'no-op: under packages/node this branch changes one markdown migration fragment, adding the node engine floor beside a documented command. The package publishes dist/ only, so no e2e contract of the npm launcher moved.'",
+  "ran_at": 1788608965,
+  "exit_code": 0,
+  "commit": "6fd45a88a8846838c5b0b508bfb401ba4cf0c427",
+  "branch": "docs/598-node-floor-invocations"
+}

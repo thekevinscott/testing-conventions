@@ -933,15 +933,71 @@ mod tests {
 
     #[test]
     fn a_package_without_a_tests_dir_has_no_suite_violations() {
+        let dir = unique_tmp("suite-test");
+        let found = find_suite_violations(&dir).expect("an empty package scans clean");
+        assert!(found.is_empty(), "got: {found:?}");
+    }
+
+    fn unique_tmp(slug: &str) -> PathBuf {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let dir = std::env::temp_dir().join(format!(
-            "tc-ts-suite-test-{}-{}",
+            "tc-ts-{slug}-{}-{}",
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed)
         ));
         std::fs::create_dir_all(&dir).unwrap();
-        let found = find_suite_violations(&dir).expect("an empty package scans clean");
-        assert!(found.is_empty(), "got: {found:?}");
+        dir
+    }
+
+    #[test]
+    fn suite_violations_cover_tiers_and_sort_stray_files() {
+        let dir = unique_tmp("suite-busy");
+        std::fs::create_dir_all(dir.join("tests/integration")).unwrap();
+        std::fs::write(
+            dir.join("tests/integration/flow.test.ts"),
+            "import { x } from './x';\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("tests/stray_b.test.ts"), "").unwrap();
+        std::fs::write(dir.join("tests/stray_a.test.ts"), "").unwrap();
+        let found = find_suite_violations(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(found.len(), 2, "got: {found:?}");
+        assert!(found.iter().all(|v| v.rule == "unknown-tier"));
+        assert!(found[0].file < found[1].file);
+    }
+
+    #[test]
+    fn an_unreadable_integration_test_file_names_the_file() {
+        let dir = unique_tmp("nonutf8-int");
+        std::fs::write(dir.join("flow.test.ts"), [0xFF, 0xFE]).unwrap();
+        let err = find_integration_violations(&dir).unwrap_err();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            format!("{err:#}").contains("reading test file"),
+            "got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn an_unreadable_unit_test_file_names_the_file() {
+        let dir = unique_tmp("nonutf8-unit");
+        std::fs::write(dir.join("widget.test.ts"), [0xFF, 0xFE]).unwrap();
+        let err = find_unit_violations(&dir).unwrap_err();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            format!("{err:#}").contains("reading test file"),
+            "got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn a_missing_root_is_an_error() {
+        let err = find_integration_violations(Path::new("/nonexistent-tc-ts")).unwrap_err();
+        assert!(
+            format!("{err:#}").contains("reading directory"),
+            "got: {err:#}"
+        );
     }
 }

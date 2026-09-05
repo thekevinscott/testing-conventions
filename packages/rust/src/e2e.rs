@@ -188,17 +188,16 @@ pub fn verify_extra_scoped(
 
     // Question 2 — does the branch's diff add or update a receipt? The filter drops
     // deletions, so sweeping a stale receipt by hand never counts as a decision.
-    let out = git_capture(
-        repo,
-        &[
-            "diff",
-            "--name-only",
-            "--diff-filter=ACMRT",
-            &format!("{base}...HEAD"),
-            "--",
-            RECEIPTS_DIR,
-        ],
-    )?;
+    let range = format!("{base}...HEAD");
+    let receipt_diff = [
+        "diff",
+        "--name-only",
+        "--diff-filter=ACMRT",
+        &range,
+        "--",
+        RECEIPTS_DIR,
+    ];
+    let out = git_capture(repo, &receipt_diff)?;
     Ok(if out.is_empty() {
         Verification::Missing
     } else {

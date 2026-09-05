@@ -502,11 +502,9 @@ fn run_unit_coverage(
                 fail_under: coverage.fail_under,
                 branch: coverage.branch,
             };
-            let (omit, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
-                root,
-                &python.exempt,
-                config::Rule::Coverage,
-            )?);
+            let scopes =
+                config::resolve_exempt_scoped(root, &python.exempt, config::Rule::Coverage)?;
+            let (omit, exempt_lines) = split_scopes(scopes);
             match base {
                 Some(base) => {
                     patch_coverage::measure(root, base, thresholds, &omit, &exempt_lines)?
@@ -526,11 +524,9 @@ fn run_unit_coverage(
                 functions: coverage.functions,
                 statements: coverage.statements,
             };
-            let (exclude, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
-                root,
-                &typescript.exempt,
-                config::Rule::Coverage,
-            )?);
+            let scopes =
+                config::resolve_exempt_scoped(root, &typescript.exempt, config::Rule::Coverage)?;
+            let (exclude, exempt_lines) = split_scopes(scopes);
             match base {
                 Some(base) => patch_coverage::measure_typescript(
                     root,
@@ -559,11 +555,9 @@ fn run_unit_coverage(
                 functions: coverage.functions,
                 branch: coverage.branch,
             };
-            let (ignore, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
-                root,
-                &rust.exempt,
-                config::Rule::Coverage,
-            )?);
+            let scopes =
+                config::resolve_exempt_scoped(root, &rust.exempt, config::Rule::Coverage)?;
+            let (ignore, exempt_lines) = split_scopes(scopes);
             match base {
                 Some(base) => patch_coverage::measure_rust(
                     root,
@@ -612,20 +606,16 @@ fn run_unit_mutation(
     let measurement = match language {
         colocated_test::Language::Rust => {
             let rust = config.rust.unwrap_or_default();
-            let (exempt, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
-                root,
-                &rust.exempt,
-                config::Rule::Mutation,
-            )?);
+            let scopes =
+                config::resolve_exempt_scoped(root, &rust.exempt, config::Rule::Mutation)?;
+            let (exempt, exempt_lines) = split_scopes(scopes);
             mutation::measure_rust(root, &exempt, &exempt_lines, base, &rust.features)?
         }
         colocated_test::Language::TypeScript => {
             let typescript = config.typescript.unwrap_or_default();
-            let (exempt, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
-                root,
-                &typescript.exempt,
-                config::Rule::Mutation,
-            )?);
+            let scopes =
+                config::resolve_exempt_scoped(root, &typescript.exempt, config::Rule::Mutation)?;
+            let (exempt, exempt_lines) = split_scopes(scopes);
             let adapter = ts_adapter.ok_or_else(|| {
                 anyhow::anyhow!(
                     "the TypeScript mutation adapter path is required: pass \
@@ -637,11 +627,9 @@ fn run_unit_mutation(
         }
         colocated_test::Language::Python => {
             let python = config.python.unwrap_or_default();
-            let (exempt, exempt_lines) = split_scopes(config::resolve_exempt_scoped(
-                root,
-                &python.exempt,
-                config::Rule::Mutation,
-            )?);
+            let scopes =
+                config::resolve_exempt_scoped(root, &python.exempt, config::Rule::Mutation)?;
+            let (exempt, exempt_lines) = split_scopes(scopes);
             mutation::measure_python(root, &exempt, &exempt_lines, base)?
         }
     };
@@ -690,12 +678,12 @@ fn run_unit_one_function(
     } else {
         config::Config::default().one_function_threshold(language)
     };
+    let key = match language {
+        colocated_test::Language::Python => "python",
+        colocated_test::Language::TypeScript => "typescript",
+        colocated_test::Language::Rust => "rust",
+    };
     let Some(max_lines) = threshold else {
-        let key = match language {
-            colocated_test::Language::Python => "python",
-            colocated_test::Language::TypeScript => "typescript",
-            colocated_test::Language::Rust => "rust",
-        };
         println!(
             "unit one-function-per-file: not enabled for {key} — \
              set `[{key}].one_function_per_file` to opt in"
@@ -979,6 +967,42 @@ mod tests {
     #[test]
     fn unknown_flag_errors() {
         assert!(run(["testing-conventions", "--bogus"]).is_err());
+    }
+
+    #[test]
+    fn split_scopes_separates_whole_file_paths_from_line_sets() {
+        let mut scopes = std::collections::BTreeMap::new();
+        scopes.insert("shim.py".to_string(), config::LineScope::WholeFile);
+        scopes.insert(
+            "widget.py".to_string(),
+            config::LineScope::Lines(std::collections::BTreeSet::from([3])),
+        );
+        let (whole_file, line_scoped) = split_scopes(scopes);
+        assert_eq!(whole_file, vec!["shim.py".to_string()]);
+        assert_eq!(line_scoped.len(), 1);
+        assert_eq!(
+            line_scoped["widget.py"],
+            std::collections::BTreeSet::from([3])
+        );
+    }
+
+    #[test]
+    fn a_violation_with_an_unwaivable_rule_id_is_kept() {
+        let dir = std::env::temp_dir().join(format!("tc-lib-waiver-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("testing-conventions.toml");
+        std::fs::write(&config_path, "").unwrap();
+        let violation = lint::Violation {
+            file: dir.join("widget_test.py"),
+            line: 1,
+            rule: "not-a-waivable-rule",
+            message: "synthetic".to_string(),
+        };
+        let kept = apply_waivers(vec![violation.clone()], &dir, &config_path, |c| {
+            c.exemptions(colocated_test::Language::Python)
+        });
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(kept.unwrap(), vec![violation]);
     }
 
     #[test]

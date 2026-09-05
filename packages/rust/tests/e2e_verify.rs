@@ -90,6 +90,14 @@ fn verify_fails_when_no_receipt_is_present() {
 }
 
 #[test]
+fn verify_with_a_bad_base_ref_is_an_error_not_no_changes() {
+    let repo = TempRepo::new();
+    let err = verify_since(&repo.0, &repo.0, Some("tc-no-such-ref"))
+        .expect_err("a bad base must fail loudly");
+    assert!(format!("{err:#}").contains("failed"), "got: {err:#}");
+}
+
+#[test]
 fn verify_presence_is_indifferent_to_later_code_commits() {
     let repo = TempRepo::new();
     attest(&repo.0, "true").expect("attest should succeed");

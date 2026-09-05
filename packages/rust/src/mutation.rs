@@ -131,8 +131,8 @@ fn cargo_mutants_survivors(report: &MutantsReport) -> Vec<Survivor> {
         .collect()
 }
 
-/// Strip the `file:line:col: ` prefix cargo-mutants embeds in a mutant's name; the survivor
-/// line already leads with `file:line:`, so keeping the prefix prints the location twice.
+/// Strip the `file:line:col: ` prefix cargo-mutants embeds in a mutant's name; a rendered site
+/// already leads with `file:line:`, so keeping the prefix prints the location twice.
 fn strip_embedded_location(name: &str) -> &str {
     let Some((location, description)) = name.split_once(": ") else {
         return name;
@@ -1146,7 +1146,9 @@ fn zero_mutant_verdict(listed: &[MutantInfo], diff: &BaseDiff, run: &Output) -> 
         .map(|mutant| {
             format!(
                 "  {}:{}: {}",
-                mutant.file, mutant.span.start.line, mutant.name
+                mutant.file,
+                mutant.span.start.line,
+                strip_embedded_location(&mutant.name)
             )
         })
         .collect();
@@ -2184,6 +2186,36 @@ diff --git a/src/lib.rs b/src/lib.rs
                 "got: {message}"
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn zero_mutant_verdict_names_each_dropped_site_once() {
+        let listed = [
+            listed_mutant(
+                "src/lib.rs",
+                7,
+                7,
+                "src/lib.rs:7:7: replace > with == in is_positive",
+            ),
+            listed_mutant("src/lib.rs", 7, 7, "replace add -> 0"),
+        ];
+        let run = fake_stdout(0, "0 mutants tested");
+        let message = zero_mutant_verdict(&listed, &diff_with_inserted("src/lib.rs", &[7]), &run)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            message.contains("  src/lib.rs:7: replace > with == in is_positive"),
+            "the name's embedded `file:line:col:` prefix is stripped; got: {message}"
+        );
+        assert!(
+            !message.contains(": src/lib.rs:7:7:"),
+            "a dropped site carries one location; got: {message}"
+        );
+        assert!(
+            message.contains("  src/lib.rs:7: replace add -> 0"),
+            "a name with no embedded location keeps its rendered location; got: {message}"
+        );
     }
 
     #[cfg(unix)]

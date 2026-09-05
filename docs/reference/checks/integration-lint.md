@@ -63,7 +63,7 @@ tiers derive from (e.g. `tests/integration/billing_test.py`), not the scanned `s
 | `no-environ-mutation` | Python | env mutated outside `patch.dict(os.environ, ...)` |
 | `no-constant-patch` | Python | patching a module-global constant (either patch form) instead of injecting config |
 | `no-first-party-double` | Rust | a `#[double]` of the crate under test or a `path` dependency |
-| `unknown-tier` | all | a test file under `<package root>/tests/` outside a standard tier |
+| `unknown-tier` | Python, TypeScript | a test file under `<package root>/tests/` outside a standard tier |
 
 ## Learn more
 

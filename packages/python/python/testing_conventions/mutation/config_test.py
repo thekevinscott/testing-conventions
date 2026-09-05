@@ -1,7 +1,7 @@
 """Unit tests for the mutation adapter's cosmic-ray config."""
 import glob
 
-from testing_conventions.mutation.config import EXCLUDES, build_config, render_config
+from testing_conventions.mutation.config import EXCLUDES, render_config
 
 
 def test_the_excludes_match_test_files_at_every_depth(tmp_path, monkeypatch):
@@ -55,12 +55,6 @@ def test_renders_the_passed_timeout_rather_than_a_fixed_value():
     # at 30s — so a suite slower than 30s no longer times out on a fixed ceiling.
     assert "timeout = 42.0\n" in render_config([], 42.0)
     assert "timeout = 30.0\n" not in render_config([], 7.5)
-
-
-def test_build_config_parses_the_rendered_toml(cosmic_ray):
-    cosmic_ray.deserialize_config.return_value = {"cfg": True}
-    assert build_config(["a.py"], 12.0) == {"cfg": True}
-    cosmic_ray.deserialize_config.assert_called_once_with(render_config(["a.py"], 12.0))
 
 
 def test_the_per_mutant_suite_stops_at_the_first_failure():

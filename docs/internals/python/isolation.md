@@ -152,7 +152,11 @@ README's full "flag any un-mocked first-party / external import" holds.
 ### External classification (slice 3)
 
 An import head that isn't first-party is classified against an embedded copy of the
-stdlib module set (`sys.stdlib_module_names`) and a curated **effectful** subset:
+stdlib module set (`sys.stdlib_module_names`) and a curated **effectful** subset. The
+copy is complete, so the underscore-prefixed private modules — `__future__`, `_thread`,
+`_socket`, `_ast` — read as stdlib alongside their public siblings. It also keeps the
+names later versions dropped (`distutils`, `imp`, `smtpd`), so a consumer on an older
+floor still reads them as stdlib rather than third-party.
 
 | Head | Class | Verdict |
 | --- | --- | --- |

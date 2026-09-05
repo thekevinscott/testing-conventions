@@ -62,7 +62,8 @@ The unit suite's side: every collaborator is mocked.
 - **Python** — `unmocked-collaborator`: an imported collaborator the colocated `*_test.py` doesn't
   mock, both first-party and external (a third-party package, or effectful stdlib such as
   `socket`, `subprocess`, `random`). Never collaborators: the unit under test, the test framework,
-  pure stdlib, and type-only imports. The canonical unit test imports only the unit under test and
+  pure stdlib (`__future__` and the other underscore-prefixed modules included), and type-only
+  imports. The canonical unit test imports only the unit under test and
   patches collaborators by string in a fixture — so it has no collaborator imports at all. When a
   collaborator *is* imported, a `patch(...)` mocks it only when its target names that import's own
   module: `from pkg.ledger import record` is mocked by `patch("pkg.ledger.record")`, and each

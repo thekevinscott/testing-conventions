@@ -75,6 +75,11 @@ fn external_waived_exits_zero() {
 }
 
 #[test]
+fn stdlib_private_clean_exits_zero() {
+    assert_eq!(isolation_exit("stdlib_private/clean"), 0);
+}
+
+#[test]
 fn barrel_clean_exits_zero() {
     assert_eq!(isolation_exit("barrel/clean"), 0);
 }

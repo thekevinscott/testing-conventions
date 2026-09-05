@@ -154,6 +154,22 @@ fn external_waived_exits_zero() {
 }
 
 #[test]
+fn stdlib_private_clean_reports_no_violations() {
+    let violations = find_unit_isolation_violations(fixture("stdlib_private/clean"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.is_empty(),
+        "`__future__` and the other underscore-prefixed stdlib modules are pure stdlib, \
+         never collaborators; got {violations:?}"
+    );
+}
+
+#[test]
+fn stdlib_private_clean_exits_zero() {
+    assert_eq!(isolation_exit("stdlib_private/clean"), 0);
+}
+
+#[test]
 fn barrel_reexport_import_is_the_unit_under_test() {
     let violations = find_unit_isolation_violations(fixture("barrel/clean"))
         .expect("walking a readable tree should succeed");

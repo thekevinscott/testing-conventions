@@ -1481,6 +1481,17 @@ mod tests {
     }
 
     #[test]
+    fn is_checked_import_classifies_private_stdlib_as_stdlib() {
+        assert!(!is_checked_import("__future__", "myproject"));
+        assert!(!is_checked_import("_thread", "myproject"));
+        assert!(!is_checked_import("_socket", "myproject"));
+        assert!(!is_checked_import("_ast", "myproject"));
+        assert!(!is_checked_import("_collections_abc", "myproject"));
+        // Membership in the set decides it, so an unlisted underscore head is third-party.
+        assert!(is_checked_import("_stripe", "myproject"));
+    }
+
+    #[test]
     fn visitor_flags_external_collaborators() {
         let found = unmocked(
             "widget",

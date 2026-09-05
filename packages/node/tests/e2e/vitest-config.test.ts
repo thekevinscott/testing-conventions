@@ -16,6 +16,7 @@ const probe = [
   '  include: c.include,',
   '  exclude: c.exclude,',
   '  thresholds: c.thresholds,',
+  '  reporter: c.reporter,',
   '  testInclude: vitestConfig.test.include,',
   '}));',
 ].join('\n');
@@ -25,6 +26,7 @@ interface ProbeResult {
   include: string[];
   exclude: string[];
   thresholds: { lines: number; branches: number; functions: number; statements: number };
+  reporter: [string, { skipFull: boolean }][];
   testInclude: string[];
 }
 
@@ -45,6 +47,7 @@ describe('testing-conventions vitestConfig export (e2e)', () => {
       functions: 100,
       statements: 100,
     });
+    expect(config.reporter).toEqual([['text', { skipFull: false }]]);
     expect(config.testInclude).toEqual(['src/**/*.test.ts']);
   });
 });

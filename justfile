@@ -15,7 +15,7 @@ rust-test:
     cd packages/rust && cargo test
 
 rust-cov:
-    cd packages/rust && cargo llvm-cov --fail-under-lines 96
+    cd packages/rust && cargo llvm-cov --fail-under-lines 100
 
 rust-build:
     cd packages/rust && cargo build --release

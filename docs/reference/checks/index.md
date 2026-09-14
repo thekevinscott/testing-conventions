@@ -1,58 +1,51 @@
 ---
-description: The checks the workflow runs — one page per check, each carrying its motivation, per-language behavior, run conditions, and configuration surface.
+description: "The GitHub Actions jobs the workflow runs — one page per job, each carrying the check(s) it runs, its run conditions, and links to each check's complete record."
 ---
 
 # Checks
 
-Every check the workflow runs has one page here carrying its complete picture: why the
-check exists, what it enforces per language, when it runs, and every configuration key and
-exemption rule that touches it. Land on a check's page and you have everything you need for that
-check.
+The reusable workflow runs a consumer's checks as **GitHub Actions jobs**. Each job that can fail
+has a page here: a job that bundles several checks has its own page, and each check it runs has its
+own page below it carrying the complete per-language record — why it exists, what it enforces,
+when it runs, and every configuration key and exemption rule that touches it.
 
-| Check | `gates` name | Asks |
+## The jobs
+
+One [`uses:` call](../workflow) runs these jobs, one per detected language where the job applies.
+The name in the table is the name you see on a pull request's check list.
+
+| Job | Check(s) | Runs |
 | --- | --- | --- |
-| [`unit colocated-test`](./colocated-test) | `colocated-test` | Does a unit test **exist** for every source file — and move with it on a pull request? |
-| [`unit one-function-per-file`](./one-function-per-file) | `one-function-per-file` | Does each source file hold at most **one substantial function** — so the file name is the subject? |
-| [`unit lint`](./unit-lint) | `unit-lint` | Does every unit test **mock every collaborator**? |
-| [`unit coverage`](./unit-coverage) | `unit-coverage` | Does the unit suite **run** the code — whole-tree and on the changed lines? |
-| [`unit mutation`](./mutation) | `mutation` | Does the unit suite **verify** the code — break it, and a test fails? |
-| [`integration lint`](./integration-lint) | `integration-lint` | Does every integration test run first-party code **for real**? |
-| [`packaging`](./packaging) | `packaging` | Does the **built artifact** ship no test files? |
-| [`e2e verify`](./e2e-verify) | `e2e-verify` | Does a branch that changed the code record one visible **e2e decision**? |
+| [`Static checks`](./static-checks) (`<language>`) | `colocated-test`, `one-function-per-file`, `unit-lint`, `integration-lint` | always — the four source-scanning checks as steps of one job |
+| [`Unit-test coverage`](./unit-coverage) (`<language>`) | `unit-coverage` | always |
+| [`Unit-test coverage — changed lines`](./unit-coverage#the-changed-line-job) (`<language>`) | `unit-coverage` | pull requests only |
+| [`Unit mutation — changed lines`](./mutation) (`<language>`) | `mutation` | pull requests only |
+| [`Packaging`](./packaging) | `packaging` | when a build is derivable, an artifact is named, or a `dist/` is committed |
+| [`E2E attestation freshness`](./e2e-verify) | `e2e-verify` | when receipts are present, on pull requests |
 
-The `gates` name is the value the [`gates` input](/reference/workflow#inputs) takes to name a
-check.
+A job skipped by [`gates`](../workflow#inputs) is absent from CI. A check left out of `gates` is
+skipped whether it runs as its own job or as a step of `Static checks`, and a check's diff-scoped
+variant rides with it (`colocated-test` covers the co-change step, `unit-coverage` the changed-line
+job).
 
-Each page states the facts and opens with the why; the [explanation section](/explanation/)
+## The checks
+
+The check name is the value the [`gates` input](../workflow#inputs) takes to name a check, and
+the value that appears in a `rules = […]` exemption. Each check's page opens with the why and
+carries the complete factual record.
+
+| Check | Job | Asks |
+| --- | --- | --- |
+| [`colocated-test`](./colocated-test) | Static checks | Does a unit test **exist** for every source file — and move with it on a pull request? |
+| [`one-function-per-file`](./one-function-per-file) | Static checks | Does each source file hold at most **one substantial function** — so the file name is the subject? |
+| [`unit-lint`](./unit-lint) | Static checks | Does every unit test **mock every collaborator**? |
+| [`integration-lint`](./integration-lint) | Static checks | Does every integration test run first-party code **for real**? |
+| [`unit-coverage`](./unit-coverage) | Unit-test coverage | Does the unit suite **run** the code — whole-tree and on the changed lines? |
+| [`mutation`](./mutation) | Unit mutation | Does the unit suite **verify** the code — break it, and a test fails? |
+| [`packaging`](./packaging) | Packaging | Does the **built artifact** ship no test files? |
+| [`e2e-verify`](./e2e-verify) | E2E attestation freshness | Does a branch that changed the code record one visible **e2e decision**? |
+
+Each check's page states the facts and opens with the why; the [explanation section](/explanation/)
 carries the same ground as discursive essays — the testing model, the unit ladder, and the design
 trade-offs behind each check. One deliberate asymmetry: the two lint checks share one essay,
 [Isolation](/explanation/isolation), because they enforce a single boundary from opposite sides.
-
-## Running a check directly
-
-The [reusable workflow](/reference/workflow) runs these subcommands for you. A repository on
-another CI system runs the same binary itself, one invocation per check per language:
-
-```sh
-testing-conventions unit colocated-test src --language python
-testing-conventions unit one-function-per-file src --language typescript
-testing-conventions unit lint src --language rust
-testing-conventions unit coverage src --language python
-testing-conventions unit mutation src --language typescript --base origin/main
-testing-conventions integration lint src --language python
-testing-conventions packaging dist --language python
-testing-conventions e2e verify . --base origin/main
-```
-
-Each check takes a path — the [`source`](/monorepo#source-vs-the-package-root) scan root, except
-`packaging` (the built artifact's root) and `e2e verify` (the package root holding the receipts) —
-and these flags:
-
-| Flag | Checks | Meaning |
-| --- | --- | --- |
-| `--language` | every check except `e2e verify` | Required: `python`, `typescript`, or `rust`. One invocation enforces one language's convention. |
-| `--config <file>` | every check except `packaging` and `e2e verify` | The [config file](/reference/config) supplying floors and exemptions, defaulting to `testing-conventions.toml` in the working directory. It is what the workflow's [`config` input](/reference/workflow#inputs) resolves to a path and passes through. Where no file exists, every check runs on its default. |
-| `--base <ref>` | `unit colocated-test`, `unit coverage`, `unit mutation`, `e2e verify` | Diffs `<base>...HEAD` and adds that check's diff-scoped behavior: the co-change check, the changed-line floor, diff-scoped mutants, the receipt question. |
-
-`e2e verify` also takes `--scope`, `--extra-scope`, and `--exclude`; [its page](./e2e-verify)
-carries them. `testing-conventions --help` prints the full command tree.

@@ -4,7 +4,7 @@ description: Why a file holds one substantial function — and why the line thre
 
 # One function per file
 
-`unit one-function-per-file` puts a ceiling on how much a single source file can hold: **one
+`one-function-per-file` puts a ceiling on how much a single source file can hold: **one
 module-scope function whose body runs longer than the configured threshold**. Trivial functions —
 the ones at or under the threshold — sit together freely. This page explains why the standard
 draws that line and why the threshold is configuration rather than a constant.

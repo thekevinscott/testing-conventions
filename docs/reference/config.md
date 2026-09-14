@@ -78,14 +78,14 @@ including why Rust's extra metrics are opt-in.
 | **TypeScript** | `lines`, `branches`, `functions`, `statements` | All four at `100`, each enforced independently. |
 | **Rust** | `lines`, `regions`, `functions`, `branch` | `lines = 100`; `regions`, `functions`, and `branch` are opt-in floors. A `branch` floor adds `--branch` to the `cargo llvm-cov` run, which needs a nightly toolchain (pin one in `rust-toolchain.toml` with `llvm-tools-preview`, or set a rustup directory override); on stable the run fails with the requirement named. |
 
-`unit mutation` has **no percentage key** — the gate is binary, not a score, and config can't
+`mutation` has **no percentage key** — the gate is binary, not a score, and config can't
 loosen it. Its only tuning is a line-scoped `mutation` exemption (below); see
 [Why mutation testing](../explanation/mutation#why-a-number-wont-do-equivalent-mutants).
 
 ## `one_function_per_file`
 
 Each language table takes **`one_function_per_file`**, whose one key sets the threshold the
-[`unit one-function-per-file`](../explanation/one-function-per-file) rule counts against. Python and
+[`one-function-per-file`](../explanation/one-function-per-file) rule counts against. Python and
 TypeScript apply the rule with no table present; **Rust applies it only when the table is there**,
 because a Rust file is a module and grouping functions in one is idiomatic — see
 [Rust is off until you opt in](../explanation/one-function-per-file#rust-is-off-until-you-opt-in):
@@ -116,7 +116,7 @@ A deliberate omission is a `[[<language>.exempt]]` entry:
 
 | Field | Meaning |
 | ----- | ------- |
-| `path` | The exempt file, **relative to the scanned `source`** of the call that loads this config — except for `integration lint`'s suite subjects, which resolve **relative to the [package root](../monorepo#source-vs-the-package-root)** the tiers derive from (e.g. `tests/integration/billing_test.py`). Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
+| `path` | The exempt file, **relative to the scanned `source`** of the call that loads this config — except for `integration-lint`'s suite subjects, which resolve **relative to the [package root](../monorepo#source-vs-the-package-root)** the tiers derive from (e.g. `tests/integration/billing_test.py`). Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
 | `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, `mutation`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`), the source-layout rule (`one-function-per-file`), or the suite-layout rule (`unknown-tier`). |
 | `lines` | The lines a `coverage` / `mutation` exemption covers. **Required** with `coverage` / `mutation`, **rejected** with any other rule. |
 | `reason` | Why the omission is deliberate. **Required**: an empty reason is rejected on load. |
@@ -148,7 +148,7 @@ Two kinds of files are skipped with no configuration — the only non-explicit e
 ## `[rust] features`
 
 The `[rust]` table takes **`features`**, a list of cargo features the suite-running Rust rules
-enable: `unit coverage` passes it to `cargo llvm-cov` as `--features`, and `unit mutation` passes it
+enable: `unit-coverage` passes it to `cargo llvm-cov` as `--features`, and `mutation` passes it
 to cargo-mutants as `--features`, so `#[cfg(feature = ...)]` code is compiled, measured, and
 mutated. The mutation run enables the features on **every** cargo invocation it makes — the build
 of the crate's test targets as much as the test run itself — so an integration test that names a
@@ -196,7 +196,7 @@ Where each language reaches for it:
 ## `[e2e] extra_scope` and `exclude`
 
 The `[e2e]` table takes **`extra_scope`**, a list of repo-root-relative directories outside the
-package's own subtree whose changes join the [`e2e verify`](../explanation/e2e#a-shared-source-tree-beside-the-package)
+package's own subtree whose changes join the [`e2e-verify`](../explanation/e2e#a-shared-source-tree-beside-the-package)
 scoped diff, and **`exclude`**, a list of feature-gated subtrees carved back out of that union.
 It is the declaration for a package whose e2e artifact is compiled from a **shared source tree that
 sits beside it** — a native core bound into several language bindings — which no `--scope`

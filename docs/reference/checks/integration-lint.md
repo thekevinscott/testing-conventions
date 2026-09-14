@@ -1,12 +1,12 @@
 ---
-description: The integration lint check — integration and e2e tests run first-party code for real; the suite tiers it scans, the per-language rules, the hygiene lints, and unknown-tier.
+description: The integration-lint check — integration and e2e tests run first-party code for real; the suite tiers it scans, the per-language rules, the hygiene lints, and unknown-tier.
 ---
 
-# `integration lint`
+# `integration-lint`
 
 An integration test isolates the *system*: first-party code runs for real, and only the outside
-world is mocked. `integration lint` enforces that from the suite's side. This page is the
-complete record of the check; [`unit lint`](./unit-lint) enforces the same boundary from the
+world is mocked. `integration-lint` enforces that from the suite's side. This page is the
+complete record of the check; [`unit-lint`](./unit-lint) enforces the same boundary from the
 opposite side.
 
 ## Why this check exists

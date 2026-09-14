@@ -1,8 +1,8 @@
 ---
-description: The unit coverage check — the unit suite clears a 100% floor per language, whole-tree and over a pull request's changed lines; every key, default, and the line-scoped exemption.
+description: The unit-coverage check — the unit suite clears a 100% floor per language, whole-tree and over a pull request's changed lines; every key, default, and the line-scoped exemption.
 ---
 
-# `unit coverage`
+# `unit-coverage`
 
 The unit suite clears **a 100% floor** — whole-tree on every run, and over the changed lines on
 every pull request. This page is the complete record of the check: why the floor is strict, what
@@ -19,7 +19,7 @@ to wherever tests are hardest to write. The standard inverts this: the floor is 
 you didn't explicitly exempt**, so every uncovered line is either covered or named with a reason.
 
 A covered line proves execution, nothing more — a test that calls the function and asserts
-nothing covers every line it touches. [`unit mutation`](./mutation) is the rung above.
+nothing covers every line it touches. [`mutation`](./mutation) is the rung above.
 
 ## What it enforces
 

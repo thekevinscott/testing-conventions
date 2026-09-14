@@ -17,7 +17,7 @@ at the real source directory — `src` for a single-package repo, each package's
 a [monorepo](../monorepo) — so virtualenvs, tooling, and sibling packages sit *outside* the scan
 rather than being filtered out of it.
 
-The suite tiers are derived rather than pointed at. `integration lint` walks up from `source` to
+The suite tiers are derived rather than pointed at. `integration-lint` walks up from `source` to
 the package root — the nearest directory holding the language's manifest (`pyproject.toml`,
 `package.json`, `Cargo.toml`), stopping at the repository boundary — and takes its subjects from
 the standard suite directories: `tests/integration/` and `tests/e2e/` (Rust: the crate root's

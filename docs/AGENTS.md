@@ -113,10 +113,13 @@ page*: fewer, denser pages beat a page per feature.
 
 Consistency is a feature: the same idea uses the same word everywhere.
 
-- **check** — one of the eight CI jobs the workflow runs (`unit coverage`, `integration lint`),
-  named as it appears in the pull-request UI. "Rule" is acceptable for the enforced convention
-  itself; never "gate" (except the `gates` input, which the reference names precisely), "lint"
-  (except a named lint like `no-first-party-mock`), or "test".
+- **check** — one of the eight enforced rules the workflow runs (`colocated-test`,
+  `unit-coverage`, `mutation`, `integration-lint`, …), each named by the value the [`gates`]
+  input takes and that appears in a `rules = […]` exemption. A check runs as a GitHub Actions
+  **job** — most 1:1, four bundled as steps of one `Static checks (<language>)` job. "Rule" is
+  acceptable for the enforced convention itself; never "gate" (the `gates` input names checks,
+  but the checks themselves are "checks"), "lint" (except a named lint like
+  `no-first-party-mock`), or "test".
 - **the drop-in** — the six-line reusable-workflow snippet a consumer adds. Not "the action" (it's a
   reusable workflow, not a composite action).
 - **the scan root** — the directory the `source` input names; the only scoping mechanism.
@@ -124,8 +127,7 @@ Consistency is a feature: the same idea uses the same word everywhere.
 - **first-party / external** — the isolation boundary. "External" = third-party packages *and*
   effectful standard-library APIs. Don't say "third-party" when you mean both.
 - **the unit ladder** — colocated-test → coverage → mutation (exists → runs → verifies).
-- **exemption** — the reason-required config escape hatch. Not "ignore", "skip", or "waiver"
-  (except `integration lint` waivers, which keep that name).
+- **exemption** — the reason-required config escape hatch. Not "ignore", "skip", or "waiver".
 - **language names** — `Python`, `TypeScript`, `Rust` capitalized in prose; lowercase
   `python` / `typescript` / `rust` only as literal `languages` values or config keys.
 - **the two configuration surfaces** — the **config file** (`testing-conventions.toml`) is *what

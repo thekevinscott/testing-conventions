@@ -1,12 +1,12 @@
 ---
-description: The unit lint check — every collaborator in a unit test is mocked; the first-party/external line, the per-language rules, and their exemptions.
+description: The unit-lint check — every collaborator in a unit test is mocked; the first-party/external line, the per-language rules, and their exemptions.
 ---
 
-# `unit lint`
+# `unit-lint`
 
 A unit test isolates one unit: everything it depends on is mocked, so a failure points at the
-unit, not a collaborator. `unit lint` enforces that from the unit suite's side. This page is the
-complete record of the check; [`integration lint`](./integration-lint) enforces the same boundary
+unit, not a collaborator. `unit-lint` enforces that from the unit suite's side. This page is the
+complete record of the check; [`integration-lint`](./integration-lint) enforces the same boundary
 from the opposite side.
 
 ## Why this check exists
@@ -32,7 +32,7 @@ deterministically and is left alone — the check is deterministic first.
 
 Always, as a step of the `Static checks (<language>)` job, for Python, TypeScript, and Rust
 alike. It scans the colocated unit tests under `source`, leaving `<package root>/tests/` to
-[`integration lint`](./integration-lint). The [`gates` input](/reference/workflow#inputs) names
+[`integration-lint`](./integration-lint). The [`gates` input](/reference/workflow#inputs) names
 it `unit-lint`.
 
 ## Configuration

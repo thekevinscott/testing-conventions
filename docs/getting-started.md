@@ -47,7 +47,7 @@ Push the branch and open a pull request.
 
 ## 3. Watch the check go red
 
-The `unit colocated-test (python)` check fails, and its log names the violation:
+The `Static checks (python)` job fails — its `Check colocated test` step names the violation:
 
 ```
 missing colocated unit test: greet.py
@@ -55,7 +55,9 @@ missing colocated unit test: greet.py
 
 This is the standard's core move: every source file carries a colocated, matching-named unit test,
 and the check is a blocking gate — the pull request stays red until the test exists (or the file
-carries a reasoned [exemption](./guide/configure#exempt-a-file)).
+carries a reasoned [exemption](./guide/configure#exempt-a-file)). The `Static checks` job bundles
+the four source-scanning gates into one job per language; open the red step to see which gate
+failed.
 
 ## 4. Make it green
 
@@ -70,17 +72,17 @@ def test_greet():
     assert greet("Ada") == "Hello, Ada!"
 ```
 
-Push. The checks run again and come back green: the test exists (`unit colocated-test`), it runs
-the new lines at a 100% floor (`unit coverage`), and its assertion pins the behavior
-(`unit mutation` breaks the code and requires a test to fail — an assertion-free test would leave
+Push. The checks run again and come back green: the test exists (`colocated-test`), it runs
+the new lines at a 100% floor (`unit-coverage`), and its assertion pins the behavior
+(`mutation` breaks the code and requires a test to fail — an assertion-free test would leave
 the check red).
 
 ## Where you are
 
 Every pull request now runs the full standard: colocated tests, one substantial function per file,
 a 100% coverage floor, mocked-out collaborators in unit tests, real first-party code in integration
-tests, a binary mutation gate on changed lines, and clean packaging. When a check goes red, its log
-names the file and the rule; you fix the code, or record a reasoned exemption in
+tests, a binary mutation gate on changed lines, and clean packaging. When a job goes red, its step
+log names the file and the gate; you fix the code, or record a reasoned exemption in
 [`testing-conventions.toml`](./guide/configure).
 
 ## Teach your agent

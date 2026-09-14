@@ -4,7 +4,7 @@ description: Why every source file carries a colocated, matching-named unit test
 
 # Colocated tests
 
-`unit colocated-test` is the first rung of the [unit ladder](./#the-unit-ladder-exist-→-run-→-verify):
+`colocated-test` is the first rung of the [unit ladder](./#the-unit-ladder-exist-→-run-→-verify):
 does a test **exist**? This page explains why the standard pins *where* that test lives and *what
 it's named* — and why, on a pull request, a changed source must change its test with it.
 

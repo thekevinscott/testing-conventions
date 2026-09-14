@@ -1,10 +1,10 @@
 ---
-description: "The unit mutation check — a binary gate, not a score: no unexplained surviving mutant on a pull request's changed lines; the engines, timeouts, and the line-scoped exemption."
+description: "The mutation check — a binary gate, not a score: no unexplained surviving mutant on a pull request's changed lines; the engines, timeouts, and the line-scoped exemption."
 ---
 
-# `unit mutation`
+# `mutation`
 
-Break the code, and a test has to fail. `unit mutation` mutates the lines a pull request touched,
+Break the code, and a test has to fail. `mutation` mutates the lines a pull request touched,
 runs the unit suite against each mutant, and fails on any surviving mutant not exempted with a
 reason — **a binary gate, not a score**. This page is the complete record of the check.
 

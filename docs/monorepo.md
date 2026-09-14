@@ -65,16 +65,16 @@ wrong directory entirely), not a file living in the wrong place relative to `sou
 | Gate | Subjects | Root it derives from | How it finds them |
 | --- | --- | --- | --- |
 | Language detection | file extensions per language | `source` | Recursive scan of `source` |
-| `unit colocated-test` | source files paired with same-named unit tests | `source` | Recursive scan of `source`; `<package root>/tests/` is explicitly excluded |
-| `unit one-function-per-file` | module-scope functions in source files | `source` | Recursive scan of `source`; test files and the suite tiers under `<package root>/tests/` are outside it |
-| `unit lint` | colocated unit test files | `source` | Recursive scan of `source`; `<package root>/tests/` is explicitly excluded |
-| `unit coverage` / `unit mutation` | source + colocated unit tests | `source` (scanned); package root (installed/run) | Recursive scan of `source` for subjects; toolchain provisioning and the suite run happen at the package root |
-| `integration lint` | integration and e2e suite files | package root | **Fixed paths only** — `<package root>/tests/integration/` and `<package root>/tests/e2e/` (plural **`tests`**; Rust: the crate root's `tests/`). Never a recursive scan of `source`, and not configurable |
+| `colocated-test` | source files paired with same-named unit tests | `source` | Recursive scan of `source`; `<package root>/tests/` is explicitly excluded |
+| `one-function-per-file` | module-scope functions in source files | `source` | Recursive scan of `source`; test files and the suite tiers under `<package root>/tests/` are outside it |
+| `unit-lint` | colocated unit test files | `source` | Recursive scan of `source`; `<package root>/tests/` is explicitly excluded |
+| `unit-coverage` / `mutation` | source + colocated unit tests | `source` (scanned); package root (installed/run) | Recursive scan of `source` for subjects; toolchain provisioning and the suite run happen at the package root |
+| `integration-lint` | integration and e2e suite files | package root | **Fixed paths only** — `<package root>/tests/integration/` and `<package root>/tests/e2e/` (plural **`tests`**; Rust: the crate root's `tests/`). Never a recursive scan of `source`, and not configurable |
 | Package manager | `packageManager` field, else lockfile | package root | Read from the manifest at the package root; a `packageManager` pin also fixes the pnpm *version* the workflow installs |
 | Python environment | a `pyproject.toml` `[project]` table | package root | Read from the manifest at the package root |
 | Native toolchain | a Rust-compiling build declaration (maturin backend, napi config, `Cargo.toml`) | package root | Read from the manifest at the package root |
 | `packaging` | the built distribution | package root | Derives the build from the manifest and scans what it writes — `dist/` (Python/TypeScript) or `target/package/` (Rust), all at the package root |
-| `e2e verify` | committed receipts | package root | **Fixed path** — `<package root>/e2e-attestations/`. Never a recursive scan |
+| `e2e-verify` | committed receipts | package root | **Fixed path** — `<package root>/e2e-attestations/`. Never a recursive scan |
 | Config file | `testing-conventions.toml` | package root, falling back to repo root | Fixed filename, discovered upward from `source` |
 
 ### The pnpm version
@@ -90,13 +90,13 @@ whatever versions are involved. The workflow satisfies that equality by handing 
 itself, which installs the same `pnpm@<pin>` that passing nothing would, build metadata included.
 
 A package whose suites live at `test/integration/` (singular) rather than `tests/integration/`
-(plural) sits outside every fixed path above — `integration lint` finds nothing there and stays
+(plural) sits outside every fixed path above — `integration-lint` finds nothing there and stays
 silently green, no matter what `source` scans. Renaming `test/` to `tests/` at the package root is
-the fix; moving files under `source` changes nothing, because `integration lint` never reads
+the fix; moving files under `source` changes nothing, because `integration-lint` never reads
 `source` at all.
 
 The config file's own `exempt` entries follow the same split: an entry's `path` resolves relative
-to `source` for every gate except `integration lint`, whose suite subjects resolve relative to the
+to `source` for every gate except `integration-lint`, whose suite subjects resolve relative to the
 package root the suite tiers derive from — the same root as the row above, not `source`.
 
 Two optional inputs refine a call: `languages` restricts the detected set explicitly, and

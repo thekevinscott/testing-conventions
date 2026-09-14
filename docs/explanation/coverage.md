@@ -4,7 +4,7 @@ description: Why the coverage floor is a strict 100% with reasoned exemptions �
 
 # Coverage
 
-`unit coverage` is the second rung of the [unit ladder](./#the-unit-ladder-exist-→-run-→-verify): does
+`unit-coverage` is the second rung of the [unit ladder](./#the-unit-ladder-exist-→-run-→-verify): does
 the test **run** the code? This page explains why the floor is a strict 100% rather than a
 comfortable 85, and how the same floor gates a pull request's changed lines.
 

@@ -1,8 +1,8 @@
 ---
-description: The unit colocated-test check — every source file has a colocated, matching-named unit test, and on a pull request a changed source changes its test with it.
+description: The colocated-test check — every source file has a colocated, matching-named unit test, and on a pull request a changed source changes its test with it.
 ---
 
-# `unit colocated-test`
+# `colocated-test`
 
 Every source file under the scan root has a colocated, matching-named unit test — and on a pull
 request, a changed source changes its test with it. This page is the complete record of the

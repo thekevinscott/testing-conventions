@@ -1,8 +1,8 @@
 ---
-description: The unit one-function-per-file check — a file holds one substantial function; the threshold, what counts as a function, the per-language defaults, and the exemption.
+description: The one-function-per-file check — a file holds one substantial function; the threshold, what counts as a function, the per-language defaults, and the exemption.
 ---
 
-# `unit one-function-per-file`
+# `one-function-per-file`
 
 A source file holds at most **one** module-scope function whose body runs longer than the
 configured threshold. Functions at or under the threshold are trivial — an expression with a name —
@@ -10,7 +10,7 @@ and share a file freely. This page is the complete record of the check.
 
 ## Why this check exists
 
-[`unit colocated-test`](./colocated-test) pairs `widget.py` with `widget_test.py`, and that pairing
+[`colocated-test`](./colocated-test) pairs `widget.py` with `widget_test.py`, and that pairing
 is worth as much as the file is coherent. A file holding ten functions still has one colocated
 test, so the 1:1 mapping describes the *file*, not the code in it. One function per file closes
 that gap: the file name is the subject, so a [coverage](./unit-coverage) or [mutation](./mutation)
@@ -38,7 +38,7 @@ What counts as module-scope, per language:
 | Rust | `fn` items at the top level of the file |
 
 Methods, nested functions, and callbacks belong to their owner and are never counted on their own.
-The scan reads the same source tree [`unit colocated-test`](./colocated-test) does, so test files,
+The scan reads the same source tree [`colocated-test`](./colocated-test) does, so test files,
 Rust's inline `#[cfg(test)]` modules, and the suite tiers under `<package root>/tests/` are all
 outside it.
 

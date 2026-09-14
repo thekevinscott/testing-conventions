@@ -1,8 +1,8 @@
 ---
-description: "The e2e verify check — a branch that changes the scoped source records one visible e2e decision: the attest/verify pair, the two diff questions, and the extra-scope keys."
+description: "The e2e-verify check — a branch that changes the scoped source records one visible e2e decision: the attest/verify pair, the two diff questions, and the extra-scope keys."
 ---
 
-# `e2e verify`
+# `e2e-verify`
 
 A branch that changes the scoped source records one visible e2e decision — a receipt in the
 branch's own diff, checked deterministically, with CI never running the e2e suite. This page is
@@ -30,7 +30,7 @@ change what the branch changed.
 
 ## What it enforces
 
-`e2e verify` asks two questions, each a plain content diff of `<base>...HEAD`:
+`e2e-verify` asks two questions, each a plain content diff of `<base>...HEAD`:
 
 1. **Did this branch change the scoped source?** The scope is `--scope` — the caller's own
    `source`, as the workflow passes it — joined with every declared extra scope and minus every

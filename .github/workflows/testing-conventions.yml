@@ -208,7 +208,6 @@ jobs:
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: '3.12'
           enable-cache: true
       - if: matrix.language == 'python'
         name: Provision the Python suite environment (uv)
@@ -298,7 +297,6 @@ jobs:
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: '3.12'
           enable-cache: true
       - if: matrix.language == 'python'
         name: Provision the Python suite environment (uv)
@@ -380,7 +378,6 @@ jobs:
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: '3.12'
           enable-cache: true
       - if: matrix.language == 'python'
         name: Provision the Python suite environment (uv)
@@ -506,7 +503,6 @@ jobs:
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_language == 'python' }}
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: '3.12'
           enable-cache: true
       - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm' }}
         uses: pnpm/action-setup@v5

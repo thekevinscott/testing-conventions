@@ -29,6 +29,9 @@ pub struct Thresholds {
 /// and the per-file `files` block the diff-scoped floor reads.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CoverageReport {
+    /// Report metadata; `meta.branch_coverage` says whether the run measured branches.
+    #[serde(default)]
+    pub meta: Meta,
     pub totals: Totals,
     /// Per-file line/branch detail, keyed by the path coverage.py reports (relative
     /// to the measured root).
@@ -59,12 +62,23 @@ pub struct FileCoverage {
     pub executed_branches: Vec<Vec<i64>>,
 }
 
+/// The `meta` block of a coverage.py JSON report. `branch_coverage` reports whether
+/// the run measured branches at all — the only way to tell "no branches because
+/// branch measurement was off" (misconfigured) from "no branches because the
+/// measured code has none" (a vacuously full floor).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Meta {
+    #[serde(default)]
+    pub branch_coverage: bool,
+}
+
 /// The `totals` block of a coverage.py report.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Totals {
     /// Total covered percent — line coverage, plus branch when measured.
     pub percent_covered: f64,
-    /// Branches measured; `0` when branch coverage was not enabled.
+    /// Branches measured; `0` when branch coverage was not enabled, or when the
+    /// measured code has no branch points.
     #[serde(default)]
     pub num_branches: u64,
 }
@@ -82,10 +96,11 @@ pub fn parse_report(json: &str) -> Result<CoverageReport> {
     serde_json::from_str(json).context("parsing coverage.py JSON report")
 }
 
-/// Whether `report` meets `thresholds`. Branch coverage required but no branches
-/// measured is a misconfigured run, and fails.
+/// Whether `report` meets `thresholds`. Branch coverage required but never measured
+/// is a misconfigured run, and fails; branches measured but absent from the code is
+/// a vacuously met floor, and passes.
 pub fn evaluate(report: &CoverageReport, thresholds: Thresholds) -> Outcome {
-    if thresholds.branch && report.totals.num_branches == 0 {
+    if thresholds.branch && !report.meta.branch_coverage && report.totals.num_branches == 0 {
         return Outcome::Fail(
             "branch coverage is required but the report measured no branches".to_string(),
         );
@@ -920,6 +935,7 @@ mod tests {
 
     fn report(percent_covered: f64, num_branches: u64) -> CoverageReport {
         CoverageReport {
+            meta: Meta::default(),
             totals: Totals {
                 percent_covered,
                 num_branches,
@@ -968,6 +984,32 @@ mod tests {
             ),
             Outcome::Fail(_)
         ));
+    }
+
+    #[test]
+    fn passes_when_branches_are_measured_but_the_code_has_none() {
+        // A source with no branch points measures zero branches even under `--branch`.
+        // That is vacuous 100%, not a misconfigured run — coverage.py's meta flag is
+        // what separates the two.
+        let mut vacuous = report(100.0, 0);
+        vacuous.meta.branch_coverage = true;
+        assert_eq!(
+            evaluate(
+                &vacuous,
+                Thresholds {
+                    fail_under: 100,
+                    branch: true
+                }
+            ),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn parses_the_branch_flag_from_the_meta_block() {
+        let json = r#"{"meta":{"branch_coverage":true},"totals":{"percent_covered":100.0,"num_branches":0}}"#;
+        let report = parse_report(json).expect("valid coverage.py json with meta");
+        assert!(report.meta.branch_coverage);
     }
 
     #[test]

@@ -4,7 +4,7 @@ description: Why unit and integration tests mock opposite things — the first-p
 
 # Isolation
 
-Two checks — `unit lint` and `integration lint` — enforce one boundary from opposite sides.
+Two checks — `unit-lint` and `integration-lint` — enforce one boundary from opposite sides.
 Isolation is about which collaborators a test may fake, and the answer is *opposite* for the two
 kinds of test:
 
@@ -36,9 +36,9 @@ stdlib (`json`, `dataclasses`, `std::collections`) is nobody's collaborator.
 
 ## Where each check finds its subjects
 
-The two checks split the tree by the standard's layout. `unit lint` scans the colocated unit
+The two checks split the tree by the standard's layout. `unit-lint` scans the colocated unit
 tests under the call's `source`, leaving `<package root>/tests/` to the suite tiers.
-`integration lint` derives its subjects from the package root — the nearest directory at or
+`integration-lint` derives its subjects from the package root — the nearest directory at or
 above `source` holding the language's manifest — per the standard layout: the integration suite in
 `tests/integration/`, the e2e suite in `tests/e2e/`. Both suites run first-party code for real,
 so both are held to the integration rules. (Rust's cargo layout keeps both out-of-crate suites
@@ -47,7 +47,7 @@ in the crate root's `tests/`, so that whole directory is the subject there.) A t
 of the standard, and a suite the scan would silently miss is an error instead. A tree with no
 manifest — loose scripts — is scanned at `source` directly.
 
-## What `unit lint` flags
+## What `unit-lint` flags
 
 <!-- #region unit-lint-flags -->
 The unit suite's side: every collaborator is mocked.
@@ -86,7 +86,7 @@ The unit suite's side: every collaborator is mocked.
   directory, so a locally-built crate is scanned the same as a fresh checkout.
 <!-- #endregion unit-lint-flags -->
 
-## What `integration lint` flags
+## What `integration-lint` flags
 
 <!-- #region integration-lint-flags -->
 The integration suite's side: first-party code runs for real.

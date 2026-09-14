@@ -82,8 +82,10 @@ builds/installs the project itself — while a plain package gets a fresh `uv ve
 toolchain (`coverage`, `pytest`, and the `testing-conventions` adapter wheel) then installs into
 that same `.venv`, which goes on the suite's `PATH` — so cosmic-ray's spawned pytest (for
 `unit mutation`) and the coverage run import the project's dependencies and the adapter together.
-uv reads its own index/network configuration (`UV_INDEX_URL`, `uv.toml`); a private index is
-declared there. TypeScript runs under `vitest`
+uv resolves the Python interpreter from the package's own `requires-python` (downloading one if
+the runner has none), so a package declaring a higher floor than the runner's ambient Python still
+provisions a satisfying interpreter. uv reads its own index/network configuration
+(`UV_INDEX_URL`, `uv.toml`); a private index is declared there. TypeScript runs under `vitest`
 v8 coverage, installed with the package's own lockfile (`pnpm install --frozen-lockfile` or
 `npm ci`, per its manifest); for `unit mutation` those project dependencies must include
 `@stryker-mutator/core` and a runner plugin. Rust runs under `cargo llvm-cov --lib` (the unit

@@ -62,12 +62,16 @@ suite under the same configuration your own runs use:
 - **Python** — coverage.py runs at the **scanned path**, and pytest resolves its rootdir and
   configuration with its own upward search — so a package-root `[tool.pytest.ini_options]` /
   `pytest.ini` and the `conftest.py` files below it apply to the gate's run exactly as to your
-  own `pytest` run. The measurement itself is owned by the gate — branch coverage on, test files
-  and exempted paths omitted, floors from your `testing-conventions.toml` config — so a
-  `.coveragerc` / `[tool.coverage]` table is deliberately not consulted: the gate holds the same
-  keys it overrides in a vitest config, and report paths stay scanned-path-relative, addressing
-  the same paths every other check uses. (`# pragma: no cover` is coverage.py's built-in default
-  and applies without configuration.)
+  own `pytest` run. The measurement itself is owned by the gate — the scanned path's sources are
+  the denominator (`--source`), branch coverage on, test files and exempted paths omitted, floors
+  from your `testing-conventions.toml` config — so a `.coveragerc` / `[tool.coverage]` table is
+  deliberately not consulted: the gate holds the same keys it overrides in a vitest config, and
+  the denominator is the scanned path's sources, addressing the same paths every other check
+  uses. Scoping to the scanned path keeps an editable path dependency's source tree out of the
+  number — a normal install lands in `site-packages` and is ignored either way, but an editable
+  install resolves through a `.pth` to a tree that is not under `site-packages`, which
+  coverage.py's default would otherwise pick up. (`# pragma: no cover` is coverage.py's built-in
+  default and applies without configuration.)
 - **Rust** — `cargo llvm-cov --lib` anchors at the **crate root** by construction: cargo resolves
   the manifest upward from the scanned path, and `.cargo/config.toml` / `rust-toolchain.toml`
   discovery is cargo's and rustup's own, exactly as in your own `cargo test`.

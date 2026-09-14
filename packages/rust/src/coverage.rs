@@ -107,22 +107,14 @@ pub fn evaluate(report: &CoverageReport, thresholds: Thresholds) -> Outcome {
 /// `omit` is the `coverage`-rule exemptions as `root`-relative paths. The `coverage`
 /// CLI, with `pytest` importable, must be on `PATH`.
 pub fn measure(root: &Path, thresholds: Thresholds, omit: &[String]) -> Result<Outcome> {
-    let report = run_coverage(root, omit, false)?;
+    let report = run_coverage(root, omit)?;
     Ok(evaluate(&report, thresholds))
 }
 
-/// Run the Python unit suite with **every** source under `root` measured
-/// (`--source=.`), so an untested source shows in `files` as wholly uncovered rather
-/// than vanishing. `omit` is as in [`measure`].
-pub fn measure_patch_report(root: &Path, omit: &[String]) -> Result<CoverageReport> {
-    run_coverage(root, omit, true)
-}
-
-/// Like [`measure_patch_report`], but measuring only the files the suite imports,
-/// exactly as [`measure`] does — the line-scoped exemption path recomputes the floor
-/// over that same file set. `omit` is as in [`measure`].
+/// Run the Python unit suite and return the per-file report, the denominator scoped
+/// to `root`'s sources (`--source=.`). `omit` is as in [`measure`].
 pub fn measure_report(root: &Path, omit: &[String]) -> Result<CoverageReport> {
-    run_coverage(root, omit, false)
+    run_coverage(root, omit)
 }
 
 /// A coverage.py data file under the temp dir — unique per call so parallel checks
@@ -148,9 +140,9 @@ impl Drop for DataFile {
 }
 
 /// Run coverage.py over the unit suite in `root` and return the parsed report.
-/// `include_all_sources` adds `--source=.`, so a source no test imports still appears
-/// in `files` as wholly uncovered. The floor passes `false`; patch coverage `true`.
-fn run_coverage(root: &Path, omit: &[String], include_all_sources: bool) -> Result<CoverageReport> {
+/// `--source=.` scopes the denominator to `root`'s sources; dropping it lets
+/// coverage.py's default pick up an editable path dependency's tree outside `root`.
+fn run_coverage(root: &Path, omit: &[String]) -> Result<CoverageReport> {
     let data = DataFile::new();
     let omit = build_omit(omit);
 
@@ -158,11 +150,8 @@ fn run_coverage(root: &Path, omit: &[String], include_all_sources: bool) -> Resu
     let mut command = Command::new("coverage");
     command
         .current_dir(root)
-        .args(["run", "--branch"])
+        .args(["run", "--branch", "--source=."])
         .arg(format!("--omit={omit}"));
-    if include_all_sources {
-        command.arg("--source=.");
-    }
     let run = command
         .args(["-m", "pytest", "-q", "-p", "no:cacheprovider", "."])
         .env("COVERAGE_FILE", &data.0)

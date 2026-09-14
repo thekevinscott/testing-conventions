@@ -32,7 +32,7 @@ pub fn measure(
     if changed.is_empty() {
         return Ok(Outcome::Pass);
     }
-    let report = coverage::measure_patch_report(root, omit)?;
+    let report = coverage::measure_report(root, omit)?;
     let files = relative_keys(report.files, root);
     Ok(evaluate_patch(&changed, &files, thresholds))
 }

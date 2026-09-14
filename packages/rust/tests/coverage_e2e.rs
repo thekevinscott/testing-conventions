@@ -46,6 +46,11 @@ fn exempt_cov_exits_zero_against_a_100_floor() {
 }
 
 #[test]
+fn editable_path_dep_outside_source_is_excluded_from_the_floor() {
+    assert_eq!(unit_coverage_exit("editable_dep/src", "floor100.toml"), 0);
+}
+
+#[test]
 fn full_exits_zero_with_no_config_via_the_default_floor() {
     assert_eq!(unit_coverage_exit("full/src", "no-such-config.toml"), 0);
 }

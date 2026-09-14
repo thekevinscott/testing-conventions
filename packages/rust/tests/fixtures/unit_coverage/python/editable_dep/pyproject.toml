@@ -1,0 +1,7 @@
+# A monorepo-shaped coverage fixture: `b` (scanned at src/) depends on a neighbor
+# package `a` through a sys.path entry a conftest adds — the same shape an editable
+# path dep (`[tool.uv.sources] a = { path = "../a", editable = true }`) resolves to,
+# where the real source tree sits outside site-packages. coverage.py's default
+# "measure everything not stdlib or third-party" picks `a` up, so without scoping the
+# run to the scanned path, `a`'s uncovered branches drag `b` below a 100 floor.
+[tool.pytest.ini_options]

@@ -208,8 +208,12 @@ The fixtures live under `.github/selftest/`, and the `-red` jobs drive the herme
 (`./hermetic-cli/testing-conventions`) rather than npm-latest (see "Hermetic mode" below). Two fixture trees are
 worth knowing about: `.github/selftest/monorepo/` carries no manifest or lockfile at its own root,
 the per-package-lockfile shape the package-root derivation runs against, and
-`.github/selftest/packaging-package-root/` is generated — regenerate it with `python
-.github/selftest/packaging-package-root/make_fixtures.py`.
+`.github/selftest/packaging-package-root/`'s tarballs are generated — regenerate them with `python
+.github/selftest/packaging-package-root/make_fixtures.py`. Its `clean/` package also packs through
+a `prepack` hook that runs a devDependency's bin (`semver`), with its `pnpm-lock.yaml` committed
+(the one lockfile in the repo, carved out of `.gitignore`'s blanket rule): the
+`packaging-package-root-clean` job passes only when the packaging job's "Install project
+dependencies" step runs before `pnpm pack`, for every TypeScript package it builds.
 
 The reusable workflow (`.github/workflows/testing-conventions.yml`) drives the **published** tool — its `detect` step pins `…/actions/detect@v0`, and each rule job runs the published CLI through `npm exec` (no version → the newest release the job's node satisfies; see "The CLI runs on its own engine" below). The self-test (`testing-conventions-selftest.yml`) calls that reusable workflow. So a change to *detection* (which rules fan out) or *rule behavior* does **not** take effect in the self-test — or for any consumer — until a release **moves `@v0`** to the new commit and publishes the package.
 
@@ -749,12 +753,13 @@ install`) — that ordering is also what `cache: pnpm` needs, since `setup-node`
 
 **`cache-dependency-path` points at `package.json`, not `pnpm-lock.yaml`.** First attempt used
 the lockfile (the obvious hash input, and what the action's docs lead with) and it broke CI:
-`.gitignore` has a blanket `pnpm-lock.yaml` rule — **no pnpm lockfile is committed anywhere in
-this repo** — so there was nothing in the checkout for `cache-dependency-path` to hash
+`.gitignore` has a blanket `pnpm-lock.yaml` rule — **no package in this repo commits a pnpm
+lockfile** (the sole carve-out is a self-test fixture under `.github/selftest/`) — so there was
+nothing in the checkout for `cache-dependency-path` to hash
 ("Some specified paths were not resolved, unable to cache dependencies"). `package.json` is the
 closest committed proxy for "did the intended dependency set change." This also settles
 whether `--no-frozen-lockfile` is deliberate: it has to be,
-since `--frozen-lockfile` requires a lockfile to freeze against, and none is ever committed.
+since `--frozen-lockfile` requires a lockfile to freeze against, and the packages commit none.
 Left untouched, now with a real reason on record rather than an absence of one.
 
 ## Docs CI: ref-scoped concurrency

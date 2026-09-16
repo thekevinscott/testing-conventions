@@ -36,8 +36,10 @@ In order:
    manifest, provisions the toolchain, runs it at the derived
    [package root](/monorepo#source-vs-the-package-root), and scans the result:
    - **Python** (a `pyproject.toml` with a `[project]` table) — `uv build`, scanning `dist/`.
-   - **TypeScript** (a `package.json`) — `<pnpm|npm> pack --pack-destination dist`, which runs
-     the package's own `prepare` / `prepack` lifecycle.
+   - **TypeScript** (a `package.json`) — `pnpm install --frozen-lockfile` (or `npm ci`) at the
+     package root, then `<pnpm|npm> pack --pack-destination dist`, which runs the package's own
+     `prepare` / `prepack` lifecycle. The install runs for every TypeScript package the job
+     builds, so a lifecycle hook that invokes a devDependency's bin finds it in `node_modules`.
    - **Rust** (a `Cargo.toml` with a `[package]` table) — `cargo package`, scanning
      `target/package/`, redirected with `--target-dir target` for a workspace member so the
      crate lands at the package's own `target/package/`.

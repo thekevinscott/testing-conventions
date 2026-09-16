@@ -47,6 +47,10 @@ packages/rust/tests/fixtures/unit_mutation/typescript/*/.stryker-tmp/
 !.github/selftest/packaging-package-root/**/dist/
 !.github/selftest/packaging-package-root/**/dist/**
 
+# The packaging-package-root clean fixture packs through a prepack hook, so its lockfile is
+# committed for the job's `pnpm install --frozen-lockfile`.
+!.github/selftest/packaging-package-root/clean/pnpm-lock.yaml
+
 # #393: a committed `target/` of built artifacts under one isolation fixture crate, proving
 # the unit-isolation source walk skips `target/` — the blanket `target/` rule above would
 # otherwise hide the built-artifact file from git.

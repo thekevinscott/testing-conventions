@@ -45,9 +45,9 @@ Three checks measure the *same* colocated unit suite, each a stronger question t
 
 | Check | Question |
 | --- | --- |
-| [`unit colocated-test`](./colocated-test) | Does a test **exist**? |
-| [`unit coverage`](./coverage) | Does the test **run** the code? |
-| [`unit mutation`](./mutation) | Does the test **verify** the code? |
+| [`colocated-test`](./colocated-test) | Does a test **exist**? |
+| [`unit-coverage`](./coverage) | Does the test **run** the code? |
+| [`mutation`](./mutation) | Does the test **verify** the code? |
 
 Each rung answers a gap in the one below. Coverage exists because a test can exist without running a
 line; mutation exists because a line can run without any assertion checking it. The ladder rewards

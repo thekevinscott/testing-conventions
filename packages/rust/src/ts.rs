@@ -8,11 +8,14 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, bail, Context, Result};
 use oxc::allocator::Allocator;
 use oxc::ast::ast::{
-    Argument, CallExpression, Expression, ImportDeclaration, ImportOrExportKind, Statement,
+    Argument, ArrowFunctionExpression, CallExpression, ConditionalExpression, DoWhileStatement,
+    Expression, ForInStatement, ForOfStatement, ForStatement, Function, IfStatement,
+    ImportDeclaration, ImportOrExportKind, SwitchStatement, TryStatement, WhileStatement,
 };
 use oxc::ast_visit::{walk, Visit};
 use oxc::parser::Parser;
 use oxc::span::{SourceType, Span};
+use oxc::syntax::scope::ScopeFlags;
 use oxc_codegen::{Codegen, CodegenOptions, CommentOptions};
 
 use crate::lint::Violation;
@@ -439,32 +442,72 @@ fn line_of(source: &str, offset: u32) -> usize {
         + 1
 }
 
-/// `true` when `source` (a module at `path`) declares something and compiles to zero runtime
-/// JavaScript, so it has no behavior to unit-test. An empty module and one that fails to parse
-/// are both `false`: the presence rule keeps a module it couldn't read as a subject.
-pub fn is_type_only_module(source: &str, path: &Path) -> bool {
+/// `true` when `source` (a module at `path`) holds a function with a body or control flow
+/// anywhere in it. A module that fails to parse is `true`: the presence rule keeps a module it
+/// couldn't read as a subject.
+pub fn has_behavior(source: &str, path: &Path) -> bool {
     let allocator = Allocator::default();
     let Ok(source_type) = SourceType::from_path(path) else {
-        return false;
+        return true;
     };
     let ret = Parser::new(&allocator, source, source_type).parse();
     if ret.panicked || !ret.diagnostics.is_empty() {
-        return false;
+        return true;
     }
-    let body = &ret.program.body;
-    !body.is_empty() && body.iter().all(is_type_only_statement)
+    let mut visitor = BehaviorVisitor { found: false };
+    visitor.visit_program(&ret.program);
+    visitor.found
 }
 
-/// `true` when a top-level statement contributes no runtime code — see [`is_type_only_module`].
-fn is_type_only_statement(statement: &Statement) -> bool {
-    match statement {
-        Statement::TSTypeAliasDeclaration(_) | Statement::TSInterfaceDeclaration(_) => true,
-        Statement::ImportDeclaration(decl) => decl.import_kind.is_type(),
-        Statement::ExportAllDeclaration(decl) => decl.export_kind.is_type(),
-        // The parser marks an exported type alias or interface as a type export, so a
-        // value-kind named export always carries runtime bindings.
-        Statement::ExportNamedDeclaration(decl) => decl.export_kind.is_type(),
-        _ => false,
+/// Records the first function body or control-flow node the walk reaches.
+struct BehaviorVisitor {
+    found: bool,
+}
+
+impl<'a> Visit<'a> for BehaviorVisitor {
+    fn visit_function(&mut self, it: &Function<'a>, _flags: ScopeFlags) {
+        // A `declare` function, an overload signature, and an abstract method have no body.
+        self.found |= it.body.is_some();
+    }
+
+    fn visit_arrow_function_expression(&mut self, _: &ArrowFunctionExpression<'a>) {
+        self.found = true;
+    }
+
+    fn visit_if_statement(&mut self, _: &IfStatement<'a>) {
+        self.found = true;
+    }
+
+    fn visit_for_statement(&mut self, _: &ForStatement<'a>) {
+        self.found = true;
+    }
+
+    fn visit_for_in_statement(&mut self, _: &ForInStatement<'a>) {
+        self.found = true;
+    }
+
+    fn visit_for_of_statement(&mut self, _: &ForOfStatement<'a>) {
+        self.found = true;
+    }
+
+    fn visit_while_statement(&mut self, _: &WhileStatement<'a>) {
+        self.found = true;
+    }
+
+    fn visit_do_while_statement(&mut self, _: &DoWhileStatement<'a>) {
+        self.found = true;
+    }
+
+    fn visit_switch_statement(&mut self, _: &SwitchStatement<'a>) {
+        self.found = true;
+    }
+
+    fn visit_try_statement(&mut self, _: &TryStatement<'a>) {
+        self.found = true;
+    }
+
+    fn visit_conditional_expression(&mut self, _: &ConditionalExpression<'a>) {
+        self.found = true;
     }
 }
 
@@ -575,49 +618,87 @@ mod tests {
         assert!(found.is_empty(), "got: {found:?}");
     }
 
-    /// Whether `source` (named `foo.ts`) is a type-only module.
-    fn type_only(source: &str) -> bool {
-        is_type_only_module(source, Path::new("foo.ts"))
+    /// Whether `source` (named `foo.ts`) holds a function with a body or control flow.
+    fn behavior(source: &str) -> bool {
+        has_behavior(source, Path::new("foo.ts"))
     }
 
     #[test]
-    fn type_only_recognizes_a_pure_type_module() {
-        assert!(type_only(
+    fn behavior_is_absent_from_a_type_only_module() {
+        assert!(!behavior(
             "export interface Shape { kind: string }\nexport type Id = string;\n"
         ));
-        assert!(type_only(
+        assert!(!behavior(
             "import type { Shape } from './shape';\nexport type Wrapped = Shape;\n"
         ));
-        assert!(type_only("export type { Id } from './shape';\n"));
-        assert!(type_only(
-            "type Local = number;\ninterface Bare { x: Local }\n"
-        ));
-        assert!(type_only("export type * from './shapes';\n"));
+        assert!(!behavior("export type { Id } from './shape';\n"));
+        assert!(!behavior("export type * from './shapes';\n"));
+        assert!(!behavior(""));
+        assert!(!behavior("// just a comment\n"));
     }
 
     #[test]
-    fn type_only_rejects_any_runtime_construct() {
-        assert!(!type_only(
+    fn behavior_is_absent_from_a_declaration_only_module() {
+        assert!(!behavior(
             "export type T = number;\nexport const version: T = 1;\n"
         ));
-        assert!(!type_only(
-            "export interface I {}\nexport function make(): I { return {}; }\n"
+        assert!(!behavior("export * from './widget';\n"));
+        assert!(!behavior("export { thing } from './thing';\n"));
+        assert!(!behavior("export enum Color { Red, Green }\n"));
+        assert!(!behavior("export namespace N { export const x = 1; }\n"));
+        assert!(!behavior(
+            "export const config = { retries: 3 } as const;\n"
         ));
-        assert!(!type_only(
-            "import { x } from './x';\nexport type T = typeof x;\n"
-        ));
-        assert!(!type_only("export * from './widget';\n"));
-        assert!(!type_only("export { thing } from './thing';\n"));
-        assert!(!type_only("export enum Color { Red, Green }\n"));
-        assert!(!type_only("export namespace N { export const x = 1; }\n"));
+        assert!(!behavior("export const now = Date.now();\n"));
+        assert!(!behavior("export const name = `${a}-${b}`;\n"));
     }
 
     #[test]
-    fn type_only_is_false_for_empty_or_unparsable() {
-        // An empty/comment-only file is a non-subject on its own account, not via this path.
-        assert!(!type_only(""));
-        assert!(!type_only("// just a comment\n"));
-        assert!(!type_only("export type T = ;;;\nconst {{{ = \n"));
+    fn behavior_is_absent_from_a_bodiless_function() {
+        assert!(!behavior("declare function f(): void;\n"));
+        assert!(!behavior(
+            "export abstract class A { abstract run(): void; }\n"
+        ));
+        assert!(!behavior("declare class B { run(): void; }\n"));
+    }
+
+    #[test]
+    fn behavior_short_circuit_operators_are_not_control_flow() {
+        assert!(!behavior("export const PORT = env.PORT ?? 3000;\n"));
+        assert!(!behavior("export const HOST = env.HOST || 'localhost';\n"));
+        assert!(!behavior("export const READY = a && b;\n"));
+    }
+
+    #[test]
+    fn behavior_every_function_form_is_present() {
+        assert!(behavior("export function f() { return 1; }\n"));
+        assert!(behavior("export const f = function () { return 1; };\n"));
+        assert!(behavior("export const f = () => 1;\n"));
+        assert!(behavior("export class W { run() { return 1; } }\n"));
+        assert!(behavior("export const o = { run() { return 1; } };\n"));
+        assert!(behavior(
+            "export function f(a: string): string;\nexport function f(a: number): number;\n\
+             export function f(a: unknown) { return a; }\n"
+        ));
+        assert!(behavior("export const x = { on: () => 1 } as const;\n"));
+    }
+
+    #[test]
+    fn behavior_every_control_flow_form_is_present() {
+        assert!(behavior("if (a) { b = 1; }\n"));
+        assert!(behavior("for (let i = 0; i < 3; i++) { b = i; }\n"));
+        assert!(behavior("for (const k in o) { b = k; }\n"));
+        assert!(behavior("for (const v of xs) { b = v; }\n"));
+        assert!(behavior("while (a) { a = false; }\n"));
+        assert!(behavior("do { a = false; } while (a);\n"));
+        assert!(behavior("switch (a) { case 1: b = 1; }\n"));
+        assert!(behavior("try { b = 1; } catch { b = 2; }\n"));
+        assert!(behavior("export const LEVEL = DEBUG ? 10 : 20;\n"));
+    }
+
+    #[test]
+    fn behavior_is_assumed_for_unparsable_content() {
+        assert!(behavior("export type T = ;;;\nconst {{{ = \n"));
     }
 
     /// Whether `base` and `head` (a module named `foo.ts`) compile to the same JavaScript.
@@ -909,16 +990,11 @@ mod tests {
     }
 
     #[test]
-    fn type_only_is_false_for_an_unsupported_extension() {
-        assert!(!is_type_only_module(
+    fn behavior_is_assumed_for_an_unsupported_extension() {
+        assert!(has_behavior(
             "export type T = number;\n",
             Path::new("foo.txt")
         ));
-    }
-
-    #[test]
-    fn type_only_rejects_a_plain_runtime_statement() {
-        assert!(!type_only("const x = 1;\ntype T = number;\n"));
     }
 
     #[test]

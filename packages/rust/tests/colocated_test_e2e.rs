@@ -107,6 +107,55 @@ fn type_only_typescript_modules_do_not_fail_the_run() {
 }
 
 #[test]
+fn python_declaration_only_modules_do_not_fail_the_run() {
+    let (code, stderr) = unit_colocated_test_output("python_declaration_only", "python");
+    assert_eq!(
+        code, 0,
+        "declaration-only modules are not subjects; stderr: {stderr}"
+    );
+}
+
+#[test]
+fn python_functions_and_control_flow_fail_the_run() {
+    let (code, stderr) = unit_colocated_test_output("python_behavior", "python");
+    assert_eq!(
+        code, 1,
+        "a function or a branch is a subject; stderr: {stderr}"
+    );
+    for name in ["func.py", "lam.py", "klass.py", "ternary.py", "comp.py"] {
+        assert!(
+            stderr.contains(name),
+            "stderr should name the orphan `{name}`; got: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn typescript_declaration_only_modules_do_not_fail_the_run() {
+    let (code, stderr) = unit_colocated_test_output("typescript/declaration_only", "typescript");
+    assert_eq!(
+        code, 0,
+        "a barrel, `export const` literals, an `as const` object, and an enum are not \
+         subjects; stderr: {stderr}"
+    );
+}
+
+#[test]
+fn typescript_functions_and_control_flow_fail_the_run() {
+    let (code, stderr) = unit_colocated_test_output("typescript/behavior", "typescript");
+    assert_eq!(
+        code, 1,
+        "a function or a branch is a subject; stderr: {stderr}"
+    );
+    for name in ["fn.ts", "arrow.ts", "method.ts", "switch.ts", "ternary.ts"] {
+        assert!(
+            stderr.contains(name),
+            "stderr should name the orphan `{name}`; got: {stderr}"
+        );
+    }
+}
+
+#[test]
 fn a_mixed_type_and_runtime_module_still_fails_the_run() {
     let (code, stderr) = unit_colocated_test_output("typescript/type_only_mixed", "typescript");
     assert_eq!(

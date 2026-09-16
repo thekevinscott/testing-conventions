@@ -219,6 +219,55 @@ fn modified_type_only_module_exits_zero() {
 }
 
 #[test]
+fn modified_python_declaration_only_module_exits_zero() {
+    let repo = TempRepo::new("py-decl-only");
+    repo.write(
+        "pkg/__init__.py",
+        "\"\"\"Package barrel.\"\"\"\nfrom ._version import __version__\n\n\
+         __all__ = [\"__version__\"]\n",
+    );
+    repo.write("pkg/_version.py", "__version__ = \"1.0.0\"\n");
+    repo.write("widget.py", WIDGET_PY);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+    repo.write("pkg/_version.py", "__version__ = \"1.1.0\"\n");
+    repo.write(
+        "pkg/__init__.py",
+        "\"\"\"Package barrel.\"\"\"\nfrom ._version import __version__\n\n\
+         __all__ = [\"__version__\", \"NAME\"]\nNAME = \"pkg\"\n",
+    );
+    repo.commit("bump the version and extend the barrel");
+
+    let (code, stderr) = co_change(&repo, "python", &base, None);
+    assert_eq!(
+        code, 0,
+        "a declaration-only module is not a co-change subject; stderr: {stderr}"
+    );
+}
+
+#[test]
+fn modified_typescript_barrel_exits_zero() {
+    let repo = TempRepo::new("ts-barrel");
+    repo.write("widget.ts", TS_WIDGET);
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.write("index.ts", "export { widget } from './widget';\n");
+    repo.commit("base");
+    let base = repo.head();
+    repo.write(
+        "index.ts",
+        "export { widget } from './widget';\nexport * from './widget';\n",
+    );
+    repo.commit("extend the barrel");
+
+    let (code, stderr) = co_change(&repo, "typescript", &base, None);
+    assert_eq!(
+        code, 0,
+        "a re-export barrel is not a co-change subject; stderr: {stderr}"
+    );
+}
+
+#[test]
 fn the_type_only_skip_does_not_silence_a_runtime_change() {
     let repo = TempRepo::new("ts-type-only-red");
     repo.write("widget.ts", TS_WIDGET);

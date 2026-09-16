@@ -4,6 +4,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
+use rustpython_ast::Visitor;
 use rustpython_parser::lexer::lex;
 use rustpython_parser::{ast, Mode, Parse, Tok};
 use syn::visit::{self, Visit};
@@ -61,26 +62,14 @@ impl Language {
         }
     }
 
-    /// `true` when `source` holds at least one line of code — anything beyond blank
-    /// lines and comments.
-    pub(crate) fn has_code(self, source: &str) -> bool {
-        match self {
-            Language::Python => python_has_code(source),
-            Language::TypeScript => typescript_has_code(source),
-            Language::Rust => false,
-        }
-    }
-
-    /// `true` when `source` at `path` declares behavior a unit test can exercise. Presence
-    /// and the commit-scoped co-change check both decide subjecthood here, so they cannot
-    /// disagree about what has behavior.
+    /// `true` when `source` at `path` holds a function or control flow anywhere in it.
+    /// Presence and the commit-scoped co-change check both decide subjecthood here, so they
+    /// cannot disagree about what has behavior.
     pub(crate) fn is_subject(self, source: &str, path: &Path) -> bool {
-        if !self.has_code(source) {
-            return false;
-        }
         match self {
-            Language::TypeScript => !crate::ts::is_type_only_module(source, path),
-            Language::Python | Language::Rust => true,
+            Language::Python => python_has_behavior(source),
+            Language::TypeScript => crate::ts::has_behavior(source, path),
+            Language::Rust => false,
         }
     }
 
@@ -291,14 +280,6 @@ fn is_declaration(path: &Path) -> bool {
     name.ends_with(".d.ts") || name.ends_with(".d.mts") || name.ends_with(".d.cts")
 }
 
-/// `true` when any line of Python `source` is neither blank nor a `#` comment.
-fn python_has_code(source: &str) -> bool {
-    source.lines().any(|line| {
-        let trimmed = line.trim_start();
-        !trimmed.is_empty() && !trimmed.starts_with('#')
-    })
-}
-
 /// `true` when Python `base` and `head` tokenize identically. Comments and blank lines
 /// never reach a token — the parser's `full-lexer` feature is off — while `Indent` /
 /// `Dedent` do, so re-indenting a statement is a code change.
@@ -306,6 +287,89 @@ fn python_same_code(base: &str, head: &str) -> bool {
     match (python_tokens(base), python_tokens(head)) {
         (Some(base), Some(head)) => base == head,
         _ => false,
+    }
+}
+
+/// `true` when Python `source` holds a function or control flow anywhere in it. A module
+/// that fails to parse is `true`: the presence rule keeps a module it couldn't read as a subject.
+fn python_has_behavior(source: &str) -> bool {
+    let Ok(suite) = ast::Suite::parse(source, "<source>") else {
+        return true;
+    };
+    let mut visitor = BehaviorVisitor { found: false };
+    for stmt in suite {
+        visitor.visit_stmt(stmt);
+    }
+    visitor.found
+}
+
+/// Records the first function or control-flow node the walk reaches.
+struct BehaviorVisitor {
+    found: bool,
+}
+
+impl Visitor for BehaviorVisitor {
+    fn visit_stmt_function_def(&mut self, _: ast::StmtFunctionDef) {
+        self.found = true;
+    }
+
+    fn visit_stmt_async_function_def(&mut self, _: ast::StmtAsyncFunctionDef) {
+        self.found = true;
+    }
+
+    fn visit_expr_lambda(&mut self, _: ast::ExprLambda) {
+        self.found = true;
+    }
+
+    fn visit_stmt_if(&mut self, _: ast::StmtIf) {
+        self.found = true;
+    }
+
+    fn visit_stmt_for(&mut self, _: ast::StmtFor) {
+        self.found = true;
+    }
+
+    fn visit_stmt_async_for(&mut self, _: ast::StmtAsyncFor) {
+        self.found = true;
+    }
+
+    fn visit_stmt_while(&mut self, _: ast::StmtWhile) {
+        self.found = true;
+    }
+
+    fn visit_stmt_try(&mut self, _: ast::StmtTry) {
+        self.found = true;
+    }
+
+    fn visit_stmt_try_star(&mut self, _: ast::StmtTryStar) {
+        self.found = true;
+    }
+
+    fn visit_stmt_with(&mut self, _: ast::StmtWith) {
+        self.found = true;
+    }
+
+    fn visit_stmt_async_with(&mut self, _: ast::StmtAsyncWith) {
+        self.found = true;
+    }
+
+    fn visit_stmt_match(&mut self, _: ast::StmtMatch) {
+        self.found = true;
+    }
+
+    fn visit_expr_if_exp(&mut self, _: ast::ExprIfExp) {
+        self.found = true;
+    }
+
+    // The generated `generic_visit_comprehension` and `generic_visit_keyword` are no-ops, so
+    // a lambda in a comprehension's iterable or a call's keyword argument needs a walk here.
+    fn visit_comprehension(&mut self, node: ast::Comprehension) {
+        self.found |= !node.ifs.is_empty();
+        self.visit_expr(node.iter);
+    }
+
+    fn visit_keyword(&mut self, node: ast::Keyword) {
+        self.visit_expr(node.value);
     }
 }
 
@@ -318,34 +382,6 @@ fn python_tokens(source: &str) -> Option<Vec<Tok>> {
     // cleanly), so the parse decides validity while the tokens carry the comparison.
     ast::Suite::parse(source, "<source>").ok()?;
     Some(tokens)
-}
-
-/// `true` when TypeScript `source` holds anything beyond whitespace and `//` / `/* … */`
-/// comments. Any other character — including a string literal's quote — counts as code.
-fn typescript_has_code(source: &str) -> bool {
-    let mut chars = source.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            c if c.is_whitespace() => {}
-            '/' if chars.peek() == Some(&'/') => {
-                while chars.peek().is_some_and(|&n| n != '\n') {
-                    chars.next();
-                }
-            }
-            '/' if chars.peek() == Some(&'*') => {
-                chars.next();
-                let mut prev = '\0';
-                for n in chars.by_ref() {
-                    if prev == '*' && n == '/' {
-                        break;
-                    }
-                    prev = n;
-                }
-            }
-            _ => return true,
-        }
-    }
-    false
 }
 
 /// The file extension, lossily decoded (empty if there is none).
@@ -455,36 +491,6 @@ mod tests {
     }
 
     #[test]
-    fn python_empty_or_comment_only_files_have_no_code() {
-        assert!(!Language::Python.has_code(""));
-        assert!(!Language::Python.has_code("\n   \n"));
-        assert!(!Language::Python.has_code("# just a comment\n   # another\n"));
-    }
-
-    #[test]
-    fn python_real_content_counts_as_code() {
-        assert!(Language::Python.has_code("x = 1\n"));
-        assert!(Language::Python.has_code("# header\nimport os\n"));
-        assert!(Language::Python.has_code("\"\"\"Package docstring.\"\"\"\n"));
-    }
-
-    #[test]
-    fn typescript_empty_or_comment_only_files_have_no_code() {
-        assert!(!Language::TypeScript.has_code(""));
-        assert!(!Language::TypeScript.has_code("   \n\t\n"));
-        assert!(!Language::TypeScript.has_code("// a line comment\n"));
-        assert!(!Language::TypeScript.has_code("/* a\n   block\n   comment */\n"));
-    }
-
-    #[test]
-    fn typescript_real_content_counts_as_code() {
-        assert!(Language::TypeScript.has_code("export const x = 1;\n"));
-        assert!(Language::TypeScript.has_code("// note\nexport * from './a';\n"));
-        assert!(Language::TypeScript.has_code("const s = '// not a comment';\n"));
-        assert!(Language::TypeScript.has_code("const r = a / b;\n"));
-    }
-
-    #[test]
     fn typescript_subject_skips_type_only_modules() {
         let ts = Path::new("aliases.ts");
         assert!(!Language::TypeScript.is_subject("export type Alias = string;\n", ts));
@@ -493,21 +499,95 @@ mod tests {
     }
 
     #[test]
-    fn typescript_subject_keeps_anything_with_runtime_behavior() {
+    fn typescript_subject_needs_a_function_or_control_flow() {
         let ts = Path::new("widget.ts");
-        assert!(Language::TypeScript.is_subject("export const x = 1;\n", ts));
-        assert!(Language::TypeScript
-            .is_subject("export type Alias = string;\nexport const x = 1;\n", ts));
+        assert!(Language::TypeScript.is_subject("export const x = () => 1;\n", ts));
+        assert!(Language::TypeScript.is_subject(
+            "export type Alias = string;\nexport const x = () => 1;\n",
+            ts
+        ));
+        assert!(!Language::TypeScript.is_subject("export const x = 1;\n", ts));
         assert!(!Language::TypeScript.is_subject("", ts));
+        assert!(!Language::TypeScript.is_subject("   \n\t\n", ts));
         assert!(!Language::TypeScript.is_subject("// nothing here\n", ts));
+        assert!(!Language::TypeScript.is_subject("/* a\n   block\n   comment */\n", ts));
+    }
+
+    fn py_subject(source: &str) -> bool {
+        Language::Python.is_subject(source, Path::new("widget.py"))
     }
 
     #[test]
-    fn python_subject_is_decided_by_code_alone() {
-        let py = Path::new("widget.py");
-        assert!(Language::Python.is_subject("x = 1\n", py));
-        assert!(Language::Python.is_subject("Alias = str\n", py));
-        assert!(!Language::Python.is_subject("# just a comment\n", py));
+    fn python_declaration_only_module_is_not_a_subject() {
+        assert!(!py_subject("x = 1\n"));
+        assert!(!py_subject("Alias = str\n"));
+        assert!(!py_subject(
+            "\"\"\"pkg.\"\"\"\nfrom ._version import __version__\n__all__ = [\"__version__\"]\n"
+        ));
+        assert!(!py_subject("class Color(Enum):\n    RED = 1\n"));
+        assert!(!py_subject(
+            "@dataclass\nclass Point:\n    x: int\n    y: int\n"
+        ));
+        assert!(!py_subject("logger = getLogger(__name__)\n"));
+        assert!(!py_subject("TIMEOUT = 30 * 60\nNAME = f\"{TIMEOUT}s\"\n"));
+        assert!(!py_subject("\"\"\"Package docstring.\"\"\"\n"));
+        assert!(!py_subject(""));
+        assert!(!py_subject("\n   \n"));
+        assert!(!py_subject("# just a comment\n   # another\n"));
+    }
+
+    #[test]
+    fn python_short_circuit_and_a_plain_comprehension_are_not_control_flow() {
+        assert!(!py_subject("DEBUG = os.environ.get(\"DEBUG\") or \"0\"\n"));
+        assert!(!py_subject("READY = a and b\n"));
+        assert!(!py_subject("NAMES = [c.name for c in Color]\n"));
+        assert!(!py_subject("BY_NAME = {c.name: c for c in Color}\n"));
+    }
+
+    #[test]
+    fn python_every_function_form_is_a_subject() {
+        assert!(py_subject("def f():\n    return 1\n"));
+        assert!(py_subject("async def f():\n    return 1\n"));
+        assert!(py_subject("HANDLERS = {\"id\": lambda x: x}\n"));
+        assert!(py_subject(
+            "class Widget:\n    def run(self):\n        return 1\n"
+        ));
+        assert!(py_subject(
+            "class Runner(Protocol):\n    def run(self) -> int: ...\n"
+        ));
+    }
+
+    #[test]
+    fn python_every_control_flow_form_is_a_subject() {
+        assert!(py_subject("if DEBUG:\n    LEVEL = 10\n"));
+        assert!(py_subject("for i in range(3):\n    pass\n"));
+        assert!(py_subject("async for i in aiter():\n    pass\n"));
+        assert!(py_subject("while True:\n    pass\n"));
+        assert!(py_subject(
+            "try:\n    import x\nexcept ImportError:\n    x = None\n"
+        ));
+        assert!(py_subject(
+            "try:\n    import x\nexcept* ImportError:\n    x = None\n"
+        ));
+        assert!(py_subject("with open(p) as f:\n    DATA = f.read()\n"));
+        assert!(py_subject("async with lock:\n    pass\n"));
+        assert!(py_subject("match cmd:\n    case \"go\":\n        pass\n"));
+        assert!(py_subject("LEVEL = 10 if DEBUG else 20\n"));
+        assert!(py_subject("EVENS = [n for n in range(9) if n % 2 == 0]\n"));
+    }
+
+    #[test]
+    fn python_control_flow_nested_in_an_expression_is_a_subject() {
+        assert!(py_subject("CONFIG = {\"level\": (10 if DEBUG else 20)}\n"));
+        assert!(py_subject("run(callback=lambda: None)\n"));
+        assert!(py_subject(
+            "ORDERED = [x for x in sorted(xs, key=lambda x: x.id)]\n"
+        ));
+    }
+
+    #[test]
+    fn python_unparsable_content_stays_a_subject() {
+        assert!(py_subject("def f(:\n"));
     }
 
     const PY_WIDGET: &str = "def widget():\n    return 1\n";
@@ -591,7 +671,7 @@ mod tests {
     fn rust_has_no_file_based_colocated_convention() {
         assert!(!Language::Rust.tracks(Path::new("lib.rs")));
         assert!(!Language::Rust.is_test(Path::new("lib_test.rs")));
-        assert!(!Language::Rust.has_code("fn main() {}\n"));
+        assert!(!Language::Rust.is_subject("fn main() {}\n", Path::new("main.rs")));
         assert_eq!(
             Language::Rust.expected_test_path(Path::new("src/lib.rs")),
             PathBuf::from("src/lib.rs")

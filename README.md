@@ -307,14 +307,14 @@ A blocking gate needs an escape hatch for files that genuinely shouldn't be test
 or it forces pointless tests and gets disabled. Exemptions are explicit and
 config-driven, never a silent ignore:
 
-- **Empty files** are skipped automatically. A file with no code (empty or
-  comment-only, e.g. a bare `__init__.py`) and declaration files (`*.d.ts`) have
-  nothing to test. This is the only automatic exclusion; there is no name- or
-  shape-based magic.
-- **Everything else is explicit.** A launcher shim, a re-export barrel, generated
-  code, or a non-empty `__init__.py` is exempted by a `[[<language>.exempt]]` config
-  entry naming the `rules` it lifts (`colocated-test` / `coverage`) and a required
-  `reason`. The whole exemption surface lives in one file, auditable in a single
+- **Declaration-only modules** are skipped automatically. A file with no function
+  and no control flow anywhere in it (empty, comment-only, a re-export barrel, a
+  constants module, a type-only module) and declaration files (`*.d.ts`) have
+  nothing a test can drive. The parser decides by content; there is no name-based
+  magic.
+- **Everything else is explicit.** A launcher shim, a process entry point, or
+  generated code is exempted by a `[[<language>.exempt]]` config entry naming the
+  `rules` it lifts (`colocated-test` / `coverage`) and a required `reason`. The whole exemption surface lives in one file, auditable in a single
   diff. A stale entry (a path that no longer exists) is a hard error, so the list
   can't rot.
 - **Line-scoped, always, for `coverage` / `mutation`.** These two rules are never

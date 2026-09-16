@@ -25,16 +25,27 @@ source went away.
 The check is **tree-wide presence**: every source file under the scan root has its colocated,
 matching-named unit test.
 
-- **Python** — `foo.py` → `foo_test.py`, side by side. `__init__.py` is not special: an empty one
-  is skipped (no logic), a non-empty one needs a test or an
-  [exemption](/guide/configure#exempt-a-file).
+A source file is a **subject** when it holds a function or control flow anywhere in it — inside a
+class body or an object literal included. A function has inputs and a branch depends on something,
+so a test can drive either and fail for a reason the source does not already state. A
+**declaration-only module** holds neither: it runs once, at import, and importing it is the whole
+test. It is skipped. The parser decides this from the file's contents, so no file name is special
+and no exemption is involved; a module becomes a subject the moment it gains a `def`, an arrow, a
+method, an `if`, or a ternary.
+
+- **Python** — `foo.py` → `foo_test.py`, side by side. A function is `def`, `async def`, or
+  `lambda`; control flow is `if`, `for`, `while`, `try`, `with`, `match`, a conditional
+  expression, or a comprehension with an `if`. A re-export barrel `__init__.py`, a constants
+  module (`TIMEOUT = 30 * 60`, `logger = getLogger(__name__)`), an `Enum`, a dataclass of
+  fields, a `TypedDict`, and an annotation-only class are declaration-only. A class is a subject
+  through its methods.
 - **TypeScript** — `foo.ts` / `.tsx` / `.mts` / `.cts` → a colocated `foo.test.*` of the matching
-  extension. Declaration files (`*.d.ts`) carry no runtime code and are ignored. A **type-only
-  module** — one whose top level is exclusively `type` / `interface` / `import type` /
-  `export type` declarations — is ignored for the same reason: TypeScript erases types, so it
-  compiles to zero runtime JavaScript and has no behavior to test (the parser decides this, so a
-  module gains subject status the moment it adds a runtime `const`, function, or `export`). This
-  mirrors the Rust arm, which already skips type-only files, and needs no exemption.
+  extension. A function is a function declaration, a function expression, an arrow, or a method,
+  each with a body (a `declare` or overload signature compiles to nothing); control flow adds
+  `switch`, `do`, and the ternary. A re-export barrel (`export { x } from './x'`,
+  `export * from './x'`), an `export const` of literals, an `as const` object, an enum-only
+  module, and a type-only module (`type` / `interface` / `import type` / `export type`) are
+  declaration-only. Declaration files (`*.d.ts`) are ignored outright.
 - **Rust** — units are inline `#[cfg(test)]` modules, not sibling files, so the check is presence
   of the inline module: a `src` file that defines a function with a body but has no `#[cfg(test)]`
   module is an orphan. A test module is one gated by a positively-required `test` — `#[cfg(test)]`
@@ -43,8 +54,10 @@ matching-named unit test.
   files (only `mod` / `use`) and type-only files (no `fn`) aren't subjects; `tests/`, `benches/`,
   `examples/`, and `build.rs` are skipped.
 
-Empty or comment-only files are never subjects, and a file with a `colocated-test`
-[exemption](/guide/configure#exempt-a-file) is deliberately omitted, with a reason.
+`and`, `or`, `||`, `&&`, and `??` short-circuit but are not control flow, so
+`PORT = env.PORT ?? 3000` stays declaration-only. Empty or comment-only files are never subjects,
+and a file with a `colocated-test` [exemption](/guide/configure#exempt-a-file) is deliberately
+omitted, with a reason.
 <!-- #endregion enforces -->
 
 ## Co-change: a stale test is an invisible orphan
@@ -58,10 +71,10 @@ requests the check also runs **commit-scoped** over the `<base>...HEAD` diff (Py
 - an **added** source is not a subject — brand-new code is the [coverage floor](./coverage)'s
   concern.
 
-Co-change reads the same subject definition presence does, from the file's own contents: an
-empty or comment-only file and a TypeScript type-only module carry no behavior, so editing one
-is not a stale-test risk and needs no exemption. A module gains subject status on both halves of
-the rule together, the moment it adds a runtime declaration.
+Co-change reads the same subject definition presence does, from the file's own contents: a
+declaration-only module carries no behavior, so editing one is not a stale-test risk and needs no
+exemption. A module gains subject status on both halves of the rule together, the moment it adds
+a function or control flow.
 
 Changing a test on its own is always fine. Rust units are inline in the same file, so a sibling
 test can't go stale and the co-change check doesn't apply. A `co-change`

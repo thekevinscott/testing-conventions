@@ -53,22 +53,25 @@ a line.
 
 ## Exempt a file
 
-Some files genuinely shouldn't be tested — a launcher shim, a re-export barrel, generated code. A
-blocking gate needs that escape hatch, but here it's **explicit and reason-required**, never a
+Some files genuinely shouldn't be tested — a launcher shim, a process entry point, generated code.
+A blocking gate needs that escape hatch, but here it's **explicit and reason-required**, never a
 silent ignore — see [Scoping and exemptions](../explanation/scoping) for the design.
 
-### Empty files need no exemption
+### Declaration-only modules need no exemption
 
-A file with no logic (empty, or only whitespace and comments) has nothing to test and is never
-flagged — that's why a bare `__init__.py` needs no configuration, and why a TypeScript declaration
-file (`*.d.ts`) is ignored. The moment a file gains a statement, it becomes a subject and needs
-either a colocated test or an exemption.
+A file with no function and no control flow anywhere in it has nothing a test can drive and is
+never flagged: an empty or comment-only file, a re-export barrel `__init__.py` / `index.ts`, a
+constants module, an `Enum`, a type-only module. A TypeScript declaration file (`*.d.ts`) is
+ignored too. The parser decides from the file's contents, never from its name — the moment a file
+gains a `def`, an arrow, a method, an `if`, or a ternary, it becomes a subject and needs either a
+colocated test or an exemption. [What it enforces](../explanation/colocated-test#what-it-enforces)
+carries the node list per language.
 
 ### Exempt a real file
 
 Add a `[[<language>.exempt]]` entry naming the rules it lifts and **why**. Whole-file exemptions are
-for the **presence and lint** rules — a launcher shim with no colocated test, a re-export barrel with
-no logic to isolate:
+for the **presence and lint** rules — a launcher shim or a process entry point with no colocated
+test:
 
 ```toml
 # A launcher shim with no unit test:
@@ -77,11 +80,11 @@ path = "mypkg/cli.py"
 rules = ["colocated-test"]
 reason = "thin launcher; logic lives in run(), tested in run_test.py"
 
-# A re-export barrel, exempt from the colocated-test rule:
+# A process entry point, exempt from the colocated-test rule:
 [[typescript.exempt]]
-path = "src/index.ts"
+path = "src/bin.ts"
 rules = ["colocated-test"]
-reason = "pure re-export barrel; no logic of its own"
+reason = "process entry; maps run() to an exit code, tested in run.test.ts"
 ```
 
 - `path` is relative to the scanned `source`, and must point to a file that exists — a stale entry

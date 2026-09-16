@@ -1,4 +1,4 @@
 [[typescript.exempt]]
-path = "index.ts"
+path = "main.ts"
 rules = ["colocated-test"]
-reason = "pure re-export barrel; no logic of its own to unit-test"
+reason = "process entry; maps widget() to an exit code, tested in widget.test.ts"

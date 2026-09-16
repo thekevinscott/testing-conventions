@@ -141,8 +141,12 @@ alone; the guard fires only on a listed line whose mutants were run and all caug
 
 Two kinds of files are skipped with no configuration — the only non-explicit exclusions:
 
-- **Empty or comment-only files** — nothing to test (a bare `__init__.py`, say). The moment a file
-  gains a statement, it becomes a subject.
+- **Declaration-only modules** — a file with no function and no control flow anywhere in it: an
+  empty or comment-only file, a re-export barrel `__init__.py` / `index.ts`, a constants module,
+  an `Enum`, a type-only module. The parser decides from the file's contents, never from its name;
+  the moment a file gains a `def`, an arrow, a method, an `if`, or a ternary, it becomes a
+  subject. [What it enforces](../explanation/colocated-test#what-it-enforces) carries the node
+  list per language.
 - **Declaration files** (`*.d.ts` / `*.d.mts` / `*.d.cts`) — they carry no runtime code.
 
 ## `[rust] features`

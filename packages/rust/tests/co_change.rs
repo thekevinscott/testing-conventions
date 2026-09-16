@@ -278,6 +278,48 @@ fn python_deleting_an_exempt_barrel_passes_base_after_dropping_its_entry() {
     );
 }
 
+const PY_BARREL: &str =
+    "\"\"\"Package barrel.\"\"\"\nfrom ._version import __version__\n\n__all__ = [\"__version__\"]\n";
+
+#[test]
+fn python_modified_declaration_only_module_is_not_a_subject() {
+    let repo = TempRepo::new("py-decl-only");
+    repo.write("pkg/__init__.py", PY_BARREL);
+    repo.write("pkg/_version.py", "__version__ = \"1.0.0\"\n");
+    repo.write("settings.py", "TIMEOUT = 30 * 60\n");
+    repo.write("widget.py", WIDGET_PY);
+    repo.write("widget_test.py", WIDGET_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write(
+        "pkg/__init__.py",
+        "\"\"\"Package barrel.\"\"\"\nfrom ._version import __version__\n\n\
+         __all__ = [\"__version__\", \"NAME\"]\nNAME = \"pkg\"\n",
+    );
+    repo.write("settings.py", "TIMEOUT = 45 * 60\n");
+    repo.commit("edit the barrel and the constants module");
+
+    assert!(stale(&repo, &base, Language::Python).is_empty());
+}
+
+#[test]
+fn python_module_gaining_a_function_is_a_subject() {
+    let repo = TempRepo::new("py-decl-only-gains-def");
+    repo.write("settings.py", "TIMEOUT = 30 * 60\n");
+    repo.write("settings_test.py", "from settings import TIMEOUT\n");
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write(
+        "settings.py",
+        "TIMEOUT = 30 * 60\n\n\ndef timeout(scale):\n    return TIMEOUT * scale\n",
+    );
+    repo.commit("add a function to the constants module");
+
+    assert_eq!(stale(&repo, &base, Language::Python), vec!["settings.py"]);
+}
+
 #[test]
 fn python_added_source_is_not_a_subject() {
     let repo = TempRepo::new("py-add");
@@ -668,6 +710,26 @@ fn typescript_modified_type_only_module_is_not_a_subject() {
         "export type Alias = string;\nexport type Alias2 = number;\n",
     );
     repo.commit("extend the type-only module");
+
+    assert!(stale(&repo, &base, Language::TypeScript).is_empty());
+}
+
+#[test]
+fn typescript_modified_declaration_only_module_is_not_a_subject() {
+    let repo = TempRepo::new("ts-decl-only");
+    repo.write("widget.ts", TS_WIDGET);
+    repo.write("widget.test.ts", TS_WIDGET_TEST);
+    repo.write("index.ts", "export { widget } from './widget';\n");
+    repo.write("constants.ts", "export const TIMEOUT = 30 * 60;\n");
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write(
+        "index.ts",
+        "export { widget } from './widget';\nexport * from './constants';\n",
+    );
+    repo.write("constants.ts", "export const TIMEOUT = 45 * 60;\n");
+    repo.commit("edit the barrel and the constants module");
 
     assert!(stale(&repo, &base, Language::TypeScript).is_empty());
 }

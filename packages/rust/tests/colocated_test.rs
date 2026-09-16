@@ -187,10 +187,10 @@ fn rust_an_exemption_lifts_a_file_without_inline_tests() {
 }
 
 #[test]
-fn empty_init_is_a_non_subject_but_content_and_shims_are_orphans() {
+fn inits_are_non_subjects_but_shims_are_orphans() {
     assert_eq!(
         relative_orphans(&fixture("python_exempt"), Language::Python),
-        vec!["cli.py", "pkg/__init__.py"],
+        vec!["cli.py"],
     );
 }
 
@@ -199,9 +199,91 @@ fn config_exemptions_lift_listed_files() {
     assert!(orphans_with(
         &fixture("python_exempt"),
         Language::Python,
-        &exempt(&["cli.py", "pkg/__init__.py"]),
+        &exempt(&["cli.py"]),
     )
     .is_empty());
+}
+
+const PYTHON_BEHAVIOR_FILES: &[&str] = &[
+    "comp.py",
+    "cond.py",
+    "coro.py",
+    "ctx.py",
+    "func.py",
+    "guard.py",
+    "klass.py",
+    "lam.py",
+    "loop.py",
+    "matcher.py",
+    "spin.py",
+    "ternary.py",
+];
+
+const TYPESCRIPT_BEHAVIOR_FILES: &[&str] = &[
+    "arrow.ts",
+    "cond.ts",
+    "each.ts",
+    "expr.ts",
+    "fn.ts",
+    "guard.ts",
+    "literal-method.ts",
+    "loop.ts",
+    "method.ts",
+    "spin.ts",
+    "switch.ts",
+    "ternary.ts",
+    "until.ts",
+];
+
+#[test]
+fn python_declaration_only_modules_are_not_subjects() {
+    assert!(
+        relative_orphans(&fixture("python_declaration_only"), Language::Python).is_empty(),
+        "a barrel, a constants module, an Enum, a module-level call, and a dataclass of \
+         fields hold no function and no control flow, so none is a subject"
+    );
+    assert_eq!(
+        unit_colocated_test_exit("python_declaration_only", "python"),
+        0
+    );
+}
+
+#[test]
+fn python_functions_and_control_flow_are_subjects() {
+    assert_eq!(
+        relative_orphans(&fixture("python_behavior"), Language::Python),
+        PYTHON_BEHAVIOR_FILES,
+    );
+    assert_eq!(unit_colocated_test_exit("python_behavior", "python"), 1);
+}
+
+#[test]
+fn typescript_declaration_only_modules_are_not_subjects() {
+    assert!(
+        relative_orphans(
+            &fixture("typescript/declaration_only"),
+            Language::TypeScript
+        )
+        .is_empty(),
+        "a re-export barrel, `export const` literals, an `as const` object, an enum, a \
+         `??` / `||` fallback, and a module-level call hold no function and no control flow"
+    );
+    assert_eq!(
+        unit_colocated_test_exit("typescript/declaration_only", "typescript"),
+        0
+    );
+}
+
+#[test]
+fn typescript_functions_and_control_flow_are_subjects() {
+    assert_eq!(
+        relative_orphans(&fixture("typescript/behavior"), Language::TypeScript),
+        TYPESCRIPT_BEHAVIOR_FILES,
+    );
+    assert_eq!(
+        unit_colocated_test_exit("typescript/behavior", "typescript"),
+        1
+    );
 }
 
 #[test]
@@ -210,10 +292,10 @@ fn python_subcommand_exits_zero_with_config_exemptions() {
 }
 
 #[test]
-fn a_typescript_barrel_is_an_orphan_until_explicitly_exempted() {
+fn a_typescript_entry_point_is_an_orphan_until_explicitly_exempted() {
     assert_eq!(
         relative_orphans(&fixture("typescript/exempt"), Language::TypeScript),
-        vec!["index.ts"],
+        vec!["main.ts"],
     );
     assert_eq!(
         unit_colocated_test_exit("typescript/exempt", "typescript"),

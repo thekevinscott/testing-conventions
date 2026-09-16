@@ -37,8 +37,8 @@ file, where it deliberately doesn't.
 ## Exemptions: a gate needs a door
 
 A blocking gate with no escape hatch gets disabled. So every check has one — but it's **explicit,
-reason-required, and in one file**, never a silent ignore. A launcher shim, a re-export barrel, or
-generated code earns a `[[<language>.exempt]]` entry that names the rules it lifts and *why*. The
+reason-required, and in one file**, never a silent ignore. A launcher shim, a process entry point,
+or generated code earns a `[[<language>.exempt]]` entry that names the rules it lifts and *why*. The
 philosophy is *"zero violations except what you exempted with a reason"* — not *"hit a number you
 can soften when it's inconvenient."*
 

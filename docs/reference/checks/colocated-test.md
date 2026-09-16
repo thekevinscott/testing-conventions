@@ -66,10 +66,10 @@ The check takes no keys of its own. Its exemption rules, each a
 
 | Rule | Lifts |
 | --- | --- |
-| `colocated-test` | the presence requirement for one file (a launcher shim, a re-export barrel) |
+| `colocated-test` | the presence requirement for one file (a launcher shim, a process entry point) |
 | `co-change` | the co-change requirement for one file, independently of presence |
 
-Both are whole-file rules. Empty and comment-only files are never subjects, and a comment-only or
+Both are whole-file rules. A declaration-only module is never a subject, and a comment-only or
 whitespace-only edit is never a co-change subject — the files themselves decide both, with no
 configuration.
 

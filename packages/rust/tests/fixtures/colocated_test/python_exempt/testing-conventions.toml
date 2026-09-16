@@ -3,8 +3,3 @@
 path = "cli.py"
 rules = ["colocated-test"]
 reason = "thin launcher; logic lives in core(), tested in core_test.py"
-
-[[python.exempt]]
-path = "pkg/__init__.py"
-rules = ["colocated-test"]
-reason = "package re-export surface; carries no logic of its own"

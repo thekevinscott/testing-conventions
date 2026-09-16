@@ -511,7 +511,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_build != '' && needs.detect.outputs.build_command != '' && needs.detect.outputs.packaging_language == 'typescript' }}
+      - if: ${{ inputs.packaging_artifact == '' && needs.detect.outputs.packaging_build != '' && needs.detect.outputs.packaging_language == 'typescript' }}
         name: Install project dependencies
         working-directory: ${{ needs.detect.outputs.package_root }}
         env:

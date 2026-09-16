@@ -28,8 +28,8 @@ jobs:
       - uses: pnpm/action-setup@v5
         with:
           version: ">=11"
-      # cache-dependency-path names package.json because .gitignore excludes every pnpm-lock.yaml
-      # here, so no lockfile exists in the checkout to hash.
+      # cache-dependency-path names package.json because .gitignore excludes the packages'
+      # pnpm-lock.yaml, so no lockfile exists for them in the checkout to hash.
       - uses: actions/setup-node@v6
         with:
           node-version: 24

@@ -38,8 +38,10 @@ The build the tool derives, from `source` and the manifest alone:
   `*.tar.gz`. The PEP 517 build resolves its own build dependencies and compiles a maturin/PyO3
   core along the way.
 - **TypeScript** (a `package.json`) → `<pnpm|npm> pack --pack-destination dist`, which runs the
-  package's own `prepare` / `prepack` lifecycle. A compile that lives in a bare `build` script —
-  a name npm doesn't standardize — is named once in `[typescript].build_command` and runs first.
+  package's own `prepare` / `prepack` lifecycle. The job installs the package's dependencies
+  first, so those hooks run against a populated `node_modules`. A compile that lives in a bare
+  `build` script — a name npm doesn't standardize — is named once in
+  `[typescript].build_command` and runs between the install and the pack.
 - **Rust** (a `Cargo.toml` with a `[package]` table) → `cargo package`, writing
   `target/package/*.crate`. When the crate is a member of an ancestor Cargo workspace, Cargo
   always resolves the target directory — and so `cargo package`'s output — at the *workspace*

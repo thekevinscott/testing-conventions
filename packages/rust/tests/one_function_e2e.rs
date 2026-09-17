@@ -1,24 +1,32 @@
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
-/// The rule id a violation carries. A clean run never names it — asserting on the
-/// rule rather than on empty stderr keeps the check pointed at this rule, since the
-/// binary also writes its version banner to stderr on every run.
-const RULE: &str = "one-function-per-file";
-
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/one_function")
         .join(name)
 }
 
-/// Output of `unit one-function-per-file --language <language> <fixture>`.
-fn run(language: &str, fixture_name: &str) -> Output {
+/// An empty, present directory — the case a vacuous run must not report identically to a
+/// real pass.
+fn empty_scan_dir() -> PathBuf {
+    let dir = std::env::temp_dir().join("tc-one-function-e2e-empty-scan");
+    std::fs::create_dir_all(&dir).expect("the scan dir should be creatable");
+    dir
+}
+
+/// Output of `unit one-function-per-file --language <language> <path>`.
+fn run_at(language: &str, path: &std::path::Path) -> Output {
     Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "one-function-per-file", "--language", language])
-        .arg(fixture(fixture_name))
+        .arg(path)
         .output()
         .expect("the built binary should run")
+}
+
+/// Output of `unit one-function-per-file --language <language> <fixture>`.
+fn run(language: &str, fixture_name: &str) -> Output {
+    run_at(language, &fixture(fixture_name))
 }
 
 /// Output of the same run with `--config <config>`.
@@ -79,8 +87,18 @@ fn python_clean_exits_zero() {
     let output = run("python", "python/clean");
     assert_eq!(code(&output), 0);
     assert!(
-        !stderr(&output).contains(RULE),
+        !stderr(&output).contains(" — "),
         "a clean tree reports no violation: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn python_clean_reports_the_files_it_scanned() {
+    let output = run("python", "python/clean");
+    assert!(
+        stderr(&output).contains("one-function-per-file: scanned 5 file(s), 0 violations"),
+        "a passing run must be distinguishable from a vacuous one: {}",
         stderr(&output)
     );
 }
@@ -154,8 +172,18 @@ fn typescript_clean_exits_zero() {
     let output = run("typescript", "typescript/clean");
     assert_eq!(code(&output), 0);
     assert!(
-        !stderr(&output).contains(RULE),
+        !stderr(&output).contains(" — "),
         "a clean tree reports no violation: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn typescript_clean_reports_the_files_it_scanned() {
+    let output = run("typescript", "typescript/clean");
+    assert!(
+        stderr(&output).contains("one-function-per-file: scanned 5 file(s), 0 violations"),
+        "a passing run must be distinguishable from a vacuous one: {}",
         stderr(&output)
     );
 }
@@ -245,8 +273,29 @@ fn rust_clean_exits_zero() {
     let output = run("rust", "rust/clean");
     assert_eq!(code(&output), 0);
     assert!(
-        !stderr(&output).contains(RULE),
+        !stderr(&output).contains(" — "),
         "a clean tree reports no violation: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn rust_clean_reports_the_files_it_scanned() {
+    let output = run("rust", "rust/clean");
+    assert!(
+        stderr(&output).contains("one-function-per-file: scanned 5 file(s), 0 violations"),
+        "a passing run must be distinguishable from a vacuous one: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn an_empty_directory_reports_zero_files_scanned() {
+    let output = run_at("python", &empty_scan_dir());
+    assert_eq!(code(&output), 0);
+    assert!(
+        stderr(&output).contains("one-function-per-file: scanned 0 file(s), 0 violations"),
+        "an empty tree must not read like a real pass: {}",
         stderr(&output)
     );
 }

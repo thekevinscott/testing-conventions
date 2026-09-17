@@ -267,9 +267,9 @@ impl<'ast> Visit<'ast> for PresenceVisitor {
     }
 }
 
-/// `true` when `source` holds an `fn` anywhere — free function, method, or default trait
-/// method, `#[cfg(test)]` included. A file that fails to parse is `true`: the mutation and
-/// colocated-test gates both keep a file they couldn't read as a subject.
+/// `true` when `source` holds an `fn` or a closure anywhere — free function, method, default
+/// trait method, or closure expression (a `static`'s `Lazy::new(|| ..)` counts, its closure
+/// sitting outside any `fn`). A file that fails to parse is `true`: both gates keep it as a subject.
 fn rust_has_behavior(source: &str) -> bool {
     let Ok(file) = syn::parse_file(source) else {
         return true;
@@ -279,7 +279,7 @@ fn rust_has_behavior(source: &str) -> bool {
     visitor.found
 }
 
-/// Records whether the walk reached any function item.
+/// Records whether the walk reached any function item or closure.
 struct BehaviorPresenceVisitor {
     found: bool,
 }
@@ -300,6 +300,11 @@ impl<'ast> Visit<'ast> for BehaviorPresenceVisitor {
             self.found = true;
         }
         visit::visit_trait_item_fn(self, node);
+    }
+
+    fn visit_expr_closure(&mut self, node: &'ast syn::ExprClosure) {
+        self.found = true;
+        visit::visit_expr_closure(self, node);
     }
 }
 
@@ -725,6 +730,38 @@ mod tests {
     #[test]
     fn rust_unparseable_file_is_a_subject() {
         assert!(Language::Rust.is_subject("fn (", Path::new("broken.rs")));
+    }
+
+    #[test]
+    fn rust_impl_method_is_a_subject() {
+        assert!(Language::Rust.is_subject(
+            "struct Widget;\nimpl Widget {\n    fn run(&self) {}\n}\n",
+            Path::new("widget.rs")
+        ));
+    }
+
+    #[test]
+    fn rust_default_trait_method_is_a_subject() {
+        assert!(Language::Rust.is_subject(
+            "trait Greeter {\n    fn greet(&self) {\n        println!(\"hi\");\n    }\n}\n",
+            Path::new("greeter.rs")
+        ));
+    }
+
+    #[test]
+    fn rust_trait_method_signature_without_a_default_is_not_a_subject() {
+        assert!(!Language::Rust.is_subject(
+            "trait Greeter {\n    fn greet(&self);\n}\n",
+            Path::new("greeter.rs")
+        ));
+    }
+
+    #[test]
+    fn rust_closure_outside_any_fn_is_a_subject() {
+        assert!(Language::Rust.is_subject(
+            "static ADDER: fn(i32) -> i32 = |x| x + 1;\n",
+            Path::new("adder.rs")
+        ));
     }
 
     /// `(has_testable_fn, has_test_module)` for a Rust source snippet.

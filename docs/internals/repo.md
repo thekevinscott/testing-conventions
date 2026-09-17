@@ -1,6 +1,6 @@
 # Repo-wide conventions
 
-Cross-cutting rules that apply across all language packages. Language-specific guidance lives in `python-supervision.md`, `typescript-supervision.md`, `rust-supervision.md`.
+Cross-cutting conventions that apply across all language packages. Language-specific guidance lives in `python-supervision.md`, `typescript-supervision.md`, `rust-supervision.md`.
 
 ## CHANGELOG + MIGRATIONS
 
@@ -9,7 +9,7 @@ Each package records its changes as **fragments** — one file per change, added
 every language package follows it.
 
 A PR that changes public API under `packages/<pkg>/` adds one fragment to each of that package's
-two fragment directories. Enforced in CI by `changelog.yml`, which runs the `changelog-gate` check
+two fragment directories. Enforced in CI by `changelog.yml`, which runs `tc-checks changelog-gate`
 (`internals/checks`); a `skip-changelog: <reason>` line on any commit bypasses it for genuinely
 internal refactors, and the reason stays in git history.
 
@@ -49,13 +49,13 @@ Public-API surface for the purpose of these files: every exported value/type, ev
 
 ## The CLI command surface
 
-Every subcommand `--help` lists runs a rule and can fail. A command that parses and exits `0`
+Every subcommand `--help` lists does real work and can fail. A command that parses and exits `0`
 without doing work hands a consumer a pass they never earned, and it reads as a documented feature
 because it sits in the help output next to real ones. The `check` umbrella was the one such
 scaffold — declared in the repo's first commit, dispatched into the no-subcommand arm, never
 wired — and it is gone; nothing replaces it. A new command lands wired.
 
-Two shapes sit outside that rule, both deliberate:
+Two shapes sit outside that guarantee, both deliberate:
 
 - **`workflow`** is hidden (`#[command(hide = true)]`) rather than absent. It does real work — the
   drift guard that walks a workflow file's invocations against the binary's own command tree — but
@@ -75,7 +75,7 @@ invoke commands the binary still exposes, or the fixture stops meaning "clean" a
 configure at the right directory: `package_root`, `ts_package_manager`,
 `ts_pnpm_version`, `python_env`, `provision_rust`, `config`, `build_command`. A `working_directory` input was considered and
 rejected — it would
-add a second, consumer-facing coordinate system against the documented rule that `source` is the
+add a second, consumer-facing coordinate system against the documented convention that `source` is the
 only scoping mechanism (docs/monorepo.md). Everything else is derived from `source` and the
 package's own manifest instead.
 
@@ -119,15 +119,15 @@ package's own manifest instead.
   `needs.detect.outputs.build_command` before the suite and the packaging job runs it before the
   pack, replacing the removed `build_command` *workflow input*.
 
-Alongside the package-root set, detect emits one **language set per gate** — the JSON arrays each
-matrix reads back with `fromJSON`, kept separate so a future per-gate language divergence needs no
+Alongside the package-root set, detect emits one **language set per check** — the JSON arrays each
+matrix reads back with `fromJSON`, kept separate so a future per-check language divergence needs no
 workflow change:
 
 - **`languages`** — the requested python/typescript languages with sources under `source`; the
   co-change (`*-changed`) matrix. Rust units are inline, so a sibling test cannot go stale.
 - **`colocated_test_languages`**, **`integration_lint_languages`**, **`isolation_languages`**,
   **`static_languages`**, **`one_function_languages`** — the same set plus rust. The five static
-  gates run as steps of one `static` job fanned out over `static_languages`; an unconfigured rust
+  checks run as steps of one `static` job fanned out over `static_languages`; an unconfigured rust
   tree reports `one-function-per-file` is off and passes, so rust rides that set too.
 - **`coverage_languages`**, **`mutation_languages`** — present python/typescript, plus rust
   whenever a crate is present. Rust coverage is zero-config (`lines = 100` by default), and all
@@ -135,7 +135,7 @@ workflow change:
 
 It also emits two presence flags the packaging and e2e-verify jobs gate on — **`packaging_dist`**
 (a built distribution is discoverable at `package_root`) and **`e2e_attestation`** (committed
-receipts sit in `e2e-attestations/` there) — so both gates run by default and skip, never fail,
+receipts sit in `e2e-attestations/` there) — so both checks run by default and skip, never fail,
 when absent.
 
 **`cargo_target_dir`** is the workspace-aware Rust build-cache location: the workspace
@@ -183,25 +183,25 @@ delegated PyPI upload" below.
 Comments and docstrings under `internals/`, `packages/`, and the crates hold to it too. A module
 opens with one line naming what it does, a surviving comment names the breakage it prevents, and
 neither carries an issue or PR number. Reasoning longer than that lives on this page and the file
-keeps at most a one-line pointer: `internals/checks` is the worked case, its per-check mechanics
-under "The self-test checks package (`internals/checks`)" below rather than recopied into forty
+keeps at most a one-line pointer: `internals/checks` is the worked case, its per-assertion mechanics
+under "The self-test assertions package (`internals/checks`)" below rather than recopied into forty
 file headers.
 
 ## Self-test and the `@v0` path
 
 `testing-conventions-selftest.yml` smoke-tests the reusable workflow end to end, so a regression in
 its *wiring* — a renamed input, a broken invocation, a dropped toolchain step — surfaces here rather
-than in a consumer repo. Rule *logic* is covered by the Rust e2e suites (`coverage_e2e.rs`,
+than in a consumer repo. Check *logic* is covered by the Rust e2e suites (`coverage_e2e.rs`,
 `coverage_ts_e2e.rs`, …); this covers the workflow that drives it.
 
-Its jobs follow a three-name convention, and a rule earns as many of the three as it has surface:
+Its jobs follow a three-name convention, and a check earns as many of the three as it has surface:
 
-- **`<rule>-wired`** — a `tc-checks` static assertion over the workflow file, so it tracks the
+- **`<check>-wired`** — a `tc-checks` static assertion over the workflow file, so it tracks the
   wiring regardless of what the published binary ships.
-- **`<rule>-clean`** — a passing fixture driven through a real `uses:` call of the reusable
-  workflow; the whole call must pass, which also proves the fixture is clean for every *other* gate
+- **`<check>-clean`** — a passing fixture driven through a real `uses:` call of the reusable
+  workflow; the whole call must pass, which also proves the fixture is clean for every *other* check
   it gets fanned over.
-- **`<rule>-red`** — a violating fixture driven through the CLI directly, asserting a non-zero exit.
+- **`<check>-red`** — a violating fixture driven through the CLI directly, asserting a non-zero exit.
   The red path cannot ride a `uses:` call, because a failing call fails the whole run.
 
 The fixtures live under `.github/selftest/`, and the `-red` jobs drive the hermetic binary
@@ -215,13 +215,13 @@ a `prepack` hook that runs a devDependency's bin (`semver`), with its `pnpm-lock
 `packaging-package-root-clean` job passes only when the packaging job's "Install project
 dependencies" step runs before `pnpm pack`, for every TypeScript package it builds.
 
-The reusable workflow (`.github/workflows/testing-conventions.yml`) drives the **published** tool — its `detect` step pins `…/actions/detect@v0`, and each rule job runs the published CLI through `npm exec` (no version → the newest release the job's node satisfies; see "The CLI runs on its own engine" below). The self-test (`testing-conventions-selftest.yml`) calls that reusable workflow. So a change to *detection* (which rules fan out) or *rule behavior* does **not** take effect in the self-test — or for any consumer — until a release **moves `@v0`** to the new commit and publishes the package.
+The reusable workflow (`.github/workflows/testing-conventions.yml`) drives the **published** tool — its `detect` step pins `…/actions/detect@v0`, and each check job runs the published CLI through `npm exec` (no version → the newest release the job's node satisfies; see "The CLI runs on its own engine" below). The self-test (`testing-conventions-selftest.yml`) calls that reusable workflow. So a change to *detection* (which checks fan out) or *check behavior* does **not** take effect in the self-test — or for any consumer — until a release **moves `@v0`** to the new commit and publishes the package.
 
-The trap: a change can stay green in its own PR's self-test (still running the old `@v0` path) yet break the self-test on the **next release**, when `@v0` advances. So any change that alters which rules a fixture is fanned over must leave every self-test fixture passing under the *new* path, not just the merged one. Concretely, a fixture driven through the reusable workflow (`uses:`) must pass **every** rule it could be fanned over — not only the rule it was added for.
+The trap: a change can stay green in its own PR's self-test (still running the old `@v0` path) yet break the self-test on the **next release**, when `@v0` advances. So any change that alters which checks a fixture is fanned over must leave every self-test fixture passing under the *new* path, not just the merged one. Concretely, a fixture driven through the reusable workflow (`uses:`) must pass **every** check it could be fanned over — not only the check it was added for.
 
-**As of #353, this trap is closed mechanically — it is no longer a rule the author must remember.** The CI-hermeticity invariant (AGENTS.md, "CI hermeticity: a required check depends only on the commit under test") is enforced in two layers, each with its own section below:
+**As of #353, this trap is closed mechanically — it is no longer a discipline the author must remember.** The CI-hermeticity invariant (AGENTS.md, "CI hermeticity: a required check depends only on the commit under test") is enforced in two layers, each with its own section below:
 
-- **Layer 1 — the merge gate now runs HEAD hermetically (#356, "Hermetic mode").** Every PR's self-test and dogfood build `detect` and the CLI from HEAD and run *those*, so a detection or rule-behavior change is validated against the commit under test in its own PR — `(HEAD workflow × HEAD detect × HEAD-built binary)`, the frozen `@v0`/npm-latest references replaced by HEAD end to end. A change that would only have surfaced "on the next release" now goes red in the PR that introduces it.
+- **Layer 1 — the merge gate now runs HEAD hermetically (#356, "Hermetic mode").** Every PR's self-test and dogfood build `detect` and the CLI from HEAD and run *those*, so a detection or check-behavior change is validated against the commit under test in its own PR — `(HEAD workflow × HEAD detect × HEAD-built binary)`, the frozen `@v0`/npm-latest references replaced by HEAD end to end. A change that would only have surfaced "on the next release" now goes red in the PR that introduces it.
 - **Layer 2 — consumer-surface validation moved to the gated `@v0` promotion (#357, "Validated promotion").** The one input Layer 1 structurally can't pin — the frozen `@v0` a consumer runs the instant the tag moves — is validated at promotion instead: the full self-test + dogfood surface runs pinned to the just-published immutable version, and `@v0` advances only if green (fail closed).
 
 The #351 packaging flip is the cautionary case that motivated both (its own worked example is the third one below): green in its PR's self-test under the old `@v0`, red on `main` only when the next release advanced the tag — the exact "green gate that tested the wrong thing" the two layers now catch, in-PR for HEAD-buildable skew and at promotion for the published surface. The worked examples that follow predate the two layers and record the incidents that drove them; the manual discipline they describe ("verify a fixture by hand with the published-equivalent command") is now the gate's job, not the author's.
@@ -232,11 +232,11 @@ A second #206 follow-up: zero-config Rust coverage also routed `packages/python`
 
 A third worked example, and a caution against over-attributing reds to `@v0` lag (#355): after the #351 `@v0` flip, `build-command-clean` and `rust-toolchain-clean` (the `[python].build_command` runtime fixtures) still failed — `ModuleNotFoundError: No module named 'generated'`, the build step silently skipped. The workflow's own comments blamed the usual `@v0`/published-binary lag, but `@v0` was already current (it points at the same commit as `main`). The real cause: #335 generalized `build_command`'s config lookup to key off `primary_language(package_root)`, which returns `''` without a manifest (`pyproject.toml`/`package.json`/`Cargo.toml`) — but both fixtures are deliberately manifest-less (a bare pip Python package), so the lookup silently dropped the build step regardless of `@v0`. Fixed in `detect.compute_outputs`: `build_command`'s language falls back to the single present language when no manifest names a primary one (still empty, never guessed, when more than one language is present with no manifest to disambiguate). The lesson: a self-test red after a `@v0` flip is only actually *just* `@v0` lag if the *local* source (this PR's own `detect.py`, not the tag) also passes — check that first, per **Layer 1** in #353, rather than assuming the documented lag and waiting for the next release. Fixing the source doesn't make `build-command-clean` / `rust-toolchain-clean` green in *this* PR's own CI, though: `detect` here is still `actions/detect@v0`, so the fix only reaches this job once a release moves the tag — the ordinary pre-release lag, now with a real bug it had been masking underneath it.
 
-Each self-test job's assertion — run a CLI command over a fixture, then pass/fail on its exit code — lives as a standalone, colocated-tested check. The failure-path jobs — `isolation-red`, `below-floor`, `mutation-gate`, `python-mutation-clean`, `packaging-red`, `coverage-rust-red`, `integration-lint-new-arms-trip`, `packaging-package-root-red`, and `colocated-rust-red` — live in the `internals/checks` package as `tc-checks <name>` subcommands: each holds its hardcoded invocations in a `CHECKS` list and hands them to the shared `run_checks` orchestrator (`checks/utils/`), which runs each invocation — or a single trailing command, the benign `true`/`false` e2e seam — and decides pass/fail through the pure `failure_reason`; colocated `cli_test.py`, `run_checks_test.py`, and `failure_reason_test.py` cover the logic while a sibling e2e suite drives the real subprocess boundary through `CliRunner`. The workflow step runs `uv run --project internals/checks tc-checks <name>`; the tested Python holds the invocation and the exit-code logic, so it earns the same dogfood gate as the rest of the checks package and stays clear of the `${{ }}` templating trap an inline `run:` body carries. Each `CHECKS` list holds the **hermetic** binary (`./hermetic-cli/testing-conventions`), shared from `checks/config.py`'s `HERMETIC_CLI`, and each red-path job downloads the `hermetic-cli` artifact (`needs: [build-cli]` + `./.github/actions/download-hermetic-cli`) so it validates this branch's CLI, not npm-latest — the `red-path-hermetic-wired` check gates that wiring.
+Each self-test job's assertion — run a CLI command over a fixture, then pass/fail on its exit code — lives as a standalone, colocated-tested assertion. The failure-path jobs — `isolation-red`, `below-floor`, `mutation-gate`, `python-mutation-clean`, `packaging-red`, `coverage-rust-red`, `integration-lint-new-arms-trip`, `packaging-package-root-red`, and `colocated-rust-red` — live in the `internals/checks` package as `tc-checks <subcommand>` subcommands: each holds its hardcoded invocations in a `CHECKS` list and hands them to the shared `run_checks` orchestrator (`checks/utils/`), which runs each invocation — or a single trailing command, the benign `true`/`false` e2e seam — and decides pass/fail through the pure `failure_reason`; colocated `cli_test.py`, `run_checks_test.py`, and `failure_reason_test.py` cover the logic while a sibling e2e suite drives the real subprocess boundary through `CliRunner`. The workflow step runs `uv run --project internals/checks tc-checks <subcommand>`; the tested Python holds the invocation and the exit-code logic, so it earns the same dogfood gate as the rest of `internals/checks` and stays clear of the `${{ }}` templating trap an inline `run:` body carries. Each `CHECKS` list holds the **hermetic** binary (`./hermetic-cli/testing-conventions`), shared from `checks/config.py`'s `HERMETIC_CLI`, and each red-path job downloads the `hermetic-cli` artifact (`needs: [build-cli]` + `./.github/actions/download-hermetic-cli`) so it validates this branch's CLI, not npm-latest — the `red-path-hermetic-wired` assertion gates that wiring.
 
 ### The CLI runs on its own engine
 
-Every rule job invokes the published CLI by bare name (`npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions"`).
+Every check job invokes the published CLI by bare name (`npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions"`).
 A bare name
 is an unconstrained range, so npm resolves it **engine-aware**: it picks the newest version whose
 `engines.node` the *running* node satisfies. `packages/node/package.json` declares `"node": ">=24"`,
@@ -245,8 +245,8 @@ resolves the newest release published before that floor rose — 0.0.86 — and 
 CLI-invoking job therefore carries an unconditional `actions/setup-node@v6` pinning a `node-version`
 at or above the floor, so the engine the package asks for is the engine the job has.
 
-The step is load-bearing because the failure is silent. The stale release runs the gates it knew
-about and reports pass or fail against its own rules, so a consumer sees a green run built from
+The step is load-bearing because the failure is silent. The stale release runs the checks it knew
+about and reports pass or fail accordingly, so a consumer sees a green run built from
 logic that shipped a dozen releases ago. Once a newer workflow passes a subcommand that release
 predates, the same skew surfaces as `unrecognized subcommand` and exit 2 — the first visible symptom
 of a condition that had been in place the whole time.
@@ -299,11 +299,11 @@ the same question. The engine pin decides *which release the registry offers*; t
 
 ## CI provisions from disk: uv, and the source mutation adapter
 
-Inside CI jobs the Python toolchain comes from **uv, and this repo's own mutation adapter comes from the source tree** — never `pip install`, and never a fetch of the published `testing-conventions` wheel. Two separable facts sit behind that one rule:
+Inside CI jobs the Python toolchain comes from **uv, and this repo's own mutation adapter comes from the source tree** — never `pip install`, and never a fetch of the published `testing-conventions` wheel. Two separable facts sit behind that one convention:
 
 - **The engines are third-party, and each is a pinned dependency of the package whose job runs it.** `coverage`, `pytest`, `cosmic-ray`, and `maturin` live nowhere in this repo, and an engine resolved from index-latest at run time is a mutable external reference inside a required check — a new engine release can red the check, or change the shipped wheel, with no commit to blame (AGENTS.md, "CI hermeticity"). So an engine is declared where a dependency belongs: in the owning uv package's dev dependency group, pinned in that package's existing `uv.lock`, with the job running through the project (`uv run --project <pkg> …`) so the version a run resolves is a function of the commit. Bumping an engine is a committed `uv lock --upgrade` diff, and setup-uv's cache (keyed on the lock) reuses the environment across runs. Where that stands per engine site:
   - `internals/detect` — `pytest` (its only engine; `detect.py` is stdlib-only) is a dev-dependency pinned in its lock, and `detect-action.yml` runs the suite from the package directory.
-  - `internals/checks` — `coverage`, `pytest`, and `cosmic-ray` are dev-dependencies pinned in its lock; the selftest jobs that shell out to them (`below-floor`, `python-mutation-clean`) already run `--project internals/checks` and pick them up from the sync. The one job with no uv project of its own (`rust.yml` integration — a Rust crate) **borrows** that environment, syncing it once and putting its `.venv/bin` on `PATH`: a deliberate coupling, accepted because the checks package is the repo's test-tooling home; if a cleaner home emerges for the borrowing job, prefer it.
+  - `internals/checks` — `coverage`, `pytest`, and `cosmic-ray` are dev-dependencies pinned in its lock; the selftest jobs that shell out to them (`below-floor`, `python-mutation-clean`) already run `--project internals/checks` and pick them up from the sync. The one job with no uv project of its own (`rust.yml` integration — a Rust crate) **borrows** that environment, syncing it once and putting its `.venv/bin` on `PATH`: a deliberate coupling, accepted because `internals/checks` is the repo's test-tooling home; if a cleaner home emerges for the borrowing job, prefer it.
   - the `packages/python` wheel build (`python.yml`) — `maturin` is not a test engine but the PEP 517 build backend, so its pin lives where a build backend is declared: `[build-system].requires`, pinned exactly. The job builds through it (`uv build --wheel`), so the toolchain that builds the shipped wheel is a function of the commit.
   - the reusable workflow's suite jobs (the consumer path) — **the consumer's own lock is the pin**. No lock of this repo's can reach that runner (the workflow executes in the consumer's checkout, and published wheels carry ranges, not locks), so the provisioning line installs only `pytest` (the runner fallback — a synced uv project's own locked pytest is already satisfied and wins) plus the `testing-conventions` wheel, whose dependencies carry the coverage/mutation engines. The float that remains — the wheel's ranges, for lock-less consumers — is the consumer-path exception below, gated at promotion (Layer 2).
 
@@ -316,7 +316,7 @@ Every job that provisions uv pins `astral-sh/setup-uv@v7`, whose bundled Node 24
 ## Hermetic mode: building detect + the CLI from HEAD (#356)
 
 Every job in the reusable workflow resolves two mutable external references at run time: the
-`detect` step pins `…/actions/detect@v0` (a floating tag), and every rule job runs
+`detect` step pins `…/actions/detect@v0` (a floating tag), and every check job runs
 `npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"` (no version → the newest
 release the job's node satisfies). For a
 *consumer*, that's the whole point — they want the released, supported surface. But when
@@ -339,8 +339,8 @@ argument the npm launcher normally appends, pre-rendered like `e2e_extra_scope`)
 other caller both are empty. (Rejected alternatives, in order: a `hermetic` boolean input —
 `workflow_call` inputs have no visibility modifier, so a testing-only flag is public surface any
 consumer can flip; and a guarded `build-cli` job inside the reusable workflow — a job with a
-false `if:` still renders a skipped row in every consumer's checks UI. The `hermetic-wired` check
-fails on either reappearing.)
+false `if:` still renders a skipped row in every consumer's checks UI. The `hermetic-wired`
+assertion fails on either reappearing.)
 
 **The build lives in the callers.** `testing-conventions-selftest.yml` and `dogfood.yml` — repo-
 only files no consumer references — each carry a `build-cli` job that checks out the repo and
@@ -365,11 +365,11 @@ checks rows, so a consumer's checks UI is unchanged):
   one place the guard stays in YAML: which action ref runs is a scheduling decision only an
   expression can make (`uses:` cannot be dynamic). Every job output coalesces whichever ran
   (`steps.scan_hermetic.outputs.x || steps.scan_published.outputs.x`).
-- Each rule job downloads the `hermetic-cli` artifact (and re-chmods the binary) when
+- Each check job downloads the `hermetic-cli` artifact (and re-chmods the binary) when
   `cli_command` is non-empty via the shared `./.github/actions/download-hermetic-cli` composite
   action — one `uses:` line instead of the download-artifact-plus-chmod pair repeated across all
-  six rule jobs (`static`, `unit-coverage`, `coverage-changed`, `mutation`, `e2e-verify`,
-  `packaging` — the five static gates share the one `static` job) — and runs
+  six check jobs (`static`, `unit-coverage`, `coverage-changed`, `mutation`, `e2e-verify`,
+  `packaging` — the five static checks share the one `static` job) — and runs
   `${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} <subcommand> …`.
   That
   `cli_command` guard is load-bearing for the `uses:` line itself, not just for whether the
@@ -388,7 +388,7 @@ Data flows through detect action outputs / `needs.detect.outputs` / step-local `
 invented environment side-channel (AGENTS.md, "Never pass data through the environment"). The
 derivation comes from `caller_repository`, never from artifact presence, so a caller that
 activates hermetic mode without staging the artifact fails red at the download step — there is no
-silent npx fallback in-repo. The `hermetic-wired` check pins the whole contract statically: the
+silent npx fallback in-repo. The `hermetic-wired` assertion pins the whole contract statically: the
 guard literal, the local detect step, the `cli_command` output, the `${CLI_COMMAND:-` fallback,
 and the `hermetic-cli` download in the reusable workflow; no `inputs.hermetic` and no `build-cli:`
 job there; and, in each caller file, a `build-cli` job plus a `needs: [build-cli]` edge on every
@@ -398,13 +398,13 @@ The fallback half of that contract is asserted **per step**, not file-wide. `CLI
 step-local `env:` value, so each of the ten steps running the fallback carries its own
 `CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}` line; drop one and that step keeps the
 `${CLI_COMMAND:-` text while silently expanding to the published npx binary, so a file-wide
-substring check passes on nine wired steps out of ten and Layer 1 is off for the tenth with no
+substring match passes on nine wired steps out of ten and Layer 1 is off for the tenth with no
 signal. `checks/hermetic_wired/cli_command_env.py` bounds every `steps:` list item to its own
 lines and reports each one that runs the fallback without the env line, naming it. The file-wide
 needle stays as the non-vacuity guard: a workflow that runs the fallback nowhere would satisfy
-the per-step rule vacuously.
+the per-step assertion vacuously.
 
-The acceptance bar: a PR that changes `detect`'s behavior, or a rule's, goes **red in its
+The acceptance bar: a PR that changes `detect`'s behavior, or a check's, goes **red in its
 own CI** before merge when that change breaks something. There is no dedicated acceptance job —
 hermetic mode has no input, so every `uses:` call in the two caller workflows is the acceptance
 test, exercising this branch's own `detect` and compiled CLI. Consumer-facing documentation never
@@ -506,8 +506,8 @@ in `release.yml`'s own `pypi-publish` job, and the engine *delegates* it: the `r
 the distributions, hands them over as artifacts, and stops.
 
 Delegation splits one publish into two halves that run in different workflows, and `release.yml`
-owns the second half. Two rules make that half correct, and both come from the reusable workflow's
-contract rather than from anything we invent:
+owns the second half. Two requirements make that half correct, and both come from the reusable
+workflow's contract rather than from anything we invent:
 
 - **Gate on `pypi_pending`, never `has_pypi`.** `has_pypi` is plan-time — the planned matrix held
   pypi rows — which is also true for a run that merely *rebuilt* wheels. `packages/rust/**` sits in
@@ -522,7 +522,7 @@ contract rather than from anything we invent:
   at hand-over nothing has. The `pypi-tag` job cuts it once the upload lands, reading the version
   PyPI reports as live, which makes it idempotent and self-healing.
 
-The two rules hold each other up. A published version that goes untagged is one the next run's plan
+The two requirements hold each other up. A published version that goes untagged is one the next run's plan
 reads as still owed, so it recomputes the same version and delegates it a second time — and a
 `pypi-publish` job gated on `has_pypi` runs anyway and uploads files PyPI already stores, which is a
 `400 File already exists` and a red `Release`. The worked case: three interleaved red runs over
@@ -530,7 +530,7 @@ reads as still owed, so it recomputes the same version and delegates it a second
 green run minutes earlier had already published, while `testing-conventions-py-v0.0.93` and
 `-v0.0.94` ended up naming commits whose builds never reached PyPI at all.
 
-This wiring is a **contract with `@v0`, and contracts drift.** Both rules arrived upstream together
+This wiring is a **contract with `@v0`, and contracts drift.** Both requirements arrived upstream together
 in [putitoutthere#623](https://github.com/thekevinscott/putitoutthere/issues/623); `release.yml` kept
 the older shape for ten days and went red on the difference. When `@v0` moves, re-read
 putitoutthere's README → "Publishing to PyPI" and match the template it publishes there. No
@@ -559,18 +559,18 @@ The wiring is guarded in CI (`rolling-release-wired` in `testing-conventions-sel
 
 Publish-gating is necessary but not sufficient. It proves the binary published; it does **not** prove that the combination the tag move is about to bless — the *new* workflow file, the *published* binary, the *current* `@v0` detect — is green over the consumer surface. A release can publish a perfectly good binary and still move `@v0` into a combination that fails the self-test/dogfood suite (the packaging case is the worked example): a red `main` with no commit to point at, and every consumer red on their next run. Layer 1 (#356) closes this for the *merge* gate — every PR is gated on `(HEAD workflow × HEAD detect × HEAD-built binary)` — but the promotion itself was still an unguarded deploy. #357 gates it: between publish and tag-move, run the full self-test + dogfood surface **pinned to the just-published immutable version**, and advance `@v0` **only if green**. Fail **closed** — any red leaves `@v0` exactly where it was, so `main` and consumers stay on the last-good release.
 
-**The verification is the published path, forced by the existing seam.** Calling the reusable workflow with `version: <just-published>` is, by #356's derivation, exactly what selects the published path: the caller *is* this repo, but `version != ''`, so `hermetic()` is false and every rule job runs the real published `testing-conventions@<version>` — the consumer ergonomic, not the hermetic build-from-HEAD. No new mechanism; the `version` input the seam was designed for is the whole lever. The just-published version is resolved from the `testing-conventions-npm-v*` tags reachable from the release commit (putitoutthere tags on publish), so it is pinned to the release, not read from `npx`-latest at some later wall-clock moment.
+**The verification is the published path, forced by the existing seam.** Calling the reusable workflow with `version: <just-published>` is, by #356's derivation, exactly what selects the published path: the caller *is* this repo, but `version != ''`, so `hermetic()` is false and every check job runs the real published `testing-conventions@<version>` — the consumer ergonomic, not the hermetic build-from-HEAD. No new mechanism; the `version` input the seam was designed for is the whole lever. The just-published version is resolved from the `testing-conventions-npm-v*` tags reachable from the release commit (putitoutthere tags on publish), so it is pinned to the release, not read from `npx`-latest at some later wall-clock moment.
 
 **"Verify at the release, not at detect-pinned-to-the-release" is structurally forced, not a smaller option we chose.** The thing a consumer runs the instant `@v0` moves is the workflow file whose `detect` step literally reads `…/actions/detect@v0`. A "more complete" verification that re-pinned `detect` to the release commit would assemble a *different file* than the one being promoted — verifying a workflow no consumer ever executes, which is the precise "green gate that tested the wrong thing" this epic exists to kill. And it is not merely undesirable but **unconstructable**: `uses:` refs cannot be dynamic, so the combination `(new workflow with its literal @v0 × detect resolved at the new tag)` does not exist until the tag moves — the ref target isn't there yet. This is the same shape as #353's original argument for moving consumer-surface testing from pre-merge to pre-promotion: there, the *artifact* didn't exist yet; here, the *ref target* doesn't. The logic that a detect-pinned verification would have covered — the new-workflow × new-detect combination, the #351 incident class — is already proven before merge by Layer 1's hermetic gate, which runs HEAD's detect against HEAD's workflow on every PR. So the coverage isn't dropped; it's supplied where it *can* be constructed.
 
-**The one named residual, and its cover.** `detect` has no publish step — its "publish" *is* the tag move — so its provenance risk is not a bad binary but the fetch/layout mechanics at the promoted commit. GitHub resolves a remote composite action (`owner/repo/.github/actions/detect@v0`) by fetching the repo at that ref, and `detect`'s `action.yml` reaches its implementation via `$GITHUB_ACTION_PATH/../../../internals/detect/src/detect.py`. Layer 1 never exercises that remote-fetch path (it uses the workspace-local `./.github/actions/detect`), and the version-pinned verification exercises it only at the *old* tag. What slips through both: a file move that breaks that relative path, or an `export-ignore`/archive quirk that strips `internals/` from the fetched action — green in every gate, then every consumer's `detect` job dies the moment `@v0` moves. The cover is one colocated-tested layout check in the verification, before the tag move: `git archive <release-sha>` and assert `internals/detect/src/detect.py` (and, generally, the relative-path targets `action.yml` reaches) are present in the archive. That literally simulates the action-fetch mechanism against the exact commit being promoted, closing the realistic remainder without touching the workflow's derivation at all.
+**The one named residual, and its cover.** `detect` has no publish step — its "publish" *is* the tag move — so its provenance risk is not a bad binary but the fetch/layout mechanics at the promoted commit. GitHub resolves a remote composite action (`owner/repo/.github/actions/detect@v0`) by fetching the repo at that ref, and `detect`'s `action.yml` reaches its implementation via `$GITHUB_ACTION_PATH/../../../internals/detect/src/detect.py`. Layer 1 never exercises that remote-fetch path (it uses the workspace-local `./.github/actions/detect`), and the version-pinned verification exercises it only at the *old* tag. What slips through both: a file move that breaks that relative path, or an `export-ignore`/archive quirk that strips `internals/` from the fetched action — green in every gate, then every consumer's `detect` job dies the moment `@v0` moves. The cover is one colocated-tested layout assertion in the verification, before the tag move: `git archive <release-sha>` and assert `internals/detect/src/detect.py` (and, generally, the relative-path targets `action.yml` reaches) are present in the archive. That literally simulates the action-fetch mechanism against the exact commit being promoted, closing the realistic remainder without touching the workflow's derivation at all.
 
 **Two execution invariants:**
 
-- **"Narrow" scopes `detect`, never the suite.** Verification is still the *full* self-test + dogfood surface — every fixture, every rule job — just run version-pinned rather than hermetic. Narrowing means only that `detect` stays at the current `@v0` (per the unconstructable argument above), not that fewer jobs run.
+- **"Narrow" scopes `detect`, never the suite.** Verification is still the *full* self-test + dogfood surface — every fixture, every check job — just run version-pinned rather than hermetic. Narrowing means only that `detect` stays at the current `@v0` (per the unconstructable argument above), not that fewer jobs run.
 - **Pin to the release SHA, not "current `main`."** A `workflow_run`-triggered verification checks out whatever the default branch is at trigger time; a commit landing between publish and verification would have it verify a workflow file that is *not* the one the tag will bless. Local `uses:`/`./` reusable-workflow calls resolve at the verify workflow's own commit and their refs cannot be an expression, so the mechanism that pins both the workflow file *and* its inner `uses:` to an arbitrary commit is a `workflow_dispatch` targeting the release commit. `workflow_dispatch` takes a branch or tag ref, never a bare SHA, so verification creates a **throwaway tag at the release SHA** (`verify-release-<sha>`, cleaned up in a `finally`; no workflow triggers on `push: tags:`, so creating it fires nothing), dispatches the self-test and dogfood workflows at that tag with `version: <just-published>`, and polls their conclusions — pinning each dispatched run to the exact release commit, the same forward-only discipline `move-major-tag` applies to `@v0` itself.
 
-**Mechanism.** The direct `Release`-success → `move-major-tag` chain becomes `Release`-success → **verify-and-promote**. On a successful publish, verify-and-promote: (1) resolves the release SHA and the just-published npm version from the tags reachable there; (2) runs the layout check against the release SHA; (3) dispatches `testing-conventions-selftest.yml` and `dogfood.yml` at a throwaway tag on the release SHA with the pinned `version`, and polls until both conclude; (4) advances `@v0` via the unchanged forward-only `move_major_tag.py` **only** when the layout check and both dispatched runs are green. Every non-trivial step is the colocated-tested `tc-checks verify-release` command (`internals/checks`, `checks/utils/verify_release.py` behind an injected git/`gh` boundary — the `build-hermetic-cli` pattern); the workflow YAML wires triggers, checkouts, and env, and holds no logic. The injected `run` fake records each call's keyword arguments alongside its argv, so the subprocess boundary flags (`capture_output=`, `text=`) are asserted like any other decision, and the group's own raise-or-echo branches are driven through `.callback()` against a patched `vr` — `tc-checks verify-release` carries no exemption. The `rolling-release-wired`/`verify-release-wired` static checks guard that the tag move stays gated on verification, so a regression that re-introduces a bare publish-only promotion fails the self-test.
+**Mechanism.** The direct `Release`-success → `move-major-tag` chain becomes `Release`-success → **verify-and-promote**. On a successful publish, verify-and-promote: (1) resolves the release SHA and the just-published npm version from the tags reachable there; (2) runs the layout assertion against the release SHA; (3) dispatches `testing-conventions-selftest.yml` and `dogfood.yml` at a throwaway tag on the release SHA with the pinned `version`, and polls until both conclude; (4) advances `@v0` via the unchanged forward-only `move_major_tag.py` **only** when the layout assertion and both dispatched runs are green. Every non-trivial step is the colocated-tested `tc-checks verify-release` command (`internals/checks`, `checks/utils/verify_release.py` behind an injected git/`gh` boundary — the `build-hermetic-cli` pattern); the workflow YAML wires triggers, checkouts, and env, and holds no logic. The injected `run` fake records each call's keyword arguments alongside its argv, so the subprocess boundary flags (`capture_output=`, `text=`) are asserted like any other decision, and the group's own raise-or-echo branches are driven through `.callback()` against a patched `vr` — `tc-checks verify-release` carries no exemption. The `rolling-release-wired`/`verify-release-wired` static assertions guard that the tag move stays gated on verification, so a regression that re-introduces a bare publish-only promotion fails the self-test.
 
 ## The one-function-per-file ratchet
 
@@ -581,7 +581,7 @@ properties hold the ratchet:
   `one_function_per_file` line in its `testing-conventions.toml` at all — the flag is deleted, not
   set to `1`.
 - **Honest.** A lowering is earned by splitting each over-threshold function into its own module,
-  with its own colocated test. An `exempt` entry would waive the rule instead of satisfying it, so
+  with its own colocated test. An `exempt` entry would waive the check instead of satisfying it, so
   the ratchet adds none.
 
 `packages/python`, `internals/move-major-tag`, `internals/detect`, and `internals/checks` all sit
@@ -591,7 +591,7 @@ at the default and carry no config for it — the ratchet's end state.
 
 `move_major_tag.py` (the forward-only `@v0` tag-advance helper) lives in its own uv package, `internals/move-major-tag`, mirroring `internals/detect`. `src/` holds four top-level modules, each with its colocated `_test.py`: the git boundary (`git_ops.py`), the pure decision (`decide.py`), the orchestration (`advance.py`), and the entry point (`move_major_tag.py`, which reads the environment and calls `advance`). Integration tests (the git boundary mocked) and e2e tests (a real repo with a local remote) sit under `tests/`, and pytest is a dev-dependency pinned in the package's `uv.lock`. `move-major-tag.yml` invokes the entry point as a plain stdlib script (`python3 internals/move-major-tag/src/move_major_tag.py`, no install step) — sibling imports resolve because the script's own directory leads `sys.path`; `move-major-tag-tests.yml` runs the three-tier suite from the package's own lock.
 
-It is dogfooded through the **shipped reusable workflow** (`dogfood.yml`, `source: internals/move-major-tag/src`) like `internals/checks` — every gate, including the coverage floor and diff-scoped mutation. `source` is the inner module dir, so the unit-tier gates recurse `src/` while the suite tiers derive from the package root. The colocated `git_ops_test.py` mocks one external — `subprocess.run`, through a fake that
+It is dogfooded through the **shipped reusable workflow** (`dogfood.yml`, `source: internals/move-major-tag/src`) like `internals/checks` — every check, including the coverage floor and diff-scoped mutation. `source` is the inner module dir, so the unit-tier checks recurse `src/` while the suite tiers derive from the package root. The colocated `git_ops_test.py` mocks one external — `subprocess.run`, through a fake that
 dispatches on argv and records every call — and runs the git boundary helpers for real against it,
 so the asserted argv kills the mutants on each boundary call; `decide_test.py` drives the pure
 decision directly, and `advance_test.py` and `move_major_tag_test.py` each mock the module below
@@ -608,13 +608,13 @@ membership test, where every comparison mutant flips an observable outcome.
 
 It was the last loose script under `.github/scripts/`, held to the conventions by `dogfood-github-helpers.yml` — a job that ran the published binary via `npx`, the n-1 skew class the hermetic gates exist to close (the worked examples under "Self-test and the `@v0` path"). The migration emptied `.github/scripts/`, so that workflow and its `github-helpers-wired` selftest guard retired with it: no code lives under `.github/`, and no required check outside the reusable workflow's consumer path invokes an unpinned `npx testing-conventions`.
 
-## The self-test checks package (`internals/checks`)
+## The self-test assertions package (`internals/checks`)
 
-The self-test wiring/assertion checks are consolidated into a single uv package at `internals/checks/` — `pyproject.toml` + `uv.lock` + a `src/checks/` layout. `checks/cli.py` is a `@click.group()` (`tc-checks`) that composes each check as a subcommand; each check lives in its own subpackage — `checks/<check>/cli.py` holds a pure predicate (or, for the failure-path group, a hardcoded `CHECKS` list) and a `@click.command()`, with a colocated `cli_test.py`. Shared code lives in `checks/utils/`: `check_failed.py` (the `CheckFailed` `click.ClickException` that prints a `::error::` annotation), `run_checks.py` + `failure_reason.py` (the failure-path orchestrator and its exit-code decision), and `job_block.py` (isolating a named job's YAML region). A self-test job runs `uv run --project internals/checks tc-checks <check>`.
+The self-test wiring and failure-path assertions are consolidated into a single uv package at `internals/checks/` — `pyproject.toml` + `uv.lock` + a `src/checks/` layout. `checks/cli.py` is a `@click.group()` (`tc-checks`) that composes each assertion as a subcommand; each assertion lives in its own subpackage — `checks/<subcommand>/cli.py` holds a pure predicate (or, for the failure-path group, a hardcoded `CHECKS` list) and a `@click.command()`, with a colocated `cli_test.py`. Shared code lives in `checks/utils/`: `check_failed.py` (the `CheckFailed` `click.ClickException` that prints a `::error::` annotation), `run_checks.py` + `failure_reason.py` (the failure-path orchestrator and its exit-code decision), and `job_block.py` (isolating a named job's YAML region). A self-test job runs `uv run --project internals/checks tc-checks <subcommand>`.
 
-The layout mirrors `packages/python`, whose importable package sits in `packages/python/python` while `packages/python/tests` holds the integration/e2e suite: `source` for the dogfood points at the **inner** `internals/checks/src`, not the package root, so the static gates recurse only the source tree. The colocated `cli_test.py` units drive each check's `@click.command` through its `.callback` (no `CliRunner`, which is a third-party collaborator the isolation lint flags) and import only the unit under test — so the colocated suite alone reaches the 100% coverage floor. The full e2e suite (`CliRunner` over the real workflow file) lives at `internals/checks/tests/e2e`, a sibling **outside** the scanned `src/`; a `*_test.py` e2e file *inside* the scan would be read as an un-isolated unit test and red the lint. The package root (`internals/checks`, where the `pyproject.toml` lives) is still derived for the coverage/mutation venv.
+The layout mirrors `packages/python`, whose importable package sits in `packages/python/python` while `packages/python/tests` holds the integration/e2e suite: `source` for the dogfood points at the **inner** `internals/checks/src`, not the package root, so the static checks recurse only the source tree. The colocated `cli_test.py` units drive each assertion's `@click.command` through its `.callback` (no `CliRunner`, which is a third-party collaborator the isolation lint flags) and import only the unit under test — so the colocated suite alone reaches the 100% coverage floor. The full e2e suite (`CliRunner` over the real workflow file) lives at `internals/checks/tests/e2e`, a sibling **outside** the scanned `src/`; a `*_test.py` e2e file *inside* the scan would be read as an un-isolated unit test and red the lint. The package root (`internals/checks`, where the `pyproject.toml` lives) is still derived for the coverage/mutation venv.
 
-The packaging gate's `packaging_build` derivation covers `internals/checks` too (a plain `uv build`), so the dogfood packaging job builds this package's own distributions and scans them — and both must exclude the colocated `*_test.py` units the same way any other zero-config Python package would, or the scan rejects the artifact as shipping its tests. `uv build` produces a wheel *and* an sdist, and hatchling's `[tool.hatch.build.targets.wheel]` / `[tool.hatch.build.targets.sdist]` exclude independently of each other — an exclude scoped to only the wheel target leaves the sdist (`.tar.gz`) shipping every test file untouched. The top-level `[tool.hatch.build] exclude = ["**/*_test.py"]` applies to both targets at once. Tests still run from the source tree (`.venv`/`uv run pytest`), never from a built artifact, so the exclude has no effect on execution — only on what `uv build` packages.
+The packaging check's `packaging_build` derivation covers `internals/checks` too (a plain `uv build`), so the dogfood packaging job builds this package's own distributions and scans them — and both must exclude the colocated `*_test.py` units the same way any other zero-config Python package would, or the scan rejects the artifact as shipping its tests. `uv build` produces a wheel *and* an sdist, and hatchling's `[tool.hatch.build.targets.wheel]` / `[tool.hatch.build.targets.sdist]` exclude independently of each other — an exclude scoped to only the wheel target leaves the sdist (`.tar.gz`) shipping every test file untouched. The top-level `[tool.hatch.build] exclude = ["**/*_test.py"]` applies to both targets at once. Tests still run from the source tree (`.venv`/`uv run pytest`), never from a built artifact, so the exclude has no effect on execution — only on what `uv build` packages.
 
 It lives under `internals/` with the repo's other first-party helper packages. As a real package it is dogfooded through the **shipped reusable workflow** (`dogfood.yml`, `path: internals/checks/src`) — colocated-test, isolation, coverage, integration-lint, and diff-scoped mutation — exactly like `packages/python`.
 
@@ -626,7 +626,7 @@ techniques cover the shapes that keep tempting a waiver:
 - **A `@click.command` body reads as glue, and is not.** `check-layout` and `dispatch-and-wait` each
   carry a real `if … raise` that lives in `cli.py`, not in the `utils` module they delegate to.
   `changelog_gate/cli_test.py` set the pattern: patch the collaborator by its string target
-  (`monkeypatch.setattr("checks.<check>.cli.<name>", fake)`), drive `cli.callback(...)`, and assert
+  (`monkeypatch.setattr("checks.<subcommand>.cli.<name>", fake)`), drive `cli.callback(...)`, and assert
   both the arguments threaded in and the branch taken. No `CliRunner`, no collaborator import, so the
   isolation lint stays satisfied.
 - **A constants module earns a colocated test.** `config_test.py` asserts each literal, exactly as
@@ -645,7 +645,7 @@ re-read a line-scoped mutation entry against its source whenever the file around
 
 `detect.py` (the `detect` composite action's implementation) lives in its own uv package, `internals/detect/`, mirroring `internals/checks`: custom logic earns a real package with real test tiers, not a loose script under `.github/`. `src/` holds flat sibling modules, one derivation per file, each with its colocated `_test.py`; `detect.py` is the entry point, reading the environment, calling `compute_outputs` (the orchestrator that imports every derivation), and rendering `GITHUB_OUTPUT`. Sibling imports resolve because the script's own directory leads `sys.path`, so the plain-script invocation works from any working directory. The integration/e2e suites sit at `internals/detect/tests/`, a sibling outside `src/`, exactly like `internals/checks`.
 
-It is dogfooded through the **shipped reusable workflow** (`dogfood.yml`, `source: internals/detect/src`) like `internals/checks` — every gate, including the coverage floor and diff-scoped mutation. `source` is the inner module dir rather than the package root, and that scoping is forced: pointing it at `internals/detect` runs all three tiers together and fails `unit lint`'s `unmocked-collaborator` rule, which has no concept of test tiers — once a first-party package is declared (any `pyproject.toml`), it flags *every* `*_test.py` under the scanned root that imports the package unmocked, `detect_integration_test.py` and `detect_e2e_test.py` included. (This also explains why `detect.py` silently passed `dogfood-github-helpers.yml`'s isolation check for years despite the same nested layout: `.github/actions` never had a `pyproject.toml`, so the rule's first-party-package lookup found nothing and reported no violations at all — not because the layout satisfied it.) So the colocated `_test.py` modules carry the whole unit tier: they build real package trees under `tmp_path` and run each derivation against them, rather than mocking the filesystem. `detect-action.yml` still runs the three-tier suite together.
+It is dogfooded through the **shipped reusable workflow** (`dogfood.yml`, `source: internals/detect/src`) like `internals/checks` — every check, including the coverage floor and diff-scoped mutation. `source` is the inner module dir rather than the package root, and that scoping is forced: pointing it at `internals/detect` runs all three tiers together and fails `unit lint`'s `unmocked-collaborator` rule, which has no concept of test tiers — once a first-party package is declared (any `pyproject.toml`), it flags *every* `*_test.py` under the scanned root that imports the package unmocked, `detect_integration_test.py` and `detect_e2e_test.py` included. (This also explains why `detect.py` silently passed `dogfood-github-helpers.yml`'s isolation check for years despite the same nested layout: `.github/actions` never had a `pyproject.toml`, so the rule's first-party-package lookup found nothing and reported no violations at all — not because the layout satisfied it.) So the colocated `_test.py` modules carry the whole unit tier: they build real package trees under `tmp_path` and run each derivation against them, rather than mocking the filesystem. `detect-action.yml` still runs the three-tier suite together.
 
 The package carries **no `testing-conventions.toml`** — every module holds the shipped `one_function_per_file` default — and **no exemptions**: the unit tier reaches 100% line-and-branch coverage and kills all 302 whole-tree mutants.
 
@@ -655,9 +655,9 @@ Four mutant classes drove a change to the source rather than a test. `is_workspa
 
 **The `outputs:` block is the forwarding contract.** A composite action forwards exactly the outputs its manifest declares. `steps.detect.outputs.<name>` resolves to the empty string for any name the block omits, however faithfully `detect.py` wrote that name to `GITHUB_OUTPUT`. The manifest and the script therefore hold one contract between them: every key `compute_outputs` returns has an `outputs:` entry, and each entry forwards `${{ steps.scan.outputs.<the same name> }}`. `internals/detect`'s e2e suite asserts both halves against the real `action.yml` — as set equality, so the next output is covered on the day it is added rather than by a fresh one-off assertion.
 
-`static_languages` is the case that earned the check. The manifest never declared it, so the `static` job's `fromJSON(needs.detect.outputs.static_languages || needs.detect.outputs.integration_lint_languages)` matrix took the fallback arm on every run. The two sets compute identically today, so the job fanned out over the right languages for the wrong reason and stayed green. The signal would have arrived only as a silently wrong matrix, on the first release where a language joined one set and not the other.
+`static_languages` is the case that earned the assertion. The manifest never declared it, so the `static` job's `fromJSON(needs.detect.outputs.static_languages || needs.detect.outputs.integration_lint_languages)` matrix took the fallback arm on every run. The two sets compute identically today, so the job fanned out over the right languages for the wrong reason and stayed green. The signal would have arrived only as a silently wrong matrix, on the first release where a language joined one set and not the other.
 
-**The chain runs two links further.** An action output reaches a rule job through the reusable workflow's `detect` job, which re-declares each name in its own `outputs:` block as `${{ steps.scan_hermetic.outputs.<name> || steps.scan_published.outputs.<name> }}` (the hermetic/published step pair), and every rule job reads it as `needs.detect.outputs.<name>`. Both links fail the way the manifest does, silently: a name the job's `outputs:` block omits makes `needs.detect.outputs.<name>` the empty string, and a forward wired to a different step output — a typo, or a rename that reached one arm of the `||` and not the other — yields the empty string while reading as wired. `internals/detect`'s e2e suite asserts both as set equality against the real workflow, so emitted, declared, forwarded, and referenced are one set of names or the check reds; the day an output is added, all four sides are covered. Every pattern over these names matches `[a-z0-9_]+`: `e2e_attestation`, `e2e_extra_scope`, and `e2e_exclude` carry a digit, so a `[a-z_]+` pattern drops the same three names from both sides of a comparison at once and the equality holds on a set two-thirds its real size.
+**The chain runs two links further.** An action output reaches a check job through the reusable workflow's `detect` job, which re-declares each name in its own `outputs:` block as `${{ steps.scan_hermetic.outputs.<name> || steps.scan_published.outputs.<name> }}` (the hermetic/published step pair), and every check job reads it as `needs.detect.outputs.<name>`. Both links fail the way the manifest does, silently: a name the job's `outputs:` block omits makes `needs.detect.outputs.<name>` the empty string, and a forward wired to a different step output — a typo, or a rename that reached one arm of the `||` and not the other — yields the empty string while reading as wired. `internals/detect`'s e2e suite asserts both as set equality against the real workflow, so emitted, declared, forwarded, and referenced are one set of names or the assertion reds; the day an output is added, all four sides are covered. Every pattern over these names matches `[a-z0-9_]+`: `e2e_attestation`, `e2e_extra_scope`, and `e2e_exclude` carry a digit, so a `[a-z_]+` pattern drops the same three names from both sides of a comparison at once and the equality holds on a set two-thirds its real size.
 
 ### The scan's invocation is an external contract (willfire)
 
@@ -681,7 +681,7 @@ Each matrixed job carries an explicit `name:` whose only interpolation is `matri
 
 `.github/workflows/pr-monitor.yml` calls `thekevinscott/pr-monitor@v1` on its defaults, and the action's own lockfile pins the willfire release it installs — so the behavior above is whatever that pinned release does, and a pr-monitor release is what moves it.
 
-Every wiring/assertion and failure-path check lives in `internals/checks` as a `tc-checks <check>` subcommand; the flat `.github/scripts/<check>/` dirs are gone, and each self-test job invokes `uv run --project internals/checks tc-checks <check>` after `astral-sh/setup-uv`. The full inventory:
+Every wiring and failure-path assertion lives in `internals/checks` as a `tc-checks <subcommand>` subcommand; the flat `.github/scripts/<subcommand>/` dirs are gone, and each self-test job invokes `uv run --project internals/checks tc-checks <subcommand>` after `astral-sh/setup-uv`. The full inventory:
 
 - **Wiring assertions:** `mutation-wired`, `isolation-wired`, `coverage-rust-wired`, `colocated-rust-wired`, `diff-scoped-wired`, `e2e-verify-wired`, `e2e-verify-checks-out-pr-head` (block-scoped to the `e2e-verify` job, replacing the old `awk` range), `e2e-verify-scope-wired`, `rolling-release-wired` (two selftest steps folded into one command over two file arguments).
 - **Detect wiring:** `wiring-detect-action`, `wiring-packaging-default-on`, `wiring-e2e-default-on`, and `detect-routes-python` — the last keeps its `uses: ./.github/actions/detect` step in the job and passes the action's `isolation_languages` output as a single-quoted JSON CLI argument.
@@ -694,7 +694,7 @@ Every wiring/assertion and failure-path check lives in `internals/checks` as a `
 - **cli-isolation-wired:** asserts every line naming the CLI package spec launches it through `npm --prefix "$RUNNER_TEMP" exec`, so resolution reads the registry rather than the checkout's `node_modules`. It also fails when it matches no line at all, so a rename of the spec surfaces as a failure rather than a vacuous pass. See "The CLI resolves outside the checkout".
 - **cli-node-engine-wired:** reads **both sides** — each CLI-invoking job's unconditional `setup-node` pin, and `engines.node` in `packages/node/package.json` — and fails when a pin sits below the floor. Raising the floor trips it without an edit, and adding a CLI-invoking job that forgets its `setup-node` trips it too. It also fails when it matches **no** job, so an edit to the `npx` invocation it keys on surfaces as a failure rather than a vacuous pass. See "The CLI runs on its own engine".
 
-The static checks hold their inspection in a pure predicate over the workflow file; the failure-path group holds a `CHECKS` list run through the shared `run_checks` orchestrator. Either way the colocated `cli_test.py` drives the pure logic in isolation, the `@click.command()` raises `CheckFailed` (a `::error::` annotation) on a failure, and a sibling `CliRunner` e2e suite exercises the real boundary — held to the same coverage and mutation bar as any shipped source.
+The static assertions hold their inspection in a pure predicate over the workflow file; the failure-path group holds a `CHECKS` list run through the shared `run_checks` orchestrator. Either way the colocated `cli_test.py` drives the pure logic in isolation, the `@click.command()` raises `CheckFailed` (a `::error::` annotation) on a failure, and a sibling `CliRunner` e2e suite exercises the real boundary — held to the same coverage and mutation bar as any shipped source.
 
 ## Rust CI: nextest, and why the coverage job's cache needed no change
 
@@ -710,11 +710,11 @@ With that fixed, the real warm-cache comparison holds up: a subsequent PR's run 
 
 ## The Rust crate's own coverage floor
 
-The `integration` job measures `packages/rust/src` over **all** cargo targets — the inline `#[cfg(test)]` units plus the suites under `packages/rust/tests/` — a wider slice than the `cargo llvm-cov --lib` the shipped Rust rule runs on a consumer's crate. That is deliberate: almost all of this crate's coverage comes from the integration and e2e tiers, so a `--lib` run would measure a small fraction of it. `just rust-cov` mirrors the same flags on the default test harness.
+The `integration` job measures `packages/rust/src` over **all** cargo targets — the inline `#[cfg(test)]` units plus the suites under `packages/rust/tests/` — a wider slice than the `cargo llvm-cov --lib` the shipped Rust check runs on a consumer's crate. That is deliberate: almost all of this crate's coverage comes from the integration and e2e tiers, so a `--lib` run would measure a small fraction of it. `just rust-cov` mirrors the same flags on the default test harness.
 
 `src/main.rs` is covered by that measurement like any other file. The e2e suites spawn the real binary through `env!("CARGO_BIN_EXE_testing-conventions")`, and llvm-cov attributes the child process's execution back to `main.rs` — three targets alone (`version_banner_e2e`, `config_unknown_key_e2e`, `workflow_e2e`) cover it at 100% lines, regions, and functions, one each for the `Ok` path, the `clap_err.exit()` path, and the `eprintln!` + `ExitCode::from(1)` path. The job once carried `--ignore-filename-regex 'main\.rs'`, which hid coverage the suite already had; `--ignore-filename-regex` is also a substring search, so the unanchored pattern would have silently dropped a future `domain.rs` or `subdomain.rs` from the denominator — the same over-match the consumer-facing path anchored away.
 
-The floor is **100**, matching the shipped rule's default. It previously sat at 96: the full suite measured 96.96% lines (256 of 8,427 uncovered, across 15 of the crate's 17 source files), and that shortfall was uncovered code rather than an exempt surface, so tests closed it. The old floor's point of margin absorbed line-mapping drift between a local toolchain and CI's `stable`; at 100, a rustc bump that remaps a line surfaces as a red run, fixed by covering the line the new mapping exposes.
+The floor is **100**, matching the shipped check's default. It previously sat at 96: the full suite measured 96.96% lines (256 of 8,427 uncovered, across 15 of the crate's 17 source files), and that shortfall was uncovered code rather than an exempt surface, so tests closed it. The old floor's point of margin absorbed line-mapping drift between a local toolchain and CI's `stable`; at 100, a rustc bump that remaps a line surfaces as a red run, fixed by covering the line the new mapping exposes.
 
 ## Python CI: build the wheel once
 

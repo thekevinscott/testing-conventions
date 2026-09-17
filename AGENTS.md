@@ -1,6 +1,6 @@
 ## North Star
 
-A consuming package adopts `conventions.yml` whole-hog with a call carrying only `source`. One `uses:` call per package, and all eight gates run: layout, package manager, Python environment, native-build toolchain, dist location, attestation location, and config file are all derived from `source` and the package's own manifest — a `testing-conventions.toml` at the package root is discovered, never named. `languages` and `config` survive as optional refinements. `build_command` is a **necessary declaration, not an escape hatch**: where an ecosystem standardizes the build the tool derives it, and where it structurally can't (npm names no build command) a compiling package states its build in one line — a fact, requiring no justification. `gates` and `rust_toolchain` are the true escape hatches — they *skip* or *override* something that already works — so they remain held to the exemption bar (near-forbidden, reasoned).
+A consuming package adopts `conventions.yml` whole-hog with a call carrying only `source`. One `uses:` call per package, and every check runs — `colocated-test`, `one-function-per-file`, `unit-lint`, `unit-coverage`, `mutation`, `integration-lint`, `packaging`, `e2e-verify` — because layout, package manager, Python environment, native-build toolchain, dist location, attestation location, and config file are all derived from `source` and the package's own manifest: a `testing-conventions.toml` at the package root is discovered, never named. `languages` and `config` survive as optional refinements. `build_command` is a **necessary declaration, not an escape hatch**: where an ecosystem standardizes the build the tool derives it, and where it structurally can't (npm names no build command) a compiling package states its build in one line — a fact, requiring no justification. `gates` and `rust_toolchain` are the true escape hatches — they *skip* or *override* something that already works — so they remain held to the exemption bar (near-forbidden, reasoned).
 
 ## The red/green cadence, and where it applies
 
@@ -56,7 +56,7 @@ written before this convention. Never append to them — a shared file every PR 
 anchor is what made concurrent PRs conflict by construction, which is the whole reason fragments
 exist. Direction of travel is one way: an entry becomes a fragment, never the reverse.
 
-`docs/internals/repo.md` ("CHANGELOG + MIGRATIONS") carries the naming rules and the required
+`docs/internals/repo.md` ("CHANGELOG + MIGRATIONS") carries the naming conventions and the required
 sections of each fragment kind.
 
 ## Cross-language parity
@@ -214,7 +214,7 @@ the commit under test and what Layer 2 gates at promotion. **Third-party actions
 which is the house style in every workflow here — `actions/checkout@v6`, `astral-sh/setup-uv@v7`,
 `dtolnay/rust-toolchain@stable`, `pypa/gh-action-pypi-publish@release/v1`,
 `thekevinscott/putitoutthere@v0`, `thekevinscott/pr-monitor@v1`. Keep them there: read a third-party
-`uses:` ref as correct as written and move on. The repo owner settled this, so it stands as a rule
+`uses:` ref as correct as written and move on. The repo owner settled this, so it stands as policy
 rather than a judgment the next PR reweighs (#507 pinned a SHA and #509 restored the tag; that round
 trip is what this paragraph ends).
 
@@ -265,12 +265,12 @@ together is not.
 
 **A workflow's `run:` step holds no logic** — it wires a trigger, a checkout, and env, then invokes
 a standalone, colocated-tested script. Any assertion, parse, or multi-line decision (`grep`/`awk`
-wiring checks, output validation, red-path exit-code checks) belongs in a tested module under
+wiring assertions, output validation, red-path exit-code assertions) belongs in a tested module under
 `internals/` — a `tc-checks` subcommand in `internals/checks` for self-test assertions, or a small
 uv package of its own (`internals/detect`, `internals/move-major-tag`) for a standalone helper,
 invoked as `run: python3 internals/<name>/src/<name>.py`.
 
-Two reasons this is a rule, not a preference:
+Two reasons this is a requirement, not a preference:
 
 - **A script carries tests; an inline block carries none.** Logic in YAML is untested prose,
   exercised only by a full CI run. An `internals/` module carries colocated unit tests plus
@@ -278,7 +278,7 @@ Two reasons this is a rule, not a preference:
   dogfooded to the shipped bar (coverage floor, diff-scoped mutation).
 - **GitHub templates `run:` text for `${{ }}` before the shell sees it.** A literal
   `${{ inputs.source }}` embedded in a `grep` pattern gets evaluated (and stripped) by that
-  templating, silently breaking the check. A file the workflow *invokes* is never templated, so
+  templating, silently breaking the assertion. A file the workflow *invokes* is never templated, so
   extracting to a script sidesteps the whole class (#301, #302).
 
 Follow the `internals/move-major-tag` (`src/move_major_tag.py` + colocated unit test + `tests/`)
@@ -288,7 +288,7 @@ side-channel — see **Never pass data through the environment**.
 
 ## Wiring gates are earned
 
-A `*_wired` checks module — a `tc-checks` subcommand plus its own selftest job — guards wiring
+A `*_wired` assertion — a `tc-checks` subcommand plus its own selftest job — guards wiring
 whose regression is **silent and correctness-affecting**: a shipped rule silently stops running, or
 a consumer's build passes when it shouldn't (`gates_wired`, `isolation_wired`,
 `coverage_package_root_wired`, `static_gates_wired`). That is the whole franchise. Plumbing whose
@@ -403,7 +403,7 @@ result = runner(["git", "diff", "--name-only", "--diff-filter=A", f"{base_sha}..
 ## Code style
 
 Internal modules in this repo are **not** underscore-prefixed — an empty `__init__.py` already says
-"nothing public here." This is our convention for *this* library's source; it is not a rule we
+"nothing public here." This is our convention for *this* library's source; it is not a requirement we
 impose on consumers, who name their modules however they like.
 
 ## Docs-only changes

@@ -689,7 +689,7 @@ fn run_unit_one_function(
         );
         return Ok(0);
     };
-    let raw = one_function::find_violations(root, language, max_lines)?;
+    let (raw, scanned) = one_function::find_violations(root, language, max_lines)?;
     let select: ExemptSelect = match language {
         colocated_test::Language::Python => |c| c.exemptions(colocated_test::Language::Python),
         colocated_test::Language::TypeScript => {
@@ -699,6 +699,7 @@ fn run_unit_one_function(
     };
     let violations = apply_waivers(raw, root, config_path, select)?;
     if violations.is_empty() {
+        eprintln!("one-function-per-file: scanned {scanned} file(s), 0 violations");
         return Ok(0);
     }
     for v in &violations {

@@ -281,7 +281,7 @@ fn rust_clean_exits_zero() {
 
 #[test]
 fn rust_clean_reports_the_files_it_scanned() {
-    let output = run("rust", "rust/clean");
+    let output = run_with_config("rust", "rust/clean", "rust/clean/testing-conventions.toml");
     assert!(
         stderr(&output).contains("one-function-per-file: scanned 5 file(s), 0 violations"),
         "a passing run must be distinguishable from a vacuous one: {}",

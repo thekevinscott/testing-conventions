@@ -45,6 +45,10 @@ fn run_without_the_adapter_arg_fails_clean() {
         stderr.contains("--ts-mutation-adapter"),
         "the error should name the adapter argument; got: {stderr}"
     );
+    assert!(
+        stderr.contains("run the check through that CLI, not the raw binary"),
+        "the error should name the check, not a rule; got: {stderr}"
+    );
 }
 
 #[test]

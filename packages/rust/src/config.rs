@@ -900,6 +900,13 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.to_string().contains("lists no `lines`"), "got: {err}");
+        assert!(
+            err.to_string().contains(
+                "only `coverage` and `mutation` are line-scoped; every other check or rule is \
+                 whole-file"
+            ),
+            "got: {err}"
+        );
     }
 
     #[test]
@@ -923,6 +930,10 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("line-scoped exemptions apply only"),
+            "got: {err}"
+        );
+        assert!(
+            err.to_string().contains("move the rest to a separate entry"),
             "got: {err}"
         );
     }

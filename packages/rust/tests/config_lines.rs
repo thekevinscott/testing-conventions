@@ -30,8 +30,23 @@ fn loads_a_line_scoped_exemption() {
 
 #[test]
 fn rejects_lines_on_a_whole_file_rule_self_guard() {
+    let err = load_config(fixture("exempt_lines_bad_rule.toml"))
+        .expect_err("a `lines` list on `colocated-test` must be rejected on load");
     assert!(
-        load_config(fixture("exempt_lines_bad_rule.toml")).is_err(),
-        "a `lines` list on `colocated-test` must be rejected on load"
+        format!("{err:#}").contains("move the rest to a separate entry"),
+        "got: {err:#}"
+    );
+}
+
+#[test]
+fn rejects_a_scopable_rule_without_lines() {
+    let err = load_config(fixture("exempt_scopable_no_lines.toml"))
+        .expect_err("a `coverage` exemption with no `lines` must be rejected on load");
+    assert!(
+        format!("{err:#}").contains(
+            "only `coverage` and `mutation` are line-scoped; every other check or rule is \
+             whole-file"
+        ),
+        "got: {err:#}"
     );
 }

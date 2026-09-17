@@ -35,6 +35,49 @@ fn missing_toolchain_fails_clean_without_downloading() {
         stderr.contains("npx --no-install"),
         "the error should name the no-download invocation; got: {stderr}"
     );
+    assert!(
+        stderr.contains("The check runs the project's own vitest"),
+        "the error should name the check, not a rule; got: {stderr}"
+    );
+}
+
+/// A staged project with a real (failing) vitest suite, mirroring `coverage_ts.rs`'s
+/// `a_failing_suite_is_an_error_naming_the_vitest_run` at the binary boundary.
+#[test]
+fn a_failing_suite_is_an_error_naming_the_check_not_a_rule() {
+    let staged = std::env::temp_dir().join(format!("tc-ts-cov-e2e-failing-{}", std::process::id()));
+    let src = staged.join("src");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::copy(
+        fixtures().join("full/package.json"),
+        staged.join("package.json"),
+    )
+    .unwrap();
+    std::fs::write(
+        src.join("widget.ts"),
+        "export const widget = (): number => 1;\n",
+    )
+    .unwrap();
+    std::fs::write(
+        src.join("widget.test.ts"),
+        "import { expect, test } from 'vitest';\nimport { widget } from './widget';\n\ntest('widget', () => {\n  expect(widget()).toBe(2);\n});\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(fixtures().join("node_modules"), staged.join("node_modules"))
+        .unwrap();
+
+    let (code, stderr) = unit_coverage_output(&src);
+    let _ = std::fs::remove_file(staged.join("node_modules"));
+    let _ = std::fs::remove_dir_all(&staged);
+    assert_ne!(code, 0, "a red suite must fail the run; stderr: {stderr}");
+    assert!(
+        stderr.contains("did not run cleanly under vitest"),
+        "got: {stderr}"
+    );
+    assert!(
+        stderr.contains("The check runs the project's own vitest"),
+        "the error should name the check, not a rule; got: {stderr}"
+    );
 }
 
 /// Exit code of `testing-conventions unit coverage --language typescript --config <cfg> <codebase>`.

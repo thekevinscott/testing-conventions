@@ -143,7 +143,9 @@ in your editor — a source that reaches above the scanned path (`import pkg fro
 a shared `../tsconfig`) resolves through the real tree, the package's `tsconfig.json` is read where
 it lies, and tooling resolves from the package's own `node_modules`. Mutation stays scoped to the
 scanned path, and the scanned path's colocated unit suite is what judges each mutant; the package's
-other suite tiers (`tests/`) stay out of the run. The scan path narrows **which** of your test
+other suite tiers (`tests/`) stay out of the run. Rust reaches that scope with
+`--cargo-test-arg --lib`, the same restriction [`unit coverage`](./coverage) applies, so the two
+checks measure one slice. The scan path narrows **which** of your test
 files judge the mutants, and your runner keeps deciding what counts as a test and where it is
 rooted — so a `vitest.config.ts` at the package root whose `include` names `src/**/*.test.ts`
 resolves that pattern against the package root, exactly as it does when you run vitest yourself.

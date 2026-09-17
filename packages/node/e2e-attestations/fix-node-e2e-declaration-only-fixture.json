@@ -1,0 +1,7 @@
+{
+  "command": "pnpm run test:e2e",
+  "ran_at": 1789668393,
+  "exit_code": 0,
+  "commit": "49def6b398bab750be83c4c8c5a80d2d9b0538c1",
+  "branch": "fix/node-e2e-declaration-only-fixture"
+}

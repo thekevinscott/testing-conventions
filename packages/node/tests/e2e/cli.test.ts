@@ -31,12 +31,18 @@ function colocatedTestExit(dir: string): number {
 describe('testing-conventions CLI (e2e)', () => {
   it('passes a colocated suite and flags an orphan — real binary, no mocks', () => {
     const clean = mkdtempSync(join(tmpdir(), 'tc-e2e-clean-'));
-    writeFileSync(join(clean, 'widget.ts'), 'export const widget = 1;\n');
+    writeFileSync(join(clean, 'widget.ts'), 'export function widget() {\n  return 1;\n}\n');
     writeFileSync(join(clean, 'widget.test.ts'), 'export const widgetTest = 1;\n');
     expect(colocatedTestExit(clean)).toBe(0);
 
     const orphaned = mkdtempSync(join(tmpdir(), 'tc-e2e-orphan-'));
-    writeFileSync(join(orphaned, 'widget.ts'), 'export const widget = 1;\n');
+    writeFileSync(join(orphaned, 'widget.ts'), 'export function widget() {\n  return 1;\n}\n');
     expect(colocatedTestExit(orphaned)).toBe(1);
+  });
+
+  it('passes a declaration-only module with no colocated test — real binary, no mocks', () => {
+    const declarations = mkdtempSync(join(tmpdir(), 'tc-e2e-declarations-'));
+    writeFileSync(join(declarations, 'widget.ts'), 'export const widget = 1;\n');
+    expect(colocatedTestExit(declarations)).toBe(0);
   });
 });

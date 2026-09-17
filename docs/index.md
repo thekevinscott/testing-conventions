@@ -26,7 +26,7 @@ features:
     details: What each check enforces and why — the three kinds of test, the unit ladder, and what makes it agent-resistant.
     link: /explanation/
     linkText: Understand the model
-  - title: Configure the rules
+  - title: Respond to a red check
     details: The two responses to a red check — fix the code, or record a reasoned exemption in one auditable file.
     link: /guide/configure
     linkText: Tune a floor, exempt a file

@@ -6,7 +6,7 @@ description: The testing-conventions.toml schema — every coverage key and its 
 
 One TOML file is the single source of truth for what the rules require: coverage floors and
 reason-required exemptions. This page is the canonical record of its schema and every default.
-For the task, see [Configure the rules](../guide/configure); for the design, [Scoping and
+For the task, see [Respond to a red check](../guide/configure); for the design, [Scoping and
 exemptions](../explanation/scoping); for the per-check view — every key and exemption rule that
 touches one check, on that check's page — see [Checks](./checks/).
 

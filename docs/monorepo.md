@@ -123,5 +123,5 @@ fix preferred:
 ## Next
 
 - [The testing model](./explanation/) — what each check enforces and why.
-- [Configure the rules](./guide/configure) — per-package floors and reasoned exemptions.
+- [Respond to a red check](./guide/configure) — per-package floors and reasoned exemptions.
 - [Workflow reference](./reference/workflow) — every input, check, and run condition.

@@ -52,7 +52,7 @@ export default defineConfig({
         {
           text: 'How-to Guides',
           items: [
-            { text: 'Configure the rules', link: '/guide/configure' },
+            { text: 'Respond to a red check', link: '/guide/configure' },
           ],
         },
         {

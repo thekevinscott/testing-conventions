@@ -2,17 +2,17 @@
 description: Respond to a red check in testing-conventions.toml — relax a coverage floor or exempt a file or line with a required reason.
 ---
 
-# Configure the rules
+# Respond to a red check
 
 When a check goes red, there are two responses: fix the code, or record a deliberate omission
 here. A single `testing-conventions.toml` at your repo root (or per package, in a
-[monorepo](../monorepo)) tunes what the rules require — coverage floors and reason-required
+[monorepo](../monorepo)) tunes what the checks require — coverage floors and reason-required
 exemptions. Anything you don't set keeps its strict default; the
 [configuration reference](../reference/config) carries every key.
 
 ## Relax a coverage floor
 
-Every rule ships a strict 100% floor. Lower one under the language's table:
+Every coverage check ships a strict 100% floor. Lower one under the language's table:
 
 ```toml
 # Drop the Python floor from the strict default 100 to 90:
@@ -70,7 +70,7 @@ carries the node list per language.
 ### Exempt a real file
 
 Add a `[[<language>.exempt]]` entry naming the rules it lifts and **why**. Whole-file exemptions are
-for the **presence and lint** rules — a launcher shim or a process entry point with no colocated
+for the **presence and lint** checks — a launcher shim or a process entry point with no colocated
 test:
 
 ```toml
@@ -80,7 +80,7 @@ path = "mypkg/cli.py"
 rules = ["colocated-test"]
 reason = "thin launcher; logic lives in run(), tested in run_test.py"
 
-# A process entry point, exempt from the colocated-test rule:
+# A process entry point, exempt from the colocated-test check:
 [[typescript.exempt]]
 path = "src/bin.ts"
 rules = ["colocated-test"]
@@ -89,9 +89,10 @@ reason = "process entry; maps run() to an exit code, tested in run.test.ts"
 
 - `path` is relative to the scanned `source`, and must point to a file that exists — a stale entry
   is a hard error, so the list can't silently rot.
-- `rules` names the checks the entry lifts (`colocated-test`, `one-function-per-file`, a
-  mutation or lint rule). For `coverage` / `mutation`, see the line-scoped form below —
-  those are never whole-file.
+- `rules` names the checks the entry lifts (`colocated-test`, `one-function-per-file`) or an
+  individual lint rule (`no-monkeypatch`) — see the [glossary](../reference/glossary) for how this
+  key spans both. For `coverage` / `mutation`, see the line-scoped form below — those are never
+  whole-file.
 - `reason` is required; a reason-less entry is rejected when the config loads.
 
 Because every exemption lives in this one file, names its rules, and carries a reason, the whole
@@ -118,7 +119,7 @@ A **determinism guard** checks the list:
 - A failing line that **isn't listed** fails the gate as normal.
 
 So the list is exactly the failing lines. `lines` is required with `coverage` / `mutation` and
-rejected with any whole-file rule, so the two never share an entry — a file exempt from both
+rejected with any whole-file check, so the two never share an entry — a file exempt from both
 `colocated-test` and `coverage` is two entries.
 
 ## See also

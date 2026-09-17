@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // Mock bin-shim's `main()` so the launcher's behaviors run without spawning a real binary.
 // `vi.hoisted` makes the mock available to the hoisted `vi.mock` factory.
 const { main } = vi.hoisted(() => ({ main: vi.fn<(opts: MainOpts) => Promise<number>>() }));
-vi.mock('bin-shim', () => ({ main }));
+vi.mock('bin-shim', async () => {
+  const actual = await vi.importActual<typeof import('bin-shim')>('bin-shim');
+  return { ...actual, main };
+});
 
 // The launcher reads `process.argv.slice(2)` at import time, so set argv, import a fresh module
 // copy, then flush the microtask that calls `process.exit`.

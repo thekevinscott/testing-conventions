@@ -6,7 +6,7 @@ description: Adopt the standard on a monorepo — one workflow call per package,
 
 A monorepo adopts the standard **one workflow call per package**: each `uses:` job names its
 package's real source directory, and the workflow derives everything else from the package
-itself. Every gate runs per call. This repository consumes itself the same way — its
+itself. Every check runs per call. This repository consumes itself the same way — its
 dogfood workflow is exactly this file with our package paths.
 
 ```yaml
@@ -32,7 +32,7 @@ jobs:
 ```
 
 Each `source` names a **source directory** — nothing more. It is the recursive scan root for
-exactly two things: language detection and the unit-tier checks (colocated-test, unit-lint, unit
+exactly two things: language detection and the unit-tier checks (colocated-test, unit lint, unit
 coverage, mutation). It is *not* the package root, and it is not where the standard looks for
 suites, builds, or config — those are all **derived**, by walking upward from `source` to the
 nearest manifest, never by scanning downward from `source`. The `typescript` call above scans
@@ -46,35 +46,53 @@ root's immediate child, so the distinction is invisible until a monorepo pulls t
 Two roots, two jobs, and confusing them is the single most common adoption mistake:
 
 - **`source`** is a directory you name. It is scanned **recursively**: colocated-test and
-  unit-lint take every matching file under it as a subject, and language detection looks under it
+  unit lint take every matching file under it as a subject, and language detection looks under it
   for each language's file extensions. Nothing about a suite, a build, or a config file lives at
   `source` — it only ever holds first-party sources and their colocated unit tests.
 - **The package root** is never named — it's **derived**, by walking upward from `source` through
   its ancestors until one holds a `package.json`, `pyproject.toml`, or `Cargo.toml` (stopping at
-  the repository boundary). Every other gate — suites, install, build, packaging, e2e receipts,
+  the repository boundary). Everything else — suites, install, build, packaging, e2e receipts,
   config discovery — reads from **fixed, non-configurable paths relative to this derived root**,
   never from `source` and never recursively.
 
 Moving a file *into* `source` only ever helps the two things that scan `source`. It does nothing
-for a gate that reads from the package root — if that gate isn't finding its subjects, the fix is
-almost always a path at the package root being named wrong (singular instead of plural, or the
+for a check that reads from the package root — if that check isn't finding its subjects, the fix
+is almost always a path at the package root being named wrong (singular instead of plural, or the
 wrong directory entirely), not a file living in the wrong place relative to `source`.
 
-## What each gate scans, and from where
+## What each check scans, and from where
 
-| Gate | Subjects | Root it derives from | How it finds them |
+| Check | Subjects | Root it derives from | How it finds them |
 | --- | --- | --- | --- |
-| Language detection | file extensions per language | `source` | Recursive scan of `source` |
 | `colocated-test` | source files paired with same-named unit tests | `source` | Recursive scan of `source`; `<package root>/tests/` is explicitly excluded |
 | `one-function-per-file` | module-scope functions in source files | `source` | Recursive scan of `source`; test files and the suite tiers under `<package root>/tests/` are outside it |
 | `unit-lint` | colocated unit test files | `source` | Recursive scan of `source`; `<package root>/tests/` is explicitly excluded |
 | `unit-coverage` / `mutation` | source + colocated unit tests | `source` (scanned); package root (installed/run) | Recursive scan of `source` for subjects; toolchain provisioning and the suite run happen at the package root |
 | `integration-lint` | integration and e2e suite files | package root | **Fixed paths only** — `<package root>/tests/integration/` and `<package root>/tests/e2e/` (plural **`tests`**; Rust: the crate root's `tests/`). Never a recursive scan of `source`, and not configurable |
+| `packaging` | the built distribution | package root | Derives the build from the manifest and scans what it writes — `dist/` (Python/TypeScript) or `target/package/` (Rust), all at the package root |
+| `e2e-verify` | committed receipts | package root | **Fixed path** — `<package root>/e2e-attestations/`. Never a recursive scan |
+
+A package whose suites live at `test/integration/` (singular) rather than `tests/integration/`
+(plural) sits outside every fixed path above — `integration-lint` finds nothing there and stays
+silently green, no matter what `source` scans. Renaming `test/` to `tests/` at the package root is
+the fix; moving files under `source` changes nothing, because `integration-lint` never reads
+`source` at all.
+
+The config file's own `exempt` entries follow the same split: an entry's `path` resolves relative
+to `source` for every check except `integration-lint`, whose suite subjects resolve relative to the
+package root the suite tiers derive from — the same root as the row above, not `source`.
+
+## What `detect` derives, and from where
+
+`detect` reads five facts from `source` and the manifest to set up every check above — a
+misconfigured one shows up as a check silently skipped rather than failed.
+
+| Facility | Subjects | Root it derives from | How it finds them |
+| --- | --- | --- | --- |
+| Language detection | file extensions per language | `source` | Recursive scan of `source` |
 | Package manager | `packageManager` field, else lockfile | package root | Read from the manifest at the package root; a `packageManager` pin also fixes the pnpm *version* the workflow installs |
 | Python environment | a `pyproject.toml` `[project]` table | package root | Read from the manifest at the package root |
 | Native toolchain | a Rust-compiling build declaration (maturin backend, napi config, `Cargo.toml`) | package root | Read from the manifest at the package root |
-| `packaging` | the built distribution | package root | Derives the build from the manifest and scans what it writes — `dist/` (Python/TypeScript) or `target/package/` (Rust), all at the package root |
-| `e2e-verify` | committed receipts | package root | **Fixed path** — `<package root>/e2e-attestations/`. Never a recursive scan |
 | Config file | `testing-conventions.toml` | package root, falling back to repo root | Fixed filename, discovered upward from `source` |
 
 ### The pnpm version
@@ -88,16 +106,6 @@ run at all when it is given a `version` *and* finds a `packageManager` field tha
 string-equal to it, so a floor and a pin cannot coexist — the job fails before installing anything,
 whatever versions are involved. The workflow satisfies that equality by handing the action the pin
 itself, which installs the same `pnpm@<pin>` that passing nothing would, build metadata included.
-
-A package whose suites live at `test/integration/` (singular) rather than `tests/integration/`
-(plural) sits outside every fixed path above — `integration-lint` finds nothing there and stays
-silently green, no matter what `source` scans. Renaming `test/` to `tests/` at the package root is
-the fix; moving files under `source` changes nothing, because `integration-lint` never reads
-`source` at all.
-
-The config file's own `exempt` entries follow the same split: an entry's `path` resolves relative
-to `source` for every gate except `integration-lint`, whose suite subjects resolve relative to the
-package root the suite tiers derive from — the same root as the row above, not `source`.
 
 Two optional inputs refine a call: `languages` restricts the detected set explicitly, and
 `config` names a config file somewhere other than the package root.
@@ -117,7 +125,7 @@ Two inputs waive or override something that already works, so they carry the sam
 fix preferred:
 
 - **`rust_toolchain`** — forces cargo provisioning when no manifest declares the need.
-- **`gates`** — restricts a call to named gates, for the rare package where one genuinely
+- **`gates`** — restricts a call to named checks, for the rare package where one genuinely
   cannot run.
 
 ## Next

@@ -6,7 +6,7 @@ description: Adopt the full standard on a repository — add one workflow file, 
 
 This tutorial adopts `testing-conventions` on a repository and walks you through the loop you'll
 live in from then on: a pull request trips a check, CI goes red with the exact violation, you fix
-it, CI goes green. By the end, every rule runs on every pull request — and you'll have seen one
+it, CI goes green. By the end, every check runs on every pull request — and you'll have seen one
 fire for real.
 
 You need a GitHub repository you can push to. The steps below use a fresh Python library so the
@@ -33,7 +33,7 @@ is safe on any library.
 
 That one file is the whole adoption: your repository is now held to the full standard.
 
-## 2. Open a pull request that breaks a rule
+## 2. Open a pull request that trips a check
 
 See it fire. On a branch, add a source file with **no test**:
 
@@ -56,7 +56,7 @@ missing colocated unit test: greet.py
 This is the standard's core move: every source file carries a colocated, matching-named unit test,
 and the check is a blocking gate — the pull request stays red until the test exists (or the file
 carries a reasoned [exemption](./guide/configure#exempt-a-file)). The `Static checks` job bundles
-the four source-scanning gates into one job per language; open the red step to see which gate
+the four source-scanning checks into one job per language; open the red step to see which check
 failed.
 
 ## 4. Make it green
@@ -82,7 +82,7 @@ the check red).
 Every pull request now runs the full standard: colocated tests, one substantial function per file,
 a 100% coverage floor, mocked-out collaborators in unit tests, real first-party code in integration
 tests, a binary mutation gate on changed lines, and clean packaging. When a job goes red, its step
-log names the file and the gate; you fix the code, or record a reasoned exemption in
+log names the file and the check; you fix the code, or record a reasoned exemption in
 [`testing-conventions.toml`](./guide/configure).
 
 ## Teach your agent
@@ -98,9 +98,9 @@ Pass a path to manage a different file: `npx testing-conventions install CLAUDE.
 ## Next
 
 - A repository with several packages adopts per package — see [Adopt on a monorepo](./monorepo).
-  If a gate isn't finding its subjects, read [`source` vs. the package
-  root](./monorepo#source-vs-the-package-root) and the [gate-by-gate discovery
-  table](./monorepo#what-each-gate-scans-and-from-where) first — most gates read fixed paths at
+  If a check isn't finding its subjects, read [`source` vs. the package
+  root](./monorepo#source-vs-the-package-root) and the [check-by-check discovery
+  table](./monorepo#what-each-check-scans-and-from-where) first — most checks read fixed paths at
   the derived package root, not wherever `source` happens to point.
 - [The testing model](./explanation/) explains what each check enforces and why.
 - [Respond to a red check](./guide/configure) tunes a floor or exempts a file, with a reason.

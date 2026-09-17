@@ -933,7 +933,8 @@ mod tests {
             "got: {err}"
         );
         assert!(
-            err.to_string().contains("move the rest to a separate entry"),
+            err.to_string()
+                .contains("move the rest to a separate entry"),
             "got: {err}"
         );
     }

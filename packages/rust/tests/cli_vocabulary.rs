@@ -35,10 +35,7 @@ fn e2e_verify_help() -> String {
 #[test]
 fn unit_mutation_help_names_a_check_not_a_gate() {
     let help = unit_mutation_help();
-    assert!(
-        help.contains("The check is on by default"),
-        "got: {help}"
-    );
+    assert!(help.contains("The check is on by default"), "got: {help}");
 }
 
 #[test]
@@ -89,8 +86,10 @@ fn a_scopable_exemption_without_lines_names_the_check_or_rule_boundary() {
         .expect_err("a `coverage` exemption with no `lines` must be rejected on load");
     let msg = format!("{err:#}");
     assert!(
-        msg.contains("only `coverage` and `mutation` are line-scoped; every other check or rule \
-                       is whole-file"),
+        msg.contains(
+            "only `coverage` and `mutation` are line-scoped; every other check or rule \
+                       is whole-file"
+        ),
         "got: {msg}"
     );
 }

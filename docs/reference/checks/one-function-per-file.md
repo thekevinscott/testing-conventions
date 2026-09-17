@@ -61,7 +61,7 @@ It scans the source files under `source`. The [`gates` input](/reference/workflo
 `one-function-per-file`.
 
 **Rust is off until you opt in.** Python and TypeScript run at the default threshold; a Rust run
-with no `[rust].one_function_per_file` table reports that the rule is not enabled and passes:
+with no `[rust].one_function_per_file` table reports that the check is not enabled and passes:
 
 ```
 unit one-function-per-file: not enabled for rust — set `[rust].one_function_per_file` to opt in
@@ -70,7 +70,7 @@ unit one-function-per-file: not enabled for rust — set `[rust].one_function_pe
 In Python and TypeScript a file is a bag of definitions, so "one subject per file" is a choice the
 author makes. In Rust a file **is** a module, and grouping a type, its `impl` blocks, and the free
 functions around it inside one is how Rust is written. The capability is identical in all three
-languages — a Rust tree that wants the rule names a threshold and gets exactly what Python and
+languages — a Rust tree that wants the check names a threshold and gets exactly what Python and
 TypeScript get. Only the default differs. See
 [One function per file](/explanation/one-function-per-file#rust-is-off-until-you-opt-in).
 
@@ -94,16 +94,16 @@ one_function_per_file = { max_lines = 5 }
 one_function_per_file = { max_lines = 8 }
 ```
 
-A tree adopting the rule onto existing source starts at a threshold that passes and walks it down;
-raising the number never turns the rule off, it only moves the line between "trivial enough to
+A tree adopting the check onto existing source starts at a threshold that passes and walks it down;
+raising the number never turns the check off, it only moves the line between "trivial enough to
 share" and "substantial enough to own the file".
 
 A file whose functions genuinely belong together takes a `one-function-per-file`
 [`[[<language>.exempt]]` entry](/reference/config#exemptions) with a required `reason`:
 
-| Rule | Language | Lifts |
+| Check | Language | Lifts |
 | --- | --- | --- |
-| `one-function-per-file` | Python, TypeScript, Rust | the rule for one file (a generated module, a table of small constructors, a public surface re-exported as one API) |
+| `one-function-per-file` | Python, TypeScript, Rust | the check for one file (a generated module, a table of small constructors, a public surface re-exported as one API) |
 
 ## Learn more
 

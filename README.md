@@ -47,8 +47,8 @@ Tests assert the behavior of code. This standard recognizes three kinds:
 
 Each rule states what it enforces, why, and how it varies by language. **Checked**
 says how it's verified. Most rules are deterministic checks run in CI from the
-config. Where a rule is a structural convention rather than its own gate (the
-integration/e2e folder layout), **Checked** says so.
+config. The integration/e2e folder layout is a structural convention, and
+**Checked** describes the location check.
 
 ### Unit
 
@@ -146,10 +146,10 @@ coverage is measured on.
 **Checked:** both behaviorally and structurally. `unit lint` requires unit tests
 to mock every collaborator, `integration lint` requires integration tests to run
 first-party code for real, and `unit coverage` measures only the colocated unit
-suite. The location is derived and enforced: `integration lint` takes its
-subjects from `<package root>/tests/integration/` and `<package root>/tests/e2e/`
-(Rust: the crate root's `tests/`), and a test file under `tests/` outside a
-standard tier is flagged (`unknown-tier`).
+suite. The location check examines `<package root>/tests/integration/` and
+`<package root>/tests/e2e/` (Rust: the crate root's `tests/`) and flags a test
+file under `tests/` outside a standard tier (`unknown-tier`). Packages may omit
+the integration/e2e folders.
 
 #### External Dependencies
 

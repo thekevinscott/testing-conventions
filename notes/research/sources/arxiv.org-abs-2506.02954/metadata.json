@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Empirical SE study (arXiv preprint, accepted IEEE TSE) comparing testing-technique effectiveness: shows code coverage is a weak fault-detection indicator vs mutation score, and evaluates a mutation-guided LLM test-generation approach against EvoSuite and vanilla prompting on 204 subjects by mutation score."}

@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Empirical benchmark study (TRACE: 54-category taxonomy plus 517 human-verified trajectories, with model detection-rate experiments) on detecting reward hacks in code RL environments; bears on the testing-strategy goal because gameable tests/checks are the failure mode a gate must resist when code is optimized against it."}

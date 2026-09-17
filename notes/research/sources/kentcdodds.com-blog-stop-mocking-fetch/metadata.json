@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Practitioner opinion essay (Kent C. Dodds) arguing against mocking fetch/the HTTP client and for intercepting at a shared mock server (msw). Non-empirical (refactored code examples, author experience, no measurements) but bears on the strategy's mocking/test-boundary axis. Included under broad-inclusion."}

@@ -1,0 +1,17 @@
+# Relevance — DafnyBench: A Benchmark for Formal Software Verification (Loughridge et al.)
+
+**Verdict:** relevant — full peer-reviewed empirical paper (TMLR, 2025) measuring how well LLMs can produce the annotations a formal verifier needs to *prove* a program meets its specification, across 782 Dafny programs. Primary empirical research directly on LLM-authored verification artifacts, bearing on the strongest available correctness gate for LLM code.
+
+## Salient sections
+
+- **Headline measured ceiling.** Best model/prompt reaches **68% success** (Claude 3 Opus 67.8 ± 1.7) at auto-generating the loop invariants/asserts needed for the Dafny verifier to pass; GPT-4 Turbo 59.8, GPT-4o 59.3, GPT-3.5 Turbo 44.0, CodeLlama-7b 28.0, no-LLM baseline 26.9. → Even with a machine-checked correctness oracle, current LLMs fully verify only ~2/3 of programs — formal verification is a high-assurance but not yet complete gate for LLM-authored code.
+- **Error-message retry has sharply diminishing returns.** First-try success ~54%, plateauing ~65% by n≈5 attempts: "the LLMs are not great at taking Dafny error messages into consideration." → Naive iterate-on-the-error loops yield little; a testing/verification strategy shouldn't assume feedback-retry closes the gap.
+- **Success degrades with size and annotation load.** "the success rate drops with program size" (Fig 5a) and "with the annotation quantity" (Fig 5b). → LLM-verifiable correctness scales down with program complexity — argues for decomposing LLM-authored code into small, separately-verifiable units.
+- **Anti-cheating success criterion (verbatim).** A program is "solved" only if it "pass[es] the Dafny verifier without modifying the requires and ensures statements... and without using {:verify false} or assume false." → A rigorous gate definition: the spec must be preserved and verification not bypassed — a transferable principle for evaluating whether LLM-generated tests/proofs actually prove anything.
+- **Spec-from-NL is untested (limitation).** The benchmark only fills annotations given a spec; it does not assess translating natural language into formal specifications — "a key untested skill." → The hardest part (writing correct specs) is unmeasured; verification-based strategies still depend on a human/trusted spec.
+
+## Evidence weight
+
+- **Study type:** Empirical benchmark/evaluation. 782 standalone compiling Dafny programs (~53k LOC) from GitHub (556, minhash/LSH-deduplicated), Clover (62), Dafny-synthesis (164); task = restore removed assert/invariant annotations; metric = Dafny-verified + spec-preserved + no verification-disabling. Models GPT-4o/4-Turbo/3.5-Turbo, Claude 3 Opus, CodeLlama-7b; temp 0.3, up to n=10 attempts with error feedback. Failures categorized into 9 types.
+- **Scope/sample:** Single-file Dafny programs only; specific models circa 2024; success rates are ± ~1.7–1.8.
+- **Caveats / on LLM code:** This **is** primary research on LLM-authored code, but narrow — formal-verification annotation in **Dafny**, not general test-suite design (unit/property/mutation testing). **Data contamination** is flagged (GitHub programs may overlap with training data, inflating scores). Multi-file/external-library Dafny excluded; does not implement Clover's full consistency check; prompts "manually but not very systematically tuned." Informs the *upper bound* of formal-verification gating for LLM code rather than everyday testing strategy.

@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Practitioner opinion essay by Kent C. Dodds arguing against testing implementation details (false positives/negatives, test as users do), argued from a single React example with no studies or data; included under broad-inclusion as non-empirical context on what to assert when testing LLM-authored code, not as primary evidence."}

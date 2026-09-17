@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Vendor engineering blog (Meta) announcing the ACH mutation-guided, LLM-based test-generation tool; non-empirical (no protocol, datasets, or numbers) but it summarizes the primary peer-reviewed paper arXiv 2501.12862 and bears on the goal as context for mutation-guided testing with LLMs. Included under broad-inclusion."}

@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Empirical primary study (arXiv preprint, ACM-related DOI) of whether LLM-generated patches passing SWE-bench tests are actually correct; quantifies how non-exhaustive test suites admit incorrect patches and applies differential patch testing (PatchDiff) — directly about how to test LLM-authored code."}

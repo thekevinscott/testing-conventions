@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Empirical study (peer-reviewed, IEEE S&P 2022) measuring the security of GitHub Copilot's generated code, finding ~40% of 1,689 generated programs vulnerable; bears on testing LLM code by motivating what to test (security/CWE classes), though it measures code-security outcomes, not a testing technique. Included under broad-inclusion."}

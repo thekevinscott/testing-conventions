@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Position/vision paper (keynote outline) advocating 'Assured LLMSE' — a generate-and-test gating approach with semantic filters; it frames what gate decides LLM-generated code is acceptable (no regression, verifiable improvement), but reports no new empirical evaluation, so it is framing context, not primary evidence."}

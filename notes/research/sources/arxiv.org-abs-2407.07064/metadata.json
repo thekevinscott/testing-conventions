@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Empirical study (systematic literature review plus evaluation on GPT-3/3.5/4 over 150 security prompts, accepted at ACM TOSEM) showing prompting techniques — especially RCI — reduce security weaknesses in LLM-generated code; adjacent to testing as it bears on quality/vulnerability of the LLM-authored code under test."}

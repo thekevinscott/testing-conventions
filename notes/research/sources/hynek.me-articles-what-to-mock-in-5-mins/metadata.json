@@ -1,0 +1,1 @@
+{"relevant": true, "reason": "Practitioner opinion essay (Hynek Schlawack) arguing the 'Don't Mock What You Don't Own' heuristic — wrap third-party deps behind a façade you own and mock that. Non-empirical (single worked Python example, no measurements) but bears on the strategy's test-doubles/mocking axis. Included under broad-inclusion."}

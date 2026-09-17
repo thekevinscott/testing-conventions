@@ -18,7 +18,7 @@ whose source went away. This is the first rung of the
 [unit ladder](/explanation/#the-unit-ladder-exist-→-run-→-verify) — does a test **exist**? — with
 [coverage](./unit-coverage) and [mutation](./mutation) asking the stronger questions above it.
 
-The co-change variant exists because presence isn't enough on a pull request: a source edit that
+The co-change mode exists because presence isn't enough on a pull request: a source edit that
 leaves the colocated test untouched lets the test silently go stale — it still exists, but it
 pins the old behavior.
 
@@ -50,26 +50,26 @@ test can't go stale and co-change doesn't apply to Rust — a deliberate asymmet
 
 ## When it runs
 
-| Variant | Runs | As |
+| Mode | Runs | As |
 | --- | --- | --- |
 | Presence | always, tree-wide | a step of the `Static checks (<language>)` job |
 | Co-change | pull requests only (Python, TypeScript), over `<base>...HEAD` | a step of the same job |
 
 The scan covers every file under `source`, leaving `<package root>/tests/` to the suite tiers.
 The [`gates` input](/reference/workflow#inputs) names it `colocated-test`; the diff-scoped
-co-change variant rides with it.
+co-change mode rides with it.
 
 ## Configuration
 
-The check takes no keys of its own. Its exemption rules, each a
+The check takes no keys of its own. Its exemption names, each a
 [`[[<language>.exempt]]` entry](/reference/config#exemptions) with a required `reason`:
 
-| Rule | Lifts |
+| Exemption | Lifts |
 | --- | --- |
 | `colocated-test` | the presence requirement for one file (a launcher shim, a process entry point) |
 | `co-change` | the co-change requirement for one file, independently of presence |
 
-Both are whole-file rules. A declaration-only module is never a subject, and a comment-only or
+Both exemptions apply to whole files. A declaration-only module is never a subject, and a comment-only or
 whitespace-only edit is never a co-change subject — the files themselves decide both, with no
 configuration.
 

@@ -138,6 +138,11 @@ It also emits two presence flags the packaging and e2e-verify jobs gate on — *
 receipts sit in `e2e-attestations/` there) — so both checks run by default and skip, never fail,
 when absent.
 
+`e2e-verify` reads a receipt's presence in the branch diff, so a package's own e2e suite runs only
+where someone runs it: `testing-conventions e2e attest "<command>"` writes the receipt from a real
+local run, and a behavior change that stales an e2e fixture surfaces there. Run the suite of every
+package a change reaches before attesting.
+
 **`cargo_target_dir`** is the workspace-aware Rust build-cache location: the workspace
 root's `target/` for a workspace-member crate, else the package root's own. cargo resolves the
 target directory at the workspace root regardless of the invoking directory, so a cache keyed on

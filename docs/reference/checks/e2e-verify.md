@@ -6,7 +6,7 @@ description: "The e2e-verify check — a branch that changes the scoped source r
 
 A branch that changes the scoped source records one visible e2e decision — a receipt in the
 branch's own diff, checked deterministically, with CI never running the e2e suite. This page is
-the complete record of the check: the attest/verify pair, the two questions the gate asks, when
+the complete record of the check: the attest/verify pair, the two questions the check asks, when
 it runs, and its configuration surface.
 
 ## Why this check exists
@@ -24,7 +24,7 @@ everyone learns to re-run until green; a deterministic floor of local runs price
 hours and real money, which teaches the same lesson: make the suite trivial, or make the gate
 lie.
 
-Both of the gate's questions are **content** questions over the `<base>...HEAD` diff, not history
+Both of the check's questions are **content** questions over the `<base>...HEAD` diff, not history
 questions (#319): a rebase, a squash merge, a force-push — none disturb a receipt, because none
 change what the branch changed.
 

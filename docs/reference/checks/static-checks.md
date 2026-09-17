@@ -52,7 +52,7 @@ that tune it.
 ## Configuration
 
 The job takes no input of its own. Its steps read the shared [`config`](../config) file, and each
-check's exemption rules and keys live on that check's page. The one input that changes whether the
+check's exemption names and keys live on that check's page. The one input that changes whether the
 job runs at all is [`gates`](../workflow#inputs).
 
 ## Learn more

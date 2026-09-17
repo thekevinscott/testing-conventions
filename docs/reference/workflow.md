@@ -5,7 +5,7 @@ description: The reusable GitHub Actions workflow — every input, every check a
 # Workflow
 
 The reusable workflow is the adoption surface: one `uses:` call runs every check. The five static
-source scans (colocated-test, its co-change variant, one-function-per-file, unit-lint, and
+source scans (colocated-test, its co-change mode, one-function-per-file, unit-lint, and
 integration-lint) run as steps of one `Static checks (<language>)` job per language; the
 toolchain-heavy suites each run as their own job. This page is the canonical record of its inputs, the checks it runs, and its versioning
 contract.
@@ -55,17 +55,17 @@ jobs:
 Each check fails the build on a violation, with the offending files in the log. Each links to its
 own page under [Checks](./checks/) — the complete per-check record: motivation, per-language
 behavior, run conditions, and configuration surface. The five static source scans (colocated-test,
-its co-change variant, one-function-per-file, unit-lint, integration-lint) run as steps of one
+its co-change mode, one-function-per-file, unit-lint, integration-lint) run as steps of one
 `Static checks (<language>)` job per language — each a sub-second scan, so one job's setup covers
 all five; the toolchain-heavy suites (`unit-coverage`, its changed-line variant, `mutation`)
 each run as their own job. Every check keeps its own
-`gates` membership and `--base` semantics — a gate left out of `gates` is skipped whether it runs as
+`gates` membership and `--base` semantics — a check left out of `gates` is skipped whether it runs as
 a job or a step.
 
 | Check | Runs | Notes |
 | --- | --- | --- |
 | [`colocated-test`](./checks/colocated-test) | always | Python, TypeScript, and Rust (inline `#[cfg(test)]` presence). Runs as a step of the `Static checks (<language>)` job. Scans `source`, leaving `<package root>/tests/` to the suite tiers. Plus the diff-scoped co-change (`--base`) step on pull requests, for Python and TypeScript — Rust units are inline, so a sibling test can't go stale and co-change doesn't apply. |
-| [`one-function-per-file`](./checks/one-function-per-file) | always | Python and TypeScript at the default `max_lines = 1`; Rust when a `[rust].one_function_per_file` table names a threshold, and a run without one reports the rule is off and passes. Runs as a step of the `Static checks (<language>)` job. Scans `source`, leaving `<package root>/tests/` to the suite tiers. |
+| [`one-function-per-file`](./checks/one-function-per-file) | always | Python and TypeScript at the default `max_lines = 1`; Rust when a `[rust].one_function_per_file` table names a threshold, and a run without one reports the check is off and passes. Runs as a step of the `Static checks (<language>)` job. Scans `source`, leaving `<package root>/tests/` to the suite tiers. |
 | [`unit-coverage`](./checks/unit-coverage) | always | The language's [default floor](./config#coverage), plus the changed-line (`--base`) job on pull requests. |
 | [`unit-lint`](./checks/unit-lint) | always | Python, TypeScript, Rust. Runs as a step of the `Static checks (<language>)` job. Scans `source`, leaving `<package root>/tests/` to the suite tiers. |
 | [`integration-lint`](./checks/integration-lint) | always | Python, TypeScript, Rust. Runs as a step of the `Static checks (<language>)` job. Subjects derive from the [package root](../monorepo#source-vs-the-package-root): the `tests/integration/` and `tests/e2e/` suites (Rust: the crate root's `tests/`). A test file under `tests/` outside a standard tier is flagged (`unknown-tier`); a tree with no manifest is scanned at `source` directly. |
@@ -166,5 +166,5 @@ testing-conventions 0.0.92
 
 The line comes from the binary itself rather than a separate lookup, so it is the version that
 produced the result below it — including on a run that fails, and on one that fails to parse its
-arguments at all. Read it whenever a gate's behavior surprises you: it tells you in one line
+arguments at all. Read it whenever a check's behavior surprises you: it tells you in one line
 whether `latest` handed this job the release you expected.

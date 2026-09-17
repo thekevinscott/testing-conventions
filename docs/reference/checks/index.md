@@ -7,7 +7,7 @@ description: "The GitHub Actions jobs the workflow runs — one page per job, ea
 The reusable workflow runs a consumer's checks as **GitHub Actions jobs**. Each job that can fail
 has a page here: a job that bundles several checks has its own page, and each check it runs has its
 own page below it carrying the complete per-language record — why it exists, what it enforces,
-when it runs, and every configuration key and exemption rule that touches it.
+when it runs, and every configuration key and exemption name that touches it.
 
 ## The jobs
 
@@ -25,7 +25,7 @@ The name in the table is the name you see on a pull request's check list.
 
 A job skipped by [`gates`](../workflow#inputs) is absent from CI. A check left out of `gates` is
 skipped whether it runs as its own job or as a step of `Static checks`, and a check's diff-scoped
-variant rides with it (`colocated-test` covers the co-change step, `unit-coverage` the changed-line
+mode rides with it (`colocated-test` covers the co-change step, `unit-coverage` the changed-line
 job).
 
 ## The checks

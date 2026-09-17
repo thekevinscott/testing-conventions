@@ -4,10 +4,10 @@ description: The testing-conventions.toml schema — every coverage key and its 
 
 # Configuration
 
-One TOML file is the single source of truth for what the rules require: coverage floors and
+One TOML file is the single source of truth for what the checks and rules require: coverage floors and
 reason-required exemptions. This page is the canonical record of its schema and every default.
 For the task, see [Respond to a red check](../guide/configure); for the design, [Scoping and
-exemptions](../explanation/scoping); for the per-check view — every key and exemption rule that
+exemptions](../explanation/scoping); for the per-check view — every key and exemption name that
 touches one check, on that check's page — see [Checks](./checks/).
 
 The file is named by the workflow's `config` input (default `testing-conventions.toml`, resolved
@@ -31,7 +31,7 @@ rules = ["colocated-test"]
 reason = "thin launcher; logic in run(), tested in run_test.py"
 
 # A line-scoped coverage/mutation exemption — `lines` is required, and never
-# shares an entry with a whole-file rule:
+# shares an entry with a whole-file check:
 [[python.exempt]]
 path = "mypkg/config/tomlcompat.py"
 rules = ["coverage", "mutation"]
@@ -42,7 +42,7 @@ reason = "version-conditional tomllib/tomli import; one branch is dead on any si
 coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
 
 [rust]
-# Cargo features the suite-running Rust rules enable, so `#[cfg(feature = ...)]`
+# Cargo features the suite-running Rust checks enable, so `#[cfg(feature = ...)]`
 # code is compiled, measured, and mutated:
 features = ["cli"]
 coverage = { regions = 100, lines = 100 }
@@ -60,7 +60,7 @@ has its own section below.
 | `exempt` | The exemption entries, each its own `[[<language>.exempt]]` table. |
 | `build_command` | The build declaration a build-dependent job runs. |
 | `reason` | A free-form note on the table's `build_command`, kept as written. An exemption entry's required `reason` is a separate field. |
-| `features` | `[rust]` only: the cargo features the suite-running Rust rules enable. |
+| `features` | `[rust]` only: the cargo features the suite-running Rust checks enable. |
 
 `[e2e]` is the fourth root table, language-agnostic, carrying `extra_scope` and `exclude`.
 
@@ -85,8 +85,8 @@ loosen it. Its only tuning is a line-scoped `mutation` exemption (below); see
 ## `one_function_per_file`
 
 Each language table takes **`one_function_per_file`**, whose one key sets the threshold the
-[`one-function-per-file`](../explanation/one-function-per-file) rule counts against. Python and
-TypeScript apply the rule with no table present; **Rust applies it only when the table is there**,
+[`one-function-per-file`](../explanation/one-function-per-file) check counts against. Python and
+TypeScript apply the check with no table present; **Rust applies it only when the table is there**,
 because a Rust file is a module and grouping functions in one is idiomatic — see
 [Rust is off until you opt in](../explanation/one-function-per-file#rust-is-off-until-you-opt-in):
 
@@ -107,7 +107,7 @@ one_function_per_file = { max_lines = 20 }
 ```
 
 Raising `max_lines` moves the boundary between "trivial enough to share" and "substantial enough to
-own the file"; it never turns the rule off. A file whose functions genuinely belong together takes a
+own the file"; it never turns the check off. A file whose functions genuinely belong together takes a
 `one-function-per-file` exemption below.
 
 ## Exemptions
@@ -117,13 +117,13 @@ A deliberate omission is a `[[<language>.exempt]]` entry:
 | Field | Meaning |
 | ----- | ------- |
 | `path` | The exempt file, **relative to the scanned `source`** of the call that loads this config — except for `integration-lint`'s suite subjects, which resolve **relative to the [package root](../monorepo#source-vs-the-package-root)** the tiers derive from (e.g. `tests/integration/billing_test.py`). Must point to a file that exists; a stale entry is a hard error, so the list can't silently rot. |
-| `rules` | Which checks the exemption lifts: `colocated-test`, `coverage`, `co-change`, `mutation`, a mocking lint (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`, `no-first-party-patch`), an isolation rule (`no-out-of-module-call`, `no-out-of-module-import`, `no-first-party-double`, `unmocked-collaborator`, `untyped-mock`, `no-first-party-mock`), the source-layout rule (`one-function-per-file`), or the suite-layout rule (`unknown-tier`). |
-| `lines` | The lines a `coverage` / `mutation` exemption covers. **Required** with `coverage` / `mutation`, **rejected** with any other rule. |
+| `rules` | Which exemptable units the entry lifts: check ids (`colocated-test`, `one-function-per-file`, `coverage`, `mutation`) and rule ids (the mocking, isolation, and layout assertions listed in the check pages). `co-change` names the diff-scoped mode of `colocated-test`. See the [glossary](./glossary#the-rules-config-key-is-a-mixed-namespace). |
+| `lines` | The lines a `coverage` / `mutation` exemption covers. **Required** with `coverage` / `mutation`, **rejected** with any other exemption name. |
 | `reason` | Why the omission is deliberate. **Required**: an empty reason is rejected on load. |
 
 ### Line-scoped exemptions
 
-The measured-line rules — `coverage` and `mutation` — are never whole-file: their entries carry a
+The measured-line checks — `coverage` and `mutation` — are never whole-file: their entries carry a
 `lines` list naming the exact lines they cover. Each element is a 1-based line number (a TOML
 integer) or an inclusive range (a `"start-end"` string). A **determinism guard** checks the list:
 
@@ -133,7 +133,7 @@ integer) or an inclusive range (a `"start-end"` string). A **determinism guard**
 
 So the list is exactly the failing lines. The two entry kinds never mix: an entry naming
 `coverage` / `mutation` without `lines` is rejected on load, a `lines` key alongside a whole-file
-rule is rejected, and a file exempt from both `colocated-test` and `coverage` is two entries.
+exemption is rejected, and a file exempt from both `colocated-test` and `coverage` is two entries.
 Under the diff-scoped mutation job, a listed line outside the diff isn't mutated and is left
 alone; the guard fires only on a listed line whose mutants were run and all caught.
 
@@ -151,14 +151,14 @@ Two kinds of files are skipped with no configuration — the only non-explicit e
 
 ## `[rust] features`
 
-The `[rust]` table takes **`features`**, a list of cargo features the suite-running Rust rules
+The `[rust]` table takes **`features`**, a list of cargo features the suite-running Rust checks
 enable: `unit-coverage` passes it to `cargo llvm-cov` as `--features`, and `mutation` passes it
 to cargo-mutants as `--features`, so `#[cfg(feature = ...)]` code is compiled, measured, and
 mutated. The mutation run enables the features on **every** cargo invocation it makes — the build
 of the crate's test targets as much as the test run itself — so an integration test that names a
 feature-gated item compiles and judges the mutants of the code it covers. Cargo features are Rust's
 build-system concept with no Python/TypeScript analog, so the key is deliberately Rust-only — a
-documented asymmetry under the [parity rule](../explanation/#parity-over-cleverness).
+documented asymmetry under the [parity principle](../explanation/#parity-over-cleverness).
 
 ## `build_command`
 

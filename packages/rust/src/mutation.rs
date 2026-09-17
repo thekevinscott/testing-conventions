@@ -1242,14 +1242,18 @@ fn list_cargo_mutants(
     parse_mutants_list(&String::from_utf8_lossy(&output.stdout))
 }
 
-/// The argv for one cargo-mutants run: `mutants --output <out> [--in-diff <diff>] [--features
-/// <list>]`. `features` rides on the engine's own `--features` so it reaches every cargo
-/// invocation; after a `--` it would reach `cargo test` alone and the baseline build would fail.
+/// The argv for one cargo-mutants run: `mutants --output <out> --cargo-test-arg --lib
+/// [--in-diff <diff>] [--features <list>]`. `--cargo-test-arg --lib` reaches only the judging
+/// `cargo test` invocation, scoping it to the same target `unit coverage` measures. `features`
+/// rides on the engine's own `--features` so it reaches every cargo invocation, judging build
+/// included; after a `--` it would reach `cargo test` alone and the baseline build would fail.
 fn mutants_argv(out: &Path, in_diff: Option<&Path>, features: &[String]) -> Vec<OsString> {
     let mut argv = vec![
         OsString::from("mutants"),
         OsString::from("--output"),
         out.as_os_str().to_os_string(),
+        OsString::from("--cargo-test-arg"),
+        OsString::from("--lib"),
     ];
     if let Some(diff) = in_diff {
         argv.push(OsString::from("--in-diff"));
@@ -2092,7 +2096,15 @@ diff --git a/src/lib.rs b/src/lib.rs
         };
         assert_eq!(
             argv(None, &["cli", "boost"]),
-            vec!["mutants", "--output", "/out", "--features", "cli,boost"]
+            vec![
+                "mutants",
+                "--output",
+                "/out",
+                "--cargo-test-arg",
+                "--lib",
+                "--features",
+                "cli,boost"
+            ]
         );
         assert_eq!(
             argv(Some(Path::new("/out/base.diff")), &["cli"]),
@@ -2100,13 +2112,18 @@ diff --git a/src/lib.rs b/src/lib.rs
                 "mutants",
                 "--output",
                 "/out",
+                "--cargo-test-arg",
+                "--lib",
                 "--in-diff",
                 "/out/base.diff",
                 "--features",
                 "cli",
             ]
         );
-        assert_eq!(argv(None, &[]), vec!["mutants", "--output", "/out"]);
+        assert_eq!(
+            argv(None, &[]),
+            vec!["mutants", "--output", "/out", "--cargo-test-arg", "--lib"]
+        );
     }
 
     #[test]

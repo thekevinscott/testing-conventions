@@ -256,6 +256,11 @@ fn survivors_fail_the_gate_by_default() {
 }
 
 #[test]
+fn an_integration_tier_mutant_fails_the_gate() {
+    assert_eq!(unit_mutation_exit("padded", None), 1);
+}
+
+#[test]
 fn a_failing_run_lists_each_survivor_with_one_location() {
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "rust"])

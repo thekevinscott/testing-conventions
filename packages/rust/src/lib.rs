@@ -155,7 +155,7 @@ enum UnitRule {
         config: PathBuf,
     },
     /// Run mutation testing over the unit suite and fail on any surviving mutant not
-    /// lifted by a `mutation` exemption — the rung above coverage. The gate is
+    /// lifted by a `mutation` exemption — the rung above coverage. The check is
     /// on by default (no report-only mode). All three languages (Python, TypeScript,
     /// Rust) are at parity and wired into the reusable workflow as a diff-scoped,
     /// PR-only job.
@@ -234,7 +234,7 @@ enum E2eCommand {
         /// Base ref for the branch's content diff (`<base>...HEAD`): a branch
         /// whose diff leaves the scoped source untouched owes no decision, and
         /// one that changed it passes when its diff adds or updates a receipt —
-        /// the way the changed-line coverage/mutation gates read the diff, and
+        /// the way the changed-line coverage/mutation checks read the diff, and
         /// indifferent to rebases and squash merges. Absent, presence of a
         /// committed receipt is the whole check.
         #[arg(long)]
@@ -619,7 +619,7 @@ fn run_unit_mutation(
                 anyhow::anyhow!(
                     "the TypeScript mutation adapter path is required: pass \
                      `--ts-mutation-adapter <path>`. The npm `testing-conventions` CLI appends it \
-                     automatically — run the rule through that CLI, not the raw binary."
+                     automatically — run the check through that CLI, not the raw binary."
                 )
             })?;
             mutation::measure_typescript(root, &exempt, &exempt_lines, base, adapter)?

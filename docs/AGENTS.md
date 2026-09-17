@@ -111,15 +111,20 @@ page*: fewer, denser pages beat a page per feature.
 
 ## Language and terminology
 
-Consistency is a feature: the same idea uses the same word everywhere.
+Consistency is a feature: the same idea uses the same word everywhere. **check**, **rule**, and
+**gate** carry one standard, stated in full at the [glossary](/reference/glossary) — that page
+binds this file, `README.md`, and the root `AGENTS.md`, not only pages under `docs/`.
 
-- **check** — one of the eight enforced rules the workflow runs (`colocated-test`,
+- **check** — one of the runnable units the workflow enforces (`colocated-test`,
   `unit-coverage`, `mutation`, `integration-lint`, …), each named by the value the [`gates`]
-  input takes and that appears in a `rules = […]` exemption. A check runs as a GitHub Actions
-  **job** — most 1:1, four bundled as steps of one `Static checks (<language>)` job. "Rule" is
-  acceptable for the enforced convention itself; never "gate" (the `gates` input names checks,
-  but the checks themselves are "checks"), "lint" (except a named lint like
-  `no-first-party-mock`), or "test".
+  input takes and that appears in a `rules = […]` exemption. A check is a unit of enforcement, not
+  a CI job: some run as their own job, several share one job as steps, and one produces two jobs
+  — see the glossary for the exact shape. Never "lint" for a check (a named lint rule like
+  `no-first-party-mock` is a "rule", not a check) or "test".
+- **rule** — an individual assertion inside a lint check (`no-monkeypatch`,
+  `unmocked-collaborator`, …), never the check that runs it.
+- **gate** — a check in its merge-blocking role, and the `gates` input. Use it there — "a binary
+  gate, not a score", "an escape hatch needs a reason" — never as a loose synonym for check.
 - **the drop-in** — the six-line reusable-workflow snippet a consumer adds. Not "the action" (it's a
   reusable workflow, not a composite action).
 - **the scan root** — the directory the `source` input names; the only scoping mechanism.

@@ -60,6 +60,7 @@ export default defineConfig({
           items: [
             { text: 'Workflow', link: '/reference/workflow' },
             { text: 'Configuration', link: '/reference/config' },
+            { text: 'Glossary', link: '/reference/glossary' },
             {
               text: 'Checks',
               link: '/reference/checks/',

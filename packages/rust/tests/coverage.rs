@@ -42,6 +42,14 @@ fn full_passes_a_100_floor() {
 }
 
 #[test]
+fn a_source_with_no_branching_constructs_passes_a_100_floor() {
+    assert_eq!(
+        measure(&codebase("no_branches").join("src"), FLOOR_100, &[]).unwrap(),
+        Outcome::Pass
+    );
+}
+
+#[test]
 fn a_package_root_conftest_governs_a_src_scan() {
     assert_eq!(
         measure(&codebase("pkg_config").join("src"), FLOOR_100, &[]).unwrap(),

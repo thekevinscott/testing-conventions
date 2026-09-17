@@ -74,7 +74,7 @@ including why Rust's extra metrics are opt-in.
 
 | Language | Keys | Default |
 | --- | --- | --- |
-| **Python** | `branch`, `fail_under` | `branch = true`, `fail_under = 100` — coverage.py's combined line + branch total. |
+| **Python** | `branch`, `fail_under` | `branch = true`, `fail_under = 100`. The suite always runs under coverage.py's branch instrumentation, so the whole-tree floor is its combined line + branch percent; a source with no branching constructs measures zero branches and is vacuously at full branch coverage. `branch` decides whether the diff-scoped and line-exempt ratios fold branch arcs in alongside lines. |
 | **TypeScript** | `lines`, `branches`, `functions`, `statements` | All four at `100`, each enforced independently. |
 | **Rust** | `lines`, `regions`, `functions`, `branch` | `lines = 100`; `regions`, `functions`, and `branch` are opt-in floors. A `branch` floor adds `--branch` to the `cargo llvm-cov` run, which needs a nightly toolchain (pin one in `rust-toolchain.toml` with `llvm-tools-preview`, or set a rustup directory override); on stable the run fails with the requirement named. |
 

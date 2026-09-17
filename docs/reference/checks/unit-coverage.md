@@ -61,7 +61,7 @@ the rest keep their default, and a typo'd key is rejected:
 
 | Language | Keys | Default |
 | --- | --- | --- |
-| **Python** | `branch`, `fail_under` | `branch = true`, `fail_under = 100` — coverage.py's combined line + branch total. |
+| **Python** | `branch`, `fail_under` | `branch = true`, `fail_under = 100`. The suite always runs under coverage.py's branch instrumentation, so the whole-tree floor is its combined line + branch percent; a source with no branching constructs measures zero branches and is vacuously at full branch coverage. `branch` decides whether the diff-scoped and line-exempt ratios fold branch arcs in alongside lines. |
 | **TypeScript** | `lines`, `branches`, `functions`, `statements` | All four at `100`, each enforced independently. |
 | **Rust** | `lines`, `regions`, `functions`, `branch` | `lines = 100`; the rest are opt-in floors. A `branch` floor adds `--branch`, which runs on the nightly toolchain the crate pins in its own `rust-toolchain.toml` (with `llvm-tools-preview`). |
 

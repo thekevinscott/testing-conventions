@@ -126,6 +126,10 @@ def test_packaging_red_is_registered():
     assert "packaging-red" in main.commands
 
 
+def test_path_length_gate_is_registered():
+    assert "path-length-gate" in main.commands
+
+
 def test_python_mutation_clean_is_registered():
     assert "python-mutation-clean" in main.commands
 

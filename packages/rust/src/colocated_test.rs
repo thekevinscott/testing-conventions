@@ -63,13 +63,13 @@ impl Language {
     }
 
     /// `true` when `source` at `path` holds a function or control flow anywhere in it.
-    /// Presence and the commit-scoped co-change check both decide subjecthood here, so they
-    /// cannot disagree about what has behavior.
+    /// Presence, the commit-scoped co-change check, and the mutation gate all decide
+    /// subjecthood here, so none of them can disagree about what has behavior.
     pub(crate) fn is_subject(self, source: &str, path: &Path) -> bool {
         match self {
             Language::Python => python_has_behavior(source),
             Language::TypeScript => crate::ts::has_behavior(source, path),
-            Language::Rust => false,
+            Language::Rust => rust_has_behavior(source),
         }
     }
 
@@ -262,6 +262,42 @@ impl<'ast> Visit<'ast> for PresenceVisitor {
     fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
         if self.test_depth == 0 && node.default.is_some() {
             self.has_testable_fn = true;
+        }
+        visit::visit_trait_item_fn(self, node);
+    }
+}
+
+/// `true` when `source` holds an `fn` anywhere — free function, method, or default trait
+/// method, `#[cfg(test)]` included. A file that fails to parse is `true`: the mutation and
+/// colocated-test gates both keep a file they couldn't read as a subject.
+fn rust_has_behavior(source: &str) -> bool {
+    let Ok(file) = syn::parse_file(source) else {
+        return true;
+    };
+    let mut visitor = BehaviorPresenceVisitor { found: false };
+    visitor.visit_file(&file);
+    visitor.found
+}
+
+/// Records whether the walk reached any function item.
+struct BehaviorPresenceVisitor {
+    found: bool,
+}
+
+impl<'ast> Visit<'ast> for BehaviorPresenceVisitor {
+    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+        self.found = true;
+        visit::visit_item_fn(self, node);
+    }
+
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        self.found = true;
+        visit::visit_impl_item_fn(self, node);
+    }
+
+    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
+        if node.default.is_some() {
+            self.found = true;
         }
         visit::visit_trait_item_fn(self, node);
     }
@@ -671,11 +707,24 @@ mod tests {
     fn rust_has_no_file_based_colocated_convention() {
         assert!(!Language::Rust.tracks(Path::new("lib.rs")));
         assert!(!Language::Rust.is_test(Path::new("lib_test.rs")));
-        assert!(!Language::Rust.is_subject("fn main() {}\n", Path::new("main.rs")));
+        assert!(Language::Rust.is_subject("fn main() {}\n", Path::new("main.rs")));
         assert_eq!(
             Language::Rust.expected_test_path(Path::new("src/lib.rs")),
             PathBuf::from("src/lib.rs")
         );
+    }
+
+    #[test]
+    fn rust_const_only_file_is_not_a_subject() {
+        assert!(!Language::Rust.is_subject(
+            "pub const TIMEOUT: u64 = 30 * 60;\n",
+            Path::new("settings.rs")
+        ));
+    }
+
+    #[test]
+    fn rust_unparseable_file_is_a_subject() {
+        assert!(Language::Rust.is_subject("fn (", Path::new("broken.rs")));
     }
 
     /// `(has_testable_fn, has_test_module)` for a Rust source snippet.

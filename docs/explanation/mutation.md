@@ -93,12 +93,14 @@ it earned. A run that tested mutants states the count:
 
 so the pass carries its own evidence, and the count is always at least one. A diff-scoped run
 whose changed source lines hold no mutant site — a signature move, a `const` value, a tests-only
-edit — runs the engine, finds nothing to judge, and says so:
+edit, a declaration-only module's mutants dropped before judging — runs the engine, finds nothing
+to judge, and says so:
 
 > `unit mutation: the engine found no mutants to test`
 
 And a run whose changed lines hold no source files at all — a docs-only or workflow-only pull
-request — skips the engine:
+request — skips the engine. TypeScript skips it the same way when the diff touches only
+declaration-only modules, filtered out before Stryker ever runs:
 
 > `unit mutation: no mutatable changed lines — engine not run`
 

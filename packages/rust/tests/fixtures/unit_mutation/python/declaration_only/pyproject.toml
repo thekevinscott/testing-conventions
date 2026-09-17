@@ -1,0 +1,4 @@
+# The package root: pytest's own upward search anchors its rootdir here, so the colocated
+# suite under src/ resolves `from calc import ...` against the scan path while the
+# package-level tests/ tier stays out of the src-scoped run.
+[tool.pytest.ini_options]

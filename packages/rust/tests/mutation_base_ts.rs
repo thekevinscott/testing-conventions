@@ -26,6 +26,15 @@ const LOOSE_BASELINE_TEST: &str = "import { it, expect } from 'vitest';\nimport 
 
 const LOOSE_WITH_SURVIVOR_TEST: &str = "import { it, expect } from 'vitest';\nimport { add, isPositive } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\nit('runs isPositive but asserts nothing', () => {\n  isPositive(1);\n});\n";
 
+const DECLARATION_ONLY_INDEX: &str =
+    "export function add(a: number, b: number): number {\n  return a + b;\n}\n";
+
+const DECLARATION_ONLY_INDEX_TEST: &str = "import { it, expect } from 'vitest';\nimport { add } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\n";
+
+const CONSTANTS_BASE: &str = "export const TIMEOUT = 30 * 60;\n";
+
+const CONSTANTS_CHANGED: &str = "export const TIMEOUT = 45 * 60;\n";
+
 const STRYKER_CONF: &str =
     "{ \"testRunner\": \"vitest\", \"reporters\": [\"json\"], \"mutate\": [\"index.ts\"] }\n";
 
@@ -178,6 +187,32 @@ fn a_loose_tree_base_scopes_the_run_to_the_changed_lines() {
             .iter()
             .all(|s| s.file == "index.ts" && s.line >= 4),
         "only the added lines should be mutated, not the well-tested `add`; got {survivors:?}"
+    );
+}
+
+#[test]
+fn base_with_only_a_declaration_only_change_reports_the_engine_not_run() {
+    let repo = TempRepo::new("declaration-only");
+    repo.write("src/index.ts", DECLARATION_ONLY_INDEX);
+    repo.write("src/index.test.ts", DECLARATION_ONLY_INDEX_TEST);
+    repo.write("src/constants.ts", CONSTANTS_BASE);
+    repo.commit("baseline: fully-tested add, a constants module");
+    let base = repo.head();
+    repo.write("src/constants.ts", CONSTANTS_CHANGED);
+    repo.commit("edit only the constants module");
+
+    let measurement = measure_typescript(
+        &repo.0.join("src"),
+        &[],
+        &std::collections::BTreeMap::new(),
+        Some(&base),
+        &ts_adapter(),
+    )
+    .expect("no run needed");
+    assert_eq!(
+        measurement,
+        Measurement::EngineNotRun,
+        "the diff touches only a declaration-only module, so the engine never ran"
     );
 }
 

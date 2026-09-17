@@ -113,6 +113,24 @@ fn a_loose_tree_with_no_manifest_passes_when_all_mutants_are_killed() {
 }
 
 #[test]
+fn a_declaration_only_module_leaves_no_survivors() {
+    let package = Staged::python_declaration_only("declaration_only");
+    let (_, survivors) = expect_tested(
+        measure_python(
+            &package.path().join("src"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+        )
+        .expect("cosmic-ray runs"),
+    );
+    assert!(
+        survivors.is_empty(),
+        "settings.py has no function or control flow, so its mutants are not subjects; got {survivors:?}"
+    );
+}
+
+#[test]
 fn a_mutation_exemption_drops_the_survivors() {
     let package = Staged::python("survivors");
     let exempt = vec!["calc.py".to_string()];

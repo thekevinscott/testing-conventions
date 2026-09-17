@@ -126,6 +126,47 @@ fn a_source_change_without_mutant_sites_reports_nothing_tested() {
 }
 
 #[test]
+fn a_declaration_only_change_reports_nothing_tested() {
+    let repo = GitRepo::new("rust-declaration-only");
+    repo.write(
+        "crate/Cargo.toml",
+        "[package]\nname = \"tc_mut_decl_only\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n",
+    );
+    repo.write(
+        "crate/src/lib.rs",
+        "pub mod settings;\n\npub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test]\n    fn adds() {\n        assert_eq!(add(2, 3), 5);\n        assert_eq!(add(10, 1), 11);\n    }\n}\n",
+    );
+    let settings = |timeout: &str| format!("pub const TIMEOUT: u64 = {timeout};\n");
+    repo.write("crate/src/settings.rs", &settings("30 * 60"));
+    repo.commit("baseline: fully-tested add, a constants module");
+    let base = repo.head();
+    repo.write("crate/src/settings.rs", &settings("45 * 60"));
+    repo.commit("edit only the constants module");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "rust"])
+        .args(["--base", &base])
+        .arg(repo.path().join("crate"))
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "a declaration-only change passes; stdout: {stdout}; stderr: {stderr}"
+    );
+    assert!(
+        stdout.contains(NOTHING_TESTED),
+        "settings.rs's mutants are dropped, leaving nothing tested; got: {stdout}"
+    );
+    assert!(
+        !stdout.contains("every mutation was caught"),
+        "a run that judged no mutants never claims mutants were caught; got: {stdout}"
+    );
+}
+
+#[test]
 fn base_states_a_nonzero_count_for_a_caught_change_in_a_workspace_member_crate() {
     let repo = GitRepo::new("rust-member-caught");
     repo.write(

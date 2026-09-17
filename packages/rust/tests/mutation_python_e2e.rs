@@ -3,7 +3,7 @@ mod common;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use common::{tested_count, GitRepo, Staged, ENGINE_NOT_RUN};
+use common::{tested_count, GitRepo, Staged, ENGINE_NOT_RUN, NOTHING_TESTED};
 
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unit_mutation")
@@ -106,6 +106,43 @@ fn a_diff_with_no_mutatable_changed_lines_reports_the_engine_not_run() {
     assert!(
         !stdout.contains("every mutation was caught"),
         "an engine-skipped pass never claims mutants were caught; got: {stdout}"
+    );
+}
+
+#[test]
+fn a_declaration_only_change_reports_nothing_tested() {
+    let repo = GitRepo::new("py-declaration-only");
+    repo.write("calc.py", "def add(a, b):\n    return a + b\n");
+    repo.write(
+        "calc_test.py",
+        "from calc import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n    assert add(-1, 1) == 0\n",
+    );
+    repo.write("settings.py", "TIMEOUT = 30 * 60\n");
+    repo.commit("baseline: fully-tested add, a constants module");
+    let base = repo.head();
+    repo.write("settings.py", "TIMEOUT = 45 * 60\n");
+    repo.commit("edit only the constants module");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "python"])
+        .args(["--base", &base])
+        .arg(repo.path())
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "a declaration-only change passes; stdout: {stdout}; stderr: {stderr}"
+    );
+    assert!(
+        stdout.contains(NOTHING_TESTED),
+        "settings.py's mutants are dropped, leaving nothing tested; got: {stdout}"
+    );
+    assert!(
+        !stdout.contains("every mutation was caught"),
+        "a run that judged no mutants never claims mutants were caught; got: {stdout}"
     );
 }
 

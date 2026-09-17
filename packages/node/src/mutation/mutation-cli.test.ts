@@ -10,9 +10,18 @@ const { parseArgs, runStryker, writeFile } = vi.hoisted(() => ({
     vi.fn<(options?: { mutate?: string[]; testFiles?: string[] }) => Promise<NormalizedMutant[]>>(),
   writeFile: vi.fn<() => Promise<void>>(),
 }));
-vi.mock('./parse-args.js', () => ({ parseArgs }));
-vi.mock('./run-stryker.js', () => ({ runStryker }));
-vi.mock('node:fs/promises', () => ({ writeFile }));
+vi.mock('./parse-args.js', async () => {
+  const actual = await vi.importActual<typeof import('./parse-args.js')>('./parse-args.js');
+  return { ...actual, parseArgs };
+});
+vi.mock('./run-stryker.js', async () => {
+  const actual = await vi.importActual<typeof import('./run-stryker.js')>('./run-stryker.js');
+  return { ...actual, runStryker };
+});
+vi.mock('node:fs/promises', async () => {
+  const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  return { ...actual, writeFile };
+});
 
 import { mutationCLI } from './mutation-cli.js';
 

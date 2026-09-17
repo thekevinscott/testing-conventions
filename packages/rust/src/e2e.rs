@@ -195,7 +195,7 @@ pub fn verify_extra_scoped(
 
     // Question 2 — does the acting branch's diff add or update *its own* receipt? The
     // filter drops deletions, so sweeping a stale receipt by hand never counts. With no
-    // acting branch to name, every receipt counts instead of failing outright.
+    // acting branch to name, every receipt counts.
     let range = format!("{base}...HEAD");
     let acting_branch = branch
         .map(str::to_string)

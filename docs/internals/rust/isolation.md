@@ -48,7 +48,7 @@ name-resolution precision").
 ## Unit detection
 
 **Scope.** Parse the crate's own unit source with `syn::parse_file`. The file walk is
-shared with the colocated-test presence rule
+shared with the colocated-test presence check
 (`colocated_test::collect_rust_source_files`), so it skips the non-unit trees —
 `tests/` (integration crates), `benches/`, `examples/`, and the `target/` build
 directory — and the `build.rs` script; a locally-built crate is scanned the same as a

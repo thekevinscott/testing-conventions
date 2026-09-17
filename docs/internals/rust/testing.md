@@ -24,7 +24,7 @@ three mechanism lints — `no-monkeypatch`, `no-inline-patch`, `no-environ-mutat
 police *how* a pytest test mocks. Rust has none, deliberately: there is no `monkeypatch`
 fixture, no string-based `patch`, and no in-place `os.environ` idiom — collaborators are
 injected as trait doubles the compiler checks against the real trait. The Rust `integration
-lint` is the first-party *direction* check alone — `no-first-party-double` (don't `#[double]`
+lint` is the first-party *direction* rule alone — `no-first-party-double` (don't `#[double]`
 a first-party item).
 
 **E2E attestation** — e2e tests aren't run in CI. Run them locally and attest:
@@ -34,13 +34,13 @@ commit they ran against; in CI, `e2e verify` checks that receipt is current (re-
 suite leaves the receipts as they were and `attest` exits with the suite's own
 code. CI never runs the e2e suite.
 
-## Gate fixture layout
+## Check fixture layout
 
-The suite-executing gates (mutation, coverage, and their diff-scoped `--base` variants) run
+The suite-executing checks (mutation, coverage, and their diff-scoped `--base` variants) run
 a real engine over a fixture codebase, so a fixture's **layout** is part of the contract under
 test. The default fixture shape is the prescribed consumer package layout — a package root with
 a manifest (`package.json` / `pyproject.toml` / `Cargo.toml`), sources under `src/`, and suite
-tiers under `tests/` — scanned at `src/`. The gate is pointed at `<package-root>/src`, so the
+tiers under `tests/` — scanned at `src/`. The check is pointed at `<package-root>/src`, so the
 run roots the engine at the package root (where an upward `../package.json` import or a
 package-root config resolves) while discovery and measurement stay scoped to the scan path. This
 is the shape a consumer actually runs; a fixture built this way can exhibit the layout-dependent
@@ -54,10 +54,10 @@ and the coverage fixtures keep it in the feature-named flat cases (`exempt_cov`,
 `full_with_config`, `conftest_omit`). Line-scoped exemption tests pin their `lines` to a fixed
 flat file, so they run against the loose fixtures on purpose.
 
-Each suite-executing TS/Python gate carries at least one fixture that **distinguishes the package
+Each suite-executing TS/Python check carries at least one fixture that **distinguishes the package
 root from the scan path**, so a regression that confuses the two goes red rather than vacuously
 green: a source under `src/` that imports a package-level file (`../package.json`) or a
-package-root config the run depends on, plus a `tests/` tier that fails loudly if the gate ever
+package-root config the run depends on, plus a `tests/` tier that fails loudly if the check ever
 collects it (`tests/integration/tiers.*` asserts it is never reached). Rust's crate layout forces
 the package shape already; the parity bar is met by giving Python and TypeScript the same default.
 
@@ -69,17 +69,17 @@ re-resolves the pattern to `src/src/**`, finds nothing, and the run dies on `No 
 executed`. The fixtures without a config cannot catch that, since vitest's default `include` is
 root-agnostic.
 
-A gate that excludes test files from mutation additionally carries a fixture whose colocated suite
+A check that excludes test files from mutation additionally carries a fixture whose colocated suite
 sits a directory **below** the scan path (`python/nested_tests`, whose `src/pkg/deep_test.py` joins
 the top-level `src/calc_test.py`). Every other fixture keeps its suite at the scan path's top
 level, where a non-recursive glob and a recursive one behave identically, so a depth regression
 stays invisible in them. The nested suite asserts `total(2, 3) == 5`, a comparison whose mutation
 to `>=` leaves the assertion true — so mutating that file yields survivors by construction, and
-the gate reports them against the consumer's own test file.
+the check reports them against the consumer's own test file.
 
 ### Fixture comments are input
 
-A comment inside a fixture is data the gates read: line-scoped exemptions pin `lines` to fixed
+A comment inside a fixture is data the checks read: line-scoped exemptions pin `lines` to fixed
 line numbers, coverage and mutation land at calibrated ratios, and some fixtures exist to prove
 comment lines are skipped (the `workflow` install-line fixture names the tool inside a comment on
 purpose). An edit to a fixture comment is therefore a test change: it preserves the file's line

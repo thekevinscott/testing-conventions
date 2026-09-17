@@ -82,14 +82,10 @@ pub fn parse_report(json: &str) -> Result<CoverageReport> {
     serde_json::from_str(json).context("parsing coverage.py JSON report")
 }
 
-/// Whether `report` meets `thresholds`. Branch coverage required but no branches
-/// measured is a misconfigured run, and fails.
+/// Whether `report` meets `thresholds`. `coverage.py` always measures branches, so a
+/// zero-branch report means a branchless source, not a misconfigured run — vacuously
+/// full branch coverage, already folded into `percent_covered`.
 pub fn evaluate(report: &CoverageReport, thresholds: Thresholds) -> Outcome {
-    if thresholds.branch && report.totals.num_branches == 0 {
-        return Outcome::Fail(
-            "branch coverage is required but the report measured no branches".to_string(),
-        );
-    }
     let actual = report.totals.percent_covered;
     let required = f64::from(thresholds.fail_under);
     // Tolerance so a report that rounds to the floor isn't failed by float noise.
@@ -957,17 +953,17 @@ mod tests {
     }
 
     #[test]
-    fn fails_when_branch_required_but_unmeasured() {
-        assert!(matches!(
+    fn passes_when_branch_required_and_none_are_measured() {
+        assert_eq!(
             evaluate(
                 &report(100.0, 0),
                 Thresholds {
-                    fail_under: 90,
+                    fail_under: 100,
                     branch: true
                 }
             ),
-            Outcome::Fail(_)
-        ));
+            Outcome::Pass
+        );
     }
 
     #[test]

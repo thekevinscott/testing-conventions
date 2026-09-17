@@ -67,6 +67,12 @@ def test_the_per_mutant_suite_stops_at_the_first_failure():
     )
 
 
+def test_the_test_command_ignores_the_standard_suite_tiers():
+    # A survivor from tests/integration or tests/e2e must never reach the unit mutation
+    # baseline, the same way it must never reach the unit coverage floor.
+    assert "--ignore=tests" in render_config([], 12.0)
+
+
 def test_derive_timeout_scales_with_the_observed_runtime():
     # A slow suite gets a proportionally larger budget (observed x multiplier)...
     from testing_conventions.mutation.config import derive_timeout

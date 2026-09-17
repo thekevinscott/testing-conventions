@@ -1,0 +1,3 @@
+# A flat package: `source` is this directory, which is also the package root —
+# the layout that puts `tests/` directly beneath the scanned root.
+[tool.pytest.ini_options]

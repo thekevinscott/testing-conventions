@@ -38,6 +38,11 @@ fn conftest_omitted_exits_zero_against_a_100_floor() {
 }
 
 #[test]
+fn suite_tier_padded_exits_zero_against_a_100_floor() {
+    assert_eq!(unit_coverage_exit("suite_tier_padded", "floor100.toml"), 0);
+}
+
+#[test]
 fn no_branches_exits_zero_against_a_100_floor() {
     assert_eq!(unit_coverage_exit("no_branches/src", "floor100.toml"), 0);
 }

@@ -1,0 +1,6 @@
+{
+  "name": "tc-declaration-only",
+  "private": true,
+  "version": "1.2.3",
+  "description": "The default gate-fixture shape, plus a declaration-only `src/constants.ts` beside the tested `src/index.ts`. `constants.ts` holds a `TIMEOUT` computed from a literal expression — a real Stryker mutant site — and no colocated test; the gate must judge it as no mutation subject rather than demand one."
+}

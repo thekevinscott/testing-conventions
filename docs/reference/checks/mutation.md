@@ -30,6 +30,11 @@ A **mutant** is the code with one small, deliberate fault (`+` becomes `-`, `>=`
 suite against it: tests fail and the mutant is **killed**; tests pass and it **survived** — and
 an un-exempted survivor fails the check.
 
+A **declaration-only module** — a file with no function or control flow, the same subject
+[`colocated-test` uses](/reference/checks/colocated-test#what-it-enforces) — is never a mutation
+subject: a mutant the engine finds there is dropped before judging, so editing one demands no
+survivor explanation.
+
 <!--@include: ../../explanation/mutation.md#engines-->
 
 ### Timeouts
@@ -61,11 +66,12 @@ A passing run states which fact made it green:
   engine ran, judged that many mutants conclusively (always at least one), and the suite (or a
   reasoned exemption) accounted for every one.
 - `unit mutation: the engine found no mutants to test` — the changed lines hold source, but no
-  mutant sites (a signature move, a `const` value, a tests-only edit): the engine ran and had
-  nothing to judge.
+  mutant sites (a signature move, a `const` value, a tests-only edit, every mutant a
+  declaration-only module produced): the engine ran and had nothing to judge.
 - `unit mutation: no mutatable changed lines — engine not run` — the diff's changed lines hold
-  no source files for the language (a docs-only or workflow-only pull request), so the engine
-  was skipped.
+  no source files for the language (a docs-only or workflow-only pull request), or for
+  TypeScript, only declaration-only modules — filtered out before Stryker ever runs — so the
+  engine was skipped.
 
 All three exit `0`; the distinction is reporting, not gating. Each line names its own evidence,
 so the log tells a validated pass from a vacuous one — the all-caught line always carries a

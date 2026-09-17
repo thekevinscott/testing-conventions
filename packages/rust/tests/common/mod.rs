@@ -86,6 +86,24 @@ impl Staged {
         )
     }
 
+    /// Stage a TypeScript fixture whose scan path also carries a declaration-only module
+    /// (`declaration_only`), a constants file beside the tested `index.ts`.
+    pub fn typescript_declaration_only(project: &str) -> Self {
+        Self::stage(
+            "typescript",
+            project,
+            &[
+                "package.json",
+                "tsconfig.json",
+                "src/index.ts",
+                "src/index.test.ts",
+                "src/constants.ts",
+                "tests/integration/tiers.test.ts",
+            ],
+            true,
+        )
+    }
+
     /// Stage a loose TypeScript fixture (`loose_killed` / `loose_survivors`): the flat,
     /// no-manifest case, where the staged path is both package root and scan path.
     pub fn loose(project: &str) -> Self {
@@ -135,6 +153,23 @@ impl Staged {
     /// no-manifest case, where the staged path is both package root and scan path.
     pub fn python_loose(project: &str) -> Self {
         Self::stage("python", project, &["calc.py", "calc_test.py"], false)
+    }
+
+    /// Stage the Python fixture whose scan path also carries a declaration-only module
+    /// (`declaration_only`), a constants file beside the tested `calc.py`.
+    pub fn python_declaration_only(project: &str) -> Self {
+        Self::stage(
+            "python",
+            project,
+            &[
+                "pyproject.toml",
+                "src/calc.py",
+                "src/calc_test.py",
+                "src/settings.py",
+                "tests/integration/tiers_test.py",
+            ],
+            false,
+        )
     }
 
     fn stage(lang: &str, project: &str, files: &[&str], link_node_modules: bool) -> Self {

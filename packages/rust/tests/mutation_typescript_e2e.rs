@@ -191,6 +191,48 @@ fn a_diff_with_no_mutatable_changed_lines_reports_the_engine_not_run() {
 }
 
 #[test]
+fn a_declaration_only_change_reports_the_engine_not_run() {
+    let repo = GitRepo::new("ts-declaration-only");
+    repo.write(
+        "index.ts",
+        "export function add(a: number, b: number): number {\n  return a + b;\n}\n",
+    );
+    repo.write(
+        "index.test.ts",
+        "import { it, expect } from 'vitest';\nimport { add } from './index';\nit('pins add', () => {\n  expect(add(2, 3)).toBe(5);\n  expect(add(-1, 1)).toBe(0);\n});\n",
+    );
+    repo.write("constants.ts", "export const TIMEOUT = 30 * 60;\n");
+    repo.commit("baseline: fully-tested add, a constants module");
+    let base = repo.head();
+    repo.write("constants.ts", "export const TIMEOUT = 45 * 60;\n");
+    repo.commit("edit only the constants module");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "typescript"])
+        .arg("--ts-mutation-adapter")
+        .arg(ts_adapter())
+        .args(["--base", &base])
+        .arg(repo.path())
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "a declaration-only change passes; stdout: {stdout}; stderr: {stderr}"
+    );
+    assert!(
+        stdout.contains(ENGINE_NOT_RUN),
+        "constants.ts is filtered out before Stryker runs; got: {stdout}"
+    );
+    assert!(
+        !stderr.contains("No tests were executed"),
+        "the engine is skipped, never aborted; got: {stderr}"
+    );
+}
+
+#[test]
 fn survivors_fail_the_gate_by_default() {
     let package = Staged::new("survivors");
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))

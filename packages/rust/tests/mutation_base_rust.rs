@@ -50,6 +50,28 @@ mod tests {
 }
 "#;
 
+const DECLARATION_ONLY_LIB: &str = r#"
+pub mod settings;
+
+pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn adds() {
+        assert_eq!(add(2, 3), 5);
+        assert_eq!(add(10, 1), 11);
+    }
+}
+"#;
+
+const SETTINGS_BASE: &str = "pub const TIMEOUT: u64 = 30 * 60;\n";
+
+const SETTINGS_CHANGED: &str = "pub const TIMEOUT: u64 = 45 * 60;\n";
+
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -215,6 +237,36 @@ fn base_finds_survivors_in_a_workspace_member_crate() {
     assert!(
         survivors.iter().all(|s| s.file == "src/lib.rs"),
         "survivor paths are scan-path-relative, not workspace-relative; got {survivors:?}"
+    );
+}
+
+#[test]
+fn base_drops_survivors_in_a_declaration_only_module() {
+    let repo = TempRepo::new("declaration-only");
+    repo.write("src/lib.rs", DECLARATION_ONLY_LIB);
+    repo.write("src/settings.rs", SETTINGS_BASE);
+    repo.commit("baseline: fully-tested add, a constants module");
+    let base = repo.head();
+    repo.write("src/settings.rs", SETTINGS_CHANGED);
+    repo.commit("edit only the constants module");
+
+    let (count, survivors) = expect_tested(
+        measure_rust(
+            &repo.0,
+            &[],
+            &std::collections::BTreeMap::new(),
+            Some(&base),
+            &[],
+        )
+        .expect("cargo-mutants runs"),
+    );
+    assert_eq!(
+        count, 0,
+        "settings.rs's const-init mutants are dropped before judging; survivors: {survivors:?}"
+    );
+    assert!(
+        survivors.is_empty(),
+        "settings.rs has no fn; got {survivors:?}"
     );
 }
 

@@ -19,6 +19,10 @@ const BASELINE_TEST: &str =
 
 const WITH_SURVIVOR_TEST: &str = "from calc import add, is_positive\n\n\ndef test_add():\n    assert add(2, 3) == 5\n    assert add(-1, 1) == 0\n\n\ndef test_is_positive_runs():\n    is_positive(1)\n";
 
+const SETTINGS_BASE: &str = "TIMEOUT = 30 * 60\n";
+
+const SETTINGS_CHANGED: &str = "TIMEOUT = 45 * 60\n";
+
 struct TempRepo(PathBuf);
 
 impl TempRepo {
@@ -152,6 +156,36 @@ fn a_loose_tree_base_scopes_the_run_to_the_changed_lines() {
     assert!(
         survivors.iter().all(|s| s.file == "calc.py" && s.line >= 3),
         "only the added lines should be reported, not the well-tested `add`; got {survivors:?}"
+    );
+}
+
+#[test]
+fn base_drops_survivors_in_a_declaration_only_module() {
+    let repo = TempRepo::new("declaration-only");
+    repo.write("src/calc.py", BASELINE);
+    repo.write("src/calc_test.py", BASELINE_TEST);
+    repo.write("src/settings.py", SETTINGS_BASE);
+    repo.commit("baseline: fully-tested add, a constants module");
+    let base = repo.head();
+    repo.write("src/settings.py", SETTINGS_CHANGED);
+    repo.commit("edit only the constants module");
+
+    let (count, survivors) = expect_tested(
+        measure_python(
+            &repo.0.join("src"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            Some(&base),
+        )
+        .expect("cosmic-ray runs"),
+    );
+    assert_eq!(
+        count, 0,
+        "settings.py's mutants are dropped before judging; survivors: {survivors:?}"
+    );
+    assert!(
+        survivors.is_empty(),
+        "settings.py has no function or control flow; got {survivors:?}"
     );
 }
 

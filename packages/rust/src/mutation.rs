@@ -11,6 +11,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
+use crate::colocated_test::Language;
+
 /// A surviving mutant — a mutation the unit suite ran but failed to catch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Survivor {
@@ -42,6 +44,16 @@ pub enum Measurement {
 /// line-scoped guard reads to tell an over-exemption (a listed line whose mutants
 /// were all caught) from an out-of-scope line (no mutant there).
 pub type MutatedLines = BTreeSet<(String, u32)>;
+
+/// `true` when `file` (resolved against `base`) is a declaration-only module, per the same
+/// [`Language::is_subject`] predicate `colocated-test` uses. An unreadable file is never
+/// dropped, so it stays a survivor rather than vanishing silently.
+fn is_declaration_only(base: &Path, file: &str, language: Language) -> bool {
+    match std::fs::read_to_string(base.join(file)) {
+        Ok(source) => !language.is_subject(&source, Path::new(file)),
+        Err(_) => false,
+    }
+}
 
 /// A cargo-mutants `outcomes.json` export, pared to what the rule reads. Unmodeled
 /// fields (`total_mutants`, `caught`, timings, …) are ignored.
@@ -400,8 +412,13 @@ pub fn measure_rust(
         Ok(json) => json,
         Err(_) => {
             if let Some(diff) = &base_diff {
-                let listed =
-                    list_cargo_mutants(&engine, root, features, |command| command.output())?;
+                let listed: Vec<MutantInfo> =
+                    list_cargo_mutants(&engine, root, features, |command| command.output())?
+                        .into_iter()
+                        .filter(|mutant| {
+                            !is_declaration_only(&workspace_root, &mutant.file, Language::Rust)
+                        })
+                        .collect();
                 zero_mutant_verdict(&listed, diff, &run)?;
             }
             return Ok(Measurement::Tested {
@@ -410,7 +427,11 @@ pub fn measure_rust(
             });
         }
     };
-    let report = rebase_report_paths(parse_mutants_report(&json)?, prefix.as_deref());
+    let mut report = rebase_report_paths(parse_mutants_report(&json)?, prefix.as_deref());
+    report.outcomes.retain(|outcome| match &outcome.scenario {
+        Scenario::Baseline => true,
+        Scenario::Mutant(mutant) => !is_declaration_only(root, &mutant.file, Language::Rust),
+    });
     let survivors = evaluate_scoped(
         cargo_mutants_survivors(&report),
         &mutated_lines(&report),
@@ -465,7 +486,8 @@ pub fn measure_typescript(
         mutate.as_deref(),
         test_files.as_deref(),
     )?;
-    let mutants = to_scan_relative(parse_normalized_results(&json)?, prefix.as_deref());
+    let mut mutants = to_scan_relative(parse_normalized_results(&json)?, prefix.as_deref());
+    mutants.retain(|mutant| !is_declaration_only(root, &mutant.file, Language::TypeScript));
     let survivors = evaluate_normalized(&mutants, exempt, exempt_lines)?;
     Ok(Measurement::Tested {
         count: normalized_conclusive_count(&mutants),
@@ -644,7 +666,7 @@ fn mutate_ranges(root: &Path, base: &str) -> Result<Vec<String>> {
     let changed = crate::patch_coverage::changed_lines(root, base)?;
     let mut specs = Vec::new();
     for (file, lines) in changed {
-        if !is_mutatable_ts(&file) {
+        if !is_mutatable_ts(&file) || is_declaration_only(root, &file, Language::TypeScript) {
             continue;
         }
         for (start, end) in contiguous_runs(&lines) {
@@ -714,6 +736,7 @@ pub fn measure_python(
                 .is_some_and(|lines| lines.contains(&u64::from(mutant.line)))
         });
     }
+    mutants.retain(|mutant| !is_declaration_only(root, &mutant.file, Language::Python));
     let survivors = evaluate_normalized(&mutants, exempt, exempt_lines)?;
     Ok(Measurement::Tested {
         count: normalized_conclusive_count(&mutants),
@@ -1537,6 +1560,47 @@ diff --git a/src/lib.rs b/src/lib.rs
         let err = run_py_adapter(&dir, &[]).unwrap_err();
         let msg = format!("{err:#}");
         assert!(msg.contains("the Python mutation adapter failed"), "{msg}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn is_declaration_only_is_true_for_a_const_only_rust_file() {
+        let dir = unique_tmp();
+        std::fs::write(
+            dir.join("settings.rs"),
+            "pub const TIMEOUT: u64 = 30 * 60;\n",
+        )
+        .unwrap();
+        assert!(is_declaration_only(&dir, "settings.rs", Language::Rust));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn is_declaration_only_is_false_for_a_rust_file_with_a_function() {
+        let dir = unique_tmp();
+        std::fs::write(dir.join("lib.rs"), "pub fn run() {}\n").unwrap();
+        assert!(!is_declaration_only(&dir, "lib.rs", Language::Rust));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn is_declaration_only_covers_python_and_typescript_too() {
+        let dir = unique_tmp();
+        std::fs::write(dir.join("settings.py"), "TIMEOUT = 30 * 60\n").unwrap();
+        std::fs::write(dir.join("settings.ts"), "export const TIMEOUT = 30 * 60;\n").unwrap();
+        assert!(is_declaration_only(&dir, "settings.py", Language::Python));
+        assert!(is_declaration_only(
+            &dir,
+            "settings.ts",
+            Language::TypeScript
+        ));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn is_declaration_only_is_false_for_an_unreadable_file() {
+        let dir = unique_tmp();
+        assert!(!is_declaration_only(&dir, "missing.rs", Language::Rust));
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -99,6 +99,24 @@ fn a_crate_with_no_mutants_reports_a_zero_count() {
 }
 
 #[test]
+fn a_declaration_only_module_leaves_no_survivors() {
+    let (_, survivors) = expect_tested(
+        measure_rust(
+            &crate_dir("declaration_only"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &[],
+        )
+        .expect("cargo-mutants runs"),
+    );
+    assert!(
+        survivors.is_empty(),
+        "settings.rs has no fn, so its const-init mutants are not subjects; got {survivors:?}"
+    );
+}
+
+#[test]
 fn a_mutation_exemption_drops_the_survivors() {
     let exempt = vec!["src/lib.rs".to_string()];
     let (_, survivors) = expect_tested(

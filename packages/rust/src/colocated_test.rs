@@ -63,13 +63,13 @@ impl Language {
     }
 
     /// `true` when `source` at `path` holds a function or control flow anywhere in it.
-    /// Presence and the commit-scoped co-change check both decide subjecthood here, so they
-    /// cannot disagree about what has behavior.
+    /// Presence, the commit-scoped co-change check, and mutation all decide subjecthood
+    /// here, so none of them can disagree about what has behavior.
     pub(crate) fn is_subject(self, source: &str, path: &Path) -> bool {
         match self {
             Language::Python => python_has_behavior(source),
             Language::TypeScript => crate::ts::has_behavior(source, path),
-            Language::Rust => false,
+            Language::Rust => rust_has_behavior(source),
         }
     }
 
@@ -264,6 +264,47 @@ impl<'ast> Visit<'ast> for PresenceVisitor {
             self.has_testable_fn = true;
         }
         visit::visit_trait_item_fn(self, node);
+    }
+}
+
+/// `true` when `source` holds an `fn` or a closure anywhere — free function, method, default
+/// trait method, or closure expression (a `static`'s `Lazy::new(|| ..)` counts, sitting outside
+/// any `fn`). A file that fails to parse is `true`: mutation and colocated-test keep it a subject.
+fn rust_has_behavior(source: &str) -> bool {
+    let Ok(file) = syn::parse_file(source) else {
+        return true;
+    };
+    let mut visitor = BehaviorPresenceVisitor { found: false };
+    visitor.visit_file(&file);
+    visitor.found
+}
+
+/// Records whether the walk reached any function item or closure.
+struct BehaviorPresenceVisitor {
+    found: bool,
+}
+
+impl<'ast> Visit<'ast> for BehaviorPresenceVisitor {
+    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+        self.found = true;
+        visit::visit_item_fn(self, node);
+    }
+
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        self.found = true;
+        visit::visit_impl_item_fn(self, node);
+    }
+
+    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
+        if node.default.is_some() {
+            self.found = true;
+        }
+        visit::visit_trait_item_fn(self, node);
+    }
+
+    fn visit_expr_closure(&mut self, node: &'ast syn::ExprClosure) {
+        self.found = true;
+        visit::visit_expr_closure(self, node);
     }
 }
 
@@ -671,11 +712,56 @@ mod tests {
     fn rust_has_no_file_based_colocated_convention() {
         assert!(!Language::Rust.tracks(Path::new("lib.rs")));
         assert!(!Language::Rust.is_test(Path::new("lib_test.rs")));
-        assert!(!Language::Rust.is_subject("fn main() {}\n", Path::new("main.rs")));
+        assert!(Language::Rust.is_subject("fn main() {}\n", Path::new("main.rs")));
         assert_eq!(
             Language::Rust.expected_test_path(Path::new("src/lib.rs")),
             PathBuf::from("src/lib.rs")
         );
+    }
+
+    #[test]
+    fn rust_const_only_file_is_not_a_subject() {
+        assert!(!Language::Rust.is_subject(
+            "pub const TIMEOUT: u64 = 30 * 60;\n",
+            Path::new("settings.rs")
+        ));
+    }
+
+    #[test]
+    fn rust_unparseable_file_is_a_subject() {
+        assert!(Language::Rust.is_subject("fn (", Path::new("broken.rs")));
+    }
+
+    #[test]
+    fn rust_impl_method_is_a_subject() {
+        assert!(Language::Rust.is_subject(
+            "struct Widget;\nimpl Widget {\n    fn run(&self) {}\n}\n",
+            Path::new("widget.rs")
+        ));
+    }
+
+    #[test]
+    fn rust_default_trait_method_is_a_subject() {
+        assert!(Language::Rust.is_subject(
+            "trait Greeter {\n    fn greet(&self) {\n        println!(\"hi\");\n    }\n}\n",
+            Path::new("greeter.rs")
+        ));
+    }
+
+    #[test]
+    fn rust_trait_method_signature_without_a_default_is_not_a_subject() {
+        assert!(!Language::Rust.is_subject(
+            "trait Greeter {\n    fn greet(&self);\n}\n",
+            Path::new("greeter.rs")
+        ));
+    }
+
+    #[test]
+    fn rust_closure_outside_any_fn_is_a_subject() {
+        assert!(Language::Rust.is_subject(
+            "static ADDER: fn(i32) -> i32 = |x| x + 1;\n",
+            Path::new("adder.rs")
+        ));
     }
 
     /// `(has_testable_fn, has_test_module)` for a Rust source snippet.

@@ -1,0 +1,9 @@
+# Fixture crate `mut_declaration_only`: its colocated test pins `add`, so every mutant of
+# it is caught; `settings.rs` has no `fn`, so its const-init mutants are not mutation
+# subjects. `[workspace]` keeps it standalone (not part of the repo's cargo workspace).
+[package]
+name = "mut_declaration_only"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

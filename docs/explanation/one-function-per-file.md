@@ -23,19 +23,19 @@ touches the one function that changed. The rungs above presence sharpen the same
 [coverage](./coverage) or [mutation](./mutation) result reported against a file is a result about
 one function, so a survivor points at the code that produced it.
 
-The rule also gives an agent a structural stopping point. "Add the helper here" is the cheapest
+The check also gives an agent a structural stopping point. "Add the helper here" is the cheapest
 move in an agentic edit, and it is how a 40-line module becomes a 400-line one with a single
-sprawling test beside it. A gate on the count makes the next function a new file.
+sprawling test beside it. A ceiling on the count makes the next function a new file.
 
 ## Why a threshold, and why it's yours
 
 A one-line function is an expression with a name — a predicate, a formatter, a default. It carries
 no branch to test in isolation, and giving it a file of its own is ceremony, not structure. So the
-rule counts only functions whose body runs longer than **`max_lines`**, and the default is `1`:
+check counts only functions whose body runs longer than **`max_lines`**, and the default is `1`:
 one line is trivial, anything longer earns its own module.
 
 That default is the standard's opinion, not a law of the domain. A codebase whose natural grain is
-small functions may want the line at three or five; one adopting the rule onto an existing tree may
+small functions may want the line at three or five; one adopting the check onto an existing tree may
 start at twenty and walk it down. `max_lines` is a plain number in the config, per language:
 
 ```toml
@@ -43,7 +43,7 @@ start at twenty and walk it down. `max_lines` is a plain number in the config, p
 one_function_per_file = { max_lines = 5 }
 ```
 
-Raising it never turns the rule off — a file with two twenty-line functions fails at
+Raising it never turns the check off — a file with two twenty-line functions fails at
 `max_lines = 5` and at `max_lines = 19` alike. It moves only the boundary between "trivial enough
 to share" and "substantial enough to own the file".
 
@@ -75,7 +75,7 @@ own.
 
 ## Rust is off until you opt in
 
-The rule runs for Python and TypeScript with no configuration. **For Rust it is off until a
+The check runs for Python and TypeScript with no configuration. **For Rust it is off until a
 `[rust].one_function_per_file` table names a threshold**, and an unconfigured Rust run says so:
 
 ```
@@ -84,12 +84,12 @@ unit one-function-per-file: not enabled for rust — set `[rust].one_function_pe
 
 This is a deliberate asymmetry, and the reason is the languages differ in what a file *is*. In
 Python and TypeScript a file is a bag of definitions with no meaning of its own, so "one subject per
-file" is a choice the author makes and the rule can hold them to. In Rust a file **is** a module —
+file" is a choice the author makes and the check can hold them to. In Rust a file **is** a module —
 the language's own unit of organization — and grouping a type, its `impl` blocks, and the free
 functions that operate on it inside one module is how Rust is written, not a lapse. Enforcing the
-rule there by default would flag idiomatic code.
+check there by default would flag idiomatic code.
 
-The capability is the same in all three languages: a Rust tree that wants the rule names a
+The capability is the same in all three languages: a Rust tree that wants the check names a
 threshold and gets exactly what Python and TypeScript get. Only the default differs.
 
 ```toml
@@ -102,7 +102,7 @@ Unit tests are never subjects. The scan reads the same source tree
 `#[cfg(test)]` modules, and the suite directories beside the package are all outside it — a test
 file is *supposed* to hold a function per case.
 
-## When the rule is wrong
+## When the check is wrong
 
 A file whose functions genuinely belong together — a generated module, a table of small
 constructors, a public surface re-exported as one API — takes a

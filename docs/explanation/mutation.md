@@ -81,12 +81,12 @@ A survivor you've confirmed is equivalent or deliberately defensive gets a reaso
 other check uses; every other survivor must be killed. It's the mutation analog of the coverage
 philosophy — *"zero survivors except what you exempted with a reason"*, not *"hit a number you
 can't reach"* — and it ports cleanly across languages, where a score does not. Diff-scoping is
-what makes a binary gate tractable: whole-tree mutation is too slow to gate, so the job runs on
+what makes a binary gate tractable: whole-tree mutation is too slow to run, so the job runs on
 pull requests only, over the `<base>...HEAD` changed lines.
 
 ## A pass names its evidence
 
-The gate has three green outcomes, and they are different facts — so the run reports which one
+The check has three green outcomes, and they are different facts — so the run reports which one
 it earned. A run that tested mutants states the count:
 
 > `unit mutation: no surviving mutants — every mutation was caught (6 mutant(s) tested)`
@@ -103,7 +103,7 @@ request — skips the engine:
 > `unit mutation: no mutatable changed lines — engine not run`
 
 All three pass (an empty diff owes no mutation run; this is reporting, not gating), but the log
-tells a validated pass from a vacuous one: a gate that has only ever printed the last two lines
+tells a validated pass from a vacuous one: a check that has only ever printed the last two lines
 has never killed a mutant, and the first behavior-touching pull request is where an environment
 problem would surface. In Rust the zero-mutant line is additionally held to proof: cargo-mutants
 applies the changed-line filter itself, so the tool cross-checks a zero-mutant report against
@@ -119,7 +119,7 @@ runner that runs your own suite:
 | Language | Engine | You provide |
 | --- | --- | --- |
 | TypeScript | [Stryker](https://stryker-mutator.io/), driven via its Node API by an adapter bundled in the npm package | `vitest` |
-| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray), driven via its library API by an adapter bundled in the wheel, with a baseline check that requires the clean suite to pass; each mutant's run ends at its first failing test | `pytest` |
+| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray), driven via its library API by an adapter bundled in the wheel, with a baseline run that requires the clean suite to pass; each mutant's run ends at its first failing test | `pytest` |
 | Rust | [cargo-mutants](https://github.com/sourcefrog/cargo-mutants), provisioned on first use (a pinned `cargo install` into the tool's own cache) and run from there; concurrent invocations share one provisioning install rather than each racing to install their own | the cargo toolchain that builds and tests your crate |
 
 A run lists each survivor with its file, line, and mutation — the engine's mutator and the source

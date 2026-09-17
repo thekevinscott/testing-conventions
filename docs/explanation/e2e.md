@@ -44,24 +44,36 @@ The mechanism is a pair:
   delete of another branch's receipt with this branch's add makes git's rename detection read the
   two as a rename — receipts look alike, because `command` is usually byte-identical across a
   repo's branches and is the longest field — so two branches cut from one parent collide on an
-  unresolvable `rename/rename` conflict. Receipts left by merged branches accumulate, which is
-  inert: `verify` reads only whether *this* branch's diff adds or updates one.
+  unresolvable `rename/rename` conflict. Receipts left by merged branches accumulate; `verify`'s
+  second question reads only the one receipt the acting branch owns, so an old receipt sitting
+  there answers nothing (#641).
 
-- **`e2e verify [path] [--scope <dir>] [--base <ref>] [--extra-scope <dir>]… [--exclude <dir>]…`** —
-  the CI half, run by the [workflow](../reference/workflow) on pull requests. It asks two
-  questions, each a plain content diff of `<base>...HEAD`:
+- **`e2e verify [path] [--scope <dir>] [--base <ref>] [--extra-scope <dir>]… [--exclude <dir>]…
+  [--branch <name>]`** — the CI half, run by the [workflow](../reference/workflow) on pull
+  requests. It asks two questions, each a plain content diff of `<base>...HEAD`:
 
   1. **Did this branch change the scoped source?** The scope is `--scope` (default: `source`
      itself), joined with every `--extra-scope` and minus every `--exclude`, with the receipts
      themselves excluded. An empty diff passes: the branch owes no decision.
-  2. **Does this branch's diff add or update a receipt?** A receipt added or updated under
-     `source`'s `e2e-attestations/` passes; otherwise the check fails, naming the fix — run
-     `e2e attest` with the command of your choosing.
+  2. **Does this branch's diff add or update *its own* receipt?** The acting branch is `--branch`
+     when given, otherwise the checked-out branch; its receipt lives at
+     `e2e-attestations/<branch_slug>.json`. Only that file answers the question — updating any
+     other file under `e2e-attestations/`, such as a receipt belonging to a different, already-merged
+     branch, does not; otherwise the check fails, naming the fix — run `e2e attest` with the
+     command of your choosing.
 
   It never runs the suite, never inspects the recorded command or exit code, and never compares
   commit SHAs — a committed receipt already means a run that passed, because that is the only
-  kind `attest` writes. Only an added or updated receipt answers question 2, so receipts left by
-  other branches are inert — which is why `attest` leaves them alone rather than deleting them.
+  kind `attest` writes. Question 2 names the file, not just the directory, so an edit to a receipt
+  that isn't the acting branch's own no longer answers the nudge — which is also why `attest`
+  leaves other branches' receipts alone rather than deleting them.
+
+  `--branch <name>` supplies the branch identity directly, for a checkout with no branch to read.
+  The [reusable workflow](../reference/workflow) checks out the pull request's head commit by SHA
+  rather than by branch name — the only way a fork's head branch resolves the same way a
+  same-repo branch does — which leaves `verify` on a detached HEAD, nothing `git symbolic-ref` can
+  name. Absent `--branch`, `verify` reads the checked-out branch; absent both, it has no acting
+  branch to scope the file to and falls back to the older whole-directory question (#641).
   In a monorepo, `source` names the package —
   `e2e verify packages/widget` behaves exactly like running `e2e verify` with `packages/widget`
   as the current directory (#281) — and `--scope` narrows what counts as code independently of

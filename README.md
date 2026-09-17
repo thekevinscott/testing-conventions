@@ -3,11 +3,11 @@
 `testing-conventions` enforces testing conventions in libraries (Python, TypeScript, and Rust).
 Primarily useful for enforcing agent (LLM) behavior.
 
-<!-- Single source of truth for the rule list: docs/index.md pulls the region below via VitePress @include. Every link inside it is absolute, because a site-root path renders dead in this file on GitHub. -->
+<!-- Single source of truth for this list: docs/index.md pulls the region below via VitePress @include. Every link inside it is absolute, because a site-root path renders dead in this file on GitHub. -->
 <!-- #region rules -->
-## Rules at a glance
+## Checks at a glance
 
-Every rule is a CLI command that fails CI on a violation. The
+Every check is a CLI command that fails CI on a violation. The
 [checks reference](https://thekevinscott.github.io/testing-conventions/reference/checks/) carries
 one page per check, with its per-language behavior, run conditions, and configuration surface.
 
@@ -17,7 +17,7 @@ one page per check, with its per-language behavior, run conditions, and configur
 - [`unit one-function-per-file`](https://thekevinscott.github.io/testing-conventions/explanation/one-function-per-file) — a file holds at most one module-scope function whose body runs longer than the configured `max_lines` (Python and TypeScript by default, Rust on opt-in; default `1`, so a one-line function is trivial and shares freely).
 - [`unit coverage`](https://thekevinscott.github.io/testing-conventions/explanation/coverage) — enforce a coverage floor on the unit suite (Python, TypeScript, Rust); with `--base`, the same floor is measured over the changed lines of a `<base>...HEAD` diff instead of the whole tree.
 - [`unit lint`](https://thekevinscott.github.io/testing-conventions/explanation/isolation) — a unit test mocks every collaborator: no out-of-module calls or imports (Rust); no un-mocked first-party or external collaborators (Python, TypeScript); typed mocks (TypeScript).
-- [`unit mutation`](https://thekevinscott.github.io/testing-conventions/explanation/mutation) — every line a change touches is *verified*, not just executed: mutation testing breaks the code and requires a test to fail. The gate is binary and diff-scoped — no unexplained surviving mutant on the diff — not a score percentage (Python, TypeScript, Rust; wired into the reusable workflow as a diff-scoped, PR-only job).
+- [`unit mutation`](https://thekevinscott.github.io/testing-conventions/explanation/mutation) — every line a change touches is *verified*, not just executed: mutation testing breaks the code and requires a test to fail. It's a binary gate, not a score — diff-scoped, so only an unexplained surviving mutant on the diff fails the check (Python, TypeScript, Rust; wired into the reusable workflow as a diff-scoped, PR-only job).
 
 **Integration**
 
@@ -43,18 +43,18 @@ Tests assert the behavior of code. This standard recognizes three kinds:
 - **E2E:** like integration, but with no mocks. Not run in CI. An agent runs them to
   confirm real third-party contracts still hold.
 
-## Rules
+## Checks in detail
 
-Each rule states what it enforces, why, and how it varies by language. **Checked**
-says how it's verified. Most rules are deterministic checks run in CI from the
-config; where a rule is enforced by structure alone rather than a dedicated
+Each section states what's enforced, why, and how it varies by language. **Checked**
+says how it's verified. Most are deterministic checks run in CI from the
+config; where enforcement is structural alone rather than a dedicated
 command, **Checked** says so.
 
 ### Unit
 
 #### Colocated Test
 
-**Rule:** unit tests are colocated with the code they test, and named after it.
+**Enforces:** unit tests are colocated with the code they test, and named after it.
 
 **Why:** colocation makes the unit/integration boundary structural, by location
 rather than a tag or marker. 1:1 naming means an orphaned test can't hide.
@@ -67,7 +67,7 @@ rather than a tag or marker. 1:1 naming means an orphaned test can't hide.
 
 #### One Function Per File
 
-**Rule:** a file holds at most one module-scope function whose body runs longer than
+**Enforces:** a file holds at most one module-scope function whose body runs longer than
 `max_lines` (default 1). Trivial functions at or under the threshold share freely.
 
 **Why:** colocation pairs a file with a test, so the pairing is worth what the file
@@ -89,11 +89,11 @@ language; a file whose functions genuinely belong together takes a
 `one-function-per-file` exemption with a reason. Python and TypeScript are checked with
 no configuration; Rust opts in by naming a threshold, because a Rust file is a module and
 grouping functions in one is idiomatic rather than a lapse. The reusable workflow runs it
-as the `one-function-per-file` gate.
+as the `one-function-per-file` check.
 
 #### Isolation
 
-**Rule:** everything except the unit under test is mocked.
+**Enforces:** everything except the unit under test is mocked.
 
 **Why:** a unit test that touches a real collaborator behaves like an integration
 test, so unrelated refactors break the wrong tests.
@@ -115,7 +115,7 @@ vi.mock('./service', async () => {
 
 #### Co-change
 
-**Rule:** when a source file changes the code the compiler sees, its colocated unit test changes with it.
+**Enforces:** when a source file changes the code the compiler sees, its colocated unit test changes with it.
 
 **Why:** an edit or removal that leaves the colocated test untouched lets the test
 go stale; the test should move with the code it pins. Adding new code is the
@@ -133,7 +133,7 @@ A modification counts when it changes code the compiler sees: the merge-base and
 
 #### Location
 
-**Rule:** integration tests live in a dedicated folder, separate from the unit
+**Enforces:** integration tests live in a dedicated folder, separate from the unit
 suite.
 
 **Why:** a structural home keeps black-box tests out of the unit suite that
@@ -154,7 +154,7 @@ integration or e2e suite passes.
 
 #### External Dependencies
 
-**Rule:** every external dependency is mocked; first-party code runs for real.
+**Enforces:** every external dependency is mocked; first-party code runs for real.
 **External** means any package dependency plus effectful standard-library APIs
 (filesystem, clock, randomness, network, subprocess, env). A whitelist lets
 specific dependencies through unmocked.
@@ -173,7 +173,7 @@ tests at the SDK. Keep the CLI a thin wrapper.
 
 #### Mocking mechanism (Python only)
 
-**Rule:** Python integration tests get four additional mechanism-hygiene lints:
+**Enforces:** Python integration tests get four additional mechanism-hygiene lints:
 
 - `no-monkeypatch`: patch with `unittest.mock` in a `pytest.fixture` rather than pytest's `monkeypatch`.
 - `no-inline-patch`: a `patch(...)` belongs in a fixture, not a test body.
@@ -193,7 +193,7 @@ first-party direction check alone (`no-first-party-mock` / `no-first-party-doubl
 
 ### E2E
 
-**Rule:** e2e tests live in a dedicated folder and run with no mocks.
+**Enforces:** e2e tests live in a dedicated folder and run with no mocks.
 
 **Why:** they confirm real external contracts still hold. They're for an agent to
 run on demand, not for CI.
@@ -247,15 +247,15 @@ The diff is git-level, so it holds identically across Python, TypeScript, and
 Rust. See the [e2e explanation](https://thekevinscott.github.io/testing-conventions/explanation/e2e#a-shared-source-tree-beside-the-package)
 and the [config reference](https://thekevinscott.github.io/testing-conventions/reference/config#e2e-extra_scope-and-exclude).
 
-**Checked:** the e2e location is a convention, not its own gate, and CI never runs
+**Checked:** the e2e location is a convention, not its own check, and CI never runs
 the suite. CI checks the decision: `e2e verify` requires a branch that changed the
 scoped source to carry a committed receipt in its diff.
 
 ### Coverage
 
-**Rule:** coverage floors are enforced on the **unit suite only** and exclude
-test code from the denominator. The thresholds are set per library, in
-each tool's native coverage primitives.
+**Enforces:** a coverage floor on the **unit suite only**, excluding test code from
+the denominator. Thresholds are set per library, in each tool's native coverage
+primitives.
 
 **Why:** coverage measures execution, not assertion. Measuring it on anything but
 real unit tests lets integration tests inflate the number.
@@ -270,7 +270,7 @@ real unit tests lets integration tests inflate the number.
 
 ### Mutation
 
-**Rule:** every line a change touches is *verified*, not just executed — some test
+**Enforces:** every line a change touches is *verified*, not just executed — some test
 must fail when that line is broken.
 
 **Why:** coverage measures execution, not assertion; a test can run a line without
@@ -282,16 +282,16 @@ agent can't satisfy without real assertions.
 - **TypeScript:** [Stryker](https://stryker-mutator.io/) over the unit suite.
 - **Rust:** [cargo-mutants](https://github.com/sourcefrog/cargo-mutants) over the unit suite.
 
-The gate is not a score percentage — equivalent mutants (mutations no test can ever
-kill) make 100% unreachable, and a score isn't comparable across engines. Instead
-it's binary and diff-scoped: **no unexplained surviving mutant on changed lines**,
-with reasoned `[[<language>.exempt]]` entries for the rest.
+Mutation is a binary gate, not a score — equivalent mutants (mutations no test can
+ever kill) make 100% unreachable, and a score isn't comparable across engines.
+Instead the check is diff-scoped: **no unexplained surviving mutant on changed
+lines**, with reasoned `[[<language>.exempt]]` entries for the rest.
 
 **Checked:** all three languages are available now — **Rust** (`unit mutation --language rust`, via cargo-mutants), **TypeScript** (`unit mutation --language typescript`, via Stryker), and **Python** (`unit mutation --language python`, via cosmic-ray) — a binary gate, on by default: any un-exempted survivor fails, with reasoned `[[<language>.exempt]] rules = ["mutation"]` entries (naming the survivor's `lines`) the only loosening. They're at parity and **wired into the reusable workflow** as a diff-scoped, PR-only job across the matrix ([#204](https://github.com/thekevinscott/testing-conventions/issues/204)). See the [mutation explanation](https://thekevinscott.github.io/testing-conventions/explanation/mutation). Deterministic (a diff-scoped mutation run; any unexplained survivor on a changed line fails the build).
 
 ### Packaging
 
-**Rule:** test files never ship in the built package.
+**Enforces:** test files never ship in the built package.
 
 **Why:** colocated unit tests live in `src/`, so packaging has to strip them.
 Shipping test code bloats the artifact and leaks fixtures.
@@ -318,16 +318,16 @@ config-driven, never a silent ignore:
   `rules` it lifts (`colocated-test` / `coverage`) and a required `reason`. The whole exemption surface lives in one file, auditable in a single
   diff. A stale entry (a path that no longer exists) is a hard error, so the list
   can't rot.
-- **Line-scoped, always, for `coverage` / `mutation`.** These two rules are never
+- **Line-scoped, always, for `coverage` / `mutation`.** These two checks are never
   whole-file: an exemption carries a `lines` list (`lines = [9, 10, "12-13"]`) naming
   the exact lines it lifts. A determinism guard checks the list — a listed line that
   *isn't* failing is a hard error, an unlisted failing line still fails — so it's
-  exactly the failing lines. (`lines` is for these two rules only; a `lines` key on
+  exactly the failing lines. (`lines` is for these two checks only; a `lines` key on
   `colocated-test` is rejected.)
 
 ## Configuration
 
-One TOML file, `testing-conventions.toml`, drives every rule. The workflow discovers it at
+One TOML file, `testing-conventions.toml`, drives every check. The workflow discovers it at
 the package root, falling back to the repository root; the `config` input names it somewhere
 else:
 
@@ -354,7 +354,7 @@ reason = "version-conditional tomllib/tomli import; one branch is dead on any si
 coverage = { lines = 100, branches = 100, functions = 100, statements = 100 }
 
 [rust]
-# Cargo features the suite-running Rust rules enable, so `#[cfg(feature = ...)]`
+# Cargo features the suite-running Rust checks enable, so `#[cfg(feature = ...)]`
 # code is compiled, measured, and mutated:
 features = ["cli"]
 coverage = { regions = 100, lines = 100 }

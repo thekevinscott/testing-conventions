@@ -39,10 +39,21 @@ opine, recommend, predict, rank, or resolve. When in doubt, report rather than j
 
 Every link gets captured under `sources/<slug>/`, where `<slug>` is the URL with
 its scheme and trailing slash stripped and every non `[A-Za-z0-9._-]` char replaced
-by `-` (one folder per exact URL). Each folder holds:
+by `-` (one folder per exact URL), capped at **120 characters**. A longer slug keeps
+its first 111 characters, trimmed back to the last `-`, then a `-` and the first eight
+hex digits of the SHA-256 of the full URL — which keeps one folder per exact URL, and
+`transcript.md`'s `url:` line carries the URL itself.
+
+The cap keeps the deepest path inside a capture under Windows's 260-character
+`MAX_PATH`. Raise it and `actions/checkout` fails on the Windows release runners with
+`fatal: cannot create directory ...: Filename too long`, taking every Windows matrix
+arm — and so the whole release — down with it.
+
+Each folder holds:
 
 - `raw.html` (or `raw.pdf`) — the raw fetched bytes.
-- `transcript.md` — the total transcript extracted from the raw bytes.
+- `transcript.md` — the total transcript extracted from the raw bytes, opening with a
+  `url:` line giving the exact URL.
 - `summary.md` — the organized notes extracted from the transcript, written to the
   sourcing/"organize, don't synthesize" rules above.
 

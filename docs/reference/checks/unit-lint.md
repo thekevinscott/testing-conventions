@@ -55,4 +55,4 @@ dependency, patch by string in a fixture — not a waiver. See
 
 - [Explanation — Isolation](/explanation/isolation): the boundary both lint checks enforce, as
   one essay.
-- [Configure the rules](/guide/configure#exempt-a-file): exempting a file, step by step.
+- [Respond to a red check](/guide/configure#exempt-a-file): exempting a file, step by step.

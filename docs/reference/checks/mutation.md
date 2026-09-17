@@ -108,5 +108,5 @@ surface:
 
 - [Explanation — Mutation](/explanation/mutation): the worked example coverage can't catch,
   equivalent mutants in full, and why it matters for agents.
-- [Configure the rules](/guide/configure#exempt-specific-lines-coverage-mutation): exempting a
+- [Respond to a red check](/guide/configure#exempt-specific-lines-coverage-mutation): exempting a
   surviving mutant, step by step.

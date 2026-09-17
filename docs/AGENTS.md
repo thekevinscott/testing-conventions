@@ -58,7 +58,7 @@ carries the intellectual weight.
 
 When a page wants to do two jobs, split it and cross-link. The mutation pages are the worked
 example: [Explanation — Mutation](./explanation/mutation) carries the concept and the engines;
-[Configure the rules](./guide/configure) carries the exemption mechanics.
+[Respond to a red check](./guide/configure) carries the exemption mechanics.
 
 ## Duplication is deliberate
 

@@ -77,4 +77,4 @@ configuration.
 
 - [Explanation — Colocated tests](/explanation/colocated-test): why colocation, and why a stale
   test is an invisible orphan.
-- [Configure the rules](/guide/configure#exempt-a-file): exempting a file, step by step.
+- [Respond to a red check](/guide/configure#exempt-a-file): exempting a file, step by step.

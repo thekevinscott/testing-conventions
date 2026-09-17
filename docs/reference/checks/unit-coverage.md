@@ -82,4 +82,4 @@ listed line that isn't actually failing — see
 ## Learn more
 
 - [Explanation — Coverage](/explanation/coverage): why 100, in full.
-- [Configure the rules](/guide/configure#relax-a-coverage-floor): lowering a floor, step by step.
+- [Respond to a red check](/guide/configure#relax-a-coverage-floor): lowering a floor, step by step.

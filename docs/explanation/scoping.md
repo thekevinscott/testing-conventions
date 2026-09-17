@@ -69,5 +69,5 @@ Almost nothing is genuinely untestable. What feels untestable usually needs a te
 the dependency and assert against a fake, drive a framework hook directly, force the dead branch of
 a version-conditional import — so the `reason` field should read like the end of an investigation,
 naming what was tried, not like a shrug. The mechanics live in
-[Configure the rules](../guide/configure#exempt-a-file); the schema in the
+[Respond to a red check](../guide/configure#exempt-a-file); the schema in the
 [configuration reference](../reference/config#exemptions).

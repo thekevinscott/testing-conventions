@@ -103,4 +103,4 @@ Pass a path to manage a different file: `npx testing-conventions install CLAUDE.
   table](./monorepo#what-each-gate-scans-and-from-where) first — most gates read fixed paths at
   the derived package root, not wherever `source` happens to point.
 - [The testing model](./explanation/) explains what each check enforces and why.
-- [Configure the rules](./guide/configure) tunes a floor or exempts a file, with a reason.
+- [Respond to a red check](./guide/configure) tunes a floor or exempts a file, with a reason.

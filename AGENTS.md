@@ -4,8 +4,9 @@ A consuming package adopts `conventions.yml` whole-hog with a call carrying only
 
 ## The red/green cadence, and where it applies
 
-**The cadence is scoped to shipped source: a change under `packages/<pkg>/src/`.** That is the code
-a consumer runs, so a red run there proves a shipped check can actually fail — which is the whole
+**The cadence is scoped to source: a change under any `src/` tree**, whatever package holds it —
+`packages/<pkg>/src/`, `internals/checks/src/`, `internals/detect/src/`. Source is where logic
+lives, so a red run there proves the tests covering that logic can actually fail, which is the
 claim the round-trip exists to make.
 
 For such a change: start by writing red integration and e2e tests, and run the e2e tests locally.
@@ -14,11 +15,10 @@ failing integration and e2e tests, and _all other tests stay green_. If other un
 figure out why and fix them. Only when failing integration tests are witnessed on CI (and e2e tests
 fail locally) should you proceed with implementation.
 
-**Everything else is outside the cadence.** Workflow YAML, CI wiring, `internals/` tooling, docs,
-fixtures, and config carry no witnessed-red obligation — not on CI, and not locally. Write the tests
-the change deserves, keep every existing test green, and ship it. Outside `packages/<pkg>/src/`
-there is no shipped check whose failure the red run would be proving, so the round-trip costs a CI
-cycle and buys nothing.
+**Everything outside a `src/` tree is outside the cadence.** Workflow YAML, CI wiring, docs,
+fixtures, scripts, and config carry no witnessed-red obligation — not on CI, and not locally. Write
+the tests the change deserves, keep every existing test green, and ship it. There is no logic there
+whose test the red run would be proving, so the round-trip costs a CI cycle and buys nothing.
 
 ## Don't fake the underivable
 
@@ -413,12 +413,14 @@ A PR that touches **only** documentation — the `docs/` site and Markdown files
 ## CI-hygiene changes
 
 A PR whose behavior change is confined to CI plumbing — workflow YAML, cache and concurrency
-wiring, and the detect outputs that feed them, with no change to what a consumer's gates enforce —
-sits outside the red/green cadence entirely (see **The red/green cadence, and where it applies**).
-Tested source still gets tests: an `internals/detect` derivation or an `internals/` helper module
-ships with the unit tests its logic deserves, written in whatever order suits the work. Every other
-bar holds — docs in the same PR, all existing tests green. For plumbing the failure mode is CI
-speed, and green CI on the finished PR is the whole story.
+wiring, with no change to what a consumer's gates enforce — sits outside the red/green cadence
+(see **The red/green cadence, and where it applies**). Every other bar holds — docs in the same PR,
+all existing tests green. For plumbing the failure mode is CI speed, and green CI on the finished
+PR is the whole story.
+
+Where such a PR also edits a `src/` tree — the `internals/detect` derivation feeding those outputs,
+say — that part is source and carries the cadence: red tests first, witnessed red, then the
+implementation.
 
 ## Specs state problems, not process
 

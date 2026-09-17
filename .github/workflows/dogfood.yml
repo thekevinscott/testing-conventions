@@ -59,6 +59,15 @@ jobs:
       source: packages/node/src
       gates: '["colocated-test"]'
 
+  unit-lint:
+    name: Unit lint (packages/node/src)
+    needs: [build-cli]
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      version: ${{ inputs.version }}
+      source: packages/node/src
+      gates: '["unit-lint"]'
+
   e2e-verify:
     name: E2E attestation (packages/node)
     needs: [build-cli]

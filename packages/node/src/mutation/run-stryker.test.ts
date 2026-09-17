@@ -7,16 +7,20 @@ const { runMutationTest, ctorOptions } = vi.hoisted(() => ({
   runMutationTest: vi.fn<() => Promise<MutantResult[]>>(),
   ctorOptions: [] as Array<Record<string, unknown>>,
 }));
-vi.mock('@stryker-mutator/core', () => ({
-  Stryker: class {
-    constructor(options: Record<string, unknown>) {
-      ctorOptions.push(options);
-    }
-    runMutationTest() {
-      return runMutationTest();
-    }
-  },
-}));
+vi.mock('@stryker-mutator/core', async () => {
+  const actual = await vi.importActual<typeof import('@stryker-mutator/core')>('@stryker-mutator/core');
+  return {
+    ...actual,
+    Stryker: class {
+      constructor(options: Record<string, unknown>) {
+        ctorOptions.push(options);
+      }
+      runMutationTest() {
+        return runMutationTest();
+      }
+    },
+  };
+});
 
 import { runStryker } from './run-stryker.js';
 

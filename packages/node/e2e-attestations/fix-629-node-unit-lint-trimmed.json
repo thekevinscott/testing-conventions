@@ -1,0 +1,7 @@
+{
+  "command": "pnpm run test:e2e",
+  "ran_at": 1789670230,
+  "exit_code": 0,
+  "commit": "2dcfeef3811696a29e803f4ac5348c38ec487895",
+  "branch": "fix/629-node-unit-lint-trimmed"
+}

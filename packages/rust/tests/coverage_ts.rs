@@ -74,6 +74,10 @@ fn a_missing_toolchain_fails_clean_without_downloading() {
         msg.contains("npx --no-install"),
         "the error should name the no-download invocation; got: {msg}"
     );
+    assert!(
+        msg.contains("The check runs the project's own vitest"),
+        "the error should name the check, not a rule; got: {msg}"
+    );
 }
 
 #[test]
@@ -116,9 +120,14 @@ fn a_failing_suite_is_an_error_naming_the_vitest_run() {
     let _ = std::fs::remove_file(staged.join("node_modules"));
     let _ = std::fs::remove_dir_all(&staged);
     let err = result.expect_err("a red suite must error, not report a floor");
+    let msg = format!("{err:#}");
     assert!(
-        format!("{err:#}").contains("did not run cleanly under vitest"),
-        "got: {err:#}"
+        msg.contains("did not run cleanly under vitest"),
+        "got: {msg}"
+    );
+    assert!(
+        msg.contains("The check runs the project's own vitest"),
+        "the error should name the check, not a rule; got: {msg}"
     );
 }
 

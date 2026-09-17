@@ -1,0 +1,6 @@
+# `coverage` is line-scoped, so an entry naming it without `lines` must be rejected on load
+# before the exemption ever applies.
+[[python.exempt]]
+path = "cli.py"
+rules = ["coverage"]
+reason = "line-scoped rule with no lines listed"

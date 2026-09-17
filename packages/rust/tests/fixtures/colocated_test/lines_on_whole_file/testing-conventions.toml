@@ -1,0 +1,7 @@
+# `colocated-test` is whole-file presence, so a `lines` key alongside it can't
+# mean anything — rejected on load.
+[[python.exempt]]
+path = "cli.py"
+rules = ["colocated-test", "coverage"]
+lines = [3]
+reason = "line-scoping a presence check makes no sense"

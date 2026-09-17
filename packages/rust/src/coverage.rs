@@ -212,7 +212,7 @@ fn vitest_default_excludes(root: &Path) -> Result<Vec<String>> {
         .context("resolving vitest's default coverage excludes via node")?;
     if !run.status.success() {
         bail!(
-            "could not resolve vitest's default coverage excludes in `{}`. The rule runs the \
+            "could not resolve vitest's default coverage excludes in `{}`. The check runs the \
              project's own vitest via `npx --no-install` and never downloads it, so `vitest` \
              must be installed in the project. node output:\n{}{}",
             root.display(),
@@ -427,7 +427,7 @@ fn run_vitest_coverage(
         .context("running `npx --no-install vitest run --coverage`")?;
     if !run.status.success() {
         bail!(
-            "the unit suite did not run cleanly under vitest in `{}`. The rule runs the \
+            "the unit suite did not run cleanly under vitest in `{}`. The check runs the \
              project's own vitest via `npx --no-install` and never downloads it, so `vitest` \
              and `@vitest/coverage-v8` must be installed in the project. vitest output:\n{}{}",
             root.display(),

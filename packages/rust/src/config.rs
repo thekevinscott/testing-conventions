@@ -485,7 +485,8 @@ impl Config {
                         bail!(
                             "[{table}].exempt entry for `{}` names `{}` but lists no `lines` — \
                              a `coverage` / `mutation` exemption must name the exact lines it \
-                             covers (whole-file exemptions are for presence / lint rules only)",
+                             covers (only `coverage` and `mutation` are line-scoped; every \
+                             other check or rule is whole-file)",
                             entry.path,
                             rule.id()
                         );
@@ -496,7 +497,7 @@ impl Config {
                         bail!(
                             "[{table}].exempt entry for `{}` has `lines` alongside rule \
                              `{}` — line-scoped exemptions apply only to `coverage` and \
-                             `mutation`; move the whole-file rules to a separate entry",
+                             `mutation`; move the rest to a separate entry",
                             entry.path,
                             rule.id()
                         );
@@ -900,6 +901,13 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.to_string().contains("lists no `lines`"), "got: {err}");
+        assert!(
+            err.to_string().contains(
+                "only `coverage` and `mutation` are line-scoped; every other check or rule is \
+                 whole-file"
+            ),
+            "got: {err}"
+        );
     }
 
     #[test]
@@ -923,6 +931,11 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("line-scoped exemptions apply only"),
+            "got: {err}"
+        );
+        assert!(
+            err.to_string()
+                .contains("move the rest to a separate entry"),
             "got: {err}"
         );
     }

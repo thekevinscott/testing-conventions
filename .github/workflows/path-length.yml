@@ -19,14 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        with:
-          # The gate diffs base...head, so it needs both commits rather than a shallow tip.
-          fetch-depth: 0
 
       - uses: astral-sh/setup-uv@v7
 
-      - name: Every path this PR adds or renames fits a Windows checkout
-        run: >-
-          uv run --project internals/checks tc-checks path-length-gate
-          "${{ github.event.pull_request.base.sha }}"
-          "${{ github.event.pull_request.head.sha }}"
+      - name: Every tracked path fits a Windows checkout
+        run: uv run --project internals/checks tc-checks path-length-gate .

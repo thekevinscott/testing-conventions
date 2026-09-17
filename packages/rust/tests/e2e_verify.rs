@@ -43,6 +43,10 @@ impl TempRepo {
             &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "code"],
         );
     }
+
+    fn detach(&self) {
+        git(&self.0, &["checkout", "-q", "--detach", "HEAD"]);
+    }
 }
 
 impl Drop for TempRepo {
@@ -160,7 +164,7 @@ fn verify_extra_scoped_with_no_extra_roots_matches_verify_since() {
     );
 
     assert_eq!(
-        verify_extra_scoped(&package, &package.join("src"), Some(&base), &[], &[]).unwrap(),
+        verify_extra_scoped(&package, &package.join("src"), Some(&base), &[], &[], None).unwrap(),
         verify_since(&package, &package.join("src"), Some(&base)).unwrap(),
         "no extra roots must be byte-identical to verify_since",
     );
@@ -242,7 +246,7 @@ fn verify_extra_scoped_flags_a_change_under_an_extra_root() {
     );
     let extra = [PathBuf::from("packages/rust/src")];
     assert_eq!(
-        verify_extra_scoped(&package, &package, Some(&base), &extra, &[]).unwrap(),
+        verify_extra_scoped(&package, &package, Some(&base), &extra, &[], None).unwrap(),
         Verification::Missing,
         "a non-excluded change under an extra root owes the binding a decision",
     );
@@ -262,7 +266,7 @@ fn verify_extra_scoped_passes_once_the_extra_root_change_is_attested() {
 
     let extra = [PathBuf::from("packages/rust/src")];
     assert_eq!(
-        verify_extra_scoped(&package, &package, Some(&base), &extra, &[]).unwrap(),
+        verify_extra_scoped(&package, &package, Some(&base), &extra, &[], None).unwrap(),
         Verification::Fresh,
         "attesting after the extra-root change must pass",
     );
@@ -285,7 +289,7 @@ fn verify_extra_scoped_ignores_a_change_under_an_excluded_subtree() {
     let extra = [PathBuf::from("packages/rust/src")];
     let exclude = [PathBuf::from("packages/rust/src/cli")];
     assert_eq!(
-        verify_extra_scoped(&package, &package, Some(&base), &extra, &exclude).unwrap(),
+        verify_extra_scoped(&package, &package, Some(&base), &extra, &exclude, None).unwrap(),
         Verification::Fresh,
         "a change only under an excluded subtree owes no decision",
     );
@@ -490,7 +494,7 @@ fn verify_extra_scoped_errors_on_an_extra_root_that_matches_no_tracked_path() {
     let base = rev_parse(&repo.0, "HEAD");
 
     let extra = [PathBuf::from("packages/rust/src")];
-    let err = verify_extra_scoped(&package, &package, Some(&base), &extra, &[])
+    let err = verify_extra_scoped(&package, &package, Some(&base), &extra, &[], None)
         .expect_err("an --extra-scope matching no tracked path must error");
     assert!(
         err.to_string().contains("extra-scope"),
@@ -515,5 +519,143 @@ fn verify_since_still_fails_for_a_valid_descendant_scope_with_no_receipt() {
         verify_since(&package, &package.join("src"), Some(&base)).unwrap(),
         Verification::Missing,
         "a valid descendant scope with an unanswered change must still fail",
+    );
+}
+
+#[test]
+fn verify_since_fails_when_only_an_unrelated_branchs_receipt_changed() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    repo.commit_code(
+        "packages/widget/e2e-attestations/docs-vitepress-site.json",
+        "{\"command\":\"true\",\"ran_at\":1,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"docs/vitepress-site\"}\n",
+    );
+    let base = rev_parse(&repo.0, "HEAD");
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    // Instead of attesting on this branch ("work"), touch a different, already-merged
+    // branch's receipt.
+    repo.commit_code(
+        "packages/widget/e2e-attestations/docs-vitepress-site.json",
+        "{\"command\":\"true\",\"ran_at\":2,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"docs/vitepress-site\"}\n",
+    );
+
+    assert_eq!(
+        verify_since(&package, &package.join("src"), Some(&base)).unwrap(),
+        Verification::Missing,
+        "editing another branch's receipt must not answer this branch's own e2e nudge",
+    );
+}
+
+#[test]
+fn verify_since_passes_when_the_branch_writes_its_own_receipt_by_hand() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    let base = rev_parse(&repo.0, "HEAD");
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    // "work" is the branch TempRepo checks out, so `work.json` is its own receipt slug.
+    repo.commit_code(
+        "packages/widget/e2e-attestations/work.json",
+        "{\"command\":\"true\",\"ran_at\":1,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"work\"}\n",
+    );
+
+    assert_eq!(
+        verify_since(&package, &package.join("src"), Some(&base)).unwrap(),
+        Verification::Fresh,
+        "adding the checked-out branch's own receipt must answer its e2e nudge",
+    );
+}
+
+#[test]
+fn verify_since_falls_back_to_whole_directory_when_head_is_detached() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    repo.commit_code(
+        "packages/widget/e2e-attestations/docs-vitepress-site.json",
+        "{\"command\":\"true\",\"ran_at\":1,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"docs/vitepress-site\"}\n",
+    );
+    let base = rev_parse(&repo.0, "HEAD");
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    repo.commit_code(
+        "packages/widget/e2e-attestations/docs-vitepress-site.json",
+        "{\"command\":\"true\",\"ran_at\":2,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"docs/vitepress-site\"}\n",
+    );
+    repo.detach();
+
+    assert_eq!(
+        verify_since(&package, &package.join("src"), Some(&base)).unwrap(),
+        Verification::Fresh,
+        "with no acting branch to scope the file to (a detached HEAD, no --branch), \
+         verify keeps the old whole-directory question rather than failing every caller",
+    );
+}
+
+#[test]
+fn cli_verify_with_branch_flag_scopes_to_that_branch_receipt_under_a_detached_head() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    repo.commit_code(
+        "packages/widget/e2e-attestations/docs-vitepress-site.json",
+        "{\"command\":\"true\",\"ran_at\":1,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"docs/vitepress-site\"}\n",
+    );
+    let base = rev_parse(&repo.0, "HEAD");
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    repo.commit_code(
+        "packages/widget/e2e-attestations/docs-vitepress-site.json",
+        "{\"command\":\"true\",\"ran_at\":2,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"docs/vitepress-site\"}\n",
+    );
+    repo.detach();
+
+    assert_eq!(
+        e2e_verify_cli(
+            &package,
+            &[("--base", base.as_str()), ("--branch", "our-topic-branch"),],
+        )
+        .expect("dispatch should succeed"),
+        1,
+        "--branch names the acting branch even on a detached HEAD, so an unrelated \
+         branch's receipt still fails the nudge",
+    );
+
+    repo.commit_code(
+        "packages/widget/e2e-attestations/our-topic-branch.json",
+        "{\"command\":\"true\",\"ran_at\":3,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"our-topic-branch\"}\n",
+    );
+
+    assert_eq!(
+        e2e_verify_cli(
+            &package,
+            &[("--base", base.as_str()), ("--branch", "our-topic-branch"),],
+        )
+        .expect("dispatch should succeed"),
+        0,
+        "--branch's own receipt answers the nudge on a detached HEAD",
     );
 }

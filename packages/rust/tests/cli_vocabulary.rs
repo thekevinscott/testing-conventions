@@ -48,6 +48,13 @@ fn e2e_verify_help_names_checks_not_gates_for_diff_scoping() {
 }
 
 #[test]
+fn e2e_verify_help_names_a_branch_flag_for_a_detached_head() {
+    let help = e2e_verify_help();
+    assert!(help.contains("--branch"), "got: {help}");
+    assert!(help.contains("detached"), "got: {help}");
+}
+
+#[test]
 fn mutation_typescript_without_the_adapter_names_the_check_not_the_rule() {
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),

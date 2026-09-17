@@ -223,7 +223,7 @@ fn verify_base_passes_on_a_receipt_added_by_the_branch() {
     let repo = TempRepo::new();
     repo.branch("feature/code");
     repo.commit_file("src/lib.rs", "pub fn changed() {}\n", "code");
-    repo.commit_receipt("feature-code-abcd012345");
+    repo.commit_receipt("feature-code");
     let result = verify_since(&repo.0, &repo.0, Some("base")).expect("verify should run");
     assert_eq!(
         result,
@@ -237,7 +237,7 @@ fn verify_base_stays_fresh_after_further_scoped_pushes() {
     let repo = TempRepo::new();
     repo.branch("feature/code");
     repo.commit_file("src/lib.rs", "pub fn changed() {}\n", "code");
-    repo.commit_receipt("feature-code-abcd012345");
+    repo.commit_receipt("feature-code");
     repo.commit_file("src/lib.rs", "pub fn changed_again() {}\n", "more code");
     let result = verify_since(&repo.0, &repo.0, Some("base")).expect("verify should run");
     assert_eq!(result, Verification::Fresh, "later pushes stay green");
@@ -246,12 +246,12 @@ fn verify_base_stays_fresh_after_further_scoped_pushes() {
 #[test]
 fn verify_base_passes_on_a_receipt_updated_by_the_branch() {
     let repo = TempRepo::new();
-    repo.commit_receipt("feature-code-abcd012345");
+    repo.commit_receipt("feature-code");
     git(&repo.0, &["branch", "-f", "base"]);
     repo.branch("feature/code");
     repo.commit_file("src/lib.rs", "pub fn changed() {}\n", "code");
     repo.commit_file(
-        &format!("{RECEIPTS_DIR}/feature-code-abcd012345.json"),
+        &format!("{RECEIPTS_DIR}/feature-code.json"),
         "{\"command\":\"true\",\"ran_at\":1,\"exit_code\":0,\"commit\":\"1\",\"branch\":\"x\"}\n",
         "re-attest",
     );
@@ -276,17 +276,13 @@ fn verify_base_ignores_a_receipt_inherited_from_the_merge_base() {
 #[test]
 fn verify_base_does_not_count_a_receipt_deletion() {
     let repo = TempRepo::new();
-    repo.commit_receipt("merged-branch-abcd012345");
+    repo.commit_receipt("feature-code");
     git(&repo.0, &["branch", "-f", "base"]);
     repo.branch("feature/code");
     repo.commit_file("src/lib.rs", "pub fn changed() {}\n", "code");
     git(
         &repo.0,
-        &[
-            "rm",
-            "-q",
-            &format!("{RECEIPTS_DIR}/merged-branch-abcd012345.json"),
-        ],
+        &["rm", "-q", &format!("{RECEIPTS_DIR}/feature-code.json")],
     );
     git(&repo.0, &["commit", "-q", "-m", "prune"]);
     let result = verify_since(&repo.0, &repo.0, Some("base")).expect("verify should run");
@@ -300,7 +296,7 @@ fn verify_base_does_not_count_a_receipt_deletion() {
 fn verify_base_receipt_only_branch_passes() {
     let repo = TempRepo::new();
     repo.branch("feature/attest-only");
-    repo.commit_receipt("feature-attest-only-abcd012345");
+    repo.commit_receipt("feature-attest-only");
     let result = verify_since(&repo.0, &repo.0, Some("base")).expect("verify should run");
     assert_eq!(result, Verification::Fresh);
 }
@@ -359,7 +355,7 @@ fn verify_base_extra_scope_change_owes_a_decision_answered_by_a_receipt() {
 
     let package = repo.0.join("packages/binding");
     let extra = vec![PathBuf::from("core/src")];
-    let result = verify_extra_scoped(&package, &package, Some("base"), &extra, &[])
+    let result = verify_extra_scoped(&package, &package, Some("base"), &extra, &[], None)
         .expect("verify should run");
     assert!(
         !matches!(result, Verification::Fresh),
@@ -367,11 +363,11 @@ fn verify_base_extra_scope_change_owes_a_decision_answered_by_a_receipt() {
     );
 
     repo.commit_file(
-        &format!("packages/binding/{RECEIPTS_DIR}/feature-core-abcd012345.json"),
+        &format!("packages/binding/{RECEIPTS_DIR}/feature-core.json"),
         "{\"command\":\"true\",\"ran_at\":0,\"exit_code\":0,\"commit\":\"0\",\"branch\":\"x\"}\n",
         "binding receipt",
     );
-    let result = verify_extra_scoped(&package, &package, Some("base"), &extra, &[])
+    let result = verify_extra_scoped(&package, &package, Some("base"), &extra, &[], None)
         .expect("verify should run");
     assert_eq!(
         result,

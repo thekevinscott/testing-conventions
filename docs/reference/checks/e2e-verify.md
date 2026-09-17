@@ -36,8 +36,12 @@ change what the branch changed.
    `source`, as the workflow passes it — joined with every declared extra scope and minus every
    exclude, with the receipts themselves excluded. An empty diff passes: the branch owes no
    decision.
-2. **Does this branch's diff add or update a receipt?** A receipt added or updated under
-   `e2e-attestations/` passes; otherwise the check fails, naming the fix.
+2. **Does this branch's diff add or update *its own* receipt?** The acting branch is `--branch`
+   when given, otherwise the checked-out branch; only its own receipt
+   (`e2e-attestations/<branch_slug>.json`) answers the question — updating another branch's
+   receipt does not. With no acting branch to name (a detached HEAD and no `--branch`), the check
+   falls back to asking whether any receipt under `e2e-attestations/` changed. Otherwise the check
+   fails, naming the fix.
 
 It never runs the suite, never inspects the recorded command or exit code, and never compares
 commit SHAs. The receipt is a decision for the **branch**, not a stamp on its newest commit:
@@ -67,8 +71,9 @@ the two receipts look alike — which they do, since `command` is usually byte-i
 repo's branches and is the longest field. Two branches off one parent would then rename the same
 file to two names: an unresolvable rename/rename conflict for anyone stacking branches or working
 parallel slices. A pure add has nothing to pair with, so the property holds whatever a receipt
-contains. Receipts other branches left behind are inert — `verify` asks only whether *this*
-branch's diff touches a receipt, and excludes `e2e-attestations/` from the scope it measures.
+contains. Receipts other branches left behind are inert — `verify` asks only whether the acting
+branch's own receipt was added or updated, and excludes `e2e-attestations/` from the scope it
+measures.
 
 ## When it runs
 
@@ -86,6 +91,8 @@ history. The [`gates` input](/reference/workflow#inputs) names it `e2e-verify`.
 - `--scope <dir>` — the flag naming what counts as scoped source, at or below the path `verify`
   reads. The workflow passes the caller's own `source`, so the scoped diff matches what the call
   scans; a direct invocation defaults to that path itself. `--base <ref>` supplies the diff.
+- `--branch <name>` — the acting branch's name, for a checkout with none to read (a detached
+  HEAD). Absent, `verify` reads the checked-out branch.
 - [`[e2e] extra_scope` and `exclude`](/reference/config#e2e-extra-scope-and-exclude) — for a
   package whose e2e artifact is compiled from a **shared source tree beside it** (a native core
   bound into several language bindings), which no scope at or below the package root can reach.

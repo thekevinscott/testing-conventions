@@ -46,6 +46,10 @@ impl TempRepo {
             .expect("git rev-parse should run");
         String::from_utf8(out.stdout).unwrap().trim().to_string()
     }
+
+    fn detach(&self) {
+        git(&self.0, &["checkout", "-q", "--detach", "HEAD"]);
+    }
 }
 
 impl Drop for TempRepo {
@@ -236,6 +240,161 @@ fn verify_with_extra_scope_exits_zero_on_an_excluded_change() {
         ],
     );
     assert_eq!(code, 0, "an excluded change owes no decision: {text}");
+}
+
+#[test]
+fn verify_fails_when_only_an_unrelated_branchs_receipt_changed() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    repo.commit_code(
+        "packages/widget/e2e-attestations/docs-vitepress-site.json",
+        "{\"command\":\"true\",\"ran_at\":1,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"docs/vitepress-site\"}\n",
+    );
+    let base = repo.head();
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    // Instead of attesting on this branch ("work"), touch a different, already-merged
+    // branch's receipt.
+    repo.commit_code(
+        "packages/widget/e2e-attestations/docs-vitepress-site.json",
+        "{\"command\":\"true\",\"ran_at\":2,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"docs/vitepress-site\"}\n",
+    );
+
+    let (code, text) = run_cli(
+        &repo.0,
+        &[
+            "e2e",
+            "verify",
+            "packages/widget",
+            "--scope",
+            "packages/widget/src",
+            "--base",
+            &base,
+        ],
+    );
+    assert_eq!(
+        code, 1,
+        "editing another branch's receipt must not answer this branch's own nudge: {text}"
+    );
+}
+
+#[test]
+fn verify_with_branch_flag_scopes_to_that_branch_receipt_under_a_detached_head() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    repo.commit_code(
+        "packages/widget/e2e-attestations/docs-vitepress-site.json",
+        "{\"command\":\"true\",\"ran_at\":1,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"docs/vitepress-site\"}\n",
+    );
+    let base = repo.head();
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    repo.commit_code(
+        "packages/widget/e2e-attestations/docs-vitepress-site.json",
+        "{\"command\":\"true\",\"ran_at\":2,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"docs/vitepress-site\"}\n",
+    );
+    // Mirrors the reusable workflow's `e2e-verify` checkout, which pins to the PR head
+    // SHA rather than the branch name and leaves HEAD detached.
+    repo.detach();
+
+    let (code, text) = run_cli(
+        &repo.0,
+        &[
+            "e2e",
+            "verify",
+            "packages/widget",
+            "--scope",
+            "packages/widget/src",
+            "--base",
+            &base,
+            "--branch",
+            "our-topic-branch",
+        ],
+    );
+    assert_eq!(
+        code, 1,
+        "--branch names the acting branch on a detached HEAD, so an unrelated \
+         branch's receipt still fails the nudge: {text}"
+    );
+
+    repo.commit_code(
+        "packages/widget/e2e-attestations/our-topic-branch.json",
+        "{\"command\":\"true\",\"ran_at\":3,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"our-topic-branch\"}\n",
+    );
+
+    let (code, text) = run_cli(
+        &repo.0,
+        &[
+            "e2e",
+            "verify",
+            "packages/widget",
+            "--scope",
+            "packages/widget/src",
+            "--base",
+            &base,
+            "--branch",
+            "our-topic-branch",
+        ],
+    );
+    assert_eq!(
+        code, 0,
+        "--branch's own receipt answers the nudge on a detached HEAD: {text}"
+    );
+}
+
+#[test]
+fn verify_falls_back_to_whole_directory_when_head_is_detached_with_no_branch_flag() {
+    let repo = TempRepo::new();
+    let package = repo.0.join("packages/widget");
+    std::fs::create_dir_all(package.join("src")).unwrap();
+    repo.commit_code("packages/widget/src/widget.rs", "pub fn widget() {}\n");
+    repo.commit_code(
+        "packages/widget/e2e-attestations/docs-vitepress-site.json",
+        "{\"command\":\"true\",\"ran_at\":1,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"docs/vitepress-site\"}\n",
+    );
+    let base = repo.head();
+    repo.commit_code(
+        "packages/widget/src/widget.rs",
+        "pub fn widget() { /* v2 */ }\n",
+    );
+    repo.commit_code(
+        "packages/widget/e2e-attestations/docs-vitepress-site.json",
+        "{\"command\":\"true\",\"ran_at\":2,\"exit_code\":0,\"commit\":\"deadbeef\",\
+         \"branch\":\"docs/vitepress-site\"}\n",
+    );
+    repo.detach();
+
+    let (code, text) = run_cli(
+        &repo.0,
+        &[
+            "e2e",
+            "verify",
+            "packages/widget",
+            "--scope",
+            "packages/widget/src",
+            "--base",
+            &base,
+        ],
+    );
+    assert_eq!(
+        code, 0,
+        "with no acting branch to scope the file to (a detached HEAD, no --branch), \
+         verify keeps the old whole-directory question: {text}"
+    );
 }
 
 #[test]

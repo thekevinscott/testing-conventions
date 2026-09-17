@@ -136,10 +136,8 @@ impl Drop for DataFile {
 }
 
 /// Run coverage.py over the unit suite in `root` and return the parsed report.
-/// `--source=.` scopes the denominator to `root`'s sources; dropping it lets
-/// coverage.py's default pick up an editable path dependency's tree outside `root`.
-/// `--ignore=tests` keeps a `tests/` directly beneath `root` — the integration/e2e
-/// tiers when `root` is itself the package root — out of pytest's collection.
+/// `--source=.` scopes the denominator to `root`'s sources; without it coverage.py picks up
+/// an editable path dependency's tree. `--ignore=tests` leaves the suite tiers uncollected.
 fn run_coverage(root: &Path, omit: &[String]) -> Result<CoverageReport> {
     let data = DataFile::new();
     let omit = build_omit(omit);

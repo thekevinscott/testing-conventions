@@ -136,8 +136,8 @@ impl Drop for DataFile {
 }
 
 /// Run coverage.py over the unit suite in `root` and return the parsed report.
-/// `--source=.` scopes the denominator to `root`'s sources; dropping it lets
-/// coverage.py's default pick up an editable path dependency's tree outside `root`.
+/// `--source=.` scopes the denominator to `root`'s sources; without it coverage.py picks up
+/// an editable path dependency's tree. `--ignore=tests` leaves the suite tiers uncollected.
 fn run_coverage(root: &Path, omit: &[String]) -> Result<CoverageReport> {
     let data = DataFile::new();
     let omit = build_omit(omit);
@@ -149,7 +149,15 @@ fn run_coverage(root: &Path, omit: &[String]) -> Result<CoverageReport> {
         .args(["run", "--branch", "--source=."])
         .arg(format!("--omit={omit}"));
     let run = command
-        .args(["-m", "pytest", "-q", "-p", "no:cacheprovider", "."])
+        .args([
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "--ignore=tests",
+            ".",
+        ])
         .env("COVERAGE_FILE", &data.0)
         .env("PYTHONDONTWRITEBYTECODE", "1")
         .output()

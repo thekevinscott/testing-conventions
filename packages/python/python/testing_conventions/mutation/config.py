@@ -27,8 +27,9 @@ def render_config(modules, timeout):
     """Render the ``cosmic-ray`` TOML for a run over ``modules`` (a list of source-file
     paths; empty ⇒ the whole project, ``"."``) with the per-run ``timeout`` in seconds.
     ``pytest`` runs the suite, ending a killed mutant's run at its first failing test (``-x``;
-    exit status — hence classification — is unchanged); the ``local`` distributor runs each
-    mutant in this adapter's own process tree."""
+    exit status — hence classification — is unchanged) and ignoring a ``tests/`` directly
+    beneath the run root; the ``local`` distributor runs each mutant in this adapter's own
+    process tree."""
     paths = modules or ["."]
     module_path = ", ".join(f'"{p}"' for p in paths)
     excludes = ", ".join(f'"{glob}"' for glob in EXCLUDES)
@@ -37,7 +38,7 @@ def render_config(modules, timeout):
         f"module-path = [{module_path}]\n"
         f"timeout = {timeout}\n"
         f"excluded-modules = [{excludes}]\n"
-        'test-command = "python3 -m pytest -x -q -p no:cacheprovider"\n'
+        'test-command = "python3 -m pytest -x -q -p no:cacheprovider --ignore=tests"\n'
         "\n"
         "[cosmic-ray.distributor]\n"
         'name = "local"\n'

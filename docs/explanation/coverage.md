@@ -30,7 +30,9 @@ exempted files/lines are lifted from it. The exact keys and defaults are in the
 
 - **Python** — the suite runs under `coverage.py` with branch coverage on; the combined line +
   branch total meets `fail_under`. A source with no branching constructs measures zero branches,
-  which is vacuously full branch coverage — the total reduces to the line percent.
+  which is vacuously full branch coverage — the total reduces to the line percent. `pytest`
+  collects only the scanned path, with the standard suite tiers under `tests/` ignored, so the
+  integration tier stays out of the unit lane the same way it stays out for TypeScript and Rust.
 - **TypeScript** — the suite runs under `vitest` v8 coverage; **four independent metrics** (lines,
   branches, functions, statements) each meet their floor, because line coverage can read 100% while
   a branch lags.
@@ -72,7 +74,10 @@ suite under the same configuration your own runs use:
   number — a normal install lands in `site-packages` and is ignored either way, but an editable
   install resolves through a `.pth` to a tree that is not under `site-packages`, which
   coverage.py's default would otherwise pick up. (`# pragma: no cover` is coverage.py's built-in
-  default and applies without configuration.)
+  default and applies without configuration.) `pytest`'s collection is scoped the same way: a
+  `tests/` directory directly beneath the scanned path is ignored, so a package whose scanned
+  path *is* its package root never collects its own `tests/integration/` or `tests/e2e/` into the
+  unit run.
 - **Rust** — `cargo llvm-cov --lib` anchors at the **crate root** by construction: cargo resolves
   the manifest upward from the scanned path, and `.cargo/config.toml` / `rust-toolchain.toml`
   discovery is cargo's and rustup's own, exactly as in your own `cargo test`.

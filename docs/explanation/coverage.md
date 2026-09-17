@@ -6,7 +6,7 @@ description: Why the coverage floor is a strict 100% with reasoned exemptions �
 
 `unit-coverage` is the second rung of the [unit ladder](./#the-unit-ladder-exist-→-run-→-verify): does
 the test **run** the code? This page explains why the floor is a strict 100% rather than a
-comfortable 85, and how the same floor gates a pull request's changed lines.
+comfortable 85, and how the same floor is measured over a pull request's changed lines.
 
 ## Why a 100% floor
 
@@ -47,25 +47,25 @@ exempted files/lines are lifted from it. The exact keys and defaults are in the
 ## Where each measurement runs
 
 <!-- #region runs -->
-Each coverage run anchors where the consumer's own test run anchors, so the gate measures the
+Each coverage run anchors where the consumer's own test run anchors, so the check measures the
 suite under the same configuration your own runs use:
 
 - **TypeScript** — vitest runs at the **scanned path** and resolves its configuration with its
   own upward search, so the package-root `vitest.config.*` that governs your own `vitest run`
-  governs the gate's run the same way: environment, setup files (resolved beside the config
-  file), aliases, and plugins all apply. The gate owns the measurement itself: its flags set the
+  governs the check's run the same way: environment, setup files (resolved beside the config
+  file), aliases, and plugins all apply. The check owns the measurement itself: its flags set the
   coverage scope (the scanned path's sources are the denominator, and the package's suite tiers
   under `tests/` stay out of the run), its floors come from your `testing-conventions.toml`
-  config, and the run clears the config file's own global coverage thresholds — the gate's
+  config, and the run clears the config file's own global coverage thresholds — the check's
   floors decide, and your config file is left untouched (a `thresholds.autoUpdate` never
-  rewrites it during a gate run).
+  rewrites it during a check run).
 - **Python** — coverage.py runs at the **scanned path**, and pytest resolves its rootdir and
   configuration with its own upward search — so a package-root `[tool.pytest.ini_options]` /
-  `pytest.ini` and the `conftest.py` files below it apply to the gate's run exactly as to your
-  own `pytest` run. The measurement itself is owned by the gate — the scanned path's sources are
+  `pytest.ini` and the `conftest.py` files below it apply to the check's run exactly as to your
+  own `pytest` run. The measurement itself is owned by the check — the scanned path's sources are
   the denominator (`--source`), branch coverage on, test files and exempted paths omitted, floors
   from your `testing-conventions.toml` config — so a `.coveragerc` / `[tool.coverage]` table is
-  deliberately not consulted: the gate holds the same keys it overrides in a vitest config, and
+  deliberately not consulted: the check holds the same keys it overrides in a vitest config, and
   the denominator is the scanned path's sources, addressing the same paths every other check
   uses. Scoping to the scanned path keeps an editable path dependency's source tree out of the
   number — a normal install lands in `site-packages` and is ignored either way, but an editable

@@ -55,7 +55,7 @@ The mechanism is a pair:
      itself), joined with every `--extra-scope` and minus every `--exclude`, with the receipts
      themselves excluded. An empty diff passes: the branch owes no decision.
   2. **Does this branch's diff add or update a receipt?** A receipt added or updated under
-     `source`'s `e2e-attestations/` passes; otherwise the gate fails, naming the fix — run
+     `source`'s `e2e-attestations/` passes; otherwise the check fails, naming the fix — run
      `e2e attest` with the command of your choosing.
 
   It never runs the suite, never inspects the recorded command or exit code, and never compares
@@ -69,7 +69,7 @@ The mechanism is a pair:
   outside what the caller actually scoped their call to — owes no decision. `--scope` names
   `source` or a directory beneath it that git tracks; a `--scope` that resolves to no tracked path
   (a typo, or a directory outside `source`) is an error that names the bad scope and exits
-  non-zero, so a misconfigured scope fails loudly at the gate rather than waving a branch through
+  non-zero, so a misconfigured scope fails loudly at the check rather than waving a branch through
   (#391).
 
 Change the scoped source without attesting, and `verify` fails with a message naming the fix. That
@@ -80,18 +80,18 @@ review can see it.
 ## One decision per branch
 
 The receipt is a decision for the **branch**, not a stamp on its newest commit. Pushing more
-commits after attesting leaves the gate green — the branch already made its call, and re-running a
-heavy suite on every push would price the gate out of the ad-hoc, judgment-driven use e2e is meant
+commits after attesting leaves the check green — the branch already made its call, and re-running a
+heavy suite on every push would price the check out of the ad-hoc, judgment-driven use e2e is meant
 for. An author who judges that later commits change the picture re-runs `attest`; the receipt is
 overwritten in place.
 
 Both of `verify`'s questions are **content** questions, not history questions: `git diff
 <base>...HEAD` reads what the branch changed relative to the merge base, not which SHAs carry it.
 A rebase onto a moved default branch, a squash merge, a force-push — none disturb a receipt,
-because none change the answer to either question. The gate runs on pull requests with `--base`,
+because none change the answer to either question. The check runs on pull requests with `--base`,
 diff-relative exactly like the [changed-line coverage](./coverage) and [mutation](./mutation)
-gates: a branch that touched none of the scoped source passes trivially, so unrelated PRs stay
-green and a squash-merging repo adopts the gate unchanged (#319).
+checks: a branch that touched none of the scoped source passes trivially, so unrelated PRs stay
+green and a squash-merging repo adopts the check unchanged (#319).
 
 Without `--base`, `verify` has no branch to read a diff from, so it checks presence: a committed
 receipt at `source` passes. The reusable workflow always passes `--base`.
@@ -137,7 +137,7 @@ the runner about everything else. That's the right trade twice over. Running e2e
 stronger proof at the cost of flaky builds, leaked credentials, and a suite everyone learns to
 re-run until green. And a *deterministic floor* of local e2e runs — demanding the full suite per
 branch, or a fresh run per push — prices the receipt in hours and real money, which teaches the
-same lesson: make the suite trivial, or make the gate lie. A receipt that records an honest
+same lesson: make the suite trivial, or make the check lie. A receipt that records an honest
 judgment keeps the guarantee CI *can* make: someone looked at this change, decided what it needed
 against the real world, and put that decision where review sees it.
 

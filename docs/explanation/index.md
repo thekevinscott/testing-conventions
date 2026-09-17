@@ -78,14 +78,14 @@ its own page under [Reference — Checks](/reference/checks/); the pages below c
 
 An LLM optimizes for the target you give it. Coverage is the most exploitable target there is — an
 agent can hit 100% with assertion-light tests that execute every line and check almost nothing. The
-mutation gate is the rung an agent **can't** satisfy by executing code; it only passes when the tests
+mutation check is the rung an agent **can't** satisfy by executing code; it only passes when the tests
 actually pin behavior. That's the throughline of the whole standard: prefer signals that can't be
 gamed by running code without asserting on it.
 
 ## Parity over cleverness
 
 A check is offered only to the level the *least-capable* supported language can meet — **least
-parity**. There are no language-only rules: if a capability can't be matched in Python, TypeScript,
+parity**. There are no language-only checks: if a capability can't be matched in Python, TypeScript,
 and Rust alike, the feature is scoped down to the common denominator or held until parity is
 reachable. The payoff is that the standard means the same thing everywhere; the cost is the
 occasional deliberate asymmetry (Rust's coverage has no branch component by default, because branch

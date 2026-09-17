@@ -73,7 +73,7 @@ requests the check also runs **commit-scoped** over the `<base>...HEAD` diff (Py
 
 Co-change reads the same subject definition presence does, from the file's own contents: a
 declaration-only module carries no behavior, so editing one is not a stale-test risk and needs no
-exemption. A module gains subject status on both halves of the rule together, the moment it adds
+exemption. A module gains subject status on both halves of the check together, the moment it adds
 a function or control flow.
 
 Changing a test on its own is always fine. Rust units are inline in the same file, so a sibling
@@ -106,5 +106,5 @@ The normalization is deliberately narrow, and everything outside it stays a subj
 - Content that fails to parse on either side counts as changed, so an unparseable file is held to
   its colocated test.
 
-Both languages reach the same rule through their own parser, so the two arms agree on what an edit
-means — the parity the standard holds every rule to.
+Both languages reach the same determination through their own parser, so the two arms agree on what
+an edit means — the parity the standard holds every check to.

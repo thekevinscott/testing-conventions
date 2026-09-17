@@ -47,6 +47,31 @@ If you are adding lines to `CHANGELOG.md` or `MIGRATIONS.md`, stop: you want a f
 
 Public-API surface for the purpose of these files: every exported value/type, every CLI flag, every config key, every observable artifact (tag format, GitHub Release body shape). Internal refactors, test-only changes, and docs-only edits stay out.
 
+## Windows checkout path budget
+
+A tracked path this PR adds or renames must survive a Windows checkout. `putitoutthere`'s release
+workflow builds the crate's `x86_64-pc-windows-msvc` wheel and npm package on a Windows runner —
+the only Windows checkout in this repo's pipeline, and one no `pull_request` workflow exercises.
+Its default workspace is `D:\a\testing-conventions\testing-conventions\` — 45 characters for this
+repo's name — against Windows's 260-character `MAX_PATH`, leaving 215 for the tracked path itself.
+`path-length.yml` runs `tc-checks path-length-gate` (`internals/checks`) over each PR's added and
+renamed paths and holds them to 200 — a 15-character margin below that ceiling, since tools disagree
+by a few characters on whether the count includes the trailing null terminator.
+
+#672 is why this exists: a `notes/research/sources/` directory slug grew to 187 characters, its
+full Windows path reached 269, and both Windows release arms died with `fatal: cannot create
+directory ...: Filename too long` — surfaced only on `main`, hours later, with `@v0` frozen and no
+PR to blame, because nothing in the `pull_request` pipeline checks anything out on Windows. #674
+caps the one generator that produced that path (`compute_slug` in `.claude/fetch-url/fetch.py`);
+this gate catches the same failure from any source.
+
+**Diff-scoped, not whole-tree.** `path-length-gate` reads the PR's own diff
+(`git diff --diff-filter=AR base...head`) rather than every tracked path, so a path that already
+breaches the budget before this gate existed does not fail every future PR — only a PR that adds or
+renames one goes red. This is not just the simpler of the two shapes: `notes/research/sources/`
+already carries paths past 200 characters, predating this gate, so a whole-tree check would have
+failed on `main` itself the day it shipped.
+
 ## The CLI command surface
 
 Every subcommand `--help` lists does real work and can fail. A command that parses and exits `0`

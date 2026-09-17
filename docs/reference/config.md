@@ -163,12 +163,14 @@ documented asymmetry under the [parity principle](../explanation/#parity-over-cl
 ## `build_command`
 
 Each language table — `[python]`, `[typescript]`, `[rust]` — takes **`build_command`**, a shell
-command a build-dependent job runs after toolchain and dependency setup and **before** it builds or
-imports the package. It **supplies a necessary fact** — how to build a package the ecosystem
-doesn't build for you — for a build the manifest **structurally can't express**: where an ecosystem
-standardizes the build, the tool derives it (a maturin/PEP 517 backend, Cargo's `build.rs` and
-`cargo package`, npm's `prepare` / `prepack` run by `npm pack`), and `build_command` names only the
-remainder — never a heuristic that guesses a script name that isn't standardized.
+command that runs at the package root — a relative path in the command resolves from there — in
+four jobs: `unit-coverage`, changed-line coverage, `mutation`, and `packaging`. Each of those jobs
+runs it after its own detected-language toolchain and dependencies are set up, and **before** it
+builds or imports the package. It **supplies a necessary fact** — how to build a package the
+ecosystem doesn't build for you — for a build the manifest **structurally can't express**: where an
+ecosystem standardizes the build, the tool derives it (a maturin/PEP 517 backend, Cargo's
+`build.rs` and `cargo package`, npm's `prepare` / `prepack` run by `npm pack`), and `build_command`
+names only the remainder — never a heuristic that guesses a script name that isn't standardized.
 
 It is **not an escape hatch** and requires no justification: unlike `gates` (which skips a check) or
 `rust_toolchain` (which overrides a working default), it waives nothing — it just names the build.
@@ -196,6 +198,26 @@ Where each language reaches for it:
   one line names it.
 - **Rust** — rarely: `cargo` compiles via `build.rs` and packages via `cargo package` from the
   manifest, so `build_command` is only for a pre-build step neither expresses.
+
+### A command naming another ecosystem's build
+
+Each of the four jobs provisions the toolchain and dependencies of its **own detected language**
+only. A `build_command` that reaches into a sibling package written in a different language names
+that ecosystem's own setup itself, inline, as part of the command.
+
+Node's runtime is on `PATH` in every one of the four jobs regardless of language — the reusable
+workflow installs it unconditionally to run the check tooling itself. A package manager beyond that
+bare runtime, a sibling package's own dependency install, and a build tool the runner doesn't
+preinstall (`just`, for one) are the command's own to arrange:
+
+```toml
+[python]
+build_command = "corepack enable && pnpm --dir ../node install --frozen-lockfile && pnpm --dir ../node build"
+```
+
+`corepack enable` puts pnpm on `PATH`, using the Node runtime already there; `pnpm --dir ../node`
+points each command at the sibling package without a `cd`, resolved relative to the package root
+the command itself runs from.
 
 ## `[e2e] extra_scope` and `exclude`
 

@@ -63,8 +63,8 @@ impl Language {
     }
 
     /// `true` when `source` at `path` holds a function or control flow anywhere in it.
-    /// Presence, the commit-scoped co-change check, and the mutation gate all decide
-    /// subjecthood here, so none of them can disagree about what has behavior.
+    /// Presence, the commit-scoped co-change check, and mutation all decide subjecthood
+    /// here, so none of them can disagree about what has behavior.
     pub(crate) fn is_subject(self, source: &str, path: &Path) -> bool {
         match self {
             Language::Python => python_has_behavior(source),
@@ -268,8 +268,8 @@ impl<'ast> Visit<'ast> for PresenceVisitor {
 }
 
 /// `true` when `source` holds an `fn` or a closure anywhere — free function, method, default
-/// trait method, or closure expression (a `static`'s `Lazy::new(|| ..)` counts, its closure
-/// sitting outside any `fn`). A file that fails to parse is `true`: both gates keep it as a subject.
+/// trait method, or closure expression (a `static`'s `Lazy::new(|| ..)` counts, sitting outside
+/// any `fn`). A file that fails to parse is `true`: mutation and colocated-test keep it a subject.
 fn rust_has_behavior(source: &str) -> bool {
     let Ok(file) = syn::parse_file(source) else {
         return true;

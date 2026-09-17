@@ -42,6 +42,18 @@ The scan reads the same source tree [`colocated-test`](./colocated-test) does, s
 Rust's inline `#[cfg(test)]` modules, and the suite tiers under `<package root>/tests/` are all
 outside it.
 
+## What a passing run reports
+
+A passing run prints one line to stderr, alongside the version banner:
+
+```
+one-function-per-file: scanned 8 file(s), 0 violations
+```
+
+The count is the number of source files the scan actually inspected, so a wrong path, an empty
+directory, or a language filter that matches nothing reads as `scanned 0 file(s)` — visibly
+different from a real pass, rather than the version banner alone either way.
+
 ## When it runs
 
 Always, as a step of the `Static checks (<language>)` job, for Python, TypeScript, and Rust alike.

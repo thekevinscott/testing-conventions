@@ -30,13 +30,14 @@ struct Function {
 }
 
 /// A violation for every module-scope function under `root` past the first whose body runs
-/// longer than `max_lines`, sorted by `(file, line)`. The first over-threshold function in a
-/// file holds it; each later one is a violation naming both.
+/// longer than `max_lines`, sorted by `(file, line)`, and the number of files scanned to find
+/// them. The first over-threshold function in a file holds it; each later one is a violation
+/// naming both.
 pub fn find_violations(
     root: impl AsRef<Path>,
     language: Language,
     max_lines: u32,
-) -> Result<Vec<Violation>> {
+) -> Result<(Vec<Violation>, usize)> {
     let root = root.as_ref();
     let files = source_files(root, language)?;
 
@@ -63,7 +64,7 @@ pub fn find_violations(
             });
         }
     }
-    Ok(violations)
+    Ok((violations, files.len()))
 }
 
 /// Every file under `root` the rule judges, sorted: the language's source files, minus the
@@ -537,7 +538,7 @@ mod tests {
         let two_functions = "def alpha():\n    return 1\n\ndef beta():\n    return 2\n";
         std::fs::write(root.join("widget.py"), two_functions).unwrap();
         std::fs::write(root.join("tests").join("helper.py"), two_functions).unwrap();
-        let found = find_violations(&root, Language::Python, 0).expect("the tree scans");
+        let (found, _) = find_violations(&root, Language::Python, 0).expect("the tree scans");
         assert_eq!(found.len(), 1, "got: {found:?}");
         assert!(found[0].file.ends_with("widget.py"), "got: {found:?}");
     }
@@ -548,7 +549,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let two_functions = "def alpha():\n    return 1\n\ndef beta():\n    return 2\n";
         std::fs::write(root.join("widget.py"), two_functions).unwrap();
-        let found = find_violations(&root, Language::Python, 0).expect("the tree scans");
+        let (found, _) = find_violations(&root, Language::Python, 0).expect("the tree scans");
         assert_eq!(found.len(), 1, "got: {found:?}");
     }
 
@@ -560,7 +561,7 @@ mod tests {
         let two = "const alpha = () => {\n  return 1;\n};\nconst beta = () => {\n  return 2;\n};\n";
         std::fs::write(root.join("widget.ts"), two).unwrap();
         std::fs::write(root.join("tests").join("helper.ts"), two).unwrap();
-        let found = find_violations(&root, Language::TypeScript, 0).expect("the tree scans");
+        let (found, _) = find_violations(&root, Language::TypeScript, 0).expect("the tree scans");
         assert_eq!(found.len(), 1, "got: {found:?}");
         assert!(found[0].file.ends_with("widget.ts"), "got: {found:?}");
     }
@@ -570,7 +571,7 @@ mod tests {
         let root = unique_tmp("rust-root");
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("widget.rs"), "pub fn one() -> u8 {\n    1\n}\n").unwrap();
-        let found = find_violations(&root, Language::Rust, 0).expect("the tree scans");
+        let (found, _) = find_violations(&root, Language::Rust, 0).expect("the tree scans");
         assert!(found.is_empty(), "got: {found:?}");
     }
 

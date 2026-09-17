@@ -29,7 +29,8 @@ exempted files/lines are lifted from it. The exact keys and defaults are in the
 [configuration reference](/reference/config#coverage).
 
 - **Python** — the suite runs under `coverage.py` with branch coverage on; the combined line +
-  branch total meets `fail_under`.
+  branch total meets `fail_under`. A source with no branching constructs measures zero branches,
+  which is vacuously full branch coverage — the total reduces to the line percent.
 - **TypeScript** — the suite runs under `vitest` v8 coverage; **four independent metrics** (lines,
   branches, functions, statements) each meet their floor, because line coverage can read 100% while
   a branch lags.

@@ -1,0 +1,4 @@
+# The default package-shaped coverage fixture: `{pyproject.toml, src/**}` scanned at
+# src/. This file anchors pytest's rootdir at the package root, so the colocated suite's
+# `from <module> import ...` resolves when coverage runs at the scan path src/.
+[tool.pytest.ini_options]

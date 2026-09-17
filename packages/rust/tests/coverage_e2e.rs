@@ -38,6 +38,19 @@ fn conftest_omitted_exits_zero_against_a_100_floor() {
 }
 
 #[test]
+fn no_branches_exits_zero_against_a_100_floor() {
+    assert_eq!(unit_coverage_exit("no_branches/src", "floor100.toml"), 0);
+}
+
+#[test]
+fn no_branches_exits_zero_with_no_config_via_the_default_floor() {
+    assert_eq!(
+        unit_coverage_exit("no_branches/src", "no-such-config.toml"),
+        0
+    );
+}
+
+#[test]
 fn exempt_cov_exits_zero_against_a_100_floor() {
     assert_eq!(
         unit_coverage_exit("exempt_cov", "floor100_exempt_shim.toml"),

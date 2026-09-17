@@ -66,6 +66,10 @@ back to locate-or-skip.
 - [`build_command`](/reference/config#build-command) — the one-line declaration for a
   compile-before-pack step npm doesn't standardize: npm runs `prepare` / `prepack` on `pack`, but
   the build script's *name* (`build` in one package, `compile` in the next) is yours to state.
+  The job provisions the toolchain of the language it's packaging; a `build_command` that reaches
+  into a sibling package in another language [names that ecosystem's own
+  setup](/reference/config#a-command-naming-another-ecosystem-s-build), inline, as part of the
+  command.
 
 The check honors no exemption rules — a test file in the artifact is always a violation.
 

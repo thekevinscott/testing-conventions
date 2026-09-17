@@ -12,7 +12,7 @@ fn member() -> PathBuf {
 }
 
 #[test]
-fn a_feature_gated_integration_test_target_builds_and_kills_its_mutants() {
+fn a_feature_gated_integration_test_target_builds_but_its_kills_dont_count() {
     let (count, survivors) = expect_tested(
         measure_rust(
             &member(),
@@ -25,11 +25,11 @@ fn a_feature_gated_integration_test_target_builds_and_kills_its_mutants() {
     );
     assert!(
         count > 0,
-        "the engine judged mutants, so the pass carries its evidence; got {count}"
+        "the feature reaches the build phase, so the pass carries its evidence; got {count}"
     );
     assert!(
-        survivors.is_empty(),
-        "the gated module's integration test kills every mutant; got {survivors:?}"
+        !survivors.is_empty(),
+        "the gated module's only test lives in the integration tier, which mutation doesn't judge; got {survivors:?}"
     );
 }
 

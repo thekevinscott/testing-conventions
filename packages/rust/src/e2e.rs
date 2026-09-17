@@ -142,20 +142,22 @@ pub fn verify_scoped(repo: &Path, scope: &Path) -> Result<Verification> {
     verify_since(repo, scope, None)
 }
 
-/// Equivalent to [`verify_extra_scoped`] with no extra roots and no excludes.
+/// Equivalent to [`verify_extra_scoped`] with no extra roots, no excludes, and no `branch`
+/// override — Question 2 reads the checked-out branch's own receipt.
 pub fn verify_since(repo: &Path, scope: &Path, base: Option<&str>) -> Result<Verification> {
-    verify_extra_scoped(repo, scope, base, &[], &[])
+    verify_extra_scoped(repo, scope, base, &[], &[], None)
 }
 
 /// Verify the e2e decision at `repo`, joining **extra scopes** outside `scope` into what
-/// counts as scoped source and subtracting `excludes`. With `base`, both checks are content
-/// diffs of `<base>...HEAD`; without one, a committed receipt at `repo` is the whole check.
+/// counts as scoped source and subtracting `excludes`. With `base`, Question 2 scopes to
+/// `branch`'s own receipt (the checked-out branch if absent); without `base`, any receipt suffices.
 pub fn verify_extra_scoped(
     repo: &Path,
     scope: &Path,
     base: Option<&str>,
     extra_scopes: &[PathBuf],
     excludes: &[PathBuf],
+    branch: Option<&str>,
 ) -> Result<Verification> {
     let Some(base) = base else {
         return Ok(if has_receipts(repo) {
@@ -191,16 +193,24 @@ pub fn verify_extra_scoped(
         return Ok(Verification::Fresh);
     }
 
-    // Question 2 — does the branch's diff add or update a receipt? The filter drops
-    // deletions, so sweeping a stale receipt by hand never counts as a decision.
+    // Question 2 — does the acting branch's diff add or update *its own* receipt? The
+    // filter drops deletions, so sweeping a stale receipt by hand never counts. With no
+    // acting branch to name, every receipt counts instead of failing outright.
     let range = format!("{base}...HEAD");
+    let acting_branch = branch
+        .map(str::to_string)
+        .or_else(|| current_branch(repo).ok());
+    let receipt_pathspec = match &acting_branch {
+        Some(b) => format!("{RECEIPTS_DIR}/{}.json", branch_slug(b)),
+        None => RECEIPTS_DIR.to_string(),
+    };
     let receipt_diff = [
         "diff",
         "--name-only",
         "--diff-filter=ACMRT",
         &range,
         "--",
-        RECEIPTS_DIR,
+        &receipt_pathspec,
     ];
     let out = git_capture(repo, &receipt_diff)?;
     Ok(if out.is_empty() {

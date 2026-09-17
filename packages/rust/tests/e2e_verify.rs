@@ -164,7 +164,7 @@ fn verify_extra_scoped_with_no_extra_roots_matches_verify_since() {
     );
 
     assert_eq!(
-        verify_extra_scoped(&package, &package.join("src"), Some(&base), &[], &[]).unwrap(),
+        verify_extra_scoped(&package, &package.join("src"), Some(&base), &[], &[], None).unwrap(),
         verify_since(&package, &package.join("src"), Some(&base)).unwrap(),
         "no extra roots must be byte-identical to verify_since",
     );
@@ -246,7 +246,7 @@ fn verify_extra_scoped_flags_a_change_under_an_extra_root() {
     );
     let extra = [PathBuf::from("packages/rust/src")];
     assert_eq!(
-        verify_extra_scoped(&package, &package, Some(&base), &extra, &[]).unwrap(),
+        verify_extra_scoped(&package, &package, Some(&base), &extra, &[], None).unwrap(),
         Verification::Missing,
         "a non-excluded change under an extra root owes the binding a decision",
     );
@@ -266,7 +266,7 @@ fn verify_extra_scoped_passes_once_the_extra_root_change_is_attested() {
 
     let extra = [PathBuf::from("packages/rust/src")];
     assert_eq!(
-        verify_extra_scoped(&package, &package, Some(&base), &extra, &[]).unwrap(),
+        verify_extra_scoped(&package, &package, Some(&base), &extra, &[], None).unwrap(),
         Verification::Fresh,
         "attesting after the extra-root change must pass",
     );
@@ -289,7 +289,7 @@ fn verify_extra_scoped_ignores_a_change_under_an_excluded_subtree() {
     let extra = [PathBuf::from("packages/rust/src")];
     let exclude = [PathBuf::from("packages/rust/src/cli")];
     assert_eq!(
-        verify_extra_scoped(&package, &package, Some(&base), &extra, &exclude).unwrap(),
+        verify_extra_scoped(&package, &package, Some(&base), &extra, &exclude, None).unwrap(),
         Verification::Fresh,
         "a change only under an excluded subtree owes no decision",
     );
@@ -494,7 +494,7 @@ fn verify_extra_scoped_errors_on_an_extra_root_that_matches_no_tracked_path() {
     let base = rev_parse(&repo.0, "HEAD");
 
     let extra = [PathBuf::from("packages/rust/src")];
-    let err = verify_extra_scoped(&package, &package, Some(&base), &extra, &[])
+    let err = verify_extra_scoped(&package, &package, Some(&base), &extra, &[], None)
         .expect_err("an --extra-scope matching no tracked path must error");
     assert!(
         err.to_string().contains("extra-scope"),

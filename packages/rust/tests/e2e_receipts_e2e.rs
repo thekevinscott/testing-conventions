@@ -116,7 +116,7 @@ fn verify_base_passes_a_branch_whose_diff_carries_a_receipt() {
     repo.branch("feature/code");
     repo.commit_file("src/lib.rs", "pub fn changed() {}\n", "code");
     repo.commit_file(
-        &format!("{RECEIPTS_DIR}/feature-code-abcd012345.json"),
+        &format!("{RECEIPTS_DIR}/feature-code.json"),
         "{\"command\":\"true\",\"ran_at\":0,\"exit_code\":0,\"commit\":\"0\",\"branch\":\"x\"}\n",
         "receipt",
     );

@@ -250,6 +250,10 @@ enum E2eCommand {
         /// bindings) whose changes owe no decision. Repeatable.
         #[arg(long = "exclude")]
         exclude: Vec<PathBuf>,
+        /// The acting branch's name, for a checkout with no branch to read (a
+        /// detached HEAD). Absent, `verify` reads the checked-out branch.
+        #[arg(long)]
+        branch: Option<String>,
     },
     /// Print the standardized receipt slug for a branch name — the receipt
     /// lives at `e2e-attestations/<slug>.json`.
@@ -324,12 +328,14 @@ where
                 base,
                 extra_scope,
                 exclude,
+                branch,
             } => run_e2e_verify(
                 &path,
                 scope.as_deref(),
                 base.as_deref(),
                 &extra_scope,
                 &exclude,
+                branch.as_deref(),
             ),
             E2eCommand::Slug { branch } => run_e2e_slug(branch.as_deref()),
         },
@@ -919,17 +925,25 @@ fn run_e2e_attest(command: &str) -> anyhow::Result<i32> {
     Ok(0)
 }
 
-/// Verify a receipt under `path` answers this branch's e2e nudge. `0` when it does;
-/// otherwise prints the hint and returns `1`. `scope` defaults to `path`; `base`, when set,
-/// makes the check a `<base>...HEAD` content diff.
+/// Verify a receipt under `path` answers the acting branch's e2e nudge. `0` when it does;
+/// otherwise prints the hint and returns `1`. `scope` defaults to `path`, `branch` overrides
+/// the checked-out branch, and `base`, when set, makes the check a `<base>...HEAD` diff.
 fn run_e2e_verify(
     path: &Path,
     scope: Option<&Path>,
     base: Option<&str>,
     extra_scopes: &[PathBuf],
     excludes: &[PathBuf],
+    branch: Option<&str>,
 ) -> anyhow::Result<i32> {
-    match e2e::verify_extra_scoped(path, scope.unwrap_or(path), base, extra_scopes, excludes)? {
+    match e2e::verify_extra_scoped(
+        path,
+        scope.unwrap_or(path),
+        base,
+        extra_scopes,
+        excludes,
+        branch,
+    )? {
         e2e::Verification::Fresh => Ok(0),
         e2e::Verification::Missing => {
             eprintln!(

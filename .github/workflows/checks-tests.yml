@@ -1,0 +1,31 @@
+name: Checks package (tests)
+
+# Red/green tests for internals/checks. See docs/internals/repo.md, "The self-test
+# assertions package".
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tc-checks — unit + e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Unit + e2e tests
+        # The e2e tier reads this repo's workflow YAML and manifests, so a `paths:` filter
+        # would skip the runs that break it.
+        working-directory: internals/checks
+        run: uv run pytest -v --import-mode=importlib

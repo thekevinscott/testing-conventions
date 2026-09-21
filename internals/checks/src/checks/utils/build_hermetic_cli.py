@@ -23,4 +23,5 @@ def stage_hermetic_cli(commands, binary, node_dist, python_dist, stage_dir, root
     wheels = sorted((root_path / python_dist).glob("*.whl"))
     if len(wheels) != 1:
         raise CheckFailed(f"{root_path / python_dist} holds {len(wheels)} wheels; the hermetic artifact carries exactly one")
-    shutil.copyfile(wheels[0], stage / wheels[0].name)
+    (wheel,) = wheels
+    shutil.copyfile(wheel, stage / wheel.name)

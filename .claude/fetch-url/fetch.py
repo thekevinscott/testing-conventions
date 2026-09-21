@@ -29,11 +29,13 @@ Fetch strategy (each step falls back to the next):
        and can fall back to the /agent-browser skill or a manual paste.
 
 Slug rule (deterministic, collision-free, reversible): strip scheme + trailing
-slash, then replace every char outside [A-Za-z0-9._-] with '-'. One folder per
-exact URL.
+slash, then replace every char outside [A-Za-z0-9._-] with '-', capped at 120
+characters with a SHA-256 suffix past that. One folder per exact URL, and
+transcript.md's `url:` frontmatter carries the exact URL.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 import sys
@@ -64,10 +66,19 @@ BLOCK_MARKERS = (
 
 # ----- slug -----------------------------------------------------------------
 
+# Raising SLUG_MAX past 120 pushes a capture's deepest path over Windows's 260-character
+# MAX_PATH, and `actions/checkout` then fails the release with "Filename too long".
+SLUG_MAX = 120
+
+
 def compute_slug(url: str) -> str:
     u = re.sub(r"^https?://", "", url.strip())
     u = u.rstrip("/")
-    return re.sub(r"[^a-zA-Z0-9._-]", "-", u)
+    slug = re.sub(r"[^a-zA-Z0-9._-]", "-", u)
+    if len(slug) <= SLUG_MAX:
+        return slug
+    digest = hashlib.sha256(url.strip().encode()).hexdigest()[:8]
+    return f"{slug[: SLUG_MAX - 9].rsplit('-', 1)[0]}-{digest}"
 
 
 # ----- fetch ----------------------------------------------------------------

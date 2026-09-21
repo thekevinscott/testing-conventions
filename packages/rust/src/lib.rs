@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod changelog;
 pub mod co_change;
 pub mod colocated_test;
 pub mod config;
@@ -74,6 +75,16 @@ enum Command {
     E2e {
         #[command(subcommand)]
         command: E2eCommand,
+    },
+    /// Changelog conventions: a pull request that changes a package's public surface adds a
+    /// fragment recording it. Skipped when the repository keeps no fragment directories.
+    Changelog {
+        /// Base commit of the pull request; the range checked is `<base>...HEAD`.
+        #[arg(long)]
+        base: String,
+        /// Repository root to read the fragment layout from.
+        #[arg(default_value = ".")]
+        path: PathBuf,
     },
 }
 
@@ -319,6 +330,7 @@ where
             } => run_integration_lint(&path, language, &config),
         },
         Some(Command::Packaging { path, language }) => run_packaging(&path, language),
+        Some(Command::Changelog { base, path }) => run_changelog(&base, &path),
         Some(Command::Workflow { path }) => run_workflow(&path),
         Some(Command::E2e { command }) => match command {
             E2eCommand::Attest { command } => run_e2e_attest(&command),
@@ -858,6 +870,10 @@ fn apply_waivers(
 
 /// Inspect the built artifact at `artifact` — an unpacked directory or a packed archive —
 /// for test files matching `language`'s globs. `1` when any are present.
+fn run_changelog(_base: &str, _root: &Path) -> anyhow::Result<i32> {
+    todo!("run_changelog")
+}
+
 fn run_packaging(artifact: &Path, language: colocated_test::Language) -> anyhow::Result<i32> {
     let globs = match language {
         colocated_test::Language::Python => vec!["*_test.py".to_string()],

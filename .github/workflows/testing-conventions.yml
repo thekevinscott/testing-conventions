@@ -204,7 +204,6 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      # The testing-conventions wheel is named last: the drift guard reads a trailing token as an install argument.
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
@@ -217,7 +216,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
-          uv pip install pytest testing-conventions
+          if compgen -G "$GITHUB_WORKSPACE/hermetic-cli/*.whl" > /dev/null; then uv pip install pytest "$GITHUB_WORKSPACE"/hermetic-cli/*.whl; else uv pip install pytest testing-conventions; fi
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
@@ -293,7 +292,6 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      # The testing-conventions wheel is named last: the drift guard reads a trailing token as an install argument.
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
@@ -306,7 +304,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
-          uv pip install pytest testing-conventions
+          if compgen -G "$GITHUB_WORKSPACE/hermetic-cli/*.whl" > /dev/null; then uv pip install pytest "$GITHUB_WORKSPACE"/hermetic-cli/*.whl; else uv pip install pytest testing-conventions; fi
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
@@ -374,7 +372,6 @@ jobs:
           key: rust-toolchain-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             rust-toolchain-build-${{ runner.os }}-
-      # The testing-conventions wheel is named last: the drift guard reads a trailing token as an install argument.
       - if: matrix.language == 'python'
         uses: astral-sh/setup-uv@v7
         with:
@@ -387,7 +384,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
-          uv pip install pytest testing-conventions
+          if compgen -G "$GITHUB_WORKSPACE/hermetic-cli/*.whl" > /dev/null; then uv pip install pytest "$GITHUB_WORKSPACE"/hermetic-cli/*.whl; else uv pip install pytest testing-conventions; fi
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5

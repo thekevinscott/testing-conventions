@@ -7,18 +7,26 @@ class _Result:
         self.returncode = returncode
 
 
-def _root(tmp_path, binary, node_dist):
+def _root(tmp_path, binary, node_dist, python_dist, wheels=("testing_conventions-0.0.0-py3-none-any.whl",)):
     b = tmp_path / binary
     b.parent.mkdir(parents=True, exist_ok=True)
     b.write_bytes(b"binary")
     adapter = tmp_path / node_dist / "mutation" / "main.js"
     adapter.parent.mkdir(parents=True, exist_ok=True)
     adapter.write_text("adapter")
+    dist = tmp_path / python_dist
+    dist.mkdir(parents=True, exist_ok=True)
+    for name in wheels:
+        (dist / name).write_bytes(b"wheel")
     return tmp_path
 
 
 def test_runs_the_commands_in_order_then_stages(tmp_path, capsys):
-    binary, node_dist = "packages/rust/target/release/testing-conventions", "packages/node/dist"
+    binary, node_dist, python_dist = (
+        "packages/rust/target/release/testing-conventions",
+        "packages/node/dist",
+        "packages/python/dist",
+    )
     commands = [(["a"], "."), (["b"], "packages/node")]
     calls = []
 
@@ -26,9 +34,9 @@ def test_runs_the_commands_in_order_then_stages(tmp_path, capsys):
         calls.append((argv, cwd))
         return _Result(0)
 
-    root = _root(tmp_path, binary, node_dist)
+    root = _root(tmp_path, binary, node_dist, python_dist)
     stage = tmp_path / "stage"
-    stage_hermetic_cli(commands, binary, node_dist, str(stage), root=str(root), run=run)
+    stage_hermetic_cli(commands, binary, node_dist, python_dist, str(stage), root=str(root), run=run)
     assert [argv for argv, _ in calls] == [argv for argv, _ in commands]
     assert calls[0][1] == str(root / ".")
     assert calls[1][1] == str(root / "packages/node")
@@ -38,47 +46,79 @@ def test_runs_the_commands_in_order_then_stages(tmp_path, capsys):
     # Exact bits, not truthy — a partial-exec mode would pass a loose `& 0o111` check.
     assert staged.stat().st_mode & 0o777 == 0o755
     assert (stage / "dist" / "mutation" / "main.js").read_text() == "adapter"
+    assert (stage / "testing_conventions-0.0.0-py3-none-any.whl").read_bytes() == b"wheel"
 
 
 def test_stages_into_a_stage_dir_with_missing_parent_directories(tmp_path):
     # mkdir(parents=True): the stage dir's own parents may not exist yet.
-    binary, node_dist = "bin", "dist"
-    root = _root(tmp_path, binary, node_dist)
+    binary, node_dist, python_dist = "bin", "dist", "python-dist"
+    root = _root(tmp_path, binary, node_dist, python_dist)
     stage = tmp_path / "nested" / "missing" / "stage"
 
     def run(argv, cwd):
         return _Result(0)
 
-    stage_hermetic_cli([], binary, node_dist, str(stage), root=str(root), run=run)
+    stage_hermetic_cli([], binary, node_dist, python_dist, str(stage), root=str(root), run=run)
     assert (stage / "testing-conventions").read_bytes() == b"binary"
 
 
 def test_stages_into_an_already_existing_stage_dir(tmp_path):
     # mkdir(exist_ok=True): a rerun over an existing stage dir must not raise FileExistsError.
-    binary, node_dist = "bin", "dist"
-    root = _root(tmp_path, binary, node_dist)
+    binary, node_dist, python_dist = "bin", "dist", "python-dist"
+    root = _root(tmp_path, binary, node_dist, python_dist)
     stage = tmp_path / "stage"
     stage.mkdir(parents=True)
 
     def run(argv, cwd):
         return _Result(0)
 
-    stage_hermetic_cli([], binary, node_dist, str(stage), root=str(root), run=run)
+    stage_hermetic_cli([], binary, node_dist, python_dist, str(stage), root=str(root), run=run)
     assert (stage / "testing-conventions").read_bytes() == b"binary"
 
 
 def test_stages_dist_over_an_already_existing_dist_dir(tmp_path):
     # copytree(dirs_exist_ok=True): a rerun over an existing dist must merge, not raise.
-    binary, node_dist = "bin", "dist"
-    root = _root(tmp_path, binary, node_dist)
+    binary, node_dist, python_dist = "bin", "dist", "python-dist"
+    root = _root(tmp_path, binary, node_dist, python_dist)
     stage = tmp_path / "stage"
     (stage / "dist").mkdir(parents=True)
 
     def run(argv, cwd):
         return _Result(0)
 
-    stage_hermetic_cli([], binary, node_dist, str(stage), root=str(root), run=run)
+    stage_hermetic_cli([], binary, node_dist, python_dist, str(stage), root=str(root), run=run)
     assert (stage / "dist" / "mutation" / "main.js").read_text() == "adapter"
+
+
+def test_raises_when_the_python_dist_holds_no_wheel(tmp_path):
+    root = _root(tmp_path, "bin", "dist", "python-dist", wheels=())
+
+    def run(argv, cwd):
+        return _Result(0)
+
+    try:
+        stage_hermetic_cli([], "bin", "dist", "python-dist", str(tmp_path / "stage"), root=str(root), run=run)
+    except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
+        assert str(tmp_path / "python-dist") in error.message
+        assert "holds 0 wheels" in error.message
+    else:
+        raise AssertionError("a dist holding no wheel must raise")
+
+
+def test_raises_when_the_python_dist_holds_more_than_one_wheel(tmp_path):
+    # Two wheels make the artifact ambiguous — picking one silently stages a build nobody asked for.
+    wheels = ("testing_conventions-0.0.9-py3-none-any.whl", "testing_conventions-0.0.10-py3-none-any.whl")
+    root = _root(tmp_path, "bin", "dist", "python-dist", wheels=wheels)
+
+    def run(argv, cwd):
+        return _Result(0)
+
+    try:
+        stage_hermetic_cli([], "bin", "dist", "python-dist", str(tmp_path / "stage"), root=str(root), run=run)
+    except Exception as error:  # noqa: BLE001
+        assert "holds 2 wheels" in error.message
+    else:
+        raise AssertionError("a dist holding two wheels must raise")
 
 
 def test_raises_when_a_command_fails_and_stages_nothing(tmp_path):
@@ -86,7 +126,7 @@ def test_raises_when_a_command_fails_and_stages_nothing(tmp_path):
         return _Result(2)
 
     try:
-        stage_hermetic_cli([(["cargo", "build"], ".")], "bin", "dist", str(tmp_path / "stage"), root=str(tmp_path), run=run)
+        stage_hermetic_cli([(["cargo", "build"], ".")], "bin", "dist", "python-dist", str(tmp_path / "stage"), root=str(tmp_path), run=run)
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
         assert "cargo build" in error.message
         assert "exited 2" in error.message
@@ -102,7 +142,7 @@ def test_raises_when_a_command_is_killed_by_a_signal(tmp_path):
         return _Result(-9)
 
     try:
-        stage_hermetic_cli([(["cargo", "build"], ".")], "bin", "dist", str(tmp_path / "stage"), root=str(tmp_path), run=run)
+        stage_hermetic_cli([(["cargo", "build"], ".")], "bin", "dist", "python-dist", str(tmp_path / "stage"), root=str(tmp_path), run=run)
     except Exception as error:  # noqa: BLE001
         assert "exited -9" in error.message
     else:

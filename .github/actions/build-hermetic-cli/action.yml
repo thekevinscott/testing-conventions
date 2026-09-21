@@ -1,7 +1,7 @@
 name: 'Build the hermetic CLI'
 description: >-
-  Repo-only helper: provisions the rust/node/uv toolchains, builds the CLI binary and the TS
-  mutation adapter from HEAD via `tc-checks build-hermetic-cli`, and uploads both as the
+  Repo-only helper: provisions the rust/node/uv toolchains, builds the CLI binary, Python wheel,
+  and TS mutation adapter from HEAD via `tc-checks build-hermetic-cli`, and uploads them as the
   `hermetic-cli` artifact the reusable workflow's rule jobs download. The caller's `build-cli:`
   job holds the checkout; this action runs everything after it.
 

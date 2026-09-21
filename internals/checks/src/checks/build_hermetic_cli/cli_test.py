@@ -10,12 +10,19 @@ def test_commands_are_the_expected_builds():
         ),
         (["pnpm", "install", "--no-frozen-lockfile"], "packages/node"),
         (["pnpm", "run", "build"], "packages/node"),
+        (["uv", "build", "--wheel"], "packages/python"),
     ]
 
 
 def test_binary_and_node_dist_are_the_release_build_outputs():
     assert BINARY == "packages/rust/target/release/testing-conventions"
     assert NODE_DIST == "packages/node/dist"
+
+
+def test_python_dist_is_the_wheel_build_output():
+    from checks.build_hermetic_cli.cli import PYTHON_DIST
+
+    assert PYTHON_DIST == "packages/python/dist"
 
 
 def test_declares_the_stage_dir_argument_with_its_default():
@@ -28,5 +35,7 @@ def test_stages_this_checks_own_commands_and_outputs_into_the_given_dir(monkeypa
     staged = []
     monkeypatch.setattr("checks.build_hermetic_cli.cli.stage_hermetic_cli", lambda *args: staged.append(args))
     cli.callback(stage_dir="somewhere")
-    assert staged == [(COMMANDS, BINARY, NODE_DIST, "somewhere")]
+    from checks.build_hermetic_cli.cli import PYTHON_DIST
+
+    assert staged == [(COMMANDS, BINARY, NODE_DIST, PYTHON_DIST, "somewhere")]
     assert capsys.readouterr().out == "staged the hermetic CLI artifact at somewhere\n"

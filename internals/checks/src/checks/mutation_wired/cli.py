@@ -15,6 +15,6 @@ def cli(workflow: str) -> None:
     if "unit mutation --language" not in Path(workflow).read_text():
         raise CheckFailed(
             "the reusable workflow does not invoke `unit mutation` — the shipped mutation "
-            "rule is not enforced on the @v0 path (#204)"
+            "rule is not enforced on the @v0 path"
         )
     click.echo("reusable workflow invokes `unit mutation`")

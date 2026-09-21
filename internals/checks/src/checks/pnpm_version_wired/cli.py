@@ -25,14 +25,14 @@ def cli(workflow: str) -> None:
         raise CheckFailed(
             f"no `{PNPM_SETUP}` step in the reusable workflow sets a `version:` — with neither "
             "that nor a consumer `packageManager` pin the action errors 'No pnpm version is "
-            "specified' (#475)"
+            "specified'"
         )
     literals = [version for version in versions if DERIVED not in version]
     if literals:
         raise CheckFailed(
             f"{len(literals)} `{PNPM_SETUP}` step(s) pin a literal pnpm version "
             f"({', '.join(literals)}) instead of `{DERIVED}` — that conflicts with any consumer "
-            "`packageManager` pin and fails the job before it installs anything (#475)"
+            "`packageManager` pin and fails the job before it installs anything"
         )
     unguarded = [version for version in versions if FALLBACK not in version]
     if unguarded:
@@ -40,7 +40,7 @@ def cli(workflow: str) -> None:
             f"{len(unguarded)} `{PNPM_SETUP}` step(s) read `{DERIVED}` with no `{FALLBACK}` "
             f"fallback ({', '.join(unguarded)}) — a published detect that predates the output "
             "hands back an empty string, and an empty `version` errors 'No pnpm version is "
-            "specified' against a manifest with no pin, blocking the release (#475)"
+            "specified' against a manifest with no pin, blocking the release"
         )
     click.echo(
         f"all {len(versions)} pnpm/action-setup steps take their version from detect, with a "

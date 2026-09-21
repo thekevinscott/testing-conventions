@@ -16,6 +16,6 @@ def cli(workflow: str) -> None:
         raise CheckFailed(
             "the reusable workflow has no `gates` input — gate selection is all-or-nothing, so a "
             "consumer that runs the suite-executing gates in its own build-capable jobs cannot "
-            "adopt the workflow for the static gates (#262)"
+            "adopt the workflow for the static gates"
         )
     click.echo("reusable workflow scopes its gates to the `gates` allowlist")

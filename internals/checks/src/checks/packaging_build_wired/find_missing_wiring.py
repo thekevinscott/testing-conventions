@@ -21,21 +21,21 @@ _HAS_CRATE_SCAN = re.compile(r"target/package")
 _GATE_ERROR = (
     "the packaging job's `if:` doesn't run on detect's packaging_build output — a native "
     "package whose manifest states a build (uv build / <pm> pack / cargo package) but ships "
-    "no committed dist/ and no uploaded artifact is skipped, so the gate never runs (#335)"
+    "no committed dist/ and no uploaded artifact is skipped, so the gate never runs"
 )
 _PROVISION_ERROR = (
     "the packaging job doesn't provision the toolchain for detect's packaging_language — the "
     "derived build has no cargo/uv/node to run under, so it fails before producing a "
-    "distribution to scan (#335)"
+    "distribution to scan"
 )
 _BUILD_ERROR = (
     "the packaging job doesn't run the derived packaging_build (`eval \"$PACKAGING_BUILD\"` "
     "wired from detect's packaging_build output) before scanning — no distribution is built, "
-    "so a package with no committed dist/ has nothing to scan (#335)"
+    "so a package with no committed dist/ has nothing to scan"
 )
 _CRATE_SCAN_ERROR = (
     "the packaging job doesn't scan target/package — a `cargo package` crate is written there, "
-    "not under dist/, so a built crate is never inspected for shipped test files (#335)"
+    "not under dist/, so a built crate is never inspected for shipped test files"
 )
 
 

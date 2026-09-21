@@ -21,6 +21,6 @@ def cli(workflow: str) -> None:
     if problems:
         raise CheckFailed(
             "the reusable workflow does not consolidate the five static gates into one `static` "
-            "job (#410): " + "; ".join(problems)
+            "job: " + "; ".join(problems)
         )
     click.echo("the five static gates run as steps of one `static` job per language")

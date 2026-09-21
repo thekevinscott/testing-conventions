@@ -15,6 +15,6 @@ def cli(workflow: str) -> None:
     if "packaging_dist" not in Path(workflow).read_text():
         raise CheckFailed(
             "the packaging job doesn't gate on detect's `packaging_dist` — "
-            "packaging isn't default-on (#186)"
+            "packaging isn't default-on"
         )
     click.echo("packaging is default-on (gates on packaging_dist)")

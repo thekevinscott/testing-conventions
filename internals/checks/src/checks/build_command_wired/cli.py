@@ -15,6 +15,6 @@ def cli(workflow: str) -> None:
     if "needs.detect.outputs.build_command" not in Path(workflow).read_text():
         raise CheckFailed(
             "the reusable workflow has no derived `build_command` step — a native-binding "
-            "consumer's compiled module is never built before the suite runs (#243/#289)"
+            "consumer's compiled module is never built before the suite runs"
         )
     click.echo("reusable workflow wires a build_command step")

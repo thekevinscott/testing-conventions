@@ -15,7 +15,7 @@ def cli(workflow: str) -> None:
     if "coverage_languages" not in Path(workflow).read_text():
         raise CheckFailed(
             "the reusable workflow's unit-coverage job does not fan out over rust (no "
-            "`coverage_languages` matrix) — the shipped Rust coverage arm (#37) is not "
-            "enforced on the @v0 path (#171)"
+            "`coverage_languages` matrix) — the shipped Rust coverage arm is not "
+            "enforced on the @v0 path"
         )
     click.echo("reusable workflow fans unit-coverage over rust")

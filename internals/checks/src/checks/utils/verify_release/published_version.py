@@ -12,7 +12,7 @@ def published_version(tags: list[str]) -> str:
     if not versions:
         raise ValueError(
             f"no {NPM_TAG_PREFIX}* tag reachable from the release commit — no published npm "
-            "version to pin the verification to; refusing to promote (#357)"
+            "version to pin the verification to; refusing to promote"
         )
     return max(versions, key=version_key)
 

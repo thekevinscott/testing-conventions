@@ -17,6 +17,6 @@ def cli(workflow: str) -> None:
         raise CheckFailed(
             "a coverage job (unit-coverage / coverage-changed) does not reference "
             "needs.detect.outputs.package_root — TS install / Python env / build_command still "
-            "run at the checkout root, not the derived package root (#278)"
+            "run at the checkout root, not the derived package root"
         )
     click.echo("unit-coverage and coverage-changed install/build at the derived package root")

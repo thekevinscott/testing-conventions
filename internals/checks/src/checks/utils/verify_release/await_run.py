@@ -18,6 +18,6 @@ def await_run(workflow: str, sha: str, since: str, run, sleep, clock) -> int:
             if clock() >= deadline:
                 raise TimeoutError(
                     f"dispatched run for {workflow} at {sha} never registered within "
-                    f"{RUN_APPEAR_TIMEOUT_S}s (#357)"
+                    f"{RUN_APPEAR_TIMEOUT_S}s"
                 )
             sleep(RUN_POLL_INTERVAL_S)

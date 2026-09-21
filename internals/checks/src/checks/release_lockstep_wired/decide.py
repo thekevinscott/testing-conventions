@@ -17,7 +17,7 @@ def lockstep_error(packages) -> Optional[str]:
     crates = [package for package in packages if package.get("kind") == "crates"]
     if len(crates) != 1:
         return f"{len(crates)} packages have kind `crates`, so the CLI crate is ambiguous"
-    crate = crates[0]
+    (crate,) = crates
     glob = f"{crate['path']}/**"
     published = [package for package in packages if package.get("kind") in PUBLISHED_KINDS]
     if not published:

@@ -42,6 +42,6 @@ def test_command_raises_on_an_unwired_workflow(tmp_path):
     try:
         cli.callback(workflow=str(workflow))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
-        assert "#335" in error.message
+        assert error.message.endswith("so a package with no committed dist/ has nothing to scan")
     else:
         raise AssertionError("an unwired workflow must raise")

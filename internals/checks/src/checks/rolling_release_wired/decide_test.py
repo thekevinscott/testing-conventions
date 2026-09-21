@@ -9,15 +9,19 @@ GATED = "on:\n  workflow_run:\n    workflows: [Release]\nconcurrency:\n  group: 
 
 
 def test_move_tag_error_when_the_file_is_absent():
-    assert "no dedicated advance workflow" in check_move_major_tag(None)
+    assert check_move_major_tag(None).endswith("has no dedicated advance workflow")
 
 
 def test_move_tag_error_when_not_publish_gated():
-    assert "workflow_run" in check_move_major_tag("concurrency:\n  group: x\n")
+    error = check_move_major_tag("concurrency:\n  group: x\n")
+    assert "workflow_run" in error
+    assert error.endswith("@v0 could advance before the binary publishes")
 
 
 def test_move_tag_error_when_not_concurrency_guarded():
-    assert "concurrency group" in check_move_major_tag("on:\n  workflow_run: {}\n")
+    error = check_move_major_tag("on:\n  workflow_run: {}\n")
+    assert "concurrency group" in error
+    assert error.endswith("out-of-order tag moves are unguarded")
 
 
 def test_move_tag_clean_when_gated_and_guarded():

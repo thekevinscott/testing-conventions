@@ -21,6 +21,6 @@ def cli(workflow: str) -> None:
             + ", ".join(unwired)
             + " — so they still drive the published npx binary and the merge gate depends on "
             "npm-latest for their assertions; each needs a `needs: [... build-cli ...]` edge and "
-            "the ./.github/actions/download-hermetic-cli step (#379)"
+            "the ./.github/actions/download-hermetic-cli step"
         )
     click.echo("every direct-drive red-path job runs the hermetic CLI built from HEAD")

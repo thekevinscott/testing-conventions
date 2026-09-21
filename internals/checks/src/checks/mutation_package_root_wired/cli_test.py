@@ -52,5 +52,6 @@ def test_command_raises_when_only_a_neighbouring_job_is_wired(tmp_path):
         cli.callback(workflow=str(workflow))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
         assert "the mutation job does not reference" in error.message
+        assert error.message.endswith("fails the job")
     else:
         raise AssertionError("an unwired workflow must raise")

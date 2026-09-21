@@ -7,7 +7,7 @@ def layout_error(sha: str, absent: list[str]) -> str:
     return (
         f"the release archive of {sha} is missing " + ", ".join(absent)
         + " — a consumer's remote `detect` action fetch would resolve a broken action the moment "
-        "@v0 moves; refusing to promote (#357)"
+        "@v0 moves; refusing to promote"
     )
 
 

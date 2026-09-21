@@ -15,6 +15,6 @@ def cli(workflow: str) -> None:
     if "unit lint --language" not in Path(workflow).read_text():
         raise CheckFailed(
             "the reusable workflow does not invoke `unit lint` — the shipped lint rule is "
-            "not enforced on the @v0 path (#125)"
+            "not enforced on the @v0 path"
         )
     click.echo("reusable workflow invokes `unit lint`")

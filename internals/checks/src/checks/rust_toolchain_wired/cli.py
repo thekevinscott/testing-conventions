@@ -17,6 +17,6 @@ def cli(workflow: str) -> None:
         raise CheckFailed(
             "the reusable workflow has no `rust_toolchain` input — a native binding whose "
             "build_command compiles a Rust core has no cargo in the python/typescript "
-            "suite-executing jobs, so the build fails before the suite runs (#263)"
+            "suite-executing jobs, so the build fails before the suite runs"
         )
     click.echo("reusable workflow provisions a Rust toolchain behind `rust_toolchain`")

@@ -28,12 +28,12 @@ def cli(workflow: str, callers: tuple[str, ...]) -> None:
     if "inputs.hermetic" in text:
         raise CheckFailed(
             "the reusable workflow references `inputs.hermetic` — hermetic mode is derived from "
-            "the caller (#356), never declared by an input; remove the flag"
+            "the caller, never declared by an input; remove the flag"
         )
     if "build-cli:" in text:
         raise CheckFailed(
             "the reusable workflow declares a `build-cli` job — the hermetic build lives in the "
-            "repo-only caller workflows (#356): a guarded job still renders a skipped row in "
+            "repo-only caller workflows: a guarded job still renders a skipped row in "
             "every consumer's checks UI, so the consumer-facing file carries hermetic steps only"
         )
     missing = []
@@ -52,7 +52,7 @@ def cli(workflow: str, callers: tuple[str, ...]) -> None:
             "the reusable workflow has no derived hermetic (build-from-HEAD) mode — missing "
             + ", ".join(missing)
             + " — so an in-repo caller (self-test, dogfood) can only validate the published "
-            "detect/binary, not the commit under test (#356)"
+            "detect/binary, not the commit under test"
         )
     unwired_fallback = unwired_steps(text)
     if unwired_fallback:
@@ -61,7 +61,7 @@ def cli(workflow: str, callers: tuple[str, ...]) -> None:
             + ", ".join(unwired_fallback)
             + " with no `CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}` in that step's "
             "own `env:` — `CLI_COMMAND` is step-local, so those steps expand to the published "
-            "binary while the file-wide fallback text stays intact: green, with Layer 1 off (#356)"
+            "binary while the file-wide fallback text stays intact: green, with Layer 1 off"
         )
     for caller in callers:
         caller_text = Path(caller).read_text()
@@ -69,13 +69,13 @@ def cli(workflow: str, callers: tuple[str, ...]) -> None:
             raise CheckFailed(
                 f"{caller} has no `build-cli` job — every repo-only caller of the reusable "
                 "workflow must build and stage the hermetic-cli artifact its hermetic rule jobs "
-                "download (#356)"
+                "download"
             )
         if "uses: ./.github/actions/build-hermetic-cli" not in caller_text:
             raise CheckFailed(
                 f"{caller}'s `build-cli` job doesn't call the shared "
                 "`./.github/actions/build-hermetic-cli` composite action — inlining the build "
-                "steps here instead lets this caller's build drift from the other caller's (#356)"
+                "steps here instead lets this caller's build drift from the other caller's"
             )
         unwired = [
             name
@@ -86,6 +86,6 @@ def cli(workflow: str, callers: tuple[str, ...]) -> None:
             raise CheckFailed(
                 f"{caller} calls the reusable workflow from {', '.join(unwired)} with no "
                 "`needs: [... build-cli ...]` on that job — without the edge the build races "
-                "the artifact download and fails flaky instead of deterministically (#356)"
+                "the artifact download and fails flaky instead of deterministically"
             )
     click.echo("hermetic build-from-HEAD mode is derived, caller-built, and fully wired")

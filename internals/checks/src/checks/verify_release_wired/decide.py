@@ -24,7 +24,7 @@ def check_move_gated_on_verification(text: Optional[str]) -> Optional[str]:
     if text is None:
         return (
             "missing .github/workflows/move-major-tag.yml — no workflow advances @v0, so there is "
-            "nothing to gate on verification (#357)"
+            "nothing to gate on verification"
         )
     missing = []
     if LAYOUT_STEP not in text:
@@ -39,13 +39,13 @@ def check_move_gated_on_verification(text: Optional[str]) -> Optional[str]:
             "move-major-tag.yml advances @v0 with no pre-move verification — missing "
             + ", ".join(missing)
             + " — so a release that publishes a binary + workflow combination the consumer surface "
-            "rejects would still move @v0 and turn main/consumers red (#357)"
+            "rejects would still move @v0 and turn main/consumers red"
         )
     move_jobs = [(name, block) for name, block in iter_job_blocks(text) if MOVE_STEP in block]
     if not move_jobs:
         return (
             "no job in move-major-tag.yml runs move_major_tag.py — the forward-only tag move must "
-            "stay the gated helper, not inline logic (#357, #235)"
+            "stay the gated helper, not inline logic"
         )
     for name, block in move_jobs:
         ungated = [job for job in VERIFY_JOBS if job not in block]
@@ -53,6 +53,6 @@ def check_move_gated_on_verification(text: Optional[str]) -> Optional[str]:
             return (
                 f"the `{name}` job advances @v0 without `needs:` on {', '.join(ungated)} — the move "
                 "isn't gated on verification, so a red layout check or a red version-pinned suite "
-                "wouldn't stop the promotion (#357)"
+                "wouldn't stop the promotion"
             )
     return None

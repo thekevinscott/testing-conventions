@@ -18,6 +18,6 @@ def cli(workflow: str) -> None:
         raise CheckFailed(
             "the mutation job does not reference needs.detect.outputs.package_root — it still "
             "installs/builds at the checkout root, so a per-package-lockfile monorepo (or a "
-            "non-pnpm TS package, or a uv-managed Python package) fails the job (#279)"
+            "non-pnpm TS package, or a uv-managed Python package) fails the job"
         )
     click.echo("mutation job installs and builds from the derived package root")

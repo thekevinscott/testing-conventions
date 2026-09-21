@@ -9,6 +9,6 @@ def check_release_no_inline_tag_move(text: str) -> Optional[str]:
     if "tag -f v0" in text:
         return (
             "release.yml moves @v0 inline (`git tag -f v0`) — the move belongs in the gated "
-            "move-major-tag.yml, not the publish workflow (#235)"
+            "move-major-tag.yml, not the publish workflow"
         )
     return None

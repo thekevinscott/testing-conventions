@@ -15,7 +15,7 @@ from checks.utils.check_failed import CheckFailed
 def cli(workflow: str) -> None:
     if not wires_diff_scoped(Path(workflow).read_text()):
         raise CheckFailed(
-            "the reusable workflow does not run the diff-scoped `--base` checks (co-change "
-            "#161 / changed-line coverage #162) — they never run in CI (#172)"
+            "the reusable workflow does not run the diff-scoped `--base` checks "
+            "(co-change, changed-line coverage) — they never run in CI"
         )
     click.echo("reusable workflow runs the diff-scoped --base checks")

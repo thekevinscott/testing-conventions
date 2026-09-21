@@ -22,12 +22,16 @@ jobs:
 
 
 def test_error_when_the_file_is_absent():
-    assert "no workflow advances @v0" in check_move_gated_on_verification(None)
+    error = check_move_gated_on_verification(None)
+    assert "no workflow advances @v0" in error
+    assert error.endswith("nothing to gate on verification")
 
 
 def test_error_when_the_layout_check_is_missing():
     text = WIRED.replace('tc-checks verify-release check-layout "$SHA"', "echo skip")
-    assert "layout check" in check_move_gated_on_verification(text)
+    error = check_move_gated_on_verification(text)
+    assert "layout check" in error
+    assert error.endswith("turn main/consumers red")
 
 
 def test_error_when_the_suite_dispatch_is_missing():
@@ -43,7 +47,9 @@ def test_error_when_a_suite_workflow_is_not_dispatched():
 
 def test_error_when_no_job_runs_the_move_helper():
     text = WIRED.replace("python3 internals/move-major-tag/src/move_major_tag.py", "echo done")
-    assert "move_major_tag.py" in check_move_gated_on_verification(text)
+    error = check_move_gated_on_verification(text)
+    assert "move_major_tag.py" in error
+    assert error.endswith("not inline logic")
 
 
 def test_error_when_the_move_job_is_not_gated_on_the_verify_jobs():
@@ -64,6 +70,7 @@ def test_error_when_the_move_job_needs_only_one_verify_job():
     error = check_move_gated_on_verification(text)
     assert "verify-suite" in error
     assert "verify-layout" not in error
+    assert error.endswith("wouldn't stop the promotion")
 
 
 def test_clean_when_fully_wired_and_gated():

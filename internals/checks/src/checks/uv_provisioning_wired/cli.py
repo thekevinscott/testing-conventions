@@ -18,6 +18,6 @@ def cli(workflow: str) -> None:
         raise CheckFailed(
             "the reusable workflow does not provision Python with uv alone — an "
             "actions/setup-python + `python -m pip install` arm survives, or the python-arm "
-            "provisioning steps drift across unit-coverage / coverage-changed / mutation (#399)"
+            "provisioning steps drift across unit-coverage / coverage-changed / mutation"
         )
     click.echo("the suite-executing jobs provision Python with uv alone, identically")

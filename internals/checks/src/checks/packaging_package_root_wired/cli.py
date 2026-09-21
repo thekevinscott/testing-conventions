@@ -16,6 +16,6 @@ def cli(workflow: str) -> None:
         raise CheckFailed(
             "the reusable workflow's packaging job does not reference "
             "needs.detect.outputs.package_root — a per-package dist/ is never discovered, only a "
-            "checkout-root one (#280)"
+            "checkout-root one"
         )
     click.echo("reusable workflow's packaging job reads the derived package_root")

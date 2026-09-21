@@ -17,6 +17,6 @@ def cli(workflow: str) -> None:
     if re.search(r"uses:\s*\S*actions/detect@", Path(workflow).read_text()) is None:
         raise CheckFailed(
             "the reusable workflow doesn't use the detect action — detection still runs as "
-            "inline bash, off the tested engine (#185)"
+            "inline bash, off the tested engine"
         )
     click.echo("reusable workflow detects via the detect action")

@@ -21,28 +21,27 @@ _HAS_EXCLUDE_FROM_DETECT = re.compile(r"EXCLUDE:\s*.*e2e_exclude")
 _SCOPE_ERROR = (
     "the e2e-verify job doesn't pass --scope naming inputs.source — the freshness walk "
     "is scoped to the derived package_root instead, which can be broader than what the "
-    "caller's own source input names (#294)"
+    "caller's own source input names"
 )
 _BASE_ERROR = (
     "the e2e-verify job doesn't pass --base naming inputs.base — the freshness walk "
     "is history-absolute instead of scoped to this branch's `<base>..HEAD` diff, which "
-    "reds unrelated PRs on a squash-merging repo (#319)"
+    "reds unrelated PRs on a squash-merging repo"
 )
 _GATE_ERROR = (
     "the e2e-verify job isn't gated to `github.event_name == 'pull_request'` — its "
     "--base diff needs a base ref, so it must ride the same pull-request gate as the "
-    "other diff-scoped jobs (#319)"
+    "other diff-scoped jobs"
 )
 _EXTRA_SCOPE_ERROR = (
     "the e2e-verify job doesn't append $EXTRA_SCOPE from detect's e2e_extra_scope output — a "
     "shared source tree beside the package (a native core bound into several bindings) can't "
-    "join the freshness walk, so a core-only PR leaves the binding attestation falsely fresh "
-    "(#333)"
+    "join the freshness walk, so a core-only PR leaves the binding attestation falsely fresh"
 )
 _EXCLUDE_ERROR = (
     "the e2e-verify job doesn't append $EXCLUDE from detect's e2e_exclude output — a "
     "feature-gated subtree of an extra root (a core cli/ compiled out of the bindings) can't "
-    "be carved back out, so a change only under it would falsely stale the attestation (#333)"
+    "be carved back out, so a change only under it would falsely stale the attestation"
 )
 
 

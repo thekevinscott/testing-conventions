@@ -16,6 +16,7 @@ def test_raises_on_an_unwired_workflow(tmp_path):
         cli.callback(workflow=str(workflow))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
         assert "does not reference" in error.message
+        assert error.message.endswith("only a checkout-root one")
     else:
         raise AssertionError("an unwired workflow must raise")
 

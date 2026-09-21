@@ -22,5 +22,8 @@ def test_command_raises_on_an_unwired_workflow(tmp_path):
         cli.callback(workflow=str(workflow))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
         assert "colocated_test_languages" in error.message
+        assert error.message.endswith(
+            "the shipped rust presence arm is not enforced on the @v0 path"
+        )
     else:
         raise AssertionError("an unwired workflow must raise")

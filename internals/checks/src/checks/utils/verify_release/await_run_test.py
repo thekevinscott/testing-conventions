@@ -52,7 +52,7 @@ def test_await_run_times_out_when_the_deadline_is_reached():
     try:
         await_run("a.yml", "sha", "2026-07-08T10:00:00Z", run, sleep=lambda _s: None, clock=lambda: next(clock))
     except TimeoutError as error:
-        assert "never registered" in str(error)
+        assert str(error).endswith(f"never registered within {RUN_APPEAR_TIMEOUT_S}s")
     else:
         raise AssertionError("reaching the deadline must time out, not poll on")
 
@@ -70,6 +70,6 @@ def test_await_run_times_out_when_the_clock_passes_the_deadline():
     try:
         await_run("a.yml", "sha", "2026-07-08T10:00:00Z", run, sleep=lambda _s: None, clock=lambda: next(clock))
     except TimeoutError as error:
-        assert "never registered" in str(error)
+        assert str(error).endswith(f"never registered within {RUN_APPEAR_TIMEOUT_S}s")
     else:
         raise AssertionError("passing the deadline must time out, not poll on")

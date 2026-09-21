@@ -400,6 +400,15 @@ breakage — the precedent is `internals/checks/src/checks/changelog_gate/git_op
 result = runner(["git", "diff", "--name-only", "--diff-filter=A", f"{base_sha}...{head_sha}"], ...)
 ```
 
+## Failure messages name the constraint, not the issue
+
+A message a check emits — a `CheckFailed`, a raised error, anything that reaches a CI annotation —
+states the constraint it enforces and stops. It carries no issue or PR number. The comment rule
+above bans archaeology because `git blame` already holds it; here the case is stronger, since the
+reader of a red annotation has neither the repo nor the history in front of them, only a number
+they cannot resolve. Where a message's reasoning needs more room than one clause, `docs/internals/`
+carries it.
+
 ## Code style
 
 Internal modules in this repo are **not** underscore-prefixed — an empty `__init__.py` already says

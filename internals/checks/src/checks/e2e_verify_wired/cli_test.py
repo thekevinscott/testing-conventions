@@ -25,5 +25,8 @@ def test_command_raises_on_an_unwired_workflow(tmp_path):
         cli.callback(workflow=str(workflow))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
         assert "e2e verify" in error.message
+        assert error.message.endswith(
+            "the attestation freshness gate isn't on the @v0 path"
+        )
     else:
         raise AssertionError("an unwired workflow must raise")

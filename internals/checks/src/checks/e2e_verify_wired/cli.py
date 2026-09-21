@@ -16,6 +16,6 @@ def cli(workflow: str) -> None:
     if not wires_e2e_verify(Path(workflow).read_text()):
         raise CheckFailed(
             "the reusable workflow does not offer an opt-in `e2e verify` job (input `run_e2e` "
-            "+ `e2e verify`) — the #68 freshness gate isn't on the @v0 path (#173)"
+            "+ `e2e verify`) — the attestation freshness gate isn't on the @v0 path"
         )
     click.echo("reusable workflow offers opt-in e2e verify")

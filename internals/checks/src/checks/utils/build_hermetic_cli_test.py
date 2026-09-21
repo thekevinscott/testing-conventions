@@ -7,16 +7,17 @@ class _Result:
         self.returncode = returncode
 
 
-def _root(tmp_path, binary, node_dist, python_dist):
+def _root(tmp_path, binary, node_dist, python_dist, wheels=("testing_conventions-0.0.0-py3-none-any.whl",)):
     b = tmp_path / binary
     b.parent.mkdir(parents=True, exist_ok=True)
     b.write_bytes(b"binary")
     adapter = tmp_path / node_dist / "mutation" / "main.js"
     adapter.parent.mkdir(parents=True, exist_ok=True)
     adapter.write_text("adapter")
-    wheel = tmp_path / python_dist / "testing_conventions-0.0.0-py3-none-any.whl"
-    wheel.parent.mkdir(parents=True, exist_ok=True)
-    wheel.write_bytes(b"wheel")
+    dist = tmp_path / python_dist
+    dist.mkdir(parents=True, exist_ok=True)
+    for name in wheels:
+        (dist / name).write_bytes(b"wheel")
     return tmp_path
 
 
@@ -87,6 +88,37 @@ def test_stages_dist_over_an_already_existing_dist_dir(tmp_path):
 
     stage_hermetic_cli([], binary, node_dist, python_dist, str(stage), root=str(root), run=run)
     assert (stage / "dist" / "mutation" / "main.js").read_text() == "adapter"
+
+
+def test_raises_when_the_python_dist_holds_no_wheel(tmp_path):
+    root = _root(tmp_path, "bin", "dist", "python-dist", wheels=())
+
+    def run(argv, cwd):
+        return _Result(0)
+
+    try:
+        stage_hermetic_cli([], "bin", "dist", "python-dist", str(tmp_path / "stage"), root=str(root), run=run)
+    except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
+        assert str(tmp_path / "python-dist") in error.message
+        assert "holds 0 wheels" in error.message
+    else:
+        raise AssertionError("a dist holding no wheel must raise")
+
+
+def test_raises_when_the_python_dist_holds_more_than_one_wheel(tmp_path):
+    # Two wheels make the artifact ambiguous — picking one silently stages a build nobody asked for.
+    wheels = ("testing_conventions-0.0.9-py3-none-any.whl", "testing_conventions-0.0.10-py3-none-any.whl")
+    root = _root(tmp_path, "bin", "dist", "python-dist", wheels=wheels)
+
+    def run(argv, cwd):
+        return _Result(0)
+
+    try:
+        stage_hermetic_cli([], "bin", "dist", "python-dist", str(tmp_path / "stage"), root=str(root), run=run)
+    except Exception as error:  # noqa: BLE001
+        assert "holds 2 wheels" in error.message
+    else:
+        raise AssertionError("a dist holding two wheels must raise")
 
 
 def test_raises_when_a_command_fails_and_stages_nothing(tmp_path):

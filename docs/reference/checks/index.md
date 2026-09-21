@@ -44,6 +44,7 @@ carries the complete factual record.
 | [`mutation`](./mutation) | Unit mutation | Does the unit suite **verify** the code — break it, and a test fails? |
 | [`packaging`](./packaging) | Packaging | Does the **built artifact** ship no test files? |
 | [`e2e-verify`](./e2e-verify) | E2E attestation freshness | Does a branch that changed the code record one visible **e2e decision**? |
+| [`changelog`](./changelog) | run from the CLI | Does a pull request that changed a package's **public surface** add a fragment recording it? |
 
 Each check's page states the facts and opens with the why; the [explanation section](/explanation/)
 carries the same ground as discursive essays — the testing model, the unit ladder, and the design

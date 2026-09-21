@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod changelog;
 pub mod co_change;
 pub mod colocated_test;
 pub mod config;
@@ -74,6 +75,16 @@ enum Command {
     E2e {
         #[command(subcommand)]
         command: E2eCommand,
+    },
+    /// Changelog conventions: a pull request that changes a package's public surface adds a
+    /// fragment recording it. Skipped when the repository keeps no fragment directories.
+    Changelog {
+        /// Base commit of the pull request; the range checked is `<base>...HEAD`.
+        #[arg(long)]
+        base: String,
+        /// Repository root to read the fragment layout from.
+        #[arg(default_value = ".")]
+        path: PathBuf,
     },
 }
 
@@ -319,6 +330,7 @@ where
             } => run_integration_lint(&path, language, &config),
         },
         Some(Command::Packaging { path, language }) => run_packaging(&path, language),
+        Some(Command::Changelog { base, path }) => run_changelog(&base, &path),
         Some(Command::Workflow { path }) => run_workflow(&path),
         Some(Command::E2e { command }) => match command {
             E2eCommand::Attest { command } => run_e2e_attest(&command),
@@ -854,6 +866,37 @@ fn apply_waivers(
         }
     }
     Ok(kept)
+}
+
+/// Report every scope in `<base>...HEAD` that changed public surface without adding the
+/// fragments recording it. `0` when `root` keeps no fragment directories.
+fn run_changelog(base: &str, root: &Path) -> anyhow::Result<i32> {
+    let Some(layout) = changelog::discover_layout(root) else {
+        println!(
+            "No fragment directories under `{}`; changelog check skipped.",
+            root.display()
+        );
+        return Ok(0);
+    };
+    if changelog::has_skip_line(&changelog::commit_bodies(root, base)?) {
+        println!("A `skip-changelog:` line is present; changelog check bypassed.");
+        return Ok(0);
+    }
+    let changed = changelog::changed_files(root, base)?;
+    let added = changelog::added_files(root, base)?;
+    let migrations = changelog::migrations_enforced(root);
+    let found = changelog::findings(&layout, migrations, &changed, &added);
+    if found.is_empty() {
+        println!("Every scope that changed public surface added its fragments.");
+        return Ok(0);
+    }
+    for finding in &found {
+        match &finding.file {
+            Some(file) => println!("::error file={file}::{}", finding.message),
+            None => println!("::error::{}", finding.message),
+        }
+    }
+    Ok(1)
 }
 
 /// Inspect the built artifact at `artifact` — an unpacked directory or a packed archive —

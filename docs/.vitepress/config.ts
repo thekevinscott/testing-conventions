@@ -74,6 +74,7 @@ export default defineConfig({
                 { text: 'mutation', link: '/reference/checks/mutation' },
                 { text: 'packaging', link: '/reference/checks/packaging' },
                 { text: 'e2e-verify', link: '/reference/checks/e2e-verify' },
+                { text: 'changelog', link: '/reference/checks/changelog' },
               ],
             },
           ],

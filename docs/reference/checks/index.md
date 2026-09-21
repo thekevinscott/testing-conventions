@@ -22,6 +22,7 @@ The name in the table is the name you see on a pull request's check list.
 | [`Unit mutation — changed lines`](./mutation) (`<language>`) | `mutation` | pull requests only |
 | [`Packaging`](./packaging) | `packaging` | when a build is derivable, an artifact is named, or a `dist/` is committed |
 | [`E2E attestation freshness`](./e2e-verify) | `e2e-verify` | when receipts are present, on pull requests |
+| [`CHANGELOG + MIGRATIONS touched`](./changelog) | `changelog` | pull requests only, when the gate is selected |
 
 A job skipped by [`gates`](../workflow#inputs) is absent from CI. A check left out of `gates` is
 skipped whether it runs as its own job or as a step of `Static checks`, and a check's diff-scoped

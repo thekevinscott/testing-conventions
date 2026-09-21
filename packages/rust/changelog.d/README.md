@@ -19,5 +19,5 @@ conflict. Fragments are permanent and append-only: nothing is assembled back int
 [`../CHANGELOG.md`](../CHANGELOG.md), which is a frozen archive of the entries written before this
 convention.
 
-`.github/workflows/changelog.yml` requires one fragment here per changed package on every PR.
+The reusable workflow's `changelog` check requires one fragment here per changed package on every PR.
 `docs/internals/repo.md` ("CHANGELOG + MIGRATIONS") carries the full convention.

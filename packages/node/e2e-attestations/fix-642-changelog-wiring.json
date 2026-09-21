@@ -1,0 +1,7 @@
+{
+  "command": "echo 'no-op: under packages/node this branch touches only two fragment-directory READMEs. The behavior change is the changelog job in .github/workflows/testing-conventions.yml, outside the package, and package.json publishes dist/ only, so the npm launcher e2e contract is unmoved.'",
+  "ran_at": 1790021233,
+  "exit_code": 0,
+  "commit": "4a8698901b6fd7c6617b81b11ff8d158043ff58e",
+  "branch": "fix/642-changelog-wiring"
+}

@@ -9,9 +9,9 @@ Each package records its changes as **fragments** — one file per change, added
 every language package follows it.
 
 A PR that changes public API under `packages/<pkg>/` adds one fragment to each of that package's
-two fragment directories. Enforced in CI by `changelog.yml`, which runs `tc-checks changelog-gate`
-(`internals/checks`); a `skip-changelog: <reason>` line on any commit bypasses it for genuinely
-internal refactors, and the reason stays in git history.
+two fragment directories. Enforced in CI by the reusable workflow's `changelog` check, which
+`dogfood.yml` runs over this repo; a `skip-changelog: <reason>` line on any commit bypasses it for
+genuinely internal refactors, and the reason stays in git history.
 
 **Why fragments.** A shared file that every PR appends to at the same anchor makes concurrent PRs
 conflict by construction: the gate requires each PR to edit it, and the convention puts each new
@@ -400,8 +400,8 @@ checks rows, so a consumer's checks UI is unchanged):
 - Each check job downloads the `hermetic-cli` artifact (and re-chmods the binary) when
   `cli_command` is non-empty via the shared `./.github/actions/download-hermetic-cli` composite
   action — one `uses:` line instead of the download-artifact-plus-chmod pair repeated across all
-  six check jobs (`static`, `unit-coverage`, `coverage-changed`, `mutation`, `e2e-verify`,
-  `packaging` — the five static checks share the one `static` job) — and runs
+  seven check jobs (`static`, `unit-coverage`, `coverage-changed`, `mutation`, `e2e-verify`,
+  `packaging`, `changelog` — the five static checks share the one `static` job) — and runs
   `${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} <subcommand> …`.
   That
   `cli_command` guard is load-bearing for the `uses:` line itself, not just for whether the

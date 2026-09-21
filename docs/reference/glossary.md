@@ -9,7 +9,7 @@ in this repo — the docs site, `README.md`, and the root `AGENTS.md` — uses t
 
 - **check** — one of the runnable units the workflow enforces: `colocated-test`,
   `one-function-per-file`, `unit-lint`, `unit-coverage`, `mutation`, `integration-lint`,
-  `packaging`, `e2e-verify`. Each is named by the value the [`gates` input](./workflow#inputs)
+  `packaging`, `e2e-verify`, `changelog`. Each is named by the value the [`gates` input](./workflow#inputs)
   takes and that appears in a `rules = […]` [exemption](./config). A check is a unit of
   enforcement, not a CI job — see [Checks](./checks/) for the job shape: some checks run as their
   own job, several share one job as steps, and one check produces two jobs.
@@ -38,10 +38,10 @@ than either definition above, not a fourth term.
 
 **GitHub's own check-runs are a different population.** GitHub Actions reports **check-runs** — a
 per-job pass/fail status on a pull request — and the word collides with this repo's "check." The
-two do not map 1:1: the workflow declares seven job names, five checks share the one `Static
+two do not map 1:1: the workflow declares eight job names, five checks share the one `Static
 checks` job, and `unit-coverage` produces two jobs. "Check" in a sentence about the pull-request UI
 means a GitHub check-run; "check" in a sentence about `colocated-test` or `mutation` means one of
-the eight above. Context carries the distinction; the words are the same.
+the nine above. Context carries the distinction; the words are the same.
 
 **`tc-checks` is a third population.** The repo's own internal CI-assertion tooling
 (`internals/checks`, invoked as `tc-checks <subcommand>`) verifies this repo's own wiring —

@@ -1,6 +1,6 @@
 ## North Star
 
-A consuming package adopts `conventions.yml` whole-hog with a call carrying only `source`. One `uses:` call per package, and every check runs — `colocated-test`, `one-function-per-file`, `unit-lint`, `unit-coverage`, `mutation`, `integration-lint`, `packaging`, `e2e-verify` — because layout, package manager, Python environment, native-build toolchain, dist location, attestation location, and config file are all derived from `source` and the package's own manifest: a `testing-conventions.toml` at the package root is discovered, never named. `languages` and `config` survive as optional refinements. `build_command` is a **necessary declaration, not an escape hatch**: where an ecosystem standardizes the build the tool derives it, and where it structurally can't (npm names no build command) a compiling package states its build in one line — a fact, requiring no justification. `gates` and `rust_toolchain` are the true escape hatches — they *skip* or *override* something that already works — so they remain held to the exemption bar (near-forbidden, reasoned).
+A consuming package adopts `conventions.yml` whole-hog with a call carrying only `source`. One `uses:` call per package, and every check runs — `colocated-test`, `one-function-per-file`, `unit-lint`, `unit-coverage`, `mutation`, `integration-lint`, `packaging`, `e2e-verify`, `changelog` — because layout, package manager, Python environment, native-build toolchain, dist location, attestation location, and config file are all derived from `source` and the package's own manifest: a `testing-conventions.toml` at the package root is discovered, never named. `languages` and `config` survive as optional refinements. `build_command` is a **necessary declaration, not an escape hatch**: where an ecosystem standardizes the build the tool derives it, and where it structurally can't (npm names no build command) a compiling package states its build in one line — a fact, requiring no justification. `gates` and `rust_toolchain` are the true escape hatches — they *skip* or *override* something that already works — so they remain held to the exemption bar (near-forbidden, reasoned).
 
 ## The red/green cadence, and where it applies
 
@@ -47,9 +47,10 @@ Every PR starts with **documentation, written alongside the red tests** — both
 
 A PR that changes public API under `packages/<pkg>/` adds **one new file** to each of that
 package's fragment directories: `packages/<pkg>/changelog.d/YYYY-MM-DD-<slug>.md` and
-`packages/<pkg>/migrations.d/YYYY-MM-DD-<slug>.md`. The gate (`changelog.yml`, running
-`tc-checks changelog-gate`) requires both per changed package; a `skip-changelog: <reason>` line
-on any commit bypasses it for a genuinely internal refactor.
+`packages/<pkg>/migrations.d/YYYY-MM-DD-<slug>.md`. The `changelog` check — the reusable
+workflow's `CHANGELOG + MIGRATIONS touched` job, run over this repo by `dogfood.yml` — requires
+both per changed package; a `skip-changelog: <reason>` line on any commit bypasses it for a
+genuinely internal refactor.
 
 The package-root `CHANGELOG.md` and `MIGRATIONS.md` are a **frozen archive** of the entries
 written before this convention. Never append to them — a shared file every PR edits at the same

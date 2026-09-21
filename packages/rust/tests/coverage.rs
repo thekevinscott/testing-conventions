@@ -66,6 +66,14 @@ fn conftest_is_omitted_from_the_denominator() {
 }
 
 #[test]
+fn the_integration_tier_under_tests_never_reaches_the_unit_lane() {
+    assert_eq!(
+        measure(&codebase("suite_tier_padded"), FLOOR_100, &[]).unwrap(),
+        Outcome::Pass
+    );
+}
+
+#[test]
 fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
     assert_eq!(
         measure(&codebase("exempt_cov"), FLOOR_100, &["shim.py".to_string()]).unwrap(),

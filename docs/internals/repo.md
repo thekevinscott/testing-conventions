@@ -11,7 +11,9 @@ every language package follows it.
 A PR that changes public API under `packages/<pkg>/` adds one fragment to each of that package's
 two fragment directories. Enforced in CI by the reusable workflow's `changelog` check, which
 `dogfood.yml` runs over this repo; a `skip-changelog: <reason>` line on any commit bypasses it for
-genuinely internal refactors, and the reason stays in git history.
+genuinely internal refactors, and the reason stays in git history. The rule itself lives in the
+shipped CLI (`packages/rust/src/changelog.rs`), which is the one implementation this repo and every
+consumer run.
 
 **Why fragments.** A shared file that every PR appends to at the same anchor makes concurrent PRs
 conflict by construction: the gate requires each PR to edit it, and the convention puts each new
@@ -692,7 +694,7 @@ techniques cover the shapes that keep tempting a waiver:
 
 - **A `@click.command` body reads as glue, and is not.** `check-layout` and `dispatch-and-wait` each
   carry a real `if … raise` that lives in `cli.py`, not in the `utils` module they delegate to.
-  `changelog_gate/cli_test.py` set the pattern: patch the collaborator by its string target
+  `path_length_gate/cli_test.py` sets the pattern: patch the collaborator by its string target
   (`monkeypatch.setattr("checks.<subcommand>.cli.<name>", fake)`), drive `cli.callback(...)`, and assert
   both the arguments threaded in and the branch taken. No `CliRunner`, no collaborator import, so the
   isolation lint stays satisfied.

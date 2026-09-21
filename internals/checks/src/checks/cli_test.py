@@ -14,10 +14,6 @@ def test_build_hermetic_cli_is_registered():
     assert "build-hermetic-cli" in main.commands
 
 
-def test_changelog_gate_is_registered():
-    assert "changelog-gate" in main.commands
-
-
 def test_cli_isolation_wired_is_registered():
     assert "cli-isolation-wired" in main.commands
 

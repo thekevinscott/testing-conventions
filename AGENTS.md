@@ -394,11 +394,12 @@ diverge"). Corrected:
 
 All four copies are deleted; `docs/internals/repo.md` carries the explanation. A comment that
 survives fits on one line, states a positive fact in the **Affirmative voice**, and names its
-breakage — the precedent is `internals/checks/src/checks/changelog_gate/git_ops.py`:
+breakage — the precedent is `packages/rust/src/changelog.rs`:
 
-```python
-# A fragment satisfies the gate only when the PR adds it, so the diff is filtered to additions.
-result = runner(["git", "diff", "--name-only", "--diff-filter=A", f"{base_sha}...{head_sha}"], ...)
+```rust
+/// The paths `<base>...HEAD` added. A fragment satisfies the check only when the pull request
+/// adds it, so the diff is filtered to additions.
+pub fn added_files(repo: &Path, base: &str) -> Result<Vec<String>> {
 ```
 
 ## Failure messages name the constraint, not the issue

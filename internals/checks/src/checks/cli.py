@@ -6,7 +6,6 @@ import click
 from checks.below_floor.cli import cli as below_floor
 from checks.build_command_wired.cli import cli as build_command_wired
 from checks.build_hermetic_cli.cli import cli as build_hermetic_cli
-from checks.changelog_gate.cli import cli as changelog_gate
 from checks.cli_isolation_wired.cli import cli as cli_isolation_wired
 from checks.cli_node_engine_wired.cli import cli as cli_node_engine_wired
 from checks.colocated_rust_red.cli import cli as colocated_rust_red
@@ -57,7 +56,6 @@ def main() -> None:
 main.add_command(below_floor, name="below-floor")
 main.add_command(build_command_wired, name="build-command-wired")
 main.add_command(build_hermetic_cli, name="build-hermetic-cli")
-main.add_command(changelog_gate, name="changelog-gate")
 main.add_command(cli_isolation_wired, name="cli-isolation-wired")
 main.add_command(cli_node_engine_wired, name="cli-node-engine-wired")
 main.add_command(colocated_rust_red, name="colocated-rust-red")

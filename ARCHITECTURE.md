@@ -28,7 +28,7 @@ the reusable workflow at `thekevinscott/putitoutthere`. Edits under
 ## CI gates
 
 - Per-language workflow (`rust.yml`, `python.yml`, `node.yml`) runs lint + test + build with path filters.
-- `changelog.yml` enforces `CHANGELOG.md` + `MIGRATIONS.md` updates on PRs that touch package code.
+- `dogfood.yml`'s `CHANGELOG + MIGRATIONS touched` job enforces a changelog and a migration fragment on PRs that touch package code.
 - `docs.yml` builds + deploys the VitePress site (which also emits the generated `llms.txt` / `llms-full.txt` agent digest, per [llmstxt.org](https://llmstxt.org)).
 - `testing-conventions-selftest.yml` smoke-tests the reusable `testing-conventions.yml` against fixtures in `.github/selftest/` (a clean suite passes; a below-floor suite trips the coverage gate).
 - `pr-monitor.yml` gates merge on the aggregate CI status, under a job-level `timeout-minutes: 20`. The action waits on the predicted runs for as long as they take, so that job clock is the backstop: it spans the full per-language + selftest fan-out, and ends the wait if a predicted run never dispatches.

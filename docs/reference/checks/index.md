@@ -22,7 +22,7 @@ The name in the table is the name you see on a pull request's check list.
 | [`Unit mutation — changed lines`](./mutation) (`<language>`) | `mutation` | pull requests only |
 | [`Packaging`](./packaging) | `packaging` | when a build is derivable, an artifact is named, or a `dist/` is committed |
 | [`E2E attestation freshness`](./e2e-verify) | `e2e-verify` | when receipts are present, on pull requests |
-| [`CHANGELOG + MIGRATIONS touched`](./changelog) | `changelog` | pull requests only, when the gate is selected |
+| [`CHANGELOG + MIGRATIONS touched`](./changelog) | `changelog` | pull requests only; passes untouched when the repository keeps no fragment directories |
 
 A job skipped by [`gates`](../workflow#inputs) is absent from CI. A check left out of `gates` is
 skipped whether it runs as its own job or as a step of `Static checks`, and a check's diff-scoped
@@ -45,7 +45,7 @@ carries the complete factual record.
 | [`mutation`](./mutation) | Unit mutation | Does the unit suite **verify** the code — break it, and a test fails? |
 | [`packaging`](./packaging) | Packaging | Does the **built artifact** ship no test files? |
 | [`e2e-verify`](./e2e-verify) | E2E attestation freshness | Does a branch that changed the code record one visible **e2e decision**? |
-| [`changelog`](./changelog) | run from the CLI | Does a pull request that changed a package's **public surface** add a fragment recording it? |
+| [`changelog`](./changelog) | CHANGELOG + MIGRATIONS touched | Does a pull request that changed a package's **public surface** add a fragment recording it? |
 
 Each check's page states the facts and opens with the why; the [explanation section](/explanation/)
 carries the same ground as discursive essays — the testing model, the unit ladder, and the design

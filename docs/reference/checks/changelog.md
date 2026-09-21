@@ -69,14 +69,13 @@ the drop-in is safe on a repository that doesn't keep a changelog this way.
 Migration fragments are enforced when the repository keeps a `migrations.d/`. A repository that
 wants changelog entries alone keeps `changelog.d/` and the migrations arm stays quiet.
 
-Run it from the CLI, naming the pull request's base:
+The reusable workflow runs it on pull requests as the `CHANGELOG + MIGRATIONS touched` job, which
+the [`gates` input](/reference/workflow#inputs) names `changelog`. Run it from the CLI, naming the
+pull request's base:
 
 ```sh
 npx testing-conventions changelog --base "$BASE"
 ```
-
-The reusable workflow runs it as its own job in a following release, where the
-[`gates` input](/reference/workflow#inputs) will name it `changelog`.
 
 ## The bypass
 

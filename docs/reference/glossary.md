@@ -38,7 +38,7 @@ than either definition above, not a fourth term.
 
 **GitHub's own check-runs are a different population.** GitHub Actions reports **check-runs** — a
 per-job pass/fail status on a pull request — and the word collides with this repo's "check." The
-two do not map 1:1: the workflow declares seven job names, five checks share the one `Static
+two do not map 1:1: the workflow declares eight job names, five checks share the one `Static
 checks` job, and `unit-coverage` produces two jobs. "Check" in a sentence about the pull-request UI
 means a GitHub check-run; "check" in a sentence about `colocated-test` or `mutation` means one of
 the nine above. Context carries the distinction; the words are the same.

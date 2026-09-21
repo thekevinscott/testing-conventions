@@ -47,9 +47,10 @@ Every PR starts with **documentation, written alongside the red tests** — both
 
 A PR that changes public API under `packages/<pkg>/` adds **one new file** to each of that
 package's fragment directories: `packages/<pkg>/changelog.d/YYYY-MM-DD-<slug>.md` and
-`packages/<pkg>/migrations.d/YYYY-MM-DD-<slug>.md`. The gate (`changelog.yml`, running
-`tc-checks changelog-gate`) requires both per changed package; a `skip-changelog: <reason>` line
-on any commit bypasses it for a genuinely internal refactor.
+`packages/<pkg>/migrations.d/YYYY-MM-DD-<slug>.md`. The `changelog` check — the reusable
+workflow's `CHANGELOG + MIGRATIONS touched` job, run over this repo by `dogfood.yml` — requires
+both per changed package; a `skip-changelog: <reason>` line on any commit bypasses it for a
+genuinely internal refactor.
 
 The package-root `CHANGELOG.md` and `MIGRATIONS.md` are a **frozen archive** of the entries
 written before this convention. Never append to them — a shared file every PR edits at the same

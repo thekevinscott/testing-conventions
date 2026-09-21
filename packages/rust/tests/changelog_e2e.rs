@@ -173,6 +173,18 @@ fn changing_only_a_test_file_exits_zero() {
 }
 
 #[test]
+fn a_base_that_names_no_commit_fails_loudly() {
+    let (repo, _) = seeded("bad-base");
+    let out = repo.changelog("no-such-ref");
+    assert_ne!(out.status.code(), Some(0));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("git log"),
+        "names the failing read: {stderr}"
+    );
+}
+
+#[test]
 fn a_malformed_fragment_name_exits_nonzero_and_annotates_the_file() {
     let (repo, base) = seeded("malformed");
     repo.write("packages/parser/src/lex.py", "def lex():\n    return 1\n");

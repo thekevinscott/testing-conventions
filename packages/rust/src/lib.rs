@@ -868,12 +868,39 @@ fn apply_waivers(
     Ok(kept)
 }
 
-/// Inspect the built artifact at `artifact` — an unpacked directory or a packed archive —
-/// for test files matching `language`'s globs. `1` when any are present.
-fn run_changelog(_base: &str, _root: &Path) -> anyhow::Result<i32> {
-    todo!("run_changelog")
+/// Report every scope in `<base>...HEAD` that changed public surface without adding the
+/// fragments recording it. `0` when `root` keeps no fragment directories.
+fn run_changelog(base: &str, root: &Path) -> anyhow::Result<i32> {
+    let Some(layout) = changelog::discover_layout(root) else {
+        println!(
+            "No fragment directories under `{}`; changelog check skipped.",
+            root.display()
+        );
+        return Ok(0);
+    };
+    if changelog::has_skip_line(&changelog::commit_bodies(root, base)?) {
+        println!("A `skip-changelog:` line is present; changelog check bypassed.");
+        return Ok(0);
+    }
+    let changed = changelog::changed_files(root, base)?;
+    let added = changelog::added_files(root, base)?;
+    let migrations = changelog::migrations_enforced(root);
+    let found = changelog::findings(&layout, migrations, &changed, &added);
+    if found.is_empty() {
+        println!("Every scope that changed public surface added its fragments.");
+        return Ok(0);
+    }
+    for finding in &found {
+        match &finding.file {
+            Some(file) => println!("::error file={file}::{}", finding.message),
+            None => println!("::error::{}", finding.message),
+        }
+    }
+    Ok(1)
 }
 
+/// Inspect the built artifact at `artifact` — an unpacked directory or a packed archive —
+/// for test files matching `language`'s globs. `1` when any are present.
 fn run_packaging(artifact: &Path, language: colocated_test::Language) -> anyhow::Result<i32> {
     let globs = match language {
         colocated_test::Language::Python => vec!["*_test.py".to_string()],

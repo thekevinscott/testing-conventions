@@ -5,7 +5,8 @@ PYTHON_ARM = (
     "      - if: matrix.language == 'python'\n"
     "        uses: astral-sh/setup-uv@v7\n"
     "      - if: matrix.language == 'python'\n"
-    "        run: uv sync\n"
+        "        run: |\n"
+        "          if compgen -G \"$GITHUB_WORKSPACE/hermetic-cli/*.whl\" > /dev/null; then uv pip install pytest \"$GITHUB_WORKSPACE\"/hermetic-cli/*.whl; else uv pip install pytest testing-conventions; fi\n"
 )
 WIRED = (
     "jobs:\n"

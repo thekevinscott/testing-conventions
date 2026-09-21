@@ -17,7 +17,11 @@ PYTHON_ARM = (
     "        uses: astral-sh/setup-uv@v7\n"
     "      - if: matrix.language == 'python'\n"
     "        name: Provision the Python suite environment (uv)\n"
-    "        run: uv sync\n"
+    "        run: |\n"
+    "          set -euo pipefail\n"
+    "          if [ \"$PYTHON_ENV\" = \"uv\" ]; then uv sync; else uv venv; fi\n"
+    "          if compgen -G \"$GITHUB_WORKSPACE/hermetic-cli/*.whl\" > /dev/null; then uv pip install pytest \"$GITHUB_WORKSPACE\"/hermetic-cli/*.whl; else uv pip install pytest testing-conventions; fi\n"
+    "          echo \"$PWD/.venv/bin\" >> \"$GITHUB_PATH\"\n"
 )
 WIRED = (
     "jobs:\n"

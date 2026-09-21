@@ -190,6 +190,15 @@ jobs:
       - name: each job's node-version pin must satisfy packages/node's engines.node
         run: uv run --project internals/checks tc-checks cli-node-engine-wired
 
+  release-lockstep-wired:
+    name: A CLI change republishes both halves, so no consumer mixes them
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: every published package rebuilds from the CLI crate
+        run: uv run --project internals/checks tc-checks release-lockstep-wired
+
   rolling-release-wired:
     name: The major tag advances only via the gated move-major-tag workflow
     runs-on: ubuntu-latest

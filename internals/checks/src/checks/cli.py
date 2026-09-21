@@ -37,6 +37,7 @@ from checks.path_length_gate.cli import cli as path_length_gate
 from checks.pnpm_version_wired.cli import cli as pnpm_version_wired
 from checks.python_mutation_clean.cli import cli as python_mutation_clean
 from checks.red_path_hermetic_wired.cli import cli as red_path_hermetic_wired
+from checks.release_lockstep_wired.cli import cli as release_lockstep_wired
 from checks.rolling_release_wired.cli import cli as rolling_release_wired
 from checks.rust_toolchain_wired.cli import cli as rust_toolchain_wired
 from checks.static_gates_wired.cli import cli as static_gates_wired
@@ -87,6 +88,7 @@ main.add_command(path_length_gate, name="path-length-gate")
 main.add_command(pnpm_version_wired, name="pnpm-version-wired")
 main.add_command(python_mutation_clean, name="python-mutation-clean")
 main.add_command(red_path_hermetic_wired, name="red-path-hermetic-wired")
+main.add_command(release_lockstep_wired, name="release-lockstep-wired")
 main.add_command(rolling_release_wired, name="rolling-release-wired")
 main.add_command(rust_toolchain_wired, name="rust-toolchain-wired")
 main.add_command(static_gates_wired, name="static-gates-wired")

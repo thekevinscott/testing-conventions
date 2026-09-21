@@ -138,6 +138,10 @@ def test_red_path_hermetic_wired_is_registered():
     assert "red-path-hermetic-wired" in main.commands
 
 
+def test_release_lockstep_wired_is_registered():
+    assert "release-lockstep-wired" in main.commands
+
+
 def test_rolling_release_wired_is_registered():
     assert "rolling-release-wired" in main.commands
 

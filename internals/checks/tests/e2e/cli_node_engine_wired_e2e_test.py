@@ -70,4 +70,4 @@ def test_default_path_passes_against_the_real_workflow_and_manifest():
 
 def test_the_real_workflow_matches_every_job_that_invokes_the_cli():
     names = {name for name, _ in cli_jobs((REPO_ROOT / REUSABLE_WORKFLOW).read_text())}
-    assert names == {"static", "unit-coverage", "coverage-changed", "mutation", "packaging", "e2e-verify"}
+    assert names == {"changelog", "static", "unit-coverage", "coverage-changed", "mutation", "packaging", "e2e-verify"}

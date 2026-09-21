@@ -570,6 +570,37 @@ putitoutthere's README → "Publishing to PyPI" and match the template it publis
 wiring gates are earned by silent, correctness-affecting failures, not by plumbing that announces
 itself (see AGENTS.md, "Wiring gates are earned").
 
+## Registry skew: the version numbers differ, the rules don't
+
+npm and PyPI carry different version numbers — `0.0.122` against `0.0.116` as of 2026-09-21 — and a
+consumer job installs both halves by name, so one run picks the newest of each independently. The
+numbers drift because putitoutthere versions each package on its own globs: a `packages/node/**`
+change advances npm alone, a `packages/python/**` change advances PyPI alone. The drift is
+arithmetic, and it is permanent by design.
+
+What matters is whether the two halves a job installs can disagree about the rules, and they cannot.
+Both published packages list `packages/rust/**` in their globs and `depends_on` the CLI crate, so
+**every change to the CLI republishes both halves**. The combination a consumer can reach is
+therefore the newest CLI against a plugin built from the same commit — never a new CLI against an
+old plugin.
+
+The reverse pairing — an old CLI against a newer plugin, from a Python-only release — is reachable,
+and both sides of the boundary between them fail loudly on any change that matters:
+
+- **argv.** `mutation.rs` spawns `python -m testing_conventions.mutation.main --out … --module …`
+  and the adapter parses it with plain argparse, which exits non-zero on an argument it does not
+  know.
+- **The normalized results JSON.** `NormalizedMutant` requires `file`, `line`, `status` and
+  `mutator`; serde rejects a payload missing any of them. The one tolerated difference is an extra
+  field, which is the adapter-extensibility affordance the type documents.
+
+So the lockstep that makes this hold is the shared `packages/rust/**` glob, and that is one line in
+`putitoutthere.toml` away from disappearing silently. `tc-checks release-lockstep-wired` derives the
+CLI crate's path and name from the config itself and asserts every published package rebuilds from
+it. This is the kind of regression wiring gates exist for: removing the glob turns every consumer's
+next run into a mixed pair with nothing red to show for it (see AGENTS.md, "Wiring gates are
+earned").
+
 ## Rolling release: how `@v0` advances
 
 `@v0` is a **moving major tag**: consumers pin `…/testing-conventions.yml@v0` and `…/actions/detect@v0`, and the tag is force-moved forward on each release so every consumer tracks `main`. We own all consumers and fix forward — this is rolling release, the opposite of a semver pin.

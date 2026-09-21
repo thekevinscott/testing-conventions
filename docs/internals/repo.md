@@ -47,6 +47,33 @@ If you are adding lines to `CHANGELOG.md` or `MIGRATIONS.md`, stop: you want a f
 
 Public-API surface for the purpose of these files: every exported value/type, every CLI flag, every config key, every observable artifact (tag format, GitHub Release body shape). Internal refactors, test-only changes, and docs-only edits stay out.
 
+## Windows checkout path budget
+
+Every tracked path must survive a Windows checkout. `putitoutthere`'s release workflow builds the
+crate's `x86_64-pc-windows-msvc` wheel and npm package on a Windows runner — the only Windows
+checkout in this repo's pipeline, and one no `pull_request` workflow exercises. Its default
+workspace is `D:\a\testing-conventions\testing-conventions\` — 45 characters for this repo's name —
+against Windows's 260-character `MAX_PATH`, leaving 215 for the tracked path itself.
+`path-length.yml` runs `tc-checks path-length-gate .` (`internals/checks`) over every path
+`git ls-files` reports and holds each to 200 — a 15-character margin below that ceiling, since tools
+disagree by a few characters on whether the count includes the trailing null terminator.
+
+#672 is why this exists: a `notes/research/sources/` directory slug grew to 187 characters, its
+full Windows path reached 269, and both Windows release arms died with `fatal: cannot create
+directory ...: Filename too long` — surfaced only on `main`, hours later, with `@v0` frozen and no
+PR to blame, because nothing in the `pull_request` pipeline checks anything out on Windows. #674
+caps the one generator that produced that path (`compute_slug` in `.claude/fetch-url/fetch.py`);
+this gate catches the same failure from any source.
+
+**Whole-tree, not diff-scoped.** `path-length-gate` lists every path `git ls-files` reports and
+checks each one, rather than filtering to the PR's own added/renamed paths. That's the invariant
+actually wanted — the checked-out tree is Windows-safe — and it holds regardless of the route a
+long path took to get there, with no dependency on git correctly resolving a base SHA or detecting
+a rename. It also needs no `fetch-depth: 0`: a shallow checkout already has every path HEAD
+tracks. The cost is sequencing, not correctness: while #672's own offending directory sits on
+`main` (fixed by #674, pending merge), this gate is red on any branch built on top of it,
+including this one, until that PR lands and this one rebases past it.
+
 ## The CLI command surface
 
 Every subcommand `--help` lists does real work and can fail. A command that parses and exits `0`

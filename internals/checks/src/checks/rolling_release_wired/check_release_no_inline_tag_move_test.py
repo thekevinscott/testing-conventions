@@ -5,7 +5,9 @@ from checks.rolling_release_wired.check_release_no_inline_tag_move import (
 
 
 def test_release_error_when_it_moves_the_tag_inline():
-    assert "inline" in check_release_no_inline_tag_move("run: git tag -f v0 $SHA\n")
+    error = check_release_no_inline_tag_move("run: git tag -f v0 $SHA\n")
+    assert "inline" in error
+    assert error.endswith("not the publish workflow")
 
 
 def test_release_clean_when_it_moves_no_tag():

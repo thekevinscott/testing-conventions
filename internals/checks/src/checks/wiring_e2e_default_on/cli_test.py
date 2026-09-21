@@ -19,6 +19,7 @@ def test_raises_on_an_unwired_workflow(tmp_path):
         cli.callback(workflow=str(workflow))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
         assert "e2e_attestation" in error.message
+        assert error.message.endswith("e2e verify isn't default-on")
     else:
         raise AssertionError("an unwired workflow must raise")
 

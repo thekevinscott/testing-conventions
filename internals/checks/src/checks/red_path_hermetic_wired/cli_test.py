@@ -70,5 +70,6 @@ def test_raises_naming_an_unwired_job(tmp_path):
         cli.callback(workflow=str(wf))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
         assert "packaging-red" in error.message
+        assert error.message.endswith("the ./.github/actions/download-hermetic-cli step")
     else:
         raise AssertionError("an unwired red-path job must raise")

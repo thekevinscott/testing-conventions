@@ -32,6 +32,7 @@ def test_raises_on_a_literal_version(tmp_path):
         cli.callback(workflow=str(workflow))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
         assert "pin a literal pnpm version" in error.message
+        assert error.message.endswith("fails the job before it installs anything")
     else:
         raise AssertionError("a literal pnpm version must raise")
 
@@ -42,7 +43,7 @@ def test_raises_when_no_step_sets_a_version(tmp_path):
     try:
         cli.callback(workflow=str(workflow))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
-        assert "No pnpm version is specified" in error.message
+        assert error.message.endswith("the action errors 'No pnpm version is specified'")
     else:
         raise AssertionError("a workflow that pins nothing at all must raise")
 
@@ -60,6 +61,7 @@ def test_raises_on_a_derived_version_with_no_stale_detect_fallback(tmp_path):
         cli.callback(workflow=str(workflow))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
         assert "No pnpm version is specified" in error.message
+        assert error.message.endswith("blocking the release")
     else:
         raise AssertionError("a derived version with no fallback must raise")
 

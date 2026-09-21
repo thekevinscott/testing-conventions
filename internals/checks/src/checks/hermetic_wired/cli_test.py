@@ -73,6 +73,7 @@ def test_raises_on_an_unwired_workflow(tmp_path):
         assert "a `cli_command`" in error.message
         assert "the `${CLI_COMMAND:-` published-CLI fallback" in error.message
         assert "a `hermetic-cli` artifact download" in error.message
+        assert error.message.endswith("not the commit under test")
     else:
         raise AssertionError("an unwired workflow must raise")
 
@@ -94,7 +95,7 @@ def test_raises_on_a_flag_shaped_workflow_even_when_fully_wired(tmp_path):
         cli.callback(workflow=workflow, callers=())
     except Exception as error:  # noqa: BLE001
         assert "inputs.hermetic" in error.message
-        assert "never declared by an input" in error.message
+        assert "from the caller, never declared by an input" in error.message
     else:
         raise AssertionError("a workflow referencing inputs.hermetic must raise")
 
@@ -105,7 +106,7 @@ def test_raises_on_a_build_job_in_the_reusable_workflow(tmp_path):
         cli.callback(workflow=workflow, callers=())
     except Exception as error:  # noqa: BLE001
         assert "declares a `build-cli` job" in error.message
-        assert "skipped row" in error.message
+        assert "repo-only caller workflows: a guarded job" in error.message
     else:
         raise AssertionError("a build-cli job in the reusable workflow must raise")
 
@@ -117,6 +118,7 @@ def test_raises_when_a_caller_has_no_build_job(tmp_path):
         cli.callback(workflow=workflow, callers=(caller,))
     except Exception as error:  # noqa: BLE001
         assert "has no `build-cli` job" in error.message
+        assert error.message.endswith("its hermetic rule jobs download")
     else:
         raise AssertionError("a caller without a build-cli job must raise")
 
@@ -136,6 +138,7 @@ def test_raises_when_a_caller_inlines_the_build_steps_instead_of_the_composite_a
     except Exception as error:  # noqa: BLE001
         assert "doesn't call the shared" in error.message
         assert "build-hermetic-cli" in error.message
+        assert error.message.endswith("drift from the other caller's")
     else:
         raise AssertionError("a caller inlining the build steps instead of the composite action must raise")
 
@@ -149,6 +152,7 @@ def test_raises_when_a_callers_uses_call_lacks_the_needs_edge(tmp_path):
         assert "clean" in error.message
         assert "packaging-clean" not in error.message
         assert "races" in error.message
+        assert error.message.endswith("fails flaky instead of deterministically")
     else:
         raise AssertionError("a uses: call without needs: [build-cli] must raise")
 
@@ -188,7 +192,7 @@ def test_raises_when_one_of_two_fallback_steps_lacks_its_own_cli_command_env(tmp
     except Exception as error:  # noqa: BLE001
         assert "Check colocated-test" in error.message
         assert "Check lint" not in error.message
-        assert "the `${CLI_COMMAND:-` published-CLI fallback" in error.message
+        assert error.message.endswith("green, with Layer 1 off")
     else:
         raise AssertionError("a step running the fallback without its own CLI_COMMAND env must raise")
 

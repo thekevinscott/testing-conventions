@@ -24,6 +24,7 @@ def test_command_raises_on_an_unwired_workflow(tmp_path):
     try:
         cli.callback(workflow=str(workflow))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
-        assert "diff-scoped" in error.message
+        assert "co-change, changed-line coverage" in error.message
+        assert error.message.endswith("they never run in CI")
     else:
         raise AssertionError("an unwired workflow must raise")

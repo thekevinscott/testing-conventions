@@ -19,6 +19,6 @@ def test_published_version_raises_when_no_npm_tag_is_present():
     try:
         published_version(["testing-conventions-rust-v0.0.1", "v0"])
     except ValueError as error:
-        assert "refusing to promote" in str(error)
+        assert str(error).endswith("refusing to promote")
     else:
         raise AssertionError("no npm tag must raise")

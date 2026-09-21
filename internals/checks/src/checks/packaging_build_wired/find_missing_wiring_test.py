@@ -63,6 +63,13 @@ SIBLING_ONLY = """\
 """
 
 
+def test_every_error_ends_at_the_constraint_it_enforces():
+    assert _GATE_ERROR.endswith("so the gate never runs")
+    assert _PROVISION_ERROR.endswith("it fails before producing a distribution to scan")
+    assert _BUILD_ERROR.endswith("so a package with no committed dist/ has nothing to scan")
+    assert _CRATE_SCAN_ERROR.endswith("a built crate is never inspected for shipped test files")
+
+
 def test_finds_no_missing_wiring_when_gate_provision_build_and_crate_scan_are_all_present():
     assert find_missing_wiring(WIRED) is None
 

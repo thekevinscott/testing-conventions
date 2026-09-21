@@ -6,7 +6,7 @@ def test_verification_error_names_the_failed_suites_and_fails_closed():
     message = verification_error("thesha", ["selftest.yml (failure)"])
     assert "selftest.yml (failure)" in message
     assert "thesha" in message
-    assert "refusing to promote" in message
+    assert message.endswith("refusing to promote")
 
 
 def test_verification_ok_names_the_verified_workflows():

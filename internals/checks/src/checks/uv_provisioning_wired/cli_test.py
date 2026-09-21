@@ -30,6 +30,9 @@ def test_raises_on_a_workflow_with_a_pip_arm(tmp_path):
         cli.callback(workflow=str(wf))
     except Exception as error:  # noqa: BLE001 — CheckFailed is first-party; catch without importing it
         assert "uv alone" in error.message
+        assert error.message.endswith(
+            "drift across unit-coverage / coverage-changed / mutation"
+        )
     else:
         raise AssertionError("a workflow with a pip arm must raise")
 

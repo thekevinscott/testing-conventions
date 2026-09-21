@@ -164,6 +164,14 @@ MISSING_EXCLUDE_ENV_ONLY = """\
 """
 
 
+def test_every_error_ends_at_the_constraint_it_enforces():
+    assert _SCOPE_ERROR.endswith("the caller's own source input names")
+    assert _BASE_ERROR.endswith("reds unrelated PRs on a squash-merging repo")
+    assert _GATE_ERROR.endswith("other diff-scoped jobs")
+    assert _EXTRA_SCOPE_ERROR.endswith("leaves the binding attestation falsely fresh")
+    assert _EXCLUDE_ERROR.endswith("would falsely stale the attestation")
+
+
 def test_finds_no_missing_wiring_when_scope_base_gate_and_extra_roots_are_all_present():
     assert find_missing_wiring(WIRED) is None
 

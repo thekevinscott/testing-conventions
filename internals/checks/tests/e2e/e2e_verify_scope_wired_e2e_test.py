@@ -52,6 +52,7 @@ def test_fails_on_a_broken_fixture(tmp_path):
     result = CliRunner().invoke(cli, [str(bad)])
     assert result.exit_code == 1
     assert "::error::" in result.output
+    assert result.output.strip().endswith("the caller's own source input names")
 
 
 def test_default_path_passes_against_the_real_workflow():

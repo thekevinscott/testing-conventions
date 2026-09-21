@@ -6,7 +6,7 @@ def test_layout_error_names_the_sha_and_the_absent_paths_and_fails_closed():
     message = layout_error("thesha", ["a/b.yml", "c/d.py"])
     assert "thesha" in message
     assert "a/b.yml, c/d.py" in message
-    assert "refusing to promote" in message
+    assert message.endswith("refusing to promote")
 
 
 def test_layout_ok_names_the_sha():

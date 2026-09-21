@@ -3,8 +3,6 @@ mod common;
 use std::path::PathBuf;
 use std::process::Command;
 
-use common::tested_count;
-
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/unit_mutation")
 }
@@ -21,7 +19,7 @@ fn a_feature_gated_module_with_killing_tests_passes_the_gate() {
 }
 
 #[test]
-fn a_feature_gated_integration_test_target_builds_and_the_gate_passes() {
+fn a_feature_gated_integration_test_target_builds_but_the_gate_fails() {
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "rust", "--config"])
         .arg(fixtures().join("rust_features.toml"))
@@ -32,12 +30,16 @@ fn a_feature_gated_integration_test_target_builds_and_the_gate_passes() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(
         out.status.code(),
-        Some(0),
-        "every mutant is caught; stdout: {stdout}; stderr: {stderr}"
+        Some(1),
+        "the integration tier's kills don't count toward the gate; stdout: {stdout}; stderr: {stderr}"
     );
     assert!(
-        tested_count(&stdout) > 0,
-        "the engine judged mutants, so the count is non-zero; got: {stdout}"
+        stderr.contains("unexplained surviving mutant"),
+        "the feature reached the build phase, so the engine judged mutants; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("src/boost.rs"),
+        "the survivor names the feature-gated module; stderr: {stderr}"
     );
 }
 

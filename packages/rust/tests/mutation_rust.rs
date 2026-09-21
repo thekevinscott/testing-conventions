@@ -83,6 +83,24 @@ fn survivor_descriptions_carry_no_location_prefix() {
 }
 
 #[test]
+fn integration_tests_do_not_pad_the_mutation_run() {
+    let (_, survivors) = expect_tested(
+        measure_rust(
+            &crate_dir("padded"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &[],
+        )
+        .expect("cargo-mutants runs"),
+    );
+    assert!(
+        !survivors.is_empty(),
+        "the integration tier judges triple, not the unit suite; got {survivors:?}"
+    );
+}
+
+#[test]
 fn a_crate_with_no_mutants_reports_a_zero_count() {
     let (count, survivors) = expect_tested(
         measure_rust(

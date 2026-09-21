@@ -1,0 +1,11 @@
+# `padded` fixture for mutation-suite scoping: `triple` has no colocated unit test,
+# only an integration test under `tests/`. A run that lets the default `cargo test`
+# judge mutants counts that integration test and kills the mutant; a run scoped to
+# the unit suite alone leaves it a survivor. `[workspace]` isolates the fixture from
+# the parent cargo workspace.
+[package]
+name = "mut_padded"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

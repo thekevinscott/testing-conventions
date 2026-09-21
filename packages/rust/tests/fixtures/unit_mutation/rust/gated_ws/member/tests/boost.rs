@@ -1,7 +1,6 @@
-//! An integration test over the feature-gated `boost` module: it names an item that is
-//! compiled out without the `boost` feature, so this target fails to compile unless the
-//! mutation run's feature selection reaches cargo's build phase. Its assertions kill
-//! every mutant of `sub`.
+//! An integration test over the feature-gated `boost` module, compiled out without the
+//! `boost` feature — proving the feature reaches the build phase. Mutation scopes to the
+//! unit suite, so this test's kills never count toward the gate.
 
 use mut_gated_member::boost::sub;
 

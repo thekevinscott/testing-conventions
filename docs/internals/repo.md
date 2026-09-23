@@ -879,9 +879,13 @@ The test lives at `packages/node/scripts/build-decision.test.ts`, colocated with
 covers rather than under `packages/node/src/`: this is build tooling invoked by the release
 workflow, not shipped source, so it sits outside the red/green cadence (AGENTS.md, "The red/green
 cadence, and where it applies") and outside the `packages/node/src` scope `dogfood.yml`'s
-`colocated-test` and `unit-lint` jobs check. It is also outside `vite.config.ts`'s `test.include`
-(`src/**/*.test.ts`, from `vitestConfig` in `src/vitest-config.ts`), so `pnpm test` does not run it
-today — a gap in the test runner's scope, not in the test's correctness.
+`colocated-test` and `unit-lint` jobs check.
+
+`packages/node/vite.config.ts` adds `scripts/**/*.test.ts` to `test.include` on top of `vitestConfig`'s
+`src/**/*.test.ts`, so `pnpm test` runs the scripts test alongside the package's own. `vitestConfig`
+itself (`src/vitest-config.ts`) keeps `include` at `src/**/*.test.ts`: that export is the shipped
+config a consumer extends, and it holds every consumer to the standard for their own `src/`, not to
+this package's own build tooling.
 
 ## Docs CI: ref-scoped concurrency
 

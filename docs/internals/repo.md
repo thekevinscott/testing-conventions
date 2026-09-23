@@ -866,6 +866,23 @@ whether `--no-frozen-lockfile` is deliberate: it has to be,
 since `--frozen-lockfile` requires a lockfile to freeze against, and the packages commit none.
 Left untouched, now with a real reason on record rather than an absence of one.
 
+## `packages/node/scripts/build.ts`: a pure decision, a thin composition root
+
+`build.ts` ran entirely at module scope — reading `TARGET`, branching, shelling out to `tsc` all
+at import time — so nothing could import it without triggering a build, and it carried no
+colocated test. The branch is one predicate: empty/`main`/`noarch` builds the JS shim, a
+per-triple `TARGET` means the engine already staged the binary, so the script exits early.
+`shouldBuildShim(target)` in `build-decision.ts` is that predicate, pure and importable; `build.ts`
+calls it and does only I/O — no decision of its own.
+
+The test lives at `packages/node/scripts/build-decision.test.ts`, colocated with the module it
+covers rather than under `packages/node/src/`: this is build tooling invoked by the release
+workflow, not shipped source, so it sits outside the red/green cadence (AGENTS.md, "The red/green
+cadence, and where it applies") and outside the `packages/node/src` scope `dogfood.yml`'s
+`colocated-test` and `unit-lint` jobs check. It is also outside `vite.config.ts`'s `test.include`
+(`src/**/*.test.ts`, from `vitestConfig` in `src/vitest-config.ts`), so `pnpm test` does not run it
+today — a gap in the test runner's scope, not in the test's correctness.
+
 ## Docs CI: ref-scoped concurrency
 
 `docs.yml` uses the standard PR-concurrency block (AGENTS.md, "PR workflow concurrency") in its

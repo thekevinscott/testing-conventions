@@ -5,12 +5,14 @@ import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { shouldBuildShim } from './build-decision';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const nodePkg = resolve(here, '..');
 
 const target = process.env.TARGET ?? '';
 
-if (target !== '' && target !== 'main' && target !== 'noarch') {
+if (!shouldBuildShim(target)) {
   console.log(`nothing to build for ${target}: the engine stages the binary`);
   process.exit(0);
 }

@@ -1,0 +1,7 @@
+{
+  "command": "TARGET=x86_64-unknown-linux-gnu pnpm exec tsx scripts/build.ts && pnpm run test:e2e",
+  "ran_at": 1790171312,
+  "exit_code": 0,
+  "commit": "cb84ab507373cab95c97d9d8205facab3a77d43f",
+  "branch": "fix/690-build-ts-colocated-test"
+}

@@ -15,6 +15,11 @@ on:
         required: false
         default: ''
 
+# cancel-in-progress is false here: see docs/internals/repo.md, "Release concurrency".
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   preflight:
     runs-on: ubuntu-latest

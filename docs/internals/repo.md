@@ -572,6 +572,39 @@ putitoutthere's README → "Publishing to PyPI" and match the template it publis
 wiring gates are earned by silent, correctness-affecting failures, not by plumbing that announces
 itself (see AGENTS.md, "Wiring gates are earned").
 
+## Release concurrency: serializing the whole run
+
+`release.yml` triggered on every push to `main` with no `concurrency:` block, so two merges seconds
+apart produced two overlapping Release runs. The PyPI version is computed from pending state at plan
+time, so two runs whose plan-to-publish windows overlap compute the same number; PyPI accepts the
+first upload and rejects the second as a duplicate, `pypi-tag` is gated on `pypi-publish` succeeding
+and so skips, and npm/crates.io — published from the caller's own jobs, unaffected by the PyPI
+rejection — advance while PyPI does not. [#628](https://github.com/thekevinscott/testing-conventions/issues/628)
+has the worked incidents.
+
+**putitoutthere's own group doesn't cover this repo's full pipeline.** The called reusable workflow
+declares `concurrency: { group: putitoutthere-release-${{ github.repository }}, cancel-in-progress:
+false }` (see "Release credentials" above), but that group's scope is the reusable workflow's own
+`build` and `publish` jobs. `preflight`, `pypi-publish`, and `pypi-tag` are jobs in *this* repo's
+`release.yml`, outside that scope — so one run's `pypi-publish` can still race a second run's
+`build`/`publish`, which is exactly the plan-to-publish overlap #628 recorded. Entry into that inner
+group also happens only after each run's own `preflight` job finishes, so the order runs enter it
+tracks preflight duration, not push order — a third run can evict the wrong one from the queue.
+
+**The fix is a workflow-level `concurrency:` block on `release.yml` itself**, evaluated before any
+job — including `preflight` — starts. It serializes the entire chain, preflight through `pypi-tag`,
+as one queue entered at push time, which both closes the plan-to-publish overlap gap and removes the
+preflight-timing skew, without touching or duplicating putitoutthere's own group one layer down.
+
+- **`group: release-${{ github.repository }}`, not `github.ref`-scoped.** Every run — a `push` to
+  `main` or a `workflow_dispatch` against any ref — publishes to the same PyPI/npm/crates namespace,
+  so two releases must never overlap regardless of which ref triggered them.
+- **`cancel-in-progress: false`**, unlike the PR-workflow default (AGENTS.md, "PR workflow
+  concurrency"). Cancelling a release mid-publish is the exact failure this closes — a partial
+  publish with no clean retry — so a superseded run queues instead. The queued run's `preflight`
+  waits until the running release finishes, then plans and computes its version from state the first
+  run has already published, rather than from the same pending state the first run started from.
+
 ## Registry skew: the version numbers differ, the rules don't
 
 npm and PyPI carry different version numbers — `0.0.122` against `0.0.116` as of 2026-09-21 — and a

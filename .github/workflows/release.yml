@@ -15,9 +15,7 @@ on:
         required: false
         default: ''
 
-# Serializes preflight through pypi-tag so the pending-state version is never raced.
-# cancel-in-progress is false, unlike the PR-workflow default (AGENTS.md, "PR workflow
-# concurrency") — see docs/internals/repo.md, "Release concurrency".
+# cancel-in-progress is false here: see docs/internals/repo.md, "Release concurrency".
 concurrency:
   group: release-${{ github.repository }}
   cancel-in-progress: false

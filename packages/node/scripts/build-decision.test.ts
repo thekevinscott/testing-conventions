@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { shouldBuildShim } from './build-decision';
+import { shouldBuildShim } from './build-decision.js';
 
 describe('shouldBuildShim', () => {
   it.each(['', 'main', 'noarch'])('builds the shim for %j', (target) => {

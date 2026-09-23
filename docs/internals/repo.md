@@ -866,23 +866,32 @@ whether `--no-frozen-lockfile` is deliberate: it has to be,
 since `--frozen-lockfile` requires a lockfile to freeze against, and the packages commit none.
 Left untouched, now with a real reason on record rather than an absence of one.
 
-## `packages/node/scripts/build.ts`: a pure decision, a thin composition root
+## `packages/node/scripts/build.ts`: declaration-only, by the parser's own rule
 
-`build.ts` ran entirely at module scope — reading `TARGET`, branching, shelling out to `tsc` all
-at import time — so nothing could import it without triggering a build, and it carried no
-colocated test. The branch is one predicate: empty/`main`/`noarch` builds the JS shim, a
-per-triple `TARGET` means the engine already staged the binary, so the script exits early.
-`shouldBuildShim(target)` in `build-decision.ts` is that predicate, pure and importable; `build.ts`
-calls it and does only I/O — no decision of its own.
+`build.ts` ran entirely at module scope — reading `TARGET`, branching, shelling out to `tsc`, and
+retrying on failure, all at import time — so nothing could import it without triggering a build,
+and it carried no colocated test. Two modules now hold the decisions: `build-decision.ts` exports
+`shouldBuildShim(target)`, the predicate deciding empty/`main`/`noarch` builds the JS shim while a
+per-triple `TARGET` means the engine already staged the binary; `build-shim.ts` exports
+`buildShim(spawn, target, packageRoot)`, which calls that predicate, runs the two `tsc`
+invocations, and maps a failing one's exit status (including a `null` status) onto the process
+exit code. `spawn` is an injected parameter matching `spawnSync`'s own signature, so a fake drives
+every branch — both `tsc` calls, the early exit, and both failure paths — without shelling out.
 
-The test lives at `packages/node/scripts/build-decision.test.ts`, colocated with the module it
-covers rather than under `packages/node/src/`: this is build tooling invoked by the release
-workflow, not shipped source, so it sits outside the red/green cadence (AGENTS.md, "The red/green
-cadence, and where it applies") and outside the `packages/node/src` scope `dogfood.yml`'s
-`colocated-test` and `unit-lint` jobs check.
+`build.ts` itself reduces to imports and one expression, `process.exit(buildShim(spawnSync,
+process.env.TARGET ?? '', nodePkg))`: no function and no control flow, so it is not a
+colocated-test subject under this repo's own rule (`packages/rust/src/colocated_test.rs`,
+"Declaration-only modules") — proven by running `unit colocated-test` over `packages/node/scripts`
+locally, not merely argued.
+
+The tests live at `packages/node/scripts/build-decision.test.ts` and `build-shim.test.ts`,
+colocated with the modules they cover rather than under `packages/node/src/`: this is build
+tooling invoked by the release workflow, not shipped source, so it sits outside the red/green
+cadence (AGENTS.md, "The red/green cadence, and where it applies") and outside the
+`packages/node/src` scope `dogfood.yml`'s `colocated-test` and `unit-lint` jobs check.
 
 `packages/node/vite.config.ts` adds `scripts/**/*.test.ts` to `test.include` on top of `vitestConfig`'s
-`src/**/*.test.ts`, so `pnpm test` runs the scripts test alongside the package's own. `vitestConfig`
+`src/**/*.test.ts`, so `pnpm test` runs the scripts tests alongside the package's own. `vitestConfig`
 itself (`src/vitest-config.ts`) keeps `include` at `src/**/*.test.ts`: that export is the shipped
 config a consumer extends, and it holds every consumer to the standard for their own `src/`, not to
 this package's own build tooling.

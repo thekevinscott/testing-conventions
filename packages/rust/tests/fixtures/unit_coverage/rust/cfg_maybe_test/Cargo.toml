@@ -1,0 +1,13 @@
+# `cfg_maybe_test` fixture: the `cfg_not_test` shape plus an item behind a gate a test build can
+# still satisfy. The gated `main` drops out of the ratios; `untested` compiles under `cargo test`,
+# so it stays a subject and holds the crate under a 100 floor.
+# `[workspace]` isolates the fixture from the parent cargo workspace.
+[package]
+name = "cov_rust_cfg_maybe_test"
+version = "0.0.0"
+edition = "2021"
+
+[profile.dev]
+codegen-units = 1
+
+[workspace]

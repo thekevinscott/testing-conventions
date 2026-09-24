@@ -38,6 +38,16 @@ fn padded_exits_nonzero_against_a_100_floor() {
 }
 
 #[test]
+fn cfg_not_test_exits_zero_against_a_100_floor() {
+    assert_eq!(unit_coverage_exit("cfg_not_test", "rust_full.toml"), 0);
+}
+
+#[test]
+fn cfg_maybe_test_exits_nonzero_against_a_100_floor() {
+    assert_eq!(unit_coverage_exit("cfg_maybe_test", "rust_full.toml"), 1);
+}
+
+#[test]
 fn exempt_cov_exits_zero_with_the_shim_exempted() {
     assert_eq!(
         unit_coverage_exit("exempt_cov", "rust_full_exempt_shim.toml"),

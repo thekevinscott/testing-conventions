@@ -28,6 +28,20 @@ The check unpacks each distribution and scans for the language's test pattern:
   out of the consumer artifact for free; only the integration `tests/` needs a Cargo `exclude`.
 <!-- #endregion enforces -->
 
+## One signal: the file name
+
+A built distribution arrives as a file, and the only thing that file carries about the ecosystem
+that produced it is its name. So the check reads the extension — `.whl` and `.tar.gz` are Python,
+`.tgz` is TypeScript, `.crate` is Rust, the names `uv build`, `npm pack` and `cargo package`
+write — and one invocation over a directory covers everything built into it, whatever mix of the
+three it holds. A directory holding none of them fails rather than passing, because a build that
+wrote nothing is the failure this check exists to catch.
+
+The rule reads the same in all three languages, and it has one edge worth naming: a Python sdist
+and an npm tarball are the same format, a gzipped tar, and nothing inside either says which
+registry it is bound for. The extension is the whole distinction. Point the check at a gzipped tar
+named the other ecosystem's way and `--language` is how you say so.
+
 ## How the workflow gets an artifact to scan
 
 In the [workflow](../reference/workflow) the check is **build-then-scan**: the packaging job

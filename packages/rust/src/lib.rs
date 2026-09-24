@@ -5,6 +5,7 @@ pub mod colocated_test;
 pub mod config;
 pub mod coverage;
 pub mod e2e;
+pub mod entrypoint;
 pub mod isolation;
 pub mod lint;
 pub mod mutation;

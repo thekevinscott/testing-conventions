@@ -36,8 +36,9 @@ exempted files/lines are lifted from it. The exact keys and defaults are in the
 - **TypeScript** — the suite runs under `vitest` v8 coverage; **four independent metrics** (lines,
   branches, functions, statements) each meet their floor, because line coverage can read 100% while
   a branch lags.
-- **Rust** — the suite runs under `cargo llvm-cov --lib`, so the floor measures the same unit-only
-  slice the other languages measure (the integration tier under `tests/` stays out of the number).
+- **Rust** — the suite runs under `cargo llvm-cov --lib --bins`, so the floor measures the same
+  unit-only slice the other languages measure (the integration tier under `tests/` stays out of the
+  number) across both the library and the binary targets — a binary's colocated tests are units too.
   The default floors **lines** only; three finer metrics are opt-in: `regions` is a Rust-only
   sub-line metric with a harsher bar and no cross-language analog, `functions` mirrors
   TypeScript's, and `branch` instruments on a nightly toolchain, which the crate pins in its own
@@ -78,7 +79,7 @@ suite under the same configuration your own runs use:
   `tests/` directory directly beneath the scanned path is ignored, so a package whose scanned
   path *is* its package root never collects its own `tests/integration/` or `tests/e2e/` into the
   unit run.
-- **Rust** — `cargo llvm-cov --lib` anchors at the **crate root** by construction: cargo resolves
+- **Rust** — `cargo llvm-cov --lib --bins` anchors at the **crate root** by construction: cargo resolves
   the manifest upward from the scanned path, and `.cargo/config.toml` / `rust-toolchain.toml`
   discovery is cargo's and rustup's own, exactly as in your own `cargo test`.
 <!-- #endregion runs -->

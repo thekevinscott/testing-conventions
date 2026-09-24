@@ -49,7 +49,7 @@ Both jobs install, provision, and build at the derived
 (`uv sync` for an installable package, else a fresh `uv venv`, with the suite toolchain installed
 into that same `.venv`); TypeScript installs with the package's own lockfile
 (`pnpm install --frozen-lockfile` or `npm ci`) and runs `vitest` v8 coverage; Rust runs
-`cargo llvm-cov --lib` with no install step of its own. A package whose suite imports a compiled
+`cargo llvm-cov --lib --bins` with no install step of its own. A package whose suite imports a compiled
 module builds it first via [`build_command`](/reference/config#build-command). The
 [`gates` input](/reference/workflow#inputs) names it `unit-coverage`; the changed-line variant
 rides with it.

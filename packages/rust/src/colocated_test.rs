@@ -246,7 +246,10 @@ impl<'ast> Visit<'ast> for PresenceVisitor {
     }
 
     fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
-        if self.test_depth == 0 && !crate::isolation::has_cfg_test(&node.attrs) {
+        if self.test_depth == 0
+            && !crate::isolation::has_cfg_test(&node.attrs)
+            && !is_logic_free_main(node)
+        {
             self.has_testable_fn = true;
         }
         visit::visit_item_fn(self, node);
@@ -265,6 +268,25 @@ impl<'ast> Visit<'ast> for PresenceVisitor {
         }
         visit::visit_trait_item_fn(self, node);
     }
+}
+
+/// `true` when `node` is a logic-free entry point: `fn main` whose body is one argument-free call
+/// and nothing else, as in `fn main() -> ExitCode { mycrate::entrypoint::main() }`.
+///
+/// Rust requires a `main` in a binary root, so that file cannot be emptied the way a library module
+/// can. A `main` of this exact shape holds no decision to test — every one of them, the argv read
+/// included, sits behind the call in the library, where a test reaches it — so it counts as a
+/// declaration. The shape is deliberately narrow: exactly one statement, and that statement a call
+/// through a path taking no arguments. A second statement, an argument, an operator, a `?`, a
+/// `match`, a method call — anything that could encode a decision — makes it a subject again.
+fn is_logic_free_main(node: &syn::ItemFn) -> bool {
+    if node.sig.ident != "main" {
+        return false;
+    }
+    let [syn::Stmt::Expr(syn::Expr::Call(call), _)] = &node.block.stmts[..] else {
+        return false;
+    };
+    call.args.is_empty() && matches!(*call.func, syn::Expr::Path(_))
 }
 
 /// `true` when `source` holds an `fn` or a closure anywhere — free function, method, default
@@ -802,6 +824,47 @@ mod tests {
             presence("pub struct W;\nimpl W { pub fn go(&self) -> u8 { 1 } }\n"),
             (true, false)
         );
+    }
+
+    #[test]
+    fn rust_presence_logic_free_main_is_a_declaration() {
+        assert_eq!(
+            presence("fn main() -> ExitCode { mycrate::entrypoint::main() }\n"),
+            (false, false)
+        );
+        assert_eq!(presence("fn main() { mycrate::run() }\n"), (false, false));
+        // A trailing semicolon is the same single call.
+        assert_eq!(presence("fn main() { mycrate::run(); }\n"), (false, false));
+    }
+
+    #[test]
+    fn rust_presence_a_main_that_could_hold_a_decision_is_a_subject() {
+        // An argument is somewhere a decision hides — which args, which order, which default.
+        assert_eq!(
+            presence("fn main() { mycrate::run(std::env::args_os()) }\n"),
+            (true, false)
+        );
+        // Two statements: the second is unreviewed behavior.
+        assert_eq!(
+            presence("fn main() { setup(); mycrate::run() }\n"),
+            (true, false)
+        );
+        // `?`, an operator, control flow, and a method call each carry their own branch.
+        assert_eq!(presence("fn main() { mycrate::run()? }\n"), (true, false));
+        assert_eq!(
+            presence("fn main() { mycrate::run().into() }\n"),
+            (true, false)
+        );
+        assert_eq!(
+            presence("fn main() { if x { a() } else { b() } }\n"),
+            (true, false)
+        );
+        assert_eq!(presence("fn main() {}\n"), (true, false));
+    }
+
+    #[test]
+    fn rust_presence_only_main_earns_the_declaration_reading() {
+        assert_eq!(presence("fn run() { mycrate::go() }\n"), (true, false));
     }
 
     #[test]

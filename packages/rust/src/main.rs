@@ -1,15 +1,4 @@
-use std::process::ExitCode;
-
-fn main() -> ExitCode {
-    match testing_conventions::run(std::env::args_os()) {
-        Ok(code) => ExitCode::from(code as u8),
-        Err(err) => {
-            if let Some(clap_err) = err.downcast_ref::<clap::Error>() {
-                clap_err.exit();
-            }
-            // `{err:#}` prints the whole anyhow chain, so a wrapped failure keeps its context.
-            eprintln!("error: {err:#}");
-            ExitCode::from(1)
-        }
-    }
-}
+// Declaration-only by design: Rust requires a `main` in the binary root, and a `fn main` with a
+// body is a unit-gate subject. Re-exporting carries no function, so the logic lives in
+// `entrypoint`, under test. See docs/reference/checks/colocated-test.md.
+pub use testing_conventions::entrypoint::main;

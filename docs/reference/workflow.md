@@ -87,8 +87,8 @@ uv reads its own index/network configuration (`UV_INDEX_URL`, `uv.toml`); a priv
 declared there. TypeScript runs under `vitest`
 v8 coverage, installed with the package's own lockfile (`pnpm install --frozen-lockfile` or
 `npm ci`, per its manifest); for `mutation` those project dependencies must include
-`@stryker-mutator/core` and a runner plugin. Rust runs under `cargo llvm-cov --lib` (the unit
-suite only) and needs
+`@stryker-mutator/core` and a runner plugin. Rust runs under `cargo llvm-cov --lib --bins` (the
+unit suite of the library and binary targets, leaving the `tests/` tier out) and needs
 no install step of its own; a [`[rust].coverage` `branch` floor](./config#coverage) adds `--branch`,
 which uses the nightly toolchain the crate pins in its own `rust-toolchain.toml` (with
 `llvm-tools-preview`) — the coverage run reads that pin directly, so the job provisions nothing

@@ -725,8 +725,10 @@ fn run_cargo_llvm_cov(
         .current_dir(root)
         .arg("llvm-cov")
         // cargo-llvm-cov's default runs every test target, which lets the integration
-        // tier under `tests/` pad the number.
+        // tier under `tests/` pad the number. `--bins` adds the binary targets' own
+        // `#[cfg(test)]` modules, which `colocated-test` requires but `--lib` never ran.
         .arg("--lib")
+        .arg("--bins")
         .args(format)
         .env("CARGO_TARGET_DIR", &target.0);
     if !features.is_empty() {

@@ -238,7 +238,10 @@ fn rust_an_added_gated_entry_point_is_not_a_changed_line_subject() {
     let base = repo.head();
 
     repo.write("src/entrypoint.rs", ENTRYPOINT_RS_GATED);
-    repo.write("src/main.rs", "pub use tc_cov_base_rust::entrypoint::main;\n");
+    repo.write(
+        "src/main.rs",
+        "pub use tc_cov_base_rust::entrypoint::main;\n",
+    );
     repo.commit("add the binary root and its gated entry point");
 
     assert_eq!(

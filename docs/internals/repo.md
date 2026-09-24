@@ -529,6 +529,31 @@ needs a classic token. `.github/workflows/bootstrap-npm.yml` is that one-shot pa
 The workflow can be deleted once every `testing-conventions` and `@testing-conventions/*` name
 exists on the registry.
 
+### Where the publish lives
+
+The job is wiring — checkout, pnpm, Node, install, `pnpm run bootstrap-npm` — and the publish is
+three modules under `packages/node/scripts/`. `bootstrapNames` (`bootstrap-names.ts`) splits the
+dispatched list and **throws** when it names nothing, so an empty dispatch fails loudly rather than
+publishing nothing and reporting success. `bootstrapManifest` (`bootstrap-manifest.ts`) returns the
+stub manifest. `publishBootstrapStubs` (`publish-bootstrap-stubs.ts`) walks the names, writing each
+manifest into a directory of its own and running `npm publish --access public --tag bootstrap`
+there. `--tag bootstrap` is load-bearing: npm refuses to publish a prerelease as `latest`, and the
+first real release — not a prerelease — takes `latest` back.
+
+Its temp-dir factory, writer, subprocess runner, and remover arrive as one `BootstrapIo` record
+typed to the `node:fs` and `node:child_process` signatures themselves, so `bootstrap-npm.ts` passes
+`mkdtempSync`, `writeFileSync`, `spawnSync`, and `rmSync` through unwrapped. That is the `build.ts`
+shape below: fakes drive every branch, and the entry point stays declaration-only.
+
+`packages/node/scripts/` is the home rather than a new uv package under `internals/`. The domain is
+npm publishing, the job already provisions Node, and that directory already carries the
+pure-layer-plus-composition-root split with colocated tests — a one-shot publisher does not earn its
+own package, test workflow, and dogfood job. The names reach it through the step's `env:`
+(`PACKAGES`), which is what `workflow-lint` asks for: an `env:` value is templated safely, where
+`${{ inputs.packages }}` inline in a `run:` body splices dispatch input into the shell. That is
+GitHub's channel into the job, not the side-channel between two parts of this repository that
+AGENTS.md's "Never pass data through the environment" rules out.
+
 ## The delegated PyPI upload
 
 PyPI is the one registry the reusable workflow cannot publish for us. Its Trusted Publisher matching

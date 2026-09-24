@@ -14,39 +14,23 @@ on:
 jobs:
   bootstrap:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/node
     steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ">=11"
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+          cache: pnpm
+          cache-dependency-path: packages/node/package.json
+      - run: pnpm install --no-frozen-lockfile
       - name: Publish bootstrap stubs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           PACKAGES: ${{ inputs.packages }}
-        run: |
-          set -euo pipefail
-          IFS=',' read -ra PKGS <<< "$PACKAGES"
-          for name in "${PKGS[@]}"; do
-            name="${name// /}"
-            echo "::group::publish 0.0.0-bootstrap for $name"
-            dir=$(mktemp -d)
-            pushd "$dir" > /dev/null
-            cat > package.json <<EOF
-          {
-            "name": "$name",
-            "version": "0.0.0-bootstrap",
-            "description": "Bootstrap stub; replaced on first real publish via OIDC trusted publisher.",
-            "license": "MIT",
-            "repository": {
-              "type": "git",
-              "url": "git+https://github.com/thekevinscott/testing-conventions.git"
-            }
-          }
-          EOF
-            # npm refuses to publish a prerelease as `latest`, so the stub is tagged explicitly and the
-            # real 0.0.1 publish becomes `latest`.
-            npm publish --access public --tag bootstrap
-            popd > /dev/null
-            rm -rf "$dir"
-            echo "::endgroup::"
-          done
+        run: pnpm run bootstrap-npm

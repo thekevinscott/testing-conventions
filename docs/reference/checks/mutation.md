@@ -95,6 +95,15 @@ lines. It installs and runs from the derived
 include `@stryker-mutator/core` and a runner plugin. The
 [`gates` input](/reference/workflow#inputs) names it `mutation`.
 
+### TypeScript requires vitest 4 or below
+
+Stryker's vitest runner runs no tests per mutant on **vitest 5 and above**: the dry run and
+per-test coverage attribution both succeed, so every mutant scores as `survived` even when the
+suite kills it. The adapter refuses to run rather than report that, naming the version it found.
+Pin `vitest` and `@vitest/coverage-v8` to `^4`, or leave `mutation` out of `gates` to skip the
+job. An exemption cannot lift this failure — exemptions apply to results, and a refused run
+returns none.
+
 ## Configuration
 
 The check has **no percentage key** — the gate is binary, and config can't loosen it. Its tuning

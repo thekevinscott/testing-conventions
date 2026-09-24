@@ -24,6 +24,16 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 ACTION_YML = REPO_ROOT / ".github" / "actions" / "detect" / "action.yml"
 WORKFLOW_YML = REPO_ROOT / ".github" / "workflows" / "testing-conventions.yml"
 
+# The manifest's input-to-environment contract, which `docs/internals/repo.md` also publishes to
+# the external evaluator that runs the scan itself.
+ENV_BINDINGS = {
+    "LANGUAGES": "languages",
+    "SCAN_PATH": "path",
+    "CONFIG": "config",
+    "CALLER_REPOSITORY": "caller_repository",
+    "VERSION": "version",
+}
+
 
 @pytest.fixture
 def run_detect(tmp_path):
@@ -124,6 +134,39 @@ def _declared_outputs():
         if value and name is not None:
             declared[name] = value.group(1).strip()
     return declared
+
+
+def _declared_inputs():
+    """The composite action's `inputs:` block, as a set of names."""
+    lines = ACTION_YML.read_text().split("\n")
+    start = lines.index("inputs:") + 1
+    names = set()
+    for line in lines[start:]:
+        if line and not line.startswith(" "):  # the next top-level key ends the block
+            break
+        header = re.match(r"^  ([A-Za-z_][A-Za-z0-9_]*):", line)
+        if header:
+            names.add(header.group(1))
+    return names
+
+
+def _scan_step_env():
+    """The `env:` the composite action's one step binds, as `name -> value expression`."""
+    lines = ACTION_YML.read_text().split("\n")
+    start = lines.index("      env:") + 1
+    bound = {}
+    for line in lines[start:]:
+        entry = re.match(r"^        ([A-Z][A-Z0-9_]*): (.*)$", line)
+        if not entry:  # the next step-level key ends the block
+            break
+        bound[entry.group(1)] = entry.group(2).strip()
+    return bound
+
+
+def _env_names_the_script_reads():
+    """Every environment name the entry point reads, less the GITHUB_OUTPUT the runner sets."""
+    read = set(re.findall(r'os\.environ\.get\("([A-Z][A-Z0-9_]*)"', SCRIPT.read_text()))
+    return read - {"GITHUB_OUTPUT"}
 
 
 def _detect_job_outputs(text):
@@ -1007,6 +1050,23 @@ def test_published_outputs_when_a_version_is_pinned(run_detect):
         caller_repository="thekevinscott/testing-conventions", version="0.3.0"
     )
     assert outputs["cli_command"] == ""
+
+
+@pytest.mark.parametrize(("variable", "input_name"), sorted(ENV_BINDINGS.items()))
+def test_each_environment_name_the_script_reads_is_bound_to_its_input(variable, input_name):
+    # The inputs half of the manifest contract. A binding wired to the wrong input — a typo, or a
+    # rename that reached one side — hands the script the empty string while reading as wired.
+    assert _scan_step_env()[variable] == "${{ inputs." + input_name + " }}"
+
+
+def test_the_manifest_binds_exactly_the_environment_names_the_script_reads():
+    # A name only the script knows defaults silently; a name only the manifest binds is dead.
+    assert set(_scan_step_env()) == _env_names_the_script_reads() == set(ENV_BINDINGS)
+
+
+def test_every_declared_input_reaches_the_script():
+    # An input nothing binds is a `with:` a caller can set and the scan never sees.
+    assert _declared_inputs() == set(ENV_BINDINGS.values())
 
 
 def test_every_emitted_output_is_declared_by_the_composite_action(run_detect):

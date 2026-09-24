@@ -40,10 +40,11 @@ fn help_stdout() -> String {
 #[test]
 fn help_does_not_list_the_private_workflow_command() {
     let help = help_stdout();
+    // The command word, not a prefix: the public `workflow-lint` shares one.
     assert!(
         !help
             .lines()
-            .any(|line| line.trim_start().starts_with("workflow")),
+            .any(|line| line.split_whitespace().next() == Some("workflow")),
         "`workflow` must not be listed in --help:\n{help}"
     );
 }

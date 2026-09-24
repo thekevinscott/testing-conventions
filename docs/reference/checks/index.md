@@ -44,8 +44,13 @@ carries the complete factual record.
 | [`unit-coverage`](./unit-coverage) | Unit-test coverage | Does the unit suite **run** the code — whole-tree and on the changed lines? |
 | [`mutation`](./mutation) | Unit mutation | Does the unit suite **verify** the code — break it, and a test fails? |
 | [`packaging`](./packaging) | Packaging | Does the **built artifact** ship no test files? |
+| [`workflow-lint`](./workflow-lint) | _none yet_ | Does every CI `run:` body read as **wiring** rather than a program? |
 | [`e2e-verify`](./e2e-verify) | E2E attestation freshness | Does a branch that changed the code record one visible **e2e decision**? |
 | [`changelog`](./changelog) | CHANGELOG + MIGRATIONS touched | Does a pull request that changed a package's **public surface** add a fragment recording it? |
+
+`workflow-lint` is the exception to that first sentence: it ships in the CLI but has no job and no
+`gates` name yet. The job wiring lands in a following release, once the published binary understands
+the subcommand — until then, run it yourself.
 
 Each check's page states the facts and opens with the why; the [explanation section](/explanation/)
 carries the same ground as discursive essays — the testing model, the unit ladder, and the design

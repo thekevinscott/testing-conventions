@@ -1,0 +1,8 @@
+# Not CI: GitHub reads only the YAML directly inside `workflows/`. The loop is here on purpose.
+jobs:
+  decoy:
+    steps:
+      - run: |
+          for name in $NAMES; do
+            npm publish "$name"
+          done

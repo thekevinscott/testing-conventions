@@ -1,0 +1,23 @@
+name: CI
+
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Test
+        run: pnpm test
+      - name: Guard the private flag
+        run: |
+          set -euo pipefail
+          private=$(gh api repos/x --jq .private)
+          if [ "$private" = "true" ]; then
+            echo "::error::the repository is private"
+            exit 1
+          fi

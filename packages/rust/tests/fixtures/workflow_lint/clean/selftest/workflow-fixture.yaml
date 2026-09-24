@@ -1,0 +1,9 @@
+# Not CI: a test fixture that merely sits under the scanned root. The loop below is here on purpose
+# — discovery must never read this file as a workflow.
+jobs:
+  decoy:
+    steps:
+      - run: |
+          for name in $NAMES; do
+            npm publish "$name"
+          done

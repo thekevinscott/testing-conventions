@@ -58,11 +58,13 @@ enum Command {
     },
     /// Packaging conventions: test files must not ship in the built artifact.
     Packaging {
-        /// Root of the built artifact to inspect (e.g. an unpacked wheel or `dist/`).
+        /// Built distributions to check: a directory holding them (searched recursively), one
+        /// named `.whl` / `.tar.gz` / `.tgz` / `.crate`, or an unpacked artifact root.
         path: PathBuf,
-        /// Language convention to enforce (required).
+        /// Language convention to enforce for `path`. Omitted, each distribution found takes
+        /// the language its file name names.
         #[arg(long, value_enum)]
-        language: colocated_test::Language,
+        language: Option<colocated_test::Language>,
     },
     /// Workflow guard (private — hidden from `--help`): every `testing-conventions`
     /// invocation in a CI workflow must name a subcommand this binary still exposes
@@ -910,28 +912,58 @@ fn run_changelog(base: &str, root: &Path) -> anyhow::Result<i32> {
     Ok(1)
 }
 
-/// Inspect the built artifact at `artifact` — an unpacked directory or a packed archive —
-/// for test files matching `language`'s globs. `1` when any are present.
-fn run_packaging(artifact: &Path, language: colocated_test::Language) -> anyhow::Result<i32> {
-    let globs = match language {
+/// Inspect the built distributions at `path` for test files. With `language`, `path` is that
+/// language's distribution or unpacked artifact root; without it, `path` is searched and every
+/// distribution found takes the language its file name names. `1` when any test file ships.
+fn run_packaging(path: &Path, language: Option<colocated_test::Language>) -> anyhow::Result<i32> {
+    let distributions = match language {
+        Some(language) => vec![packaging::Distribution {
+            path: path.to_path_buf(),
+            language,
+        }],
+        None => packaging::discover(path)?,
+    };
+    if distributions.is_empty() {
+        anyhow::bail!(
+            "no recognized built distribution (`.whl`, `.tar.gz`, `.tgz`, `.crate`) at `{}`",
+            path.display()
+        );
+    }
+    let mut shipped = 0;
+    for distribution in &distributions {
+        shipped += report_shipped_test_files(distribution)?;
+    }
+    if shipped > 0 {
+        eprintln!(
+            "error: {shipped} test file(s) present in the built distribution(s) \
+             (they must be excluded from packaging)"
+        );
+        return Ok(1);
+    }
+    println!(
+        "checked {} built distribution(s); no test files shipped",
+        distributions.len()
+    );
+    Ok(0)
+}
+
+/// Name every test file `distribution` ships, and how many there were.
+fn report_shipped_test_files(distribution: &packaging::Distribution) -> anyhow::Result<usize> {
+    let globs = match distribution.language {
         colocated_test::Language::Python => vec!["*_test.py".to_string()],
         colocated_test::Language::TypeScript => vec!["*.test.*".to_string()],
         // `#[cfg(test)]` units compile out, so only the crate-root `tests/` dir can ship.
         colocated_test::Language::Rust => vec!["tests/".to_string()],
     };
-    let offenders = packaging::inspect(artifact, &globs)?;
-    if offenders.is_empty() {
-        return Ok(0);
-    }
+    let offenders = packaging::inspect(&distribution.path, &globs)?;
     for offender in &offenders {
-        eprintln!("test file in built artifact: {}", offender.display());
+        eprintln!(
+            "test file in built artifact `{}`: {}",
+            distribution.path.display(),
+            offender.display()
+        );
     }
-    eprintln!(
-        "error: {} test file(s) present in the built artifact \
-         (they must be excluded from packaging)",
-        offenders.len()
-    );
-    Ok(1)
+    Ok(offenders.len())
 }
 
 /// Flag every `testing-conventions` invocation under `path` naming a subcommand this

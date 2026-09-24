@@ -48,6 +48,47 @@ is held to its test.
 Changing a test on its own always passes. Rust units are inline in the same file, so a sibling
 test can't go stale and co-change doesn't apply to Rust — a deliberate asymmetry.
 
+### A Rust binary's entry point
+
+Rust requires a `main` in a binary root, so `src/main.rs` cannot be emptied the way a library module
+can. It needs no exemption. Two shapes read as declaration-only; both move the logic into the
+library, where a test reaches it.
+
+**Re-export the entry point.** A `pub use` carries no function at all:
+
+```rust
+// src/main.rs
+pub use mycrate::entrypoint::main;
+```
+
+Rust accepts a re-export as the entry point as long as the item is a zero-argument function
+returning a `Termination` type.
+
+**Or delegate in a single call.** A `fn main` is declaration-only when its body is one
+argument-free call and nothing else:
+
+```rust
+// src/main.rs
+#[cfg(not(test))]
+fn main() -> std::process::ExitCode {
+    mycrate::entrypoint::main()
+}
+```
+
+The shape is deliberately narrow, because anything wider can hide a decision. Exactly one
+statement, and that statement a call through a path taking no arguments. A second statement, an
+argument, an operator, a `?`, a `match`, a method call — each makes the file a subject again, and
+then it needs its own inline `#[cfg(test)]` module.
+
+`#[cfg(not(test))]` is not optional on this shape. Without it the function is instrumented and
+reads 0% — `cargo test` replaces a binary's `main` with the harness's own, so no unit test can ever
+execute it, and a 100% floor would be unreachable. The re-export needs no such attribute: it emits
+no code regions and is absent from the coverage report either way.
+
+That leaves one line outside the unit tier by construction — the process-boundary argv read the
+library's `main` performs. Keep it free of decisions, mark it `#[cfg(not(test))]` too, and let
+[`e2e-verify`](./e2e-verify) exercise the real binary.
+
 ## When it runs
 
 | Mode | Runs | As |

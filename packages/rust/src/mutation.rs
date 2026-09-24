@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
+use syn::spanned::Spanned;
+use syn::visit::{self, Visit};
 
 use crate::colocated_test::Language;
 
@@ -52,6 +54,69 @@ fn is_declaration_only(base: &Path, file: &str, language: Language) -> bool {
     match std::fs::read_to_string(base.join(file)) {
         Ok(source) => !language.is_subject(&source, Path::new(file)),
         Err(_) => false,
+    }
+}
+
+/// `true` when the mutant at `line` of `file` (resolved against `base`) sits inside an item a
+/// test build never compiles. An unreadable file is never dropped, so it stays a survivor rather
+/// than vanishing silently.
+fn is_hidden_from_tests(base: &Path, file: &str, line: u32) -> bool {
+    let source = std::fs::read_to_string(base.join(file)).unwrap_or_default();
+    lines_hidden_from_tests(&source).contains(&line)
+}
+
+/// The 1-based lines of the Rust items a `#[cfg(not(test))]` gate keeps out of a test build.
+///
+/// A mutant on one of those lines survives by construction: the unit tier runs `--lib --bins`,
+/// which sets `cfg(test)`, so the mutated code is not in the binary the suite runs and no test can
+/// reach it. cargo-mutants mutates the item anyway — it reads the source, not the build — and
+/// reports MISSED. Unparseable source yields no lines, leaving every survivor in place.
+fn lines_hidden_from_tests(source: &str) -> BTreeSet<u32> {
+    let Ok(ast) = syn::parse_file(source) else {
+        return BTreeSet::new();
+    };
+    let mut hidden = HiddenItems::default();
+    hidden.visit_file(&ast);
+    hidden.lines
+}
+
+/// Collects the line ranges of gated items. A gated `mod` or `impl` covers everything inside it,
+/// so recording the whole span is enough and the walk need not track nesting.
+#[derive(Default)]
+struct HiddenItems {
+    lines: BTreeSet<u32>,
+}
+
+impl HiddenItems {
+    fn gated(&mut self, attrs: &[syn::Attribute], node: &dyn Spanned) {
+        if !crate::isolation::has_cfg_not_test(attrs) {
+            return;
+        }
+        let span = node.span();
+        self.lines
+            .extend(span.start().line as u32..=span.end().line as u32);
+    }
+}
+
+impl<'ast> Visit<'ast> for HiddenItems {
+    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+        self.gated(&node.attrs, node);
+        visit::visit_item_fn(self, node);
+    }
+
+    fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
+        self.gated(&node.attrs, node);
+        visit::visit_item_mod(self, node);
+    }
+
+    fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+        self.gated(&node.attrs, node);
+        visit::visit_item_impl(self, node);
+    }
+
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        self.gated(&node.attrs, node);
+        visit::visit_impl_item_fn(self, node);
     }
 }
 
@@ -417,6 +482,11 @@ pub fn measure_rust(
                         .into_iter()
                         .filter(|mutant| {
                             !is_declaration_only(&workspace_root, &mutant.file, Language::Rust)
+                                && !is_hidden_from_tests(
+                                    &workspace_root,
+                                    &mutant.file,
+                                    mutant.span.start.line,
+                                )
                         })
                         .collect();
                 zero_mutant_verdict(&listed, diff, &run)?;
@@ -430,7 +500,10 @@ pub fn measure_rust(
     let mut report = rebase_report_paths(parse_mutants_report(&json)?, prefix.as_deref());
     report.outcomes.retain(|outcome| match &outcome.scenario {
         Scenario::Baseline => true,
-        Scenario::Mutant(mutant) => !is_declaration_only(root, &mutant.file, Language::Rust),
+        Scenario::Mutant(mutant) => {
+            !is_declaration_only(root, &mutant.file, Language::Rust)
+                && !is_hidden_from_tests(root, &mutant.file, mutant.span.start.line)
+        }
     });
     let survivors = evaluate_scoped(
         cargo_mutants_survivors(&report),
@@ -1569,6 +1642,110 @@ diff --git a/src/lib.rs b/src/lib.rs
         let msg = format!("{err:#}");
         assert!(msg.contains("the Python mutation adapter failed"), "{msg}");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_cfg_not_test_function_hides_its_own_lines_and_no_others() {
+        let source = "\
+#[cfg(not(test))]
+pub fn main() -> u8 {
+    run()
+}
+
+fn run() -> u8 {
+    1
+}
+";
+        assert_eq!(
+            lines_hidden_from_tests(source),
+            BTreeSet::from([1, 2, 3, 4])
+        );
+    }
+
+    #[test]
+    fn a_gated_module_hides_everything_inside_it() {
+        let source = "\
+#[cfg(not(test))]
+mod real {
+    pub fn go() -> u8 {
+        1
+    }
+}
+";
+        assert_eq!(
+            lines_hidden_from_tests(source),
+            BTreeSet::from([1, 2, 3, 4, 5, 6])
+        );
+    }
+
+    #[test]
+    fn a_gated_method_hides_only_that_method() {
+        let source = "\
+impl Runner {
+    #[cfg(not(test))]
+    fn go(&self) -> u8 {
+        1
+    }
+
+    fn stay(&self) -> u8 {
+        2
+    }
+}
+";
+        assert_eq!(
+            lines_hidden_from_tests(source),
+            BTreeSet::from([2, 3, 4, 5])
+        );
+    }
+
+    #[test]
+    fn an_ungated_file_hides_nothing() {
+        let source = "#[cfg(test)]\nmod tests {\n    fn t() {}\n}\n\nfn go() -> u8 {\n    1\n}\n";
+
+        assert!(lines_hidden_from_tests(source).is_empty());
+    }
+
+    #[test]
+    fn unparseable_source_hides_nothing() {
+        assert!(lines_hidden_from_tests("fn go( {").is_empty());
+    }
+
+    /// Whether `attr` on a plain function hides it from the test build.
+    fn hides_under(attr: &str) -> bool {
+        !lines_hidden_from_tests(&format!("{attr}\nfn go() -> u8 {{\n    1\n}}\n")).is_empty()
+    }
+
+    #[test]
+    fn a_gate_no_test_build_can_satisfy_hides_the_item() {
+        assert!(hides_under("#[cfg(not(test))]"));
+        assert!(hides_under("#[cfg(all(not(test), unix))]"));
+        assert!(hides_under("#[cfg(not(any(test, unix)))]"));
+        assert!(hides_under("#[cfg(any())]"));
+        assert!(hides_under("#[cfg(not(all()))]"));
+    }
+
+    #[test]
+    fn a_gate_a_test_build_can_still_satisfy_hides_nothing() {
+        assert!(!hides_under("#[cfg(test)]"));
+        assert!(!hides_under("#[cfg(unix)]"));
+        assert!(!hides_under("#[cfg(feature = \"x\")]"));
+        assert!(!hides_under("#[cfg(any(not(test), unix))]"));
+        assert!(!hides_under("#[cfg(not(not(test)))]"));
+        assert!(!hides_under("#[cfg(all())]"));
+        assert!(!hides_under("#[inline]"));
+    }
+
+    #[test]
+    fn a_gate_resting_on_a_condition_we_cannot_decide_hides_nothing() {
+        assert!(!hides_under("#[cfg(not(unix))]"));
+        assert!(!hides_under("#[cfg(all(test, unix))]"));
+    }
+
+    #[test]
+    fn a_malformed_gate_hides_nothing() {
+        assert!(!hides_under("#[cfg(not())]"));
+        assert!(!hides_under("#[cfg(nope(test))]"));
+        assert!(!hides_under("#[cfg(not(test), unix)]"));
     }
 
     #[test]

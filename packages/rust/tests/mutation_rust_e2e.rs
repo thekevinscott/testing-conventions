@@ -261,6 +261,11 @@ fn an_integration_tier_mutant_fails_the_gate() {
 }
 
 #[test]
+fn a_cfg_not_test_entry_point_passes_the_gate() {
+    assert_eq!(unit_mutation_exit("cfg_not_test", None), 0);
+}
+
+#[test]
 fn a_failing_run_lists_each_survivor_with_one_location() {
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "rust"])

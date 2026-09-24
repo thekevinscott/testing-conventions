@@ -135,6 +135,29 @@ fn a_declaration_only_module_leaves_no_survivors() {
 }
 
 #[test]
+fn a_cfg_not_test_entry_point_leaves_no_survivors() {
+    let (count, survivors) = expect_tested(
+        measure_rust(
+            &crate_dir("cfg_not_test"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &[],
+        )
+        .expect("cargo-mutants runs"),
+    );
+    assert!(
+        survivors.is_empty(),
+        "a gated entry point is absent from the --lib --bins build, so no test can kill its \
+         mutants; got {survivors:?}"
+    );
+    assert!(
+        count > 0,
+        "the mutants beside the gated ones were still judged"
+    );
+}
+
+#[test]
 fn a_mutation_exemption_drops_the_survivors() {
     let exempt = vec!["src/lib.rs".to_string()];
     let (_, survivors) = expect_tested(

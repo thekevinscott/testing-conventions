@@ -401,6 +401,115 @@ fn cfg_requires_test(tokens: proc_macro2::TokenStream, negated: bool) -> bool {
     false
 }
 
+/// `true` when `attrs` carry a `cfg` gate that no test build can satisfy — `#[cfg(not(test))]`
+/// and `#[cfg(all(not(test), unix))]`, but not `#[cfg(any(not(test), unix))]`, which still
+/// compiles under `cargo test`. `mutation` reads this: a mutant inside an item the test build
+/// never compiles is unkillable by construction.
+pub(crate) fn has_cfg_not_test(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("cfg")
+            && attr
+                .meta
+                .require_list()
+                .map(|list| cfg_under_test(list.tokens.clone()) == CfgTruth::False)
+                .unwrap_or(false)
+    })
+}
+
+/// A `cfg(...)` predicate's truth with `test` set and every other condition unknown. Only a
+/// definite [`CfgTruth::False`] proves the item is compiled out of a test build.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CfgTruth {
+    False,
+    True,
+    Unknown,
+}
+
+/// Evaluate a whole `cfg(...)` predicate list. A `cfg` attribute holds exactly one predicate;
+/// anything else is malformed and not ours to judge.
+fn cfg_under_test(tokens: proc_macro2::TokenStream) -> CfgTruth {
+    match cfg_predicates(tokens).as_slice() {
+        [only] => *only,
+        _ => CfgTruth::Unknown,
+    }
+}
+
+/// Evaluate each comma-separated predicate in a `not(…)` / `all(…)` / `any(…)` group.
+fn cfg_predicates(tokens: proc_macro2::TokenStream) -> Vec<CfgTruth> {
+    let mut out = Vec::new();
+    let mut current: Vec<proc_macro2::TokenTree> = Vec::new();
+    for tt in tokens {
+        match &tt {
+            proc_macro2::TokenTree::Punct(punct) if punct.as_char() == ',' => {
+                if !current.is_empty() {
+                    out.push(cfg_predicate(&current));
+                    current.clear();
+                }
+            }
+            _ => current.push(tt),
+        }
+    }
+    if !current.is_empty() {
+        out.push(cfg_predicate(&current));
+    }
+    out
+}
+
+/// Evaluate one predicate with `test` set. A bare `test` is true, the three combinators recurse,
+/// and everything else — `unix`, `feature = "x"`, an unknown combinator — is
+/// [`CfgTruth::Unknown`].
+fn cfg_predicate(tokens: &[proc_macro2::TokenTree]) -> CfgTruth {
+    use proc_macro2::TokenTree;
+    match tokens {
+        [TokenTree::Ident(id)] if id == "test" => CfgTruth::True,
+        [TokenTree::Ident(id), TokenTree::Group(group)] => {
+            let inner = cfg_predicates(group.stream());
+            match id.to_string().as_str() {
+                // `not` takes exactly one predicate; a malformed `not()` is undecidable, not true.
+                "not" => match inner.as_slice() {
+                    [only] => cfg_negate(*only),
+                    _ => CfgTruth::Unknown,
+                },
+                "all" => cfg_all(&inner),
+                "any" => cfg_any(&inner),
+                _ => CfgTruth::Unknown,
+            }
+        }
+        _ => CfgTruth::Unknown,
+    }
+}
+
+/// `all(…)`: false if any part is false, unknown if any part is unknown. An empty `all()` is true.
+fn cfg_all(parts: &[CfgTruth]) -> CfgTruth {
+    if parts.contains(&CfgTruth::False) {
+        CfgTruth::False
+    } else if parts.contains(&CfgTruth::Unknown) {
+        CfgTruth::Unknown
+    } else {
+        CfgTruth::True
+    }
+}
+
+/// `any(…)`: true if any part is true, unknown if any part is unknown. An empty `any()` is false.
+fn cfg_any(parts: &[CfgTruth]) -> CfgTruth {
+    if parts.contains(&CfgTruth::True) {
+        CfgTruth::True
+    } else if parts.contains(&CfgTruth::Unknown) {
+        CfgTruth::Unknown
+    } else {
+        CfgTruth::False
+    }
+}
+
+/// `not(…)`: an unknown stays unknown, so a gate we cannot decide never drops a mutant.
+fn cfg_negate(truth: CfgTruth) -> CfgTruth {
+    match truth {
+        CfgTruth::False => CfgTruth::True,
+        CfgTruth::True => CfgTruth::False,
+        CfgTruth::Unknown => CfgTruth::Unknown,
+    }
+}
+
 /// The crate's `[dependencies]` names, hyphens normalized to underscores — the external
 /// crates whose calls are out-of-module. `[dev-dependencies]` are excluded: a unit test
 /// uses its framework (`mockall`, `rstest`, …) for real.

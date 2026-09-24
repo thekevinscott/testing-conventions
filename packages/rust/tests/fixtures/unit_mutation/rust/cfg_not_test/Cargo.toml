@@ -1,0 +1,10 @@
+# Fixture crate `mut_cfg_not_test`: the binary shape `colocated-test` documents — a
+# `#[cfg(not(test))]` entry point the test build never compiles, beside a `report` its
+# colocated test pins. cargo-mutants mutates the gated functions anyway, and nothing can kill
+# those mutants. `[workspace]` keeps it standalone (not part of the repo's cargo workspace).
+[package]
+name = "mut_cfg_not_test"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

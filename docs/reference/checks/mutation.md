@@ -35,6 +35,16 @@ A **declaration-only module** — a file with no function or control flow, the s
 subject: a mutant the engine finds there is dropped before judging, so editing one demands no
 survivor explanation.
 
+In Rust, a mutant inside an item a `#[cfg(not(test))]` gate keeps out of the test build is dropped
+the same way. The unit tier runs `--lib --bins`, which sets `cfg(test)`, so that code is not in the
+binary the suite runs and no test can reach it — cargo-mutants mutates it anyway, because it reads
+the source rather than the build, and reports a survivor nothing could have killed. The exclusion is
+item-level and only covers a gate a test build genuinely cannot satisfy: `#[cfg(not(test))]` and
+`#[cfg(all(not(test), unix))]` qualify, `#[cfg(any(not(test), unix))]` still compiles under
+`cargo test` and stays a subject. This is what makes the
+[binary entry point `colocated-test` documents](/reference/checks/colocated-test#a-rust-binary-s-entry-point)
+mutation-clean.
+
 <!--@include: ../../explanation/mutation.md#engines-->
 
 ### Timeouts

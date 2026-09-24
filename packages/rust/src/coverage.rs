@@ -588,7 +588,7 @@ pub struct LlvmCovData {
 
 /// The `totals` block of an llvm-cov export. `branches` is optional so an export from
 /// a run without branch instrumentation still parses.
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
 pub struct LlvmCovTotals {
     pub regions: LlvmCovMetric,
     pub lines: LlvmCovMetric,
@@ -598,7 +598,7 @@ pub struct LlvmCovTotals {
 }
 
 /// One metric's totals from an llvm-cov export.
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
 pub struct LlvmCovMetric {
     /// Size of the denominator (regions or lines counted).
     pub count: u64,
@@ -691,21 +691,229 @@ impl Drop for TargetDir {
     }
 }
 
-/// The parsed `--summary-only` export — the totals the floor checks. `branch` adds
-/// `--branch` for a configured branch floor.
+/// The totals the floor checks, less the items a `#[cfg(not(test))]` gate keeps out of the
+/// test build. `branch` adds `--branch` for a configured branch floor. The run exports in
+/// full rather than `--summary-only`, since the per-function detail is what locates those
+/// items in the totals.
 fn run_llvm_cov(
     root: &Path,
     ignore: &[String],
     features: &[String],
     branch: bool,
 ) -> Result<LlvmCovReport> {
-    parse_llvm_cov_report(&run_cargo_llvm_cov(
-        root,
-        ignore,
-        &["--json", "--summary-only"],
-        features,
-        branch,
-    )?)
+    let json = run_cargo_llvm_cov(root, ignore, &["--json"], features, branch)?;
+    let hidden = hidden_lines_by_file(&json)?;
+    Ok(llvm_cov_totals_less_hidden(
+        &parse_llvm_cov_export(&json)?,
+        &hidden,
+    ))
+}
+
+/// The 1-based lines a `#[cfg(not(test))]` gate hides, per source file the export measured.
+///
+/// The unit tier runs `--lib --bins`, which sets `cfg(test)`, so no test can execute a gated
+/// item. The `--bins` half links the library a second time as a plain dependency of the binary
+/// target's test harness, where `cfg(test)` is unset: the item is compiled and instrumented
+/// there and lands as 0-hit, or not, depending on how the linker partitioned that build. An
+/// unreadable file hides nothing, leaving every line it maps in the ratios.
+fn hidden_lines_by_file(json: &str) -> Result<BTreeMap<String, BTreeSet<u32>>> {
+    let export = parse_llvm_cov_export(json)?;
+    let mut out = BTreeMap::new();
+    for data in &export.data {
+        for file in &data.files {
+            let Ok(source) = std::fs::read_to_string(&file.filename) else {
+                continue;
+            };
+            let lines = crate::isolation::lines_hidden_from_tests(&source);
+            if !lines.is_empty() {
+                out.insert(file.filename.clone(), lines);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// One metric's count and covered pair, the shape every llvm-cov metric reports.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Tally {
+    count: u64,
+    covered: u64,
+}
+
+impl Tally {
+    /// llvm-cov merges the records of one instantiation group by `max`, so a delta over that
+    /// group does too — two copies of the same function subtract once.
+    fn merge(&mut self, other: Tally) {
+        self.count = self.count.max(other.count);
+        self.covered = self.covered.max(other.covered);
+    }
+
+    fn add(&mut self, other: Tally) {
+        self.count += other.count;
+        self.covered += other.covered;
+    }
+}
+
+/// What the items a `#[cfg(not(test))]` gate hides contribute to an export's totals.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct HiddenTotals {
+    regions: Tally,
+    lines: Tally,
+    functions: Tally,
+    branches: Tally,
+}
+
+impl HiddenTotals {
+    fn merge(&mut self, other: HiddenTotals) {
+        self.regions.merge(other.regions);
+        self.lines.merge(other.lines);
+        self.functions.merge(other.functions);
+        self.branches.merge(other.branches);
+    }
+
+    fn add(&mut self, other: HiddenTotals) {
+        self.regions.add(other.regions);
+        self.lines.add(other.lines);
+        self.functions.add(other.functions);
+        self.branches.add(other.branches);
+    }
+}
+
+/// Pure: the export's totals less what its gated items contribute.
+fn llvm_cov_totals_less_hidden(
+    export: &LlvmCovExport,
+    hidden: &BTreeMap<String, BTreeSet<u32>>,
+) -> LlvmCovReport {
+    LlvmCovReport {
+        data: export
+            .data
+            .iter()
+            .map(|data| LlvmCovData {
+                totals: totals_less_hidden(data, hidden),
+            })
+            .collect(),
+    }
+}
+
+/// One export entry's totals with the gated items' share taken out of every metric.
+fn totals_less_hidden(
+    data: &LlvmCovExportData,
+    hidden: &BTreeMap<String, BTreeSet<u32>>,
+) -> LlvmCovTotals {
+    let delta = hidden_totals(data, hidden);
+    LlvmCovTotals {
+        regions: metric_less(data.totals.regions, delta.regions),
+        lines: metric_less(data.totals.lines, delta.lines),
+        functions: metric_less(data.totals.functions, delta.functions),
+        branches: data
+            .totals
+            .branches
+            .map(|metric| metric_less(metric, delta.branches)),
+    }
+}
+
+/// One metric less the gated items' share, its percent recomputed. A metric the subtraction
+/// empties reads 100%: with nothing left to measure there is nothing left to miss.
+fn metric_less(metric: LlvmCovMetric, delta: Tally) -> LlvmCovMetric {
+    let count = metric.count.saturating_sub(delta.count);
+    let covered = metric.covered.saturating_sub(delta.covered).min(count);
+    let percent = if count == 0 {
+        100.0
+    } else {
+        covered as f64 * 100.0 / count as f64
+    };
+    LlvmCovMetric {
+        count,
+        covered,
+        percent,
+    }
+}
+
+/// The gated items' contribution to one export entry. llvm-cov groups function records by their
+/// first region's start location, so the `--bins` half's second copy of an ungated function
+/// merges with the first; a gated item has no such twin and stands alone as 0-hit.
+fn hidden_totals(
+    data: &LlvmCovExportData,
+    hidden: &BTreeMap<String, BTreeSet<u32>>,
+) -> HiddenTotals {
+    let measured: BTreeSet<&str> = data.files.iter().map(|f| f.filename.as_str()).collect();
+    let mut groups: BTreeMap<(String, i64, i64), HiddenTotals> = BTreeMap::new();
+    for function in &data.functions {
+        let Some((file, line, column)) = function_start(function) else {
+            continue;
+        };
+        if !measured.contains(file.as_str()) {
+            continue;
+        }
+        let Some(lines) = hidden.get(&file) else {
+            continue;
+        };
+        if !lines.contains(&(line.max(0) as u32)) {
+            continue;
+        }
+        groups
+            .entry((file, line, column))
+            .or_default()
+            .merge(function_totals(function, lines));
+    }
+    groups.values().fold(HiddenTotals::default(), |mut acc, g| {
+        acc.add(*g);
+        acc
+    })
+}
+
+/// The `(file, line, column)` llvm-cov groups a function record under — its first region's
+/// start. A record with no region, or one naming a file outside its own list, has no group.
+fn function_start(function: &LlvmCovFunction) -> Option<(String, i64, i64)> {
+    let region = function.regions.first()?;
+    if region.len() < 8 {
+        return None;
+    }
+    let file = function.filenames.get(usize::try_from(region[5]).ok()?)?;
+    Some((file.clone(), region[0], region[1]))
+}
+
+/// One record's share: its code regions, the gated source lines they map, its own execution,
+/// and the two outcomes llvm-cov counts per branch region.
+fn function_totals(function: &LlvmCovFunction, hidden: &BTreeSet<u32>) -> HiddenTotals {
+    let code: Vec<&Vec<i64>> = function
+        .regions
+        .iter()
+        .filter(|region| region.len() >= 8 && region[7] == 0)
+        .collect();
+    let mut lines: BTreeMap<u32, bool> = BTreeMap::new();
+    for region in &code {
+        for line in region[0].max(0) as u32..=region[2].max(0) as u32 {
+            if hidden.contains(&line) {
+                *lines.entry(line).or_default() |= region[4] > 0;
+            }
+        }
+    }
+    HiddenTotals {
+        regions: Tally {
+            count: code.len() as u64,
+            covered: code.iter().filter(|region| region[4] > 0).count() as u64,
+        },
+        lines: Tally {
+            count: lines.len() as u64,
+            covered: lines.values().filter(|covered| **covered).count() as u64,
+        },
+        functions: Tally {
+            count: 1,
+            covered: u64::from(function.count > 0),
+        },
+        branches: branch_tally(&function.branches),
+    }
+}
+
+/// Two outcomes per branch region: llvm-cov counts the true and false arms separately.
+fn branch_tally(branches: &[Vec<i64>]) -> Tally {
+    let mut tally = Tally::default();
+    for branch in branches.iter().filter(|branch| branch.len() >= 9) {
+        tally.count += 2;
+        tally.covered += u64::from(branch[4] > 0) + u64::from(branch[5] > 0);
+    }
+    tally
 }
 
 /// Run `cargo llvm-cov --lib` over the unit suite in `root` with the given coverage
@@ -812,6 +1020,10 @@ struct LlvmCovExport {
 struct LlvmCovExportData {
     files: Vec<LlvmCovExportFile>,
     functions: Vec<LlvmCovFunction>,
+    /// The same block [`LlvmCovReport`] reads. Defaulted so a fixture that models only the
+    /// region detail still parses.
+    #[serde(default)]
+    totals: LlvmCovTotals,
 }
 
 /// One measured file in the export's `files` block — only its absolute `filename` is
@@ -824,10 +1036,16 @@ struct LlvmCovExportFile {
 /// One function's coverage: the files it spans (`filenames`, indexed by a region's
 /// `fileID`) and its regions. Each region is a flat array `[lineStart, colStart,
 /// lineEnd, colEnd, executionCount, fileID, expandedFileID, kind]`, read positionally.
+/// A branch region sits in `branches` instead, with `falseExecutionCount` inserted at index 5.
 #[derive(Debug, Clone, Deserialize)]
 struct LlvmCovFunction {
     filenames: Vec<String>,
     regions: Vec<Vec<i64>>,
+    /// How many times the function itself ran.
+    #[serde(default)]
+    count: u64,
+    #[serde(default)]
+    branches: Vec<Vec<i64>>,
 }
 
 /// Run the Rust unit suite under `cargo llvm-cov` and return the per-file region
@@ -840,15 +1058,24 @@ pub fn measure_patch_rust_detail(
 ) -> Result<BTreeMap<String, RustPatchCoverage>> {
     // The diff-scoped floor judges regions + lines, so its run never adds `--branch`.
     let json = run_cargo_llvm_cov(root, ignore, &["--json"], features, false)?;
-    llvm_cov_patch_detail(&json)
+    let hidden = hidden_lines_by_file(&json)?;
+    llvm_cov_patch_detail(&json, &hidden)
+}
+
+/// Parse a full `cargo llvm-cov --json` export.
+fn parse_llvm_cov_export(json: &str) -> Result<LlvmCovExport> {
+    serde_json::from_str(json).context("parsing cargo llvm-cov JSON export")
 }
 
 /// Pure: per-file [`RustPatchCoverage`] from a `cargo llvm-cov --json` export, keyed
 /// by the absolute path llvm-cov reports. Only `kind == 0` code regions in the `files`
-/// allowlist count; a malformed short region is skipped rather than indexed.
-fn llvm_cov_patch_detail(json: &str) -> Result<BTreeMap<String, RustPatchCoverage>> {
-    let export: LlvmCovExport =
-        serde_json::from_str(json).context("parsing cargo llvm-cov JSON export")?;
+/// allowlist count; a malformed short region is skipped rather than indexed, and a region
+/// starting on a line `hidden` names is dropped — no test can execute it.
+fn llvm_cov_patch_detail(
+    json: &str,
+    hidden: &BTreeMap<String, BTreeSet<u32>>,
+) -> Result<BTreeMap<String, RustPatchCoverage>> {
+    let export = parse_llvm_cov_export(json)?;
     let mut out: BTreeMap<String, RustPatchCoverage> = BTreeMap::new();
     for data in &export.data {
         let measured: BTreeSet<&str> = data.files.iter().map(|f| f.filename.as_str()).collect();
@@ -874,6 +1101,14 @@ fn llvm_cov_patch_detail(json: &str) -> Result<BTreeMap<String, RustPatchCoverag
                 }
                 let start = region[0].max(0) as u64;
                 let end = region[2].max(0) as u64;
+                // A gated item is instrumented in the bin target's test harness, where
+                // `cfg(test)` is unset, and no test can reach it.
+                if hidden
+                    .get(file)
+                    .is_some_and(|lines| lines.contains(&(start as u32)))
+                {
+                    continue;
+                }
                 let covered = region[4] > 0;
                 out.entry(file.clone())
                     .or_default()
@@ -1391,6 +1626,11 @@ mod tests {
         assert_eq!(report.data[0].totals.lines.count, 20);
     }
 
+    /// [`llvm_cov_patch_detail`] over an export with nothing gated.
+    fn patch_detail(json: &str) -> BTreeMap<String, RustPatchCoverage> {
+        llvm_cov_patch_detail(json, &BTreeMap::new()).expect("valid llvm-cov export")
+    }
+
     #[test]
     fn llvm_cov_patch_detail_reads_code_regions_per_file() {
         let json = r#"{
@@ -1402,13 +1642,12 @@ mod tests {
                         [6, 5, 6, 26, 1, 0, 0, 0],
                         [10, 9, 10, 17, 0, 0, 0, 0]
                     ]
-                }],
-                "totals": {}
+                }]
             }],
             "type": "llvm.coverage.json.export",
             "version": "3.0.1"
         }"#;
-        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        let out = patch_detail(json);
         assert_eq!(
             out["/abs/grade.rs"].regions,
             vec![(6, 6, true), (10, 10, false)]
@@ -1430,7 +1669,7 @@ mod tests {
                 }]
             }]
         }"#;
-        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        let out = patch_detail(json);
         assert_eq!(out["/abs/a.rs"].regions, vec![(1, 1, true)]);
     }
 
@@ -1448,7 +1687,7 @@ mod tests {
                 }]
             }]
         }"#;
-        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        let out = patch_detail(json);
         assert_eq!(out["/abs/a.rs"].regions, vec![(1, 1, true)]);
         assert_eq!(out["/abs/b.rs"].regions, vec![(9, 9, false)]);
     }
@@ -1467,7 +1706,7 @@ mod tests {
                 }]
             }]
         }"#;
-        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        let out = patch_detail(json);
         assert_eq!(out["/abs/a.rs"].regions, vec![(5, 5, true)]);
     }
 
@@ -1482,7 +1721,7 @@ mod tests {
                 }]
             }]
         }"#;
-        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        let out = patch_detail(json);
         assert_eq!(out["/abs/a.rs"].regions, vec![(3, 5, false)]);
     }
 
@@ -1500,14 +1739,14 @@ mod tests {
                 }]
             }]
         }"#;
-        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        let out = patch_detail(json);
         assert_eq!(out["/abs/kept.rs"].regions, vec![(1, 1, true)]);
         assert!(!out.contains_key("/abs/ignored.rs"));
     }
 
     #[test]
     fn llvm_cov_patch_detail_malformed_json_is_an_error() {
-        assert!(llvm_cov_patch_detail("{ not json").is_err());
+        assert!(llvm_cov_patch_detail("{ not json", &BTreeMap::new()).is_err());
     }
 
     #[test]
@@ -1521,7 +1760,7 @@ mod tests {
                 }]
             }]
         }"#;
-        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        let out = patch_detail(json);
         assert!(out.is_empty(), "got: {out:?}");
     }
 
@@ -1536,7 +1775,7 @@ mod tests {
                 }]
             }]
         }"#;
-        let out = llvm_cov_patch_detail(json).expect("valid llvm-cov export");
+        let out = patch_detail(json);
         assert!(out.is_empty(), "got: {out:?}");
     }
 
@@ -1648,6 +1887,201 @@ mod tests {
         assert!(
             !llvm_would_ignore(&regex, "/repo/src/xsrc/a.rs"),
             "`src/a.rs` over-matched `src/xsrc/a.rs`: {regex}"
+        );
+    }
+
+    /// A `cargo llvm-cov --json` export of one file holding a gated `main` on lines 6-8 and a
+    /// tested `report` on lines 11-13, with the `--bins` half's second, 0-hit copy of both.
+    const GATED_EXPORT: &str = r#"{
+        "data": [{
+            "files": [{"filename": "/abs/entrypoint.rs"}],
+            "functions": [
+                {"name": "report", "count": 1, "filenames": ["/abs/entrypoint.rs"], "branches": [],
+                 "regions": [[11, 1, 11, 37, 1, 0, 0, 0], [12, 5, 12, 19, 1, 0, 0, 0],
+                             [12, 20, 12, 30, 1, 0, 0, 0], [13, 1, 13, 2, 1, 0, 0, 0]]},
+                {"name": "main", "count": 0, "filenames": ["/abs/entrypoint.rs"], "branches": [],
+                 "regions": [[6, 1, 6, 26, 0, 0, 0, 0], [7, 5, 7, 11, 0, 0, 0, 0],
+                             [7, 12, 7, 46, 0, 0, 0, 0], [8, 1, 8, 2, 0, 0, 0, 0]]},
+                {"name": "report", "count": 0, "filenames": ["/abs/entrypoint.rs"], "branches": [],
+                 "regions": [[11, 1, 11, 37, 0, 0, 0, 0], [12, 5, 12, 19, 0, 0, 0, 0],
+                             [12, 20, 12, 30, 0, 0, 0, 0], [13, 1, 13, 2, 0, 0, 0, 0]]}
+            ],
+            "totals": {
+                "regions": {"count": 13, "covered": 9, "percent": 69.23},
+                "lines": {"count": 9, "covered": 6, "percent": 66.67},
+                "functions": {"count": 3, "covered": 2, "percent": 66.67}
+            }
+        }]
+    }"#;
+
+    /// The lines `#[cfg(not(test))] fn main` spans in [`GATED_EXPORT`]'s source.
+    fn gated_main() -> BTreeMap<String, BTreeSet<u32>> {
+        BTreeMap::from([(
+            "/abs/entrypoint.rs".to_string(),
+            BTreeSet::from([5, 6, 7, 8]),
+        )])
+    }
+
+    /// [`llvm_cov_totals_less_hidden`] over an export string.
+    fn totals_less(json: &str, hidden: &BTreeMap<String, BTreeSet<u32>>) -> LlvmCovTotals {
+        let export = parse_llvm_cov_export(json).expect("valid llvm-cov export");
+        llvm_cov_totals_less_hidden(&export, hidden).data[0].totals
+    }
+
+    #[test]
+    fn a_gated_entry_point_leaves_every_ratio_full() {
+        let totals = totals_less(GATED_EXPORT, &gated_main());
+        assert_eq!((totals.regions.count, totals.regions.covered), (9, 9));
+        assert_eq!((totals.lines.count, totals.lines.covered), (6, 6));
+        assert_eq!((totals.functions.count, totals.functions.covered), (2, 2));
+        assert_eq!(totals.regions.percent, 100.0);
+    }
+
+    #[test]
+    fn an_export_with_nothing_gated_keeps_its_totals() {
+        let totals = totals_less(GATED_EXPORT, &BTreeMap::new());
+        assert_eq!((totals.regions.count, totals.regions.covered), (13, 9));
+        assert_eq!((totals.lines.count, totals.lines.covered), (9, 6));
+        assert_eq!((totals.functions.count, totals.functions.covered), (3, 2));
+    }
+
+    #[test]
+    fn two_copies_of_one_gated_item_subtract_once() {
+        let json = GATED_EXPORT.replace(
+            r#"{"name": "report", "count": 1"#,
+            r#"{"name": "main", "count": 0, "filenames": ["/abs/entrypoint.rs"], "branches": [],
+                 "regions": [[6, 1, 6, 26, 0, 0, 0, 0], [7, 5, 7, 11, 0, 0, 0, 0],
+                             [7, 12, 7, 46, 0, 0, 0, 0], [8, 1, 8, 2, 0, 0, 0, 0]]},
+                {"name": "report", "count": 1"#,
+        );
+        let totals = totals_less(&json, &gated_main());
+        assert_eq!((totals.regions.count, totals.regions.covered), (9, 9));
+        assert_eq!(totals.functions.count, 2);
+    }
+
+    #[test]
+    fn a_record_with_no_region_to_place_it_is_not_subtracted() {
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/a.rs"}],
+                "functions": [{"name": "empty", "count": 0, "filenames": ["/abs/a.rs"],
+                    "regions": [], "branches": []}],
+                "totals": {
+                    "regions": {"count": 2, "covered": 2, "percent": 100.0},
+                    "lines": {"count": 2, "covered": 2, "percent": 100.0},
+                    "functions": {"count": 1, "covered": 1, "percent": 100.0}
+                }
+            }]
+        }"#;
+        let hidden = BTreeMap::from([("/abs/a.rs".to_string(), BTreeSet::from([1]))]);
+        assert_eq!(totals_less(json, &hidden).regions.count, 2);
+    }
+
+    #[test]
+    fn a_record_outside_the_files_allowlist_is_not_subtracted() {
+        let hidden = BTreeMap::from([("/abs/other.rs".to_string(), BTreeSet::from([6]))]);
+        let json = GATED_EXPORT.replace("\"/abs/entrypoint.rs\"],", "\"/abs/other.rs\"],");
+        assert_eq!(totals_less(&json, &hidden).regions.count, 13);
+    }
+
+    #[test]
+    fn a_gated_branch_drops_both_of_its_arms() {
+        let json = r#"{
+            "data": [{
+                "files": [{"filename": "/abs/a.rs"}],
+                "functions": [{"name": "main", "count": 0, "filenames": ["/abs/a.rs"],
+                    "regions": [[1, 1, 3, 2, 0, 0, 0, 0]],
+                    "branches": [[2, 9, 2, 14, 0, 0, 0, 0, 4], [2, 9, 2, 14, 0, 0, 0, 0]]}],
+                "totals": {
+                    "regions": {"count": 5, "covered": 4, "percent": 80.0},
+                    "lines": {"count": 9, "covered": 6, "percent": 66.67},
+                    "functions": {"count": 3, "covered": 2, "percent": 66.67},
+                    "branches": {"count": 6, "covered": 4, "percent": 66.67}
+                }
+            }]
+        }"#;
+        let hidden = BTreeMap::from([("/abs/a.rs".to_string(), BTreeSet::from([1, 2, 3]))]);
+        let branches = totals_less(json, &hidden).branches.expect("branch totals");
+        // The second entry is a region array, not a branch one; a short array carries no arms.
+        assert_eq!((branches.count, branches.covered), (4, 4));
+    }
+
+    #[test]
+    fn a_metric_the_subtraction_empties_reads_full() {
+        let metric = LlvmCovMetric {
+            count: 4,
+            covered: 0,
+            percent: 0.0,
+        };
+        let emptied = metric_less(
+            metric,
+            Tally {
+                count: 9,
+                covered: 9,
+            },
+        );
+        assert_eq!((emptied.count, emptied.covered), (0, 0));
+        assert_eq!(emptied.percent, 100.0);
+    }
+
+    #[test]
+    fn a_function_record_without_a_usable_first_region_has_no_group() {
+        let short = LlvmCovFunction {
+            filenames: vec!["/abs/a.rs".to_string()],
+            regions: vec![vec![1, 1, 1, 2]],
+            count: 0,
+            branches: Vec::new(),
+        };
+        let unnamed = LlvmCovFunction {
+            filenames: Vec::new(),
+            regions: vec![vec![1, 1, 1, 2, 0, 7, 0, 0]],
+            count: 0,
+            branches: Vec::new(),
+        };
+        let empty = LlvmCovFunction {
+            filenames: vec!["/abs/a.rs".to_string()],
+            regions: Vec::new(),
+            count: 0,
+            branches: Vec::new(),
+        };
+        assert_eq!(function_start(&short), None);
+        assert_eq!(function_start(&unnamed), None);
+        assert_eq!(function_start(&empty), None);
+    }
+
+    #[test]
+    fn a_gated_region_drops_out_of_the_changed_line_detail() {
+        let hidden =
+            BTreeMap::from([("/abs/entrypoint.rs".to_string(), BTreeSet::from([6, 7, 8]))]);
+        let detail = llvm_cov_patch_detail(GATED_EXPORT, &hidden).expect("valid export");
+        assert_eq!(
+            detail["/abs/entrypoint.rs"]
+                .regions
+                .iter()
+                .map(|(start, _, _)| *start)
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([11, 12, 13])
+        );
+    }
+
+    #[test]
+    fn hidden_lines_come_from_the_sources_the_export_measured() {
+        let dir = std::env::temp_dir().join(format!("tc-cov-hidden-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let gated = dir.join("gated.rs");
+        std::fs::write(&gated, "#[cfg(not(test))]\nfn main() {}\n").unwrap();
+        let json = format!(
+            r#"{{"data": [{{"files": [{{"filename": "{}"}}, {{"filename": "{}"}}],
+                 "functions": []}}]}}"#,
+            gated.display(),
+            dir.join("absent.rs").display(),
+        );
+        let hidden = hidden_lines_by_file(&json).expect("valid export");
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(
+            hidden,
+            BTreeMap::from([(gated.display().to_string(), BTreeSet::from([1, 2]))]),
+            "an unreadable source hides nothing"
         );
     }
 }

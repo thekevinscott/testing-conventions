@@ -1,11 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NormalizedMutant } from './to-normalized.js';
 
-// Mock `parseArgs`, `runStryker`, and `fs/promises.writeFile` so the behaviors `mutationCLI`
-// owns can be driven without a real mutation run.
-const { parseArgs, runStryker, writeFile } = vi.hoisted(() => ({
+// Mock `parseArgs`, `runStryker`, `readVitestVersion`, and `fs/promises.writeFile` so the
+// behaviors `mutationCLI` owns can be driven without a real mutation run. The version read is
+// mocked so these tests never depend on the vitest this repo happens to install.
+const { parseArgs, readVitestVersion, runStryker, writeFile } = vi.hoisted(() => ({
   parseArgs: vi.fn<(argv: string[]) => { mutate?: string[]; out?: string; testFiles?: string[] }>(),
+  readVitestVersion: vi.fn<(projectRoot: string) => string | null>(),
   runStryker:
     vi.fn<(options?: { mutate?: string[]; testFiles?: string[] }) => Promise<NormalizedMutant[]>>(),
   writeFile: vi.fn<() => Promise<void>>(),
@@ -13,6 +15,11 @@ const { parseArgs, runStryker, writeFile } = vi.hoisted(() => ({
 vi.mock('./parse-args.js', async () => {
   const actual = await vi.importActual<typeof import('./parse-args.js')>('./parse-args.js');
   return { ...actual, parseArgs };
+});
+vi.mock('./read-vitest-version.js', async () => {
+  const actual =
+    await vi.importActual<typeof import('./read-vitest-version.js')>('./read-vitest-version.js');
+  return { ...actual, readVitestVersion };
 });
 vi.mock('./run-stryker.js', async () => {
   const actual = await vi.importActual<typeof import('./run-stryker.js')>('./run-stryker.js');
@@ -26,9 +33,14 @@ vi.mock('node:fs/promises', async () => {
 import { mutationCLI } from './mutation-cli.js';
 
 describe('mutationCLI', () => {
+  beforeEach(() => {
+    readVitestVersion.mockReturnValue('3.2.4');
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     parseArgs.mockReset();
+    readVitestVersion.mockReset();
     runStryker.mockReset();
     writeFile.mockReset();
   });
@@ -72,5 +84,13 @@ describe('mutationCLI', () => {
     runStryker.mockRejectedValue(new Error('boom'));
 
     await expect(mutationCLI([])).rejects.toThrow('boom');
+  });
+
+  it('refuses to run at all on a vitest the runner mis-scores, rather than reporting survivors', async () => {
+    parseArgs.mockReturnValue({});
+    readVitestVersion.mockReturnValue('5.0.1');
+
+    await expect(mutationCLI([])).rejects.toThrow('vitest 5.0.1');
+    expect(runStryker).not.toHaveBeenCalled();
   });
 });

@@ -1,0 +1,7 @@
+{
+  "command": "pnpm run test:e2e",
+  "ran_at": 1790275174,
+  "exit_code": 0,
+  "commit": "09a0eb554af3ff57293808fd7ffb60ed4f20ea64",
+  "branch": "fix/700-mutation-vitest5-guard"
+}

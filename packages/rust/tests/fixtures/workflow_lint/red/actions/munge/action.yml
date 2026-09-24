@@ -1,0 +1,9 @@
+name: Munge
+description: A composite action that rewrites text in a run step.
+
+runs:
+  using: composite
+  steps:
+    - name: Rewrite the version
+      shell: bash
+      run: sed -i "s/0.0.0/$VERSION/" package.json

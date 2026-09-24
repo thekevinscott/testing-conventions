@@ -1,0 +1,9 @@
+name: Detect
+description: A composite action whose steps are wiring.
+
+runs:
+  using: composite
+  steps:
+    - name: Detect
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/dist/index.js"

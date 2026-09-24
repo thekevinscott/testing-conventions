@@ -73,6 +73,7 @@ export default defineConfig({
                 { text: 'unit-coverage', link: '/reference/checks/unit-coverage' },
                 { text: 'mutation', link: '/reference/checks/mutation' },
                 { text: 'packaging', link: '/reference/checks/packaging' },
+                { text: 'workflow-lint', link: '/reference/checks/workflow-lint' },
                 { text: 'e2e-verify', link: '/reference/checks/e2e-verify' },
                 { text: 'changelog', link: '/reference/checks/changelog' },
               ],

@@ -1,0 +1,16 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Publish bootstrap stubs
+        run: |
+          set -euo pipefail
+          for name in $NAMES; do
+            npm publish "$name" --access public
+          done

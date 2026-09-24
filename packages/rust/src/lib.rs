@@ -16,6 +16,7 @@ pub mod ts;
 pub mod violation;
 mod walk;
 pub mod workflow;
+pub mod workflow_lint;
 
 use std::path::{Path, PathBuf};
 
@@ -75,6 +76,14 @@ enum Command {
     E2e {
         #[command(subcommand)]
         command: E2eCommand,
+    },
+    /// Workflow conventions: a GitHub Actions `run:` or `github-script` body must be wiring, not a
+    /// program. Iteration, multi-branch dispatch, text-munging, and a body past a dozen commands
+    /// belong in a tested package in the repository's own language, invoked as a one-line `run:`.
+    WorkflowLint {
+        /// Workflow or action file, or a directory of them (defaults to `.github`).
+        #[arg(default_value = ".github")]
+        path: PathBuf,
     },
     /// Changelog conventions: a pull request that changes a package's public surface adds a
     /// fragment recording it. Skipped when the repository keeps no fragment directories.
@@ -332,6 +341,7 @@ where
         Some(Command::Packaging { path, language }) => run_packaging(&path, language),
         Some(Command::Changelog { base, path }) => run_changelog(&base, &path),
         Some(Command::Workflow { path }) => run_workflow(&path),
+        Some(Command::WorkflowLint { path }) => run_workflow_lint(&path),
         Some(Command::E2e { command }) => match command {
             E2eCommand::Attest { command } => run_e2e_attest(&command),
             E2eCommand::Verify {
@@ -942,6 +952,29 @@ fn run_workflow(path: &Path) -> anyhow::Result<i32> {
     eprintln!(
         "error: {} workflow invocation(s) name a subcommand this binary no longer exposes",
         violations.len()
+    );
+    Ok(1)
+}
+
+fn run_workflow_lint(path: &Path) -> anyhow::Result<i32> {
+    let findings = workflow_lint::scan(path)?;
+    if findings.is_empty() {
+        return Ok(0);
+    }
+    for f in &findings {
+        eprintln!(
+            "{}:{}: {} step `{}` encodes logic inline ({}) — move it into a tested package in \
+             this repository's own language, invoked as a one-line `run:`",
+            f.file.display(),
+            f.line,
+            f.kind,
+            f.step,
+            f.reasons.join("; ")
+        );
+    }
+    eprintln!(
+        "error: {} step(s) encode logic in CI YAML, where nothing tests it",
+        findings.len()
     );
     Ok(1)
 }

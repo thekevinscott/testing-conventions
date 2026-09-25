@@ -59,6 +59,41 @@ safe on a repository that hasn't built anything yet. The
 `testing-conventions` release whose `detect` derives the build — a `version` pinned older falls
 back to locate-or-skip.
 
+## Discovering the distributions
+
+Point the CLI at a directory and it finds every built distribution under it, recursively:
+
+```sh
+npx testing-conventions packaging dist/
+```
+
+Each one is checked under the language its file name names:
+
+| File name | Language | Scanned for |
+| --- | --- | --- |
+| `*.whl` | Python | `*_test.py` |
+| `*.tar.gz` | Python | `*_test.py` |
+| `*.tgz` | TypeScript | `*.test.*` |
+| `*.crate` | Rust | a crate-root `tests/` directory |
+
+So one invocation covers a root holding a wheel, an sdist, a tarball and a crate at once, and the
+run ends by naming how many it checked. A root holding none of the four **fails**, naming the four
+it looked for: an empty `dist/` is a misconfigured build, not a pass.
+
+`--language` names the convention for a single path. Use it for an already-unpacked artifact root,
+which carries no extension to read, and to check a distribution whose name follows the other
+ecosystem's convention:
+
+```sh
+npx testing-conventions packaging build/unpacked --language typescript
+npx testing-conventions packaging dist/widget-0.1.0.tar.gz --language typescript
+```
+
+That second form is the one asymmetry here. A Python sdist and an npm tarball are the same format
+— a gzipped tar — and the file name is the only signal either carries, so `.tar.gz` reads as
+Python and `.tgz` as TypeScript, the names `uv build` and `npm pack` write. A tarball named
+against its ecosystem's convention is checked under the other language until you say otherwise.
+
 ## Configuration
 
 - [`packaging_artifact`](/reference/workflow#inputs) — the workflow input naming an uploaded

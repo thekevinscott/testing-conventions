@@ -1,9 +1,12 @@
 //! Packaging rule — the deterministic core: given the root of an unpacked built artifact and
-//! the test-file globs that must not appear in it, [`scan`] returns every offending file.
+//! the test-file globs that must not appear in it, [`scan`] returns every offending file, and
+//! [`discover`] finds the built distributions under a root.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
+
+use crate::colocated_test::Language;
 
 /// Every file under `root` — the root of an unpacked built artifact — whose name matches one
 /// of `globs`, sorted. `globs` are file-name globs where `*` matches any run of characters;
@@ -36,6 +39,56 @@ pub fn inspect(path: impl AsRef<Path>, globs: &[String]) -> Result<Vec<PathBuf>>
         )
     };
     Ok(relative_to(unpacked.path(), scan(unpacked.path(), globs)?))
+}
+
+/// A built distribution, with the language its file name names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Distribution {
+    pub path: PathBuf,
+    pub language: Language,
+}
+
+/// Every built distribution the file name of a `.whl`, `.tar.gz`, `.tgz` or `.crate` announces,
+/// and the language that ecosystem's packer writes it from.
+const DISTRIBUTIONS: [(&str, Language); 4] = [
+    (".whl", Language::Python),
+    (".tar.gz", Language::Python),
+    (".tgz", Language::TypeScript),
+    (".crate", Language::Rust),
+];
+
+/// The built distributions at `path`, sorted: a directory is searched recursively, and any other
+/// path is the single candidate. Empty when nothing there is a recognized distribution.
+pub fn discover(path: &Path) -> Result<Vec<Distribution>> {
+    if !path.is_dir() {
+        return Ok(as_distribution(path.to_path_buf()).into_iter().collect());
+    }
+    let globs: Vec<String> = DISTRIBUTIONS
+        .iter()
+        .map(|(suffix, _)| format!("*{suffix}"))
+        .collect();
+    Ok(scan(path, &globs)?
+        .into_iter()
+        .filter_map(as_distribution)
+        .collect())
+}
+
+/// `path` as the distribution its file name names, or `None` when it names none.
+fn as_distribution(path: PathBuf) -> Option<Distribution> {
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    let language = distribution_language(name)?;
+    Some(Distribution { path, language })
+}
+
+/// The language a built distribution's file name names, or `None` for any other name.
+fn distribution_language(name: &str) -> Option<Language> {
+    DISTRIBUTIONS
+        .iter()
+        .find(|(suffix, _)| name.ends_with(suffix))
+        .map(|(_, language)| *language)
 }
 
 /// `true` for an artifact this rule unpacks as a zip: a Python wheel (`.whl`) or a `.zip`.

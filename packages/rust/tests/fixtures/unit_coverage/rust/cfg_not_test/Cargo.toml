@@ -1,0 +1,14 @@
+# `cfg_not_test` fixture: the Rust binary root `colocated-test` documents — `main.rs` re-exports
+# a `#[cfg(not(test))]` entry point from the library. One codegen unit pins the link, so the gated
+# item's coverage records land in the bin target's test harness on every machine instead of
+# depending on how that build happened to be partitioned.
+# `[workspace]` isolates the fixture from the parent cargo workspace.
+[package]
+name = "cov_rust_cfg_not_test"
+version = "0.0.0"
+edition = "2021"
+
+[profile.dev]
+codegen-units = 1
+
+[workspace]

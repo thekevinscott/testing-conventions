@@ -184,6 +184,73 @@ fn baseline(repo: &TempRepo) -> String {
     repo.head()
 }
 
+/// A crate that also builds a binary. One codegen unit pins the link, so the gated entry point's
+/// coverage records land in the bin target's test harness on every machine.
+const BIN_CARGO_TOML: &str = "[package]\nname = \"tc_cov_base_rust\"\nversion = \"0.0.0\"\n\
+     edition = \"2021\"\n\n[profile.dev]\ncodegen-units = 1\n\n[workspace]\n";
+
+const ENTRYPOINT_RS: &str = r#"use std::process::ExitCode;
+
+pub fn report(argc: i32) -> ExitCode {
+    ExitCode::from(argc as u8)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_argument_count_becomes_the_exit_code() {
+        assert_eq!(report(3), ExitCode::from(3));
+    }
+}
+"#;
+
+const ENTRYPOINT_RS_GATED: &str = r#"use std::process::ExitCode;
+
+#[cfg(not(test))]
+pub fn main() -> ExitCode {
+    report(std::env::args_os().count() as i32)
+}
+
+pub fn report(argc: i32) -> ExitCode {
+    ExitCode::from(argc as u8)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_argument_count_becomes_the_exit_code() {
+        assert_eq!(report(3), ExitCode::from(3));
+    }
+}
+"#;
+
+#[test]
+fn rust_an_added_gated_entry_point_is_not_a_changed_line_subject() {
+    let repo = TempRepo::new("cfg-not-test");
+    repo.write("Cargo.toml", BIN_CARGO_TOML);
+    repo.write("src/lib.rs", "pub mod entrypoint;\n");
+    repo.write("src/entrypoint.rs", ENTRYPOINT_RS);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.write("src/entrypoint.rs", ENTRYPOINT_RS_GATED);
+    repo.write(
+        "src/main.rs",
+        "pub use tc_cov_base_rust::entrypoint::main;\n",
+    );
+    repo.commit("add the binary root and its gated entry point");
+
+    assert_eq!(
+        measure_base(&repo, &base, 100),
+        Outcome::Pass,
+        "no test can execute the gated `main`, so its added lines are not measured"
+    );
+}
+
 #[test]
 fn rust_a_diff_below_the_floor_fails() {
     let repo = TempRepo::new("below");

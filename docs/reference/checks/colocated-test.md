@@ -82,8 +82,11 @@ then it needs its own inline `#[cfg(test)]` module.
 
 `#[cfg(not(test))]` is not optional on this shape. Without it the function is instrumented and
 reads 0% — `cargo test` replaces a binary's `main` with the harness's own, so no unit test can ever
-execute it, and a 100% floor would be unreachable. The re-export needs no such attribute: it emits
-no code regions and is absent from the coverage report either way.
+execute it, and a 100% floor would be unreachable. The re-export needs no such attribute of its
+own, because a `pub use` emits no code regions. It does link the library's gated `main` into the
+binary target's test harness, where `cfg(test)` is unset and the item is compiled and instrumented;
+[`unit-coverage`](./unit-coverage#an-item-the-test-build-never-compiles) drops a gated item from the
+ratios, so both shapes measure the same.
 
 That leaves one line outside the unit tier by construction — the process-boundary argv read the
 library's `main` performs. Keep it free of decisions, mark it `#[cfg(not(test))]` too, and let

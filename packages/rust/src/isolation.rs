@@ -401,10 +401,64 @@ fn cfg_requires_test(tokens: proc_macro2::TokenStream, negated: bool) -> bool {
     false
 }
 
+/// The 1-based lines of the Rust items a `#[cfg(not(test))]` gate keeps out of a test build.
+///
+/// The unit tier runs `--lib --bins`, which sets `cfg(test)`, so no test reaches those lines.
+/// `mutation` drops their mutants — unkillable by construction — and `coverage` drops their
+/// regions, which the binary target's test harness instruments as 0-hit. Unparseable source
+/// yields no lines, so both checks keep judging what they already judged.
+pub(crate) fn lines_hidden_from_tests(source: &str) -> BTreeSet<u32> {
+    let Ok(ast) = syn::parse_file(source) else {
+        return BTreeSet::new();
+    };
+    let mut hidden = HiddenItems::default();
+    hidden.visit_file(&ast);
+    hidden.lines
+}
+
+/// Collects the line ranges of gated items. A gated `mod` or `impl` covers everything inside it,
+/// so recording the whole span is enough and the walk need not track nesting.
+#[derive(Default)]
+struct HiddenItems {
+    lines: BTreeSet<u32>,
+}
+
+impl HiddenItems {
+    fn gated(&mut self, attrs: &[syn::Attribute], node: &dyn Spanned) {
+        if !has_cfg_not_test(attrs) {
+            return;
+        }
+        let span = node.span();
+        self.lines
+            .extend(span.start().line as u32..=span.end().line as u32);
+    }
+}
+
+impl<'ast> Visit<'ast> for HiddenItems {
+    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+        self.gated(&node.attrs, node);
+        visit::visit_item_fn(self, node);
+    }
+
+    fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
+        self.gated(&node.attrs, node);
+        visit::visit_item_mod(self, node);
+    }
+
+    fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+        self.gated(&node.attrs, node);
+        visit::visit_item_impl(self, node);
+    }
+
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        self.gated(&node.attrs, node);
+        visit::visit_impl_item_fn(self, node);
+    }
+}
+
 /// `true` when `attrs` carry a `cfg` gate that no test build can satisfy — `#[cfg(not(test))]`
 /// and `#[cfg(all(not(test), unix))]`, but not `#[cfg(any(not(test), unix))]`, which still
-/// compiles under `cargo test`. `mutation` reads this: a mutant inside an item the test build
-/// never compiles is unkillable by construction.
+/// compiles under `cargo test`.
 pub(crate) fn has_cfg_not_test(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
         attr.path().is_ident("cfg")
@@ -1064,5 +1118,109 @@ mod tests {
             format!("{err:#}").contains("reading directory"),
             "got: {err:#}"
         );
+    }
+
+    #[test]
+    fn a_cfg_not_test_function_hides_its_own_lines_and_no_others() {
+        let source = "\
+#[cfg(not(test))]
+pub fn main() -> u8 {
+    run()
+}
+
+fn run() -> u8 {
+    1
+}
+";
+        assert_eq!(
+            lines_hidden_from_tests(source),
+            BTreeSet::from([1, 2, 3, 4])
+        );
+    }
+
+    #[test]
+    fn a_gated_module_hides_everything_inside_it() {
+        let source = "\
+#[cfg(not(test))]
+mod real {
+    pub fn go() -> u8 {
+        1
+    }
+}
+";
+        assert_eq!(
+            lines_hidden_from_tests(source),
+            BTreeSet::from([1, 2, 3, 4, 5, 6])
+        );
+    }
+
+    #[test]
+    fn a_gated_method_hides_only_that_method() {
+        let source = "\
+impl Runner {
+    #[cfg(not(test))]
+    fn go(&self) -> u8 {
+        1
+    }
+
+    fn stay(&self) -> u8 {
+        2
+    }
+}
+";
+        assert_eq!(
+            lines_hidden_from_tests(source),
+            BTreeSet::from([2, 3, 4, 5])
+        );
+    }
+
+    #[test]
+    fn an_ungated_file_hides_nothing() {
+        let source = "#[cfg(test)]\nmod tests {\n    fn t() {}\n}\n\nfn go() -> u8 {\n    1\n}\n";
+
+        assert!(lines_hidden_from_tests(source).is_empty());
+    }
+
+    #[test]
+    fn unparseable_source_hides_nothing() {
+        assert!(lines_hidden_from_tests("fn go( {").is_empty());
+    }
+
+    /// Whether `attr` on a plain function hides it from the test build.
+    fn hides_under(attr: &str) -> bool {
+        !lines_hidden_from_tests(&format!("{attr}\nfn go() -> u8 {{\n    1\n}}\n")).is_empty()
+    }
+
+    #[test]
+    fn a_gate_no_test_build_can_satisfy_hides_the_item() {
+        assert!(hides_under("#[cfg(not(test))]"));
+        assert!(hides_under("#[cfg(all(not(test), unix))]"));
+        assert!(hides_under("#[cfg(not(any(test, unix)))]"));
+        assert!(hides_under("#[cfg(any())]"));
+        assert!(hides_under("#[cfg(not(all()))]"));
+    }
+
+    #[test]
+    fn a_gate_a_test_build_can_still_satisfy_hides_nothing() {
+        assert!(!hides_under("#[cfg(test)]"));
+        assert!(!hides_under("#[cfg(unix)]"));
+        assert!(!hides_under("#[cfg(feature = \"x\")]"));
+        assert!(!hides_under("#[cfg(any(not(test), unix))]"));
+        assert!(!hides_under("#[cfg(not(not(test)))]"));
+        assert!(!hides_under("#[cfg(all())]"));
+        assert!(!hides_under("#[inline]"));
+    }
+
+    #[test]
+    fn a_gate_resting_on_a_condition_we_cannot_decide_hides_nothing() {
+        assert!(!hides_under("#[cfg(not(unix))]"));
+        assert!(!hides_under("#[cfg(all(test, unix))]"));
+    }
+
+    #[test]
+    fn a_malformed_gate_hides_nothing() {
+        assert!(!hides_under("#[cfg(not())]"));
+        assert!(!hides_under("#[cfg(nope(test))]"));
+        assert!(!hides_under("#[cfg(not(test), unix)]"));
     }
 }

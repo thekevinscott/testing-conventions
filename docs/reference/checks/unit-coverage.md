@@ -29,6 +29,22 @@ nothing covers every line it touches. [`mutation`](./mutation) is the rung above
 
 <!--@include: ../../explanation/coverage.md#runs-->
 
+### An item the test build never compiles
+
+In Rust, an item a `#[cfg(not(test))]` gate keeps out of the test build is not a coverage subject,
+whole-tree or changed-line. The unit tier runs `cargo llvm-cov --lib --bins`, which sets
+`cfg(test)`, so no test can execute the item; the `--bins` half nevertheless links the library a
+second time as a plain dependency of the binary target's test harness, where `cfg(test)` is unset,
+and the gated item is compiled and instrumented there. Whether its counters reach the report depends
+on how the linker partitioned that build — `CARGO_INCREMENTAL=0` alone flips it — so the check
+drops the item's regions, lines, functions, and branches from the ratios instead.
+
+The exclusion is item-level and covers only a gate a test build genuinely cannot satisfy:
+`#[cfg(not(test))]` and `#[cfg(all(not(test), unix))]` qualify, `#[cfg(any(not(test), unix))]` still
+compiles under `cargo test` and stays a subject. This is what makes the
+[binary entry point `colocated-test` documents](/reference/checks/colocated-test#a-rust-binary-s-entry-point)
+coverage-clean, the same way [`mutation`](./mutation) drops the mutants inside it.
+
 ## The changed-line job
 
 On pull requests, the same configured floor is also measured over only the lines the

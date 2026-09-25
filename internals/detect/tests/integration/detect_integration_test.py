@@ -246,11 +246,14 @@ def test_packaging_root_is_the_crate_output_for_a_rust_build(fs):
     assert out["packaging_root"] == "packages/rust/target/package"
 
 
-def test_packaging_root_is_empty_when_no_build_was_derived(fs):
+def test_packaging_root_still_points_at_the_dist_when_no_build_was_derived(fs):
+    # The packaging job also runs on a committed dist/ whose manifest states no build.
     fs["primary"] = "python"
     fs["packaging_build"] = ""
-    out = compute_outputs.compute_outputs("", scan_root="/repo")
-    assert out["packaging_root"] == ""
+    fs["package_root"] = Path("/repo/packages/py")
+    out = compute_outputs.compute_outputs("", scan_root="/repo/packages/py/src", repo_root="/repo")
+    assert out["packaging_build"] == ""
+    assert out["packaging_root"] == "packages/py/dist"
 
 
 def test_e2e_extra_scope_output_wired_from_derive(fs):

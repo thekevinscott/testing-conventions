@@ -71,6 +71,7 @@ jobs:
       build_command: ${{ steps.scan_hermetic.outputs.build_command || steps.scan_published.outputs.build_command }}
       packaging_build: ${{ steps.scan_hermetic.outputs.packaging_build || steps.scan_published.outputs.packaging_build }}
       packaging_language: ${{ steps.scan_hermetic.outputs.packaging_language || steps.scan_published.outputs.packaging_language }}
+      packaging_root: ${{ steps.scan_hermetic.outputs.packaging_root || steps.scan_published.outputs.packaging_root }}
       e2e_extra_scope: ${{ steps.scan_hermetic.outputs.e2e_extra_scope || steps.scan_published.outputs.e2e_extra_scope }}
       e2e_exclude: ${{ steps.scan_hermetic.outputs.e2e_exclude || steps.scan_published.outputs.e2e_exclude }}
       cli_command: ${{ steps.scan_hermetic.outputs.cli_command || steps.scan_published.outputs.cli_command }}
@@ -557,30 +558,8 @@ jobs:
       - name: Check the built distributions ship no test files
         env:
           VERSION: ${{ inputs.version }}
-          PACKAGING_ARTIFACT: ${{ inputs.packaging_artifact }}
-          PACKAGE_ROOT: ${{ needs.detect.outputs.package_root }}
           CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
-        run: |
-          set -euo pipefail
-          # nullglob: an unmatched glob expands to nothing, not the literal; globstar: `**` recurses.
-          shopt -s nullglob globstar
-          pkg="${PACKAGE_ROOT:-.}"
-          if [ -n "$PACKAGING_ARTIFACT" ]; then dist_root=_packaging_artifact; crate_root=_packaging_artifact; else dist_root="$pkg/dist"; crate_root="$pkg/target/package"; fi
-          checked=0
-          check () {
-            local lang="$1"; shift
-            for dist in "$@"; do
-              echo "::group::packaging --language $lang $dist"
-              ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} packaging "$dist" --language "$lang"
-              echo "::endgroup::"
-              checked=$((checked + 1))
-            done
-          }
-          check python "$dist_root"/**/*.whl "$dist_root"/**/*.tar.gz
-          check typescript "$dist_root"/**/*.tgz
-          check rust "$crate_root"/**/*.crate
-          if [ "$checked" -eq 0 ]; then
-            echo "::error::no recognized built distribution (.whl / .tar.gz / .tgz / .crate) found in '$dist_root' or '$crate_root'"
-            exit 1
-          fi
-          echo "checked $checked built distribution(s); no test files shipped"
+          # An uploaded artifact is unpacked to a fixed directory, so its root is known here; a built
+          # one sits where the manifest puts it, which is detect's `packaging_root`.
+          PACKAGING_ROOT: ${{ inputs.packaging_artifact != '' && '_packaging_artifact' || needs.detect.outputs.packaging_root }}
+        run: ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} packaging "$PACKAGING_ROOT"

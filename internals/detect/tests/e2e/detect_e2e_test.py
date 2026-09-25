@@ -935,7 +935,7 @@ def test_e2e_packaging_root_is_the_crate_output_for_a_standalone_crate(run_detec
     assert out["packaging_root"] == "scan/target/package"
 
 
-def test_e2e_packaging_root_is_empty_when_the_manifest_cant_state_a_build(run_detect):
+def test_e2e_packaging_root_survives_a_manifest_that_cant_state_a_build(run_detect):
     out = run_detect(
         scan_path="packages/py/src",
         root_files={
@@ -943,7 +943,8 @@ def test_e2e_packaging_root_is_empty_when_the_manifest_cant_state_a_build(run_de
             "packages/py/src/widget.py": "x = 1\n",
         },
     )
-    assert out["packaging_root"] == ""
+    assert out["packaging_build"] == ""
+    assert out["packaging_root"] == "packages/py/dist"
 
 
 def test_is_workspace_member_true_when_an_ancestor_up_to_repo_root_declares_a_workspace(tmp_path):

@@ -8,6 +8,7 @@ from derive_cargo_target_dir import derive_cargo_target_dir
 from derive_config import CONFIG_DEFAULT, derive_config
 from derive_package_root import derive_package_root
 from derive_packaging import derive_packaging
+from derive_packaging_root import derive_packaging_root
 from e2e_scope_flags import derive_e2e_exclude, derive_e2e_extra_scope
 from eligible import eligible
 from file_presence import has_rust_crate, has_source
@@ -56,6 +57,7 @@ def compute_outputs(
     primary = primary_language(package_root)
     bc_language = build_command_language(primary, present)
     packaging_build = derive_packaging(package_root, primary, repo)
+    packaging_language = primary if packaging_build else ""
     workspace_root = cargo_workspace_root(package_root, repo)
     if workspace_root is not None:
         try:
@@ -85,7 +87,8 @@ def compute_outputs(
         "config": config,
         "build_command": derive_build_command(config, bc_language),
         "packaging_build": packaging_build,
-        "packaging_language": primary if packaging_build else "",
+        "packaging_language": packaging_language,
+        "packaging_root": derive_packaging_root(package_root_rel, primary),
         "e2e_extra_scope": derive_e2e_extra_scope(config),
         "e2e_exclude": derive_e2e_exclude(config),
         "cli_command": HERMETIC_CLI_COMMAND if hermetic(caller_repository, version) else "",

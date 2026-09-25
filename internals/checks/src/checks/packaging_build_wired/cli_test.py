@@ -17,7 +17,9 @@ WIRED = """\
           PACKAGING_BUILD: ${{ needs.detect.outputs.packaging_build }}
         run: |
           eval "$PACKAGING_BUILD"
-      - run: check rust "$pkg/target/package"/**/*.crate
+      - env:
+          PACKAGING_ROOT: ${{ needs.detect.outputs.packaging_root }}
+        run: testing-conventions packaging "$PACKAGING_ROOT"
 """
 
 UNWIRED = WIRED.replace('eval "$PACKAGING_BUILD"', "true")
@@ -33,7 +35,7 @@ def test_command_echoes_on_a_fully_wired_workflow(tmp_path, capsys):
     workflow = tmp_path / "wf.yml"
     workflow.write_text(WIRED)
     cli.callback(workflow=str(workflow))
-    assert "scans target/package" in capsys.readouterr().out
+    assert "scans detect's packaging_root" in capsys.readouterr().out
 
 
 def test_command_raises_on_an_unwired_workflow(tmp_path):

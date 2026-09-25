@@ -6,9 +6,9 @@ count.
 """
 from checks.packaging_build_wired.find_missing_wiring import (
     _BUILD_ERROR,
-    _CRATE_SCAN_ERROR,
     _GATE_ERROR,
     _PROVISION_ERROR,
+    _SCAN_ROOT_ERROR,
     find_missing_wiring,
 )
 
@@ -27,9 +27,9 @@ WIRED = """\
         run: |
           eval "$PACKAGING_BUILD"
       - name: Check the built distributions ship no test files
-        run: |
-          if [ -n "$PACKAGING_ARTIFACT" ]; then crate_root=_packaging_artifact; else crate_root="$pkg/target/package"; fi
-          check rust "$crate_root"/**/*.crate
+        env:
+          PACKAGING_ROOT: ${{ inputs.packaging_artifact != '' && '_packaging_artifact' || needs.detect.outputs.packaging_root }}
+        run: testing-conventions packaging "$PACKAGING_ROOT"
 """
 
 # Each unwired variant keeps everything the earlier checks require, so the walk reaches the
@@ -45,7 +45,7 @@ MISSING_BUILD_ENV = WIRED.replace(
     "PACKAGING_BUILD: ${{ needs.detect.outputs.packaging_build }}",
     "PACKAGING_BUILD: something-else",
 )
-MISSING_CRATE_SCAN = WIRED.replace("target/package", "dist")
+MISSING_SCAN_ROOT = WIRED.replace("needs.detect.outputs.packaging_root", "'dist'")
 
 # A `packaging_build` gate / provision / build living in a sibling job must not satisfy the
 # check for the packaging job specifically — the block is extracted first.
@@ -54,7 +54,7 @@ SIBLING_ONLY = """\
     if: ${{ needs.detect.outputs.packaging_build != '' }}
     run: |
       eval "$PACKAGING_BUILD"  # PACKAGING_BUILD: needs.detect.outputs.packaging_build
-      cat "$pkg/target/package"  # needs.detect.outputs.packaging_language
+      cat "${{ needs.detect.outputs.packaging_root }}"  # needs.detect.outputs.packaging_language
 
   packaging:
     name: Packaging
@@ -67,10 +67,10 @@ def test_every_error_ends_at_the_constraint_it_enforces():
     assert _GATE_ERROR.endswith("so the gate never runs")
     assert _PROVISION_ERROR.endswith("it fails before producing a distribution to scan")
     assert _BUILD_ERROR.endswith("so a package with no committed dist/ has nothing to scan")
-    assert _CRATE_SCAN_ERROR.endswith("a built crate is never inspected for shipped test files")
+    assert _SCAN_ROOT_ERROR.endswith("a built crate never inspected for shipped test files")
 
 
-def test_finds_no_missing_wiring_when_gate_provision_build_and_crate_scan_are_all_present():
+def test_finds_no_missing_wiring_when_gate_provision_build_and_scan_root_are_all_present():
     assert find_missing_wiring(WIRED) is None
 
 
@@ -90,8 +90,8 @@ def test_finds_missing_wiring_when_the_build_env_is_unbound():
     assert find_missing_wiring(MISSING_BUILD_ENV) == _BUILD_ERROR
 
 
-def test_finds_missing_wiring_when_the_crate_scan_is_absent():
-    assert find_missing_wiring(MISSING_CRATE_SCAN) == _CRATE_SCAN_ERROR
+def test_finds_missing_wiring_when_the_scan_root_is_not_wired_from_detect():
+    assert find_missing_wiring(MISSING_SCAN_ROOT) == _SCAN_ROOT_ERROR
 
 
 def test_rejects_wiring_that_lives_outside_the_packaging_block():

@@ -33,8 +33,9 @@ jobs:
 
   action:
     name: action.yml — end-to-end (local use)
-    # Exercises the composite action's own wiring — inputs to env to detect.py to step outputs —
-    # by using it locally.
+    # Runs the composite action on a real runner, which is the one thing pytest cannot: the
+    # manifest parses and its `$GITHUB_ACTION_PATH` script path resolves. The outputs it derives
+    # are asserted in internals/detect's e2e suite.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -52,37 +53,3 @@ jobs:
           languages: ''
           path: detect-fixture
           caller_repository: thekevinscott/testing-conventions
-      - name: Assert the action's outputs
-        env:
-          LINT: ${{ steps.detect.outputs.integration_lint_languages }}
-          COLOC: ${{ steps.detect.outputs.colocated_test_languages }}
-          PKG: ${{ steps.detect.outputs.packaging_dist }}
-          ATT: ${{ steps.detect.outputs.e2e_attestation }}
-          PKGROOT: ${{ steps.detect.outputs.package_root }}
-          TSPM: ${{ steps.detect.outputs.ts_package_manager }}
-          TSPNPM: ${{ steps.detect.outputs.ts_pnpm_version }}
-          PYENV: ${{ steps.detect.outputs.python_env }}
-          PROVRUST: ${{ steps.detect.outputs.provision_rust }}
-          CARGOTARGETDIR: ${{ steps.detect.outputs.cargo_target_dir }}
-          CONFIG: ${{ steps.detect.outputs.config }}
-          BUILDCMD: ${{ steps.detect.outputs.build_command }}
-          CLICMD: ${{ steps.detect.outputs.cli_command }}
-          TSADAPTER: ${{ steps.detect.outputs.ts_mutation_adapter_args }}
-        run: |
-          set -euo pipefail
-          echo "integration_lint_languages=$LINT colocated_test_languages=$COLOC packaging_dist=$PKG e2e_attestation=$ATT package_root=$PKGROOT ts_package_manager=$TSPM ts_pnpm_version=$TSPNPM python_env=$PYENV provision_rust=$PROVRUST cargo_target_dir=$CARGOTARGETDIR config=$CONFIG build_command=$BUILDCMD cli_command=$CLICMD ts_mutation_adapter_args=$TSADAPTER"
-          [ "$LINT" = '["rust"]' ]  || { echo "::error::expected rust auto-detected, got $LINT"; exit 1; }
-          [ "$COLOC" = '["rust"]' ] || { echo "::error::expected rust in the colocated-test matrix, got $COLOC"; exit 1; }
-          [ "$PKG" = "true" ]      || { echo "::error::expected packaging_dist=true, got $PKG"; exit 1; }
-          [ "$ATT" = "true" ]      || { echo "::error::expected e2e_attestation=true, got $ATT"; exit 1; }
-          [ "$PKGROOT" = "detect-fixture" ] || { echo "::error::expected package_root=detect-fixture, got $PKGROOT"; exit 1; }
-          [ "$TSPM" = "pnpm" ]     || { echo "::error::expected ts_package_manager=pnpm (default), got $TSPM"; exit 1; }
-          [ "$TSPNPM" = ">=11" ]   || { echo "::error::expected ts_pnpm_version=>=11 (no packageManager pin), got $TSPNPM"; exit 1; }
-          [ "$PYENV" = "pip" ]     || { echo "::error::expected python_env=pip (default), got $PYENV"; exit 1; }
-          [ "$PROVRUST" = "true" ] || { echo "::error::expected provision_rust=true (Cargo.toml present), got $PROVRUST"; exit 1; }
-          [ "$CARGOTARGETDIR" = "detect-fixture/target" ] || { echo "::error::expected cargo_target_dir=detect-fixture/target, got $CARGOTARGETDIR"; exit 1; }
-          [ "$CONFIG" = "testing-conventions.toml" ] || { echo "::error::expected config=testing-conventions.toml (no package-root file), got $CONFIG"; exit 1; }
-          [ -z "$BUILDCMD" ] || { echo "::error::expected build_command empty (no config with the key), got $BUILDCMD"; exit 1; }
-          [ "$CLICMD" = "./hermetic-cli/testing-conventions" ] || { echo "::error::expected cli_command=./hermetic-cli/testing-conventions (caller_repository wired through), got '$CLICMD'"; exit 1; }
-          [ "$TSADAPTER" = "--ts-mutation-adapter ./hermetic-cli/dist/mutation/main.js" ] || { echo "::error::expected ts_mutation_adapter_args wired through, got '$TSADAPTER'"; exit 1; }
-          echo "action.yml glue OK"

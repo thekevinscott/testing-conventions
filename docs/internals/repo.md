@@ -548,11 +548,16 @@ shape below: fakes drive every branch, and the entry point stays declaration-onl
 `packages/node/scripts/` is the home rather than a new uv package under `internals/`. The domain is
 npm publishing, the job already provisions Node, and that directory already carries the
 pure-layer-plus-composition-root split with colocated tests — a one-shot publisher does not earn its
-own package, test workflow, and dogfood job. The names reach it through the step's `env:`
-(`PACKAGES`), which is what `workflow-lint` asks for: an `env:` value is templated safely, where
-`${{ inputs.packages }}` inline in a `run:` body splices dispatch input into the shell. That is
-GitHub's channel into the job, not the side-channel between two parts of this repository that
-AGENTS.md's "Never pass data through the environment" rules out.
+own package, test workflow, and dogfood job.
+
+The names reach it as a CLI argument. `${{ inputs.packages }}` binds to the step's `PACKAGES` and the
+invocation passes that along as `-- "$PACKAGES"`, so the expression never lands in the `run:` text
+where GitHub's templating — which runs before bash parses the line — would splice dispatch input into
+the shell. Bash expands the variable after parsing, as a single argv element. That `env:` name is
+bash's, not the script's: `bootstrap-npm.ts` reads `process.argv` and never `process.env`, which is
+what AGENTS.md's "Never pass data through the environment" requires of a value a step hands a script.
+`NODE_AUTH_TOKEN` stays in `env:` because `npm publish` reads it from there itself — npm's interface,
+not our wiring.
 
 ## The delegated PyPI upload
 

@@ -33,4 +33,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           PACKAGES: ${{ inputs.packages }}
-        run: pnpm run bootstrap-npm
+        # PACKAGES carries the dispatch input across GitHub's `${{ }}` templating, which runs before
+        # bash parses this line; the script itself takes the names as an argument. No `--` — pnpm
+        # forwards that to the script as a literal argv entry.
+        run: pnpm run bootstrap-npm "$PACKAGES"

@@ -1,5 +1,5 @@
 // Publishes the bootstrap stubs `.github/workflows/bootstrap-npm.yml` dispatches, naming them in
-// PACKAGES. See docs/internals/repo.md, "Bootstrapping a new npm package name".
+// its first argument. See docs/internals/repo.md, "Bootstrapping a new npm package name".
 
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -13,5 +13,5 @@ publishBootstrapStubs(
     run: spawnSync,
     removeDir: rmSync,
   },
-  process.env.PACKAGES ?? '',
+  process.argv[2] ?? '',
 );

@@ -1,0 +1,7 @@
+{
+  "command": "pnpm run test:e2e",
+  "ran_at": 1790334373,
+  "exit_code": 0,
+  "commit": "a1e61eb370139c58ccfdfa3a1666e26c381dea74",
+  "branch": "fix/719-bootstrap-npm-argv"
+}

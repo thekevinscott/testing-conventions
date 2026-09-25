@@ -19,6 +19,7 @@
     "dist/"
   ],
   "scripts": {
+    "bootstrap-npm": "tsx scripts/bootstrap-npm.ts",
     "build": "tsx scripts/build.ts",
     "lint": "eslint .",
     "test": "vitest run",

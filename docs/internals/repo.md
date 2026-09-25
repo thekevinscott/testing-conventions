@@ -177,6 +177,15 @@ root's `target/` for a workspace-member crate, else the package root's own. carg
 target directory at the workspace root regardless of the invoking directory, so a cache keyed on
 `package_root` alone would archive and restore a directory cargo never writes to.
 
+**`packaging_root`** is the directory the packaging scan is pointed at: `<package_root>/dist` for
+Python and TypeScript, `<package_root>/target/package` for Rust, and empty when no
+`packaging_build` was derived. `cargo package` writes the crate under `target/package` rather than
+`dist/`, so a single hardcoded root covers only two of the three languages. The layout is a
+function of the manifest, which makes it detect's to derive rather than a ternary in the job's
+`env:`. The scan is pointed at that directory and not at `package_root`, because discovery recurses
+— given the package root it would also sweep up every unrelated archive in the tree, including the
+deliberately-red fixtures under `packages/rust/tests/fixtures/packaging/`.
+
 Each language-set output spends one release absent, exactly as `ts_pnpm_version` describes above,
 so the workflow's matrix expressions carry a `|| <older set>` fallback until `@v0` advances.
 

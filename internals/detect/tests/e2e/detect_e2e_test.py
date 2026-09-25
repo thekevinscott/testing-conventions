@@ -893,6 +893,59 @@ def test_e2e_packaging_build_unredirected_when_the_package_root_is_the_repo_root
     assert out["packaging_build"] == "cargo package"
 
 
+def test_e2e_packaging_root_is_the_package_dist_for_a_python_project(run_detect):
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": '[project]\nname = "x"\n',
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["packaging_root"] == "packages/py/dist"
+
+
+def test_e2e_packaging_root_is_the_package_dist_for_a_typescript_package(run_detect):
+    out = run_detect(
+        scan_path="packages/ts/src",
+        root_files={
+            "packages/ts/package.json": '{"name": "x"}\n',
+            "packages/ts/pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+            "packages/ts/src/widget.ts": "export const x = 1;\n",
+        },
+    )
+    assert out["packaging_root"] == "packages/ts/dist"
+
+
+def test_e2e_packaging_root_is_the_crate_output_for_a_workspace_member(run_detect):
+    out = run_detect(
+        scan_path="packages/rust/src",
+        root_files={
+            "Cargo.toml": '[workspace]\nmembers = ["packages/rust"]\n',
+            "packages/rust/Cargo.toml": '[package]\nname = "x"\n',
+            "packages/rust/src/lib.rs": "pub fn f() {}\n",
+        },
+    )
+    assert out["packaging_root"] == "packages/rust/target/package"
+
+
+def test_e2e_packaging_root_is_the_crate_output_for_a_standalone_crate(run_detect):
+    out = run_detect(
+        sources={"Cargo.toml": '[package]\nname = "x"\n', "src/lib.rs": "pub fn f() {}\n"},
+    )
+    assert out["packaging_root"] == "scan/target/package"
+
+
+def test_e2e_packaging_root_is_empty_when_the_manifest_cant_state_a_build(run_detect):
+    out = run_detect(
+        scan_path="packages/py/src",
+        root_files={
+            "packages/py/pyproject.toml": "[tool.black]\nline-length = 100\n",
+            "packages/py/src/widget.py": "x = 1\n",
+        },
+    )
+    assert out["packaging_root"] == ""
+
+
 def test_is_workspace_member_true_when_an_ancestor_up_to_repo_root_declares_a_workspace(tmp_path):
     repo_root = tmp_path
     (repo_root / "Cargo.toml").write_text('[workspace]\nmembers = ["packages/rust"]\n')

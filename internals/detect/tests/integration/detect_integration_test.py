@@ -222,6 +222,37 @@ def test_packaging_language_is_empty_when_no_build_was_derived(fs):
     assert out["packaging_language"] == ""
 
 
+def test_packaging_root_is_the_package_dist_for_a_python_build(fs):
+    fs["primary"] = "python"
+    fs["packaging_build"] = "uv build"
+    fs["package_root"] = Path("/repo/packages/py")
+    out = compute_outputs.compute_outputs("", scan_root="/repo/packages/py/src", repo_root="/repo")
+    assert out["packaging_root"] == "packages/py/dist"
+
+
+def test_packaging_root_is_the_package_dist_for_a_typescript_build(fs):
+    fs["primary"] = "typescript"
+    fs["packaging_build"] = "pnpm pack --pack-destination dist"
+    fs["package_root"] = Path("/repo/packages/ts")
+    out = compute_outputs.compute_outputs("", scan_root="/repo/packages/ts/src", repo_root="/repo")
+    assert out["packaging_root"] == "packages/ts/dist"
+
+
+def test_packaging_root_is_the_crate_output_for_a_rust_build(fs):
+    fs["primary"] = "rust"
+    fs["packaging_build"] = "cargo package --target-dir target"
+    fs["package_root"] = Path("/repo/packages/rust")
+    out = compute_outputs.compute_outputs("", scan_root="/repo/packages/rust/src", repo_root="/repo")
+    assert out["packaging_root"] == "packages/rust/target/package"
+
+
+def test_packaging_root_is_empty_when_no_build_was_derived(fs):
+    fs["primary"] = "python"
+    fs["packaging_build"] = ""
+    out = compute_outputs.compute_outputs("", scan_root="/repo")
+    assert out["packaging_root"] == ""
+
+
 def test_e2e_extra_scope_output_wired_from_derive(fs):
     fs["e2e_extra_scope"] = "--extra-scope packages/rust/src"
     out = compute_outputs.compute_outputs("", scan_root="/repo")

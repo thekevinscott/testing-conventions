@@ -45,6 +45,22 @@ fn killed_crate_passes_and_states_the_tested_count() {
 }
 
 #[test]
+fn binary_unit_test_cannot_satisfy_library_mutation_gate() {
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "rust"])
+        .arg(fixtures().join("rust").join("bin_unit_only"))
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "stdout: {stdout}; stderr: {stderr}");
+    assert!(
+        stderr.contains("src/lib.rs"),
+        "the library survivor reaches the CLI report; stderr: {stderr}"
+    );
+}
+
+#[test]
 fn a_diff_without_crate_changes_reports_the_engine_not_run() {
     let repo = GitRepo::new("rust-vacuous");
     repo.write(

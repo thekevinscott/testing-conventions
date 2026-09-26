@@ -16,7 +16,7 @@ def test_the_default_read_is_the_real_git_read():
         for name, parameter in inspect.signature(run).parameters.items()
         if parameter.kind is inspect.Parameter.KEYWORD_ONLY
     }
-    assert defaults == {"tracked_paths": ("checks.path_length_gate.git_ops", "tracked_paths")}
+    assert defaults == {"tracked_paths": ("checks.utils.tracked_paths", "tracked_paths")}
 
 
 def _run(root="root", paths=()):

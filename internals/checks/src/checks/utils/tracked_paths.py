@@ -1,8 +1,8 @@
-"""The tracked-paths git read — repo-only.
+"""The tracked-paths git read every whole-tree check shares — repo-only.
 
 Shells out for exactly one piece of data — every path a checkout materializes under `root` — so
-the decision and the orchestration in `gate.py` never touch a subprocess. The subprocess boundary
-is injected as `runner`, the seam the colocated tests drive.
+each check's decision and orchestration never touch a subprocess. The subprocess boundary is
+injected as `runner`, the seam the colocated tests drive.
 """
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 """Colocated unit tests for the tracked-paths git read (isolation — injected runner)."""
-from checks.path_length_gate.git_ops import tracked_paths
+from checks.utils.tracked_paths import tracked_paths
 
 
 class _Result:

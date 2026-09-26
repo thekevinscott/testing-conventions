@@ -8,7 +8,7 @@ from __future__ import annotations
 import click
 
 from checks.path_length_gate.decide import BUDGET, over_budget
-from checks.path_length_gate.git_ops import tracked_paths as read_tracked_paths
+from checks.utils.tracked_paths import tracked_paths as read_tracked_paths
 
 
 def run(root: str, *, tracked_paths=read_tracked_paths) -> int:

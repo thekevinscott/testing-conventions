@@ -76,6 +76,10 @@ tracks. The cost is sequencing, not correctness: while #672's own offending dire
 `main` (fixed by #674, pending merge), this gate is red on any branch built on top of it,
 including this one, until that PR lands and this one rebases past it.
 
+The `git ls-files` read itself is `checks/utils/tracked_paths.py`, shared rather than owned by
+this gate: every whole-tree check needs the same list, and the second one to want it would
+otherwise fork a copy of the subprocess boundary and its runner seam.
+
 ## Instructions file size budget
 
 `agents_md_size(path, max_len)` (`internals/checks`) answers one question: does this instructions

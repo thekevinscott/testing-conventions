@@ -9,7 +9,7 @@ in this repo — the docs site, `README.md`, and the root `AGENTS.md` — uses t
 
 - **check** — one of the runnable units the workflow enforces: `colocated-test`,
   `one-function-per-file`, `unit-lint`, `unit-coverage`, `mutation`, `integration-lint`,
-  `packaging`, `e2e-verify`, `changelog`. Each is named by the value the [`gates` input](./workflow#inputs)
+  `packaging`, `workflow-lint`, `e2e-verify`, `changelog`. Each is named by the value the [`gates` input](./workflow#inputs)
   takes and that appears in a `rules = […]` [exemption](./config). A check is a unit of
   enforcement, not a CI job — see [Checks](./checks/) for the job shape: some checks run as their
   own job, several share one job as steps, and one check produces two jobs.

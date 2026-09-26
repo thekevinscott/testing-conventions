@@ -89,7 +89,9 @@ check could.
 
 ## When it runs
 
-Always — the files it reads are in the tree on every event, so there is nothing to scope to a diff.
+Always, as the `Workflow lint` job — the files it reads are in the tree on every event, so there is
+nothing to scope to a diff. The job scans the calling repository's `.github`, the subcommand's
+default, whatever `source` the call names: the CI under test is the repository's, not the package's.
 A repository with no workflows passes untouched.
 
 Run it from the CLI:
@@ -98,9 +100,6 @@ Run it from the CLI:
 npx testing-conventions workflow-lint          # defaults to .github
 npx testing-conventions workflow-lint path/to/workflow.yml
 ```
-
-The reusable workflow runs it as its own job in a following release, where the
-[`gates` input](/reference/workflow#inputs) will name it `workflow-lint`.
 
 ## Configuration
 
@@ -112,8 +111,8 @@ inline is always that extracting it is not worth the trouble, and the whole poin
 that the trouble is one function and one test. A step that truly cannot move is a sign the work
 belongs in a composite action or a real program, not in an exemption.
 
-Once the check runs as a job, a consumer that needs it off leaves it out of
-[`gates`](/reference/workflow#inputs) — the allowlist is authoritative.
+A consumer that needs the job off leaves it out of [`gates`](/reference/workflow#inputs) — the
+allowlist is authoritative.
 
 ## Learn more
 

@@ -53,7 +53,11 @@ fn binary_unit_test_cannot_satisfy_library_mutation_gate() {
         .expect("the built binary should run");
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(out.status.code(), Some(1), "stdout: {stdout}; stderr: {stderr}");
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "stdout: {stdout}; stderr: {stderr}"
+    );
     assert!(
         stderr.contains("src/lib.rs"),
         "the library survivor reaches the CLI report; stderr: {stderr}"

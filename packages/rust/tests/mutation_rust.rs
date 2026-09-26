@@ -166,7 +166,7 @@ fn a_cfg_not_test_entry_point_leaves_no_survivors() {
     );
     assert!(
         survivors.is_empty(),
-        "a gated entry point is absent from the --lib --bins build, so no test can kill its \
+        "a gated entry point is absent from the --lib build, so no test can kill its \
          mutants; got {survivors:?}"
     );
     assert!(

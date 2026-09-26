@@ -257,12 +257,19 @@ fn classify(path: &syn::Path, deps: &BTreeSet<String>) -> Option<&'static str> {
     }
 }
 
-/// `true` for an effectful `std` path — fs, net, process, env, threads, OS, the clock, or
+/// `true` for an effectful `std` path — net, process, env, threads, OS, the clock, or
 /// real-handle I/O. Pure `std` stays in-module: `internals/rust/testing.md` makes
 /// `io::Cursor` the idiomatic in-memory unit-test tool.
+///
+/// `fs` is the deliberate carve-out. Rust privacy makes the inline `#[cfg(test)]` module the
+/// only tier that can reach a private item, so a private path-walker can be tested nowhere
+/// else — and its argument is a directory that has to exist. `env::temp_dir` rides along
+/// because it only names a writable directory; the rest of `env` reads ambient state the test
+/// never created, which is the collaborator this rule exists to catch.
 fn is_effectful_std(segs: &[String]) -> bool {
     match segs.get(1).map(String::as_str) {
-        Some("fs" | "net" | "process" | "env" | "thread" | "os") => true,
+        Some("net" | "process" | "thread" | "os") => true,
+        Some("env") => segs.get(2).map(String::as_str) != Some("temp_dir"),
         Some("io") => matches!(
             segs.get(2).map(String::as_str),
             Some("stdin" | "stdout" | "stderr")
@@ -627,7 +634,7 @@ mod tests {
     #[test]
     fn t() {
         let _ = crate::store::load();
-        let _ = std::fs::read(\"x\");
+        let _ = std::net::TcpStream::connect(\"x\");
         let _ = rand::random::<u8>();
         let _ = super::super::util::help();
     }
@@ -719,9 +726,10 @@ mod tests {
             Some("external crate")
         );
         assert_eq!(
-            classify(&path("std::fs::read"), &deps),
+            classify(&path("std::net::TcpStream::connect"), &deps),
             Some("effectful std")
         );
+        assert_eq!(classify(&path("std::fs::read"), &deps), None);
         assert_eq!(classify(&path("std::io::Cursor"), &deps), None);
     }
 
@@ -758,12 +766,14 @@ mod tests {
     use crate::other::*;
     use crate::other::Named;
     use rand::Rng;
+    use std::net;
     use std::fs;
     use std::collections::HashMap;
     use std::io::Cursor;
 }
 ";
-        // Flagged: the crate glob, the crate named import, `rand`, and `std::fs`.
+        // Flagged: the crate glob, the crate named import, `rand`, and `std::net`. `std::fs`
+        // is not — a unit test may build the tree its unit walks.
         let violations = violations_in(src, &["rand"]);
         assert_eq!(violations.len(), 4, "got {violations:?}");
         assert!(violations.iter().all(|v| v.rule == RULE_IMPORT));
@@ -798,9 +808,10 @@ mod tests {
             Some("external crate")
         );
         assert_eq!(
-            classify_use(&segs("std::fs"), false, &deps),
+            classify_use(&segs("std::net"), false, &deps),
             Some("effectful std")
         );
+        assert_eq!(classify_use(&segs("std::fs"), false, &deps), None);
         assert_eq!(
             classify_use(&segs("std::collections"), true, &deps),
             Some("glob import")
@@ -1008,14 +1019,14 @@ mod tests {
 mod tests {
     #[test]
     fn t() {
-        let _ = ::std::fs::read(\"x\");
+        let _ = ::std::net::TcpStream::connect(\"x\");
     }
 }
 ";
         let violations = violations_in(src, &[]);
         assert_eq!(violations.len(), 1, "got {violations:?}");
         let m = &violations[0].message;
-        assert!(m.contains("`::std::fs::read`"), "{m}");
+        assert!(m.contains("`::std::net::TcpStream::connect`"), "{m}");
     }
 
     #[test]

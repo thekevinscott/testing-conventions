@@ -2,23 +2,21 @@
 
 Every read is injected as a hand-rolled fake, so the orchestration is exercised without a repo, a
 subprocess, or a filesystem. The fakes record what they were asked for, which pins that `run`
-threads its own arguments through rather than reading some other root or ref.
+threads its own root through rather than reading some other one.
 """
 import inspect
-from types import SimpleNamespace
 
 from checks.agents_md_size.gate import run
 
-LIMITS = SimpleNamespace(warn_lines=10, warn_bytes=1000, max_lines=20, max_bytes=2000)
+MAX_CHARS = 100
 
 
-def _document(lines):
-    return "".join("x\n" for _ in range(lines))
+def _document(chars):
+    return "x" * chars
 
 
-def _run(files, *, limits=LIMITS, base=None, changed=()):
-    """Drive `run` over a dict of path -> text; return (exit code, what each fake was asked)."""
-    asked = {"roots": [], "reads": [], "diffs": []}
+def _fakes(files, asked):
+    """Injected reads over a dict of path -> text, recording what each was asked for."""
 
     def tracked_paths(root):
         asked["roots"].append(root)
@@ -28,18 +26,22 @@ def _run(files, *, limits=LIMITS, base=None, changed=()):
         asked["reads"].append((root, path))
         return files.get(path)
 
-    def changed_paths(root, ref):
-        asked["diffs"].append((root, ref))
-        return list(changed)
+    return tracked_paths, read_text
 
-    code = run(
-        "repo",
-        limits,
-        base,
-        tracked_paths=tracked_paths,
-        read_text=read_text,
-        changed_paths=changed_paths,
-    )
+
+def _run(files, *, max_chars=MAX_CHARS):
+    """Drive `run` over a dict of path -> text; return (exit code, what each fake was asked)."""
+    asked = {"roots": [], "reads": []}
+    tracked_paths, read_text = _fakes(files, asked)
+    code = run("repo", max_chars, tracked_paths=tracked_paths, read_text=read_text)
+    return code, asked
+
+
+def _run_with_default_budget(files):
+    """Drive `run` without a budget argument, so the shipped default is the one under test."""
+    asked = {"roots": [], "reads": []}
+    tracked_paths, read_text = _fakes(files, asked)
+    code = run("repo", tracked_paths=tracked_paths, read_text=read_text)
     return code, asked
 
 
@@ -53,18 +55,21 @@ def test_the_default_reads_are_the_real_ones():
     assert defaults == {
         "tracked_paths": ("checks.agents_md_size.git_ops", "tracked_paths"),
         "read_text": ("checks.agents_md_size.fs_ops", "read_text"),
-        "changed_paths": ("checks.agents_md_size.diff_ops", "changed_paths"),
     }
 
 
-def test_the_default_budgets_are_the_shipped_ones():
-    # Pinned by module and name rather than identity, so no budget collaborator is imported.
-    default = type(inspect.signature(run).parameters["limits"].default)
-    assert (default.__module__, default.__name__) == ("checks.agents_md_size.limits", "Limits")
+def test_the_shipped_budget_is_thirty_thousand_characters(capsys):
+    # The literal, asserted through the message rather than against the constant: a test that
+    # reads `MAX_CHARS` moves with it and pins nothing.
+    code, _ = _run_with_default_budget({"AGENTS.md": _document(30001)})
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "30001 characters" in out
+    assert "30000-character budget" in out
 
 
 def test_a_tree_with_no_instructions_file_passes(capsys):
-    code, _ = _run({"README.md": _document(500)})
+    code, _ = _run({"README.md": _document(MAX_CHARS * 5)})
     assert code == 0
     assert "every instructions file fits its budget" in capsys.readouterr().out
 
@@ -75,55 +80,48 @@ def test_a_small_instructions_file_passes(capsys):
     assert "every instructions file fits its budget" in capsys.readouterr().out
 
 
-def test_an_over_budget_file_fails_naming_its_size_and_budget(capsys):
-    code, _ = _run({"AGENTS.md": _document(LIMITS.max_lines + 1)})
+def test_a_file_at_exactly_the_budget_passes(capsys):
+    code, _ = _run({"AGENTS.md": _document(MAX_CHARS)})
+    assert code == 0
+    assert "::" not in capsys.readouterr().out
+
+
+def test_a_file_one_character_over_the_budget_fails(capsys):
+    code, _ = _run({"AGENTS.md": _document(MAX_CHARS + 1)})
     out = capsys.readouterr().out
     assert code == 1
     assert "::error file=AGENTS.md::" in out
-    assert f"{LIMITS.max_lines + 1} lines" in out
-    assert f"{LIMITS.max_lines}-line / {LIMITS.max_bytes}-byte budget" in out
+    assert f"{MAX_CHARS + 1} characters" in out
+    assert f"{MAX_CHARS}-character budget" in out
     assert "Move sections into reference files or skills" in out
 
 
 def test_an_over_budget_file_names_every_member_of_its_closure(capsys):
-    code, _ = _run(
-        {"AGENTS.md": "@agents/style.md\n", "agents/style.md": _document(LIMITS.max_lines + 1)}
-    )
+    code, _ = _run({"AGENTS.md": "@agents/style.md\n", "agents/style.md": _document(MAX_CHARS)})
     out = capsys.readouterr().out
     assert code == 1
-    assert "Closure: AGENTS.md (1 lines), agents/style.md" in out
-    assert f"({LIMITS.max_lines + 1} lines)" in out
+    assert "Closure: AGENTS.md (17 chars), agents/style.md" in out
+    assert f"({MAX_CHARS} chars)" in out
 
 
-def test_a_file_past_the_soft_budget_warns_without_failing(capsys):
-    code, _ = _run({"AGENTS.md": _document(LIMITS.warn_lines + 1)})
-    out = capsys.readouterr().out
-    assert code == 0
-    assert "::warning file=AGENTS.md::" in out
-    assert f"{LIMITS.warn_lines}-line / {LIMITS.warn_bytes}-byte soft budget" in out
-
-
-def test_a_warning_suppresses_the_everything_fits_message(capsys):
-    _run({"AGENTS.md": _document(LIMITS.warn_lines + 1)})
+def test_an_over_budget_file_suppresses_the_everything_fits_message(capsys):
+    _run({"AGENTS.md": _document(MAX_CHARS + 1)})
     assert "every instructions file fits its budget" not in capsys.readouterr().out
-
-
-def test_a_warning_beside_a_failure_still_fails(capsys):
-    code, _ = _run(
-        {
-            "AGENTS.md": _document(LIMITS.warn_lines + 1),
-            "pkg/AGENTS.md": _document(LIMITS.max_lines + 1),
-        }
-    )
-    out = capsys.readouterr().out
-    assert code == 1
-    assert "::warning file=AGENTS.md::" in out
-    assert "::error file=pkg/AGENTS.md::" in out
 
 
 def test_a_passing_run_annotates_nothing(capsys):
     _run({"AGENTS.md": _document(3)})
     assert "::" not in capsys.readouterr().out
+
+
+def test_every_over_budget_file_is_reported_not_just_the_first(capsys):
+    code, _ = _run(
+        {"AGENTS.md": _document(MAX_CHARS + 1), "pkg/CLAUDE.md": _document(MAX_CHARS + 1)}
+    )
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "::error file=AGENTS.md::" in out
+    assert "::error file=pkg/CLAUDE.md::" in out
 
 
 def test_the_tree_is_listed_for_the_root_under_test():
@@ -141,48 +139,12 @@ def test_a_file_that_is_not_an_instructions_file_is_never_read():
     assert asked["reads"] == [("repo", "AGENTS.md")]
 
 
-def test_no_base_means_the_diff_is_never_read():
-    _, asked = _run({"AGENTS.md": _document(3)})
-    assert asked["diffs"] == []
-
-
-def test_a_base_is_diffed_against_the_root_under_test():
-    _, asked = _run({"AGENTS.md": _document(3)}, base="origin/main", changed=["AGENTS.md"])
-    assert asked["diffs"] == [("repo", "origin/main")]
-
-
-def test_a_base_drops_a_closure_the_diff_never_reaches(capsys):
-    code, _ = _run(
-        {"AGENTS.md": _document(LIMITS.max_lines + 1)}, base="main", changed=["README.md"]
-    )
-    out = capsys.readouterr().out
-    assert code == 0
-    assert "::error" not in out
-    assert "every instructions file fits its budget" in out
-
-
-def test_a_base_keeps_a_closure_the_diff_reaches(capsys):
-    code, _ = _run(
-        {"AGENTS.md": _document(LIMITS.max_lines + 1)}, base="main", changed=["AGENTS.md"]
-    )
-    assert code == 1
-    assert "::error file=AGENTS.md::" in capsys.readouterr().out
-
-
-def test_a_base_keeps_an_importer_when_only_its_import_changed(capsys):
-    code, _ = _run(
-        {"AGENTS.md": "@a.md\n", "a.md": _document(LIMITS.max_lines + 1)},
-        base="main",
-        changed=["a.md"],
-    )
-    assert code == 1
-    assert "::error file=AGENTS.md::" in capsys.readouterr().out
+def test_entries_are_reported_in_path_order():
+    _, asked = _run({"pkg/AGENTS.md": _document(3), "AGENTS.md": _document(3)})
+    assert asked["reads"] == [("repo", "AGENTS.md"), ("repo", "pkg/AGENTS.md")]
 
 
 def test_a_raised_budget_passes_a_file_the_default_would_fail(capsys):
-    code, _ = _run(
-        {"AGENTS.md": _document(LIMITS.max_lines + 1)},
-        limits=SimpleNamespace(warn_lines=100, warn_bytes=10000, max_lines=200, max_bytes=20000),
-    )
+    code, _ = _run({"AGENTS.md": _document(MAX_CHARS + 1)}, max_chars=MAX_CHARS * 2)
     assert code == 0
     assert "::" not in capsys.readouterr().out

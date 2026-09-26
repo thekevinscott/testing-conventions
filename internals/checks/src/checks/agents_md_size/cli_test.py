@@ -1,24 +1,17 @@
 """Colocated unit tests for the agents-md-size command.
 
-The shipped budget values are pinned by the budgets module's own tests and by the e2e run; here
-the claim is only that each option is declared and reaches the gate.
+The shipped budget value is pinned by the gate's own tests and by the e2e run; here the claim is
+only that the option is declared and reaches the gate.
 """
 from checks.agents_md_size.cli import cli
-
-OPTIONS = {
-    "--warn-lines": "warn_lines",
-    "--warn-bytes": "warn_bytes",
-    "--max-lines": "max_lines",
-    "--max-bytes": "max_bytes",
-}
 
 
 def _patch_run(monkeypatch, verdict):
     """Stand a recording fake in for the gate; return the list of calls it was given."""
     seen = []
 
-    def run(root, limits, base):
-        seen.append((root, limits, base))
+    def run(root, max_chars):
+        seen.append((root, max_chars))
         return verdict
 
     monkeypatch.setattr("checks.agents_md_size.cli.run", run)
@@ -44,23 +37,16 @@ def test_declares_the_root_argument():
     assert _parameters()["root"].required is True
 
 
-def test_the_base_option_defaults_to_the_whole_tree():
-    assert _parameters()["base"].default is None
+def test_the_budget_option_defaults_to_a_budget_rather_than_nothing():
+    assert _parameters()["max_chars"].default > 0
 
 
-def test_each_budget_option_defaults_to_a_budget_rather_than_nothing():
-    parameters = _parameters()
-    assert [parameters[name].default > 0 for name in OPTIONS.values()] == [True] * len(OPTIONS)
+def test_the_budget_option_parses_as_an_integer():
+    assert _parameters()["max_chars"].type.name == "integer"
 
 
-def test_each_budget_option_parses_as_an_integer():
-    parameters = _parameters()
-    assert [parameters[name].type.name for name in OPTIONS.values()] == ["integer"] * len(OPTIONS)
-
-
-def test_each_budget_option_declares_its_flag():
-    parameters = _parameters()
-    assert [flag in parameters[name].opts for flag, name in OPTIONS.items()] == [True] * len(OPTIONS)
+def test_the_budget_option_declares_its_flag():
+    assert "--max-chars" in _parameters()["max_chars"].opts
 
 
 def test_threads_the_root_into_the_gate(monkeypatch):
@@ -69,25 +55,16 @@ def test_threads_the_root_into_the_gate(monkeypatch):
     assert seen[0][0] == "pkg"
 
 
-def test_threads_the_base_into_the_gate(monkeypatch):
+def test_passes_the_declared_budget_to_the_gate(monkeypatch):
     seen = _patch_run(monkeypatch, 0)
-    _invoke(base="origin/main")
-    assert seen[0][2] == "origin/main"
-
-
-def test_passes_the_declared_budgets_to_the_gate(monkeypatch):
-    seen = _patch_run(monkeypatch, 0)
-    parameters = _parameters()
     _invoke()
-    assert [getattr(seen[0][1], name) for name in OPTIONS.values()] == [
-        parameters[name].default for name in OPTIONS.values()
-    ]
+    assert seen[0][1] == _parameters()["max_chars"].default
 
 
-def test_passes_overridden_budgets_to_the_gate(monkeypatch):
+def test_passes_an_overridden_budget_to_the_gate(monkeypatch):
     seen = _patch_run(monkeypatch, 0)
-    _invoke(warn_lines=1, warn_bytes=2, max_lines=3, max_bytes=4)
-    assert [getattr(seen[0][1], name) for name in OPTIONS.values()] == [1, 2, 3, 4]
+    _invoke(max_chars=7)
+    assert seen[0][1] == 7
 
 
 def test_exits_zero_when_the_gate_holds(monkeypatch):

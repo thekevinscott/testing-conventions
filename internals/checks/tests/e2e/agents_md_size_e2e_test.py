@@ -9,7 +9,7 @@ import subprocess
 from click.testing import CliRunner
 
 from checks.agents_md_size.cli import cli
-from checks.agents_md_size.limits import Limits
+from checks.agents_md_size.gate import MAX_CHARS
 
 
 def _git(repo, *args):
@@ -35,8 +35,8 @@ def _write(path, text):
     path.write_text(text)
 
 
-def _document(lines, width=10):
-    return "".join(f"{'x' * width}\n" for _ in range(lines))
+def _document(chars):
+    return "x" * chars
 
 
 def _gate(repo, *args):
@@ -45,7 +45,7 @@ def _gate(repo, *args):
 
 def test_a_short_instructions_file_passes(tmp_path):
     _repo(tmp_path)
-    _write(tmp_path / "AGENTS.md", _document(10))
+    _write(tmp_path / "AGENTS.md", _document(100))
     _commit(tmp_path, "add a short AGENTS.md")
 
     result = _gate(tmp_path)
@@ -53,52 +53,32 @@ def test_a_short_instructions_file_passes(tmp_path):
     assert "every instructions file fits its budget" in result.output
 
 
-def test_a_file_at_exactly_the_hard_line_budget_does_not_fail(tmp_path):
+def test_a_file_at_exactly_the_budget_does_not_fail(tmp_path):
     _repo(tmp_path)
-    _write(tmp_path / "AGENTS.md", _document(Limits.max_lines))
-    _commit(tmp_path, "add an AGENTS.md at the hard budget")
+    _write(tmp_path / "AGENTS.md", _document(MAX_CHARS))
+    _commit(tmp_path, "add an AGENTS.md at the budget")
 
     result = _gate(tmp_path)
     assert result.exit_code == 0
     assert "::error" not in result.output
 
 
-def test_a_file_one_line_over_the_hard_budget_fails(tmp_path):
+def test_a_file_one_character_over_the_budget_fails(tmp_path):
     _repo(tmp_path)
-    _write(tmp_path / "AGENTS.md", _document(Limits.max_lines + 1))
+    _write(tmp_path / "AGENTS.md", _document(MAX_CHARS + 1))
     _commit(tmp_path, "add an over-budget AGENTS.md")
 
     result = _gate(tmp_path)
     assert result.exit_code == 1
     assert "::error file=AGENTS.md::" in result.output
-    assert str(Limits.max_lines + 1) in result.output
-    assert str(Limits.max_lines) in result.output
-
-
-def test_a_file_past_the_soft_budget_warns_without_failing(tmp_path):
-    _repo(tmp_path)
-    _write(tmp_path / "AGENTS.md", _document(Limits.warn_lines + 1))
-    _commit(tmp_path, "add a soft-over AGENTS.md")
-
-    result = _gate(tmp_path)
-    assert result.exit_code == 0
-    assert "::warning file=AGENTS.md::" in result.output
-
-
-def test_a_few_very_wide_lines_fail_on_the_byte_budget(tmp_path):
-    _repo(tmp_path)
-    _write(tmp_path / "AGENTS.md", _document(10, width=Limits.max_bytes))
-    _commit(tmp_path, "add a wide AGENTS.md")
-
-    result = _gate(tmp_path)
-    assert result.exit_code == 1
-    assert "::error file=AGENTS.md::" in result.output
-    assert str(Limits.max_bytes) in result.output
+    # The literal budget, not `MAX_CHARS`: an assertion that reads the constant moves with it.
+    assert "30001 characters" in result.output
+    assert "30000-character budget" in result.output
 
 
 def test_a_nested_claude_md_is_held_to_the_same_budget(tmp_path):
     _repo(tmp_path)
-    _write(tmp_path / "pkg" / "CLAUDE.md", _document(Limits.max_lines + 1))
+    _write(tmp_path / "pkg" / "CLAUDE.md", _document(MAX_CHARS + 1))
     _commit(tmp_path, "add an over-budget nested CLAUDE.md")
 
     result = _gate(tmp_path)
@@ -109,7 +89,7 @@ def test_a_nested_claude_md_is_held_to_the_same_budget(tmp_path):
 def test_an_imported_file_counts_toward_the_importer_budget(tmp_path):
     _repo(tmp_path)
     _write(tmp_path / "AGENTS.md", "@agents/style.md\n")
-    _write(tmp_path / "agents" / "style.md", _document(Limits.max_lines + 1))
+    _write(tmp_path / "agents" / "style.md", _document(MAX_CHARS))
     _commit(tmp_path, "add a short index importing a long file")
 
     result = _gate(tmp_path)
@@ -121,7 +101,7 @@ def test_an_imported_file_counts_toward_the_importer_budget(tmp_path):
 def test_an_import_inside_a_fenced_block_is_not_expanded(tmp_path):
     _repo(tmp_path)
     _write(tmp_path / "AGENTS.md", "```\n@agents/style.md\n```\n")
-    _write(tmp_path / "agents" / "style.md", _document(Limits.max_lines + 1))
+    _write(tmp_path / "agents" / "style.md", _document(MAX_CHARS + 1))
     _commit(tmp_path, "add a fenced import")
 
     result = _gate(tmp_path)
@@ -131,58 +111,20 @@ def test_an_import_inside_a_fenced_block_is_not_expanded(tmp_path):
 
 def test_an_untracked_over_budget_file_does_not_trip_the_gate(tmp_path):
     _repo(tmp_path)
-    _write(tmp_path / "AGENTS.md", _document(10))
+    _write(tmp_path / "AGENTS.md", _document(100))
     _commit(tmp_path, "add a short AGENTS.md")
-    _write(tmp_path / "pkg" / "AGENTS.md", _document(Limits.max_lines + 1))
+    _write(tmp_path / "pkg" / "AGENTS.md", _document(MAX_CHARS + 1))
 
     result = _gate(tmp_path)
     assert result.exit_code == 0
     assert "::error" not in result.output
 
 
-def test_a_raised_line_budget_lets_an_otherwise_failing_file_pass(tmp_path):
+def test_a_raised_budget_lets_an_otherwise_failing_file_pass(tmp_path):
     _repo(tmp_path)
-    _write(tmp_path / "AGENTS.md", _document(Limits.max_lines + 1))
+    _write(tmp_path / "AGENTS.md", _document(MAX_CHARS + 1))
     _commit(tmp_path, "add an over-budget AGENTS.md")
 
-    result = _gate(tmp_path, "--max-lines", str(Limits.max_lines + 1), "--warn-lines", str(Limits.max_lines + 1))
+    result = _gate(tmp_path, "--max-chars", str(MAX_CHARS + 1))
     assert result.exit_code == 0
     assert "::error" not in result.output
-
-
-def test_a_base_ref_skips_a_file_the_branch_never_touched(tmp_path):
-    _repo(tmp_path)
-    _write(tmp_path / "AGENTS.md", _document(Limits.max_lines + 1))
-    _commit(tmp_path, "add an over-budget AGENTS.md")
-    _write(tmp_path / "notes.md", "unrelated\n")
-    _commit(tmp_path, "touch something else")
-
-    result = _gate(tmp_path, "--base", "HEAD~1")
-    assert result.exit_code == 0
-    assert "::error" not in result.output
-
-
-def test_a_base_ref_still_reports_a_file_the_branch_grew(tmp_path):
-    _repo(tmp_path)
-    _write(tmp_path / "AGENTS.md", _document(10))
-    _commit(tmp_path, "add a short AGENTS.md")
-    _write(tmp_path / "AGENTS.md", _document(Limits.max_lines + 1))
-    _commit(tmp_path, "grow it past the budget")
-
-    result = _gate(tmp_path, "--base", "HEAD~1")
-    assert result.exit_code == 1
-    assert "::error file=AGENTS.md::" in result.output
-
-
-def test_a_base_ref_reports_an_importer_when_only_the_imported_file_grew(tmp_path):
-    _repo(tmp_path)
-    _write(tmp_path / "AGENTS.md", "@agents/style.md\n")
-    _write(tmp_path / "agents" / "style.md", _document(10))
-    _commit(tmp_path, "add an index and its import")
-    _write(tmp_path / "agents" / "style.md", _document(Limits.max_lines + 1))
-    _commit(tmp_path, "grow the imported file")
-
-    result = _gate(tmp_path, "--base", "HEAD~1")
-    assert result.exit_code == 1
-    assert "::error file=AGENTS.md::" in result.output
-    assert "agents/style.md" in result.output

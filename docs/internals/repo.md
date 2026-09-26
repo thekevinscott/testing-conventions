@@ -76,6 +76,24 @@ tracks. The cost is sequencing, not correctness: while #672's own offending dire
 `main` (fixed by #674, pending merge), this gate is red on any branch built on top of it,
 including this one, until that PR lands and this one rebases past it.
 
+## Instructions file size budget
+
+`agents_md_size(path, max_len)` (`internals/checks`) answers one question: does this instructions
+file fit? It resolves the file's `@path` imports and returns whether the result is under `max_len`
+characters. The limit is the caller's — there is no default, no discovery of which files to check,
+and no CLI yet.
+
+**Characters, not lines or bytes.** One axis. Lines vary too much with wrapping to mean anything,
+and bytes punish non-ASCII prose for no reason.
+
+**Counting happens after `@path` import resolution.** Imports load at launch, so a short index
+importing five files costs the same context as one long file and would game a naive measurement.
+`resolve_agents_md` walks the closure: a target resolves relative to the *containing* file, the
+chain stops at five hops (Claude Code's own cap), a repeated target terminates a cycle, an `@`
+inside a fenced block or a code span is not an import, and an `@` mid-word — an email address, a
+scoped package name — is not one either. A file two documents both import is loaded once, so it is
+counted once.
+
 ## The CLI command surface
 
 Every subcommand `--help` lists does real work and can fail. A command that parses and exits `0`

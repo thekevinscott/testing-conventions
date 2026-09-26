@@ -1,28 +1,34 @@
 #!/usr/bin/env python3
 """Entry point for the reusable workflow's `detect` job; sibling modules hold the derivations.
 
-Inputs come from the environment set by the workflow — LANGUAGES, SCAN_PATH, CONFIG,
-CALLER_REPOSITORY, VERSION — and the detected sets are appended to GITHUB_OUTPUT.
+The composite action passes the five inputs positionally, in `ARGUMENTS` order, and the detected
+sets are appended to the file `GITHUB_OUTPUT` names.
 """
 import os
+import sys
 
 from compute_outputs import compute_outputs
 from derive_config import CONFIG_DEFAULT
 from render_github_output import render_github_output
 
+ARGUMENTS = {
+    "languages": "",
+    "scan_path": ".",
+    "config": CONFIG_DEFAULT,
+    "caller_repository": "",
+    "version": "",
+}
 
-def main() -> int:
-    languages = os.environ.get("LANGUAGES", "")
-    scan_path = os.environ.get("SCAN_PATH", ".")
-    config_input = os.environ.get("CONFIG", CONFIG_DEFAULT)
-    caller_repository = os.environ.get("CALLER_REPOSITORY", "")
-    version = os.environ.get("VERSION", "")
+
+def main(argv) -> int:
+    supplied = dict(zip(ARGUMENTS, argv))
+    arguments = {name: supplied.get(name, default) for name, default in ARGUMENTS.items()}
     outputs = compute_outputs(
-        languages,
-        scan_path,
-        config_input=config_input,
-        caller_repository=caller_repository,
-        version=version,
+        arguments["languages"],
+        arguments["scan_path"],
+        config_input=arguments["config"],
+        caller_repository=arguments["caller_repository"],
+        version=arguments["version"],
     )
 
     github_output = os.environ.get("GITHUB_OUTPUT")
@@ -30,9 +36,10 @@ def main() -> int:
         with open(github_output, "a", encoding="utf-8") as handle:
             handle.write(render_github_output(outputs))
     summary = ", ".join(f"{name} {value}" for name, value in outputs.items())
+    languages, scan_path = arguments["languages"], arguments["scan_path"]
     print(f"languages='{languages}' under '{scan_path}' -> {summary}")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

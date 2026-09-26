@@ -116,4 +116,4 @@ runs:
         VERSION: ${{ inputs.version }}
       # GitHub checks out the whole repo to resolve a composite action, so this path up out of
       # `$GITHUB_ACTION_PATH` and back down into internals/ resolves for a consumer too.
-      run: python3 "$GITHUB_ACTION_PATH/../../../internals/detect/src/detect.py"
+      run: python3 "$GITHUB_ACTION_PATH/../../../internals/detect/src/detect.py" "$LANGUAGES" "$SCAN_PATH" "$CONFIG" "$CALLER_REPOSITORY" "$VERSION"

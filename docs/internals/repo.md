@@ -84,11 +84,38 @@ otherwise fork a copy of the subprocess boundary and its runner seam.
 
 `agents_md_size(path, max_len)` (`internals/checks`) answers one question: does this instructions
 file fit? It resolves the file's `@path` imports and returns whether the result is under `max_len`
-characters. The limit is the caller's — there is no default, no discovery of which files to check,
-and no CLI yet.
+characters.
+
+`tc-checks agents-md-size <root>` is the gate around it. It lists every tracked path under `root`,
+keeps the ones named `AGENTS.md` or `CLAUDE.md` at any depth, and annotates each one over budget.
+Discovery is the gate's own decision rather than an argument, because a hand-maintained list of
+files to check is a list that misses the next one. `--budget` overrides the default of 16384
+characters.
+
+**16384 characters, and the cap is review discipline, not model attention.** The one controlled
+experiment on instruction-file length ([arXiv 2605.10039](https://arxiv.org/abs/2605.10039), 1,650
+Claude Code sessions across 25/100/250/500 lines) found nulls on length, rule position, nesting,
+and internal contradictions alike. What mattered was having a file at all. So the gate does not
+claim a compliance benefit. It claims that below the cap a human still reads the file end to end,
+and above it they skim — and skimmed files accumulate stale rules, which is what actually burns
+the instruction budget. The failure message says so, and names relocating rules as the remedy,
+because deleting them is the wrong way to get green.
 
 **Characters, not lines or bytes.** One axis. Lines vary too much with wrapping to mean anything,
-and bytes punish non-ASCII prose for no reason.
+and bytes punish non-ASCII prose for no reason. This supersedes the two-axis lines/bytes table in
+the issue that asked for the gate: a file that passes one axis and fails the other has no
+behavioral difference to point at, and the second threshold only adds a way to argue about which
+one was wrong.
+
+**Whole-tree, not diff-scoped.** Like `path-length-gate`, and for the same reason: the invariant
+is that the checkout's instructions fit, which holds regardless of how a file got large. It also
+sidesteps a trap specific to this gate — counting after import resolution means a shared imported
+file that grows pushes an `AGENTS.md` over budget on a pull request that never touched it. A
+diff-scoped run would miss exactly that case.
+
+**No CI job yet.** The subcommand ships first and the reusable-workflow job follows in the next
+release, because a pinned consumer resolves an older binary and a job that calls a subcommand its
+binary lacks fails on a missing command rather than on the thing it checks.
 
 **Counting happens after `@path` import resolution.** Imports load at launch, so a short index
 importing five files costs the same context as one long file and would game a naive measurement.

@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """Advance the moving major tag `@v0` to a released commit, forward-only.
-Inputs come from the environment the workflow sets: SHA (required), TAG (default 'v0').
+Arguments: the released commit to advance to (required), then the tag to move (default 'v0').
 """
 from __future__ import annotations
 
-import os
+import sys
 
 from advance import advance
 
 
-def main() -> int:
-    sha = os.environ.get("SHA", "").strip()
+def main(argv: list[str]) -> int:
+    # Padded so an omitted argument binds blank; a length check here leaves an equivalent mutant.
+    sha, tag, *_ = (*argv, "", "")
+    sha = sha.strip()
     if not sha:
-        print("::error::SHA is required (the released commit to advance the tag to)")
+        print("::error::a commit SHA is required (the released commit to advance the tag to)")
         return 1
-    tag = os.environ.get("TAG", "v0").strip() or "v0"
+    tag = tag.strip() or "v0"
     action = advance(tag, sha)
     print({
         "bootstrap": f"{tag} did not exist yet; bootstrapped it at {sha}",
@@ -25,4 +27,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

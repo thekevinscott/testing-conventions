@@ -94,4 +94,4 @@ jobs:
         env:
           SHA: ${{ needs.context.outputs.sha }}
           TAG: v0
-        run: python3 internals/move-major-tag/src/move_major_tag.py
+        run: python3 internals/move-major-tag/src/move_major_tag.py "$SHA" "$TAG"

@@ -740,7 +740,7 @@ so the asserted argv kills the mutants on each boundary call; `decide_test.py` d
 decision directly, and `advance_test.py` and `move_major_tag_test.py` each mock the module below
 them. The package carries **no `testing-conventions.toml`**: every module holds the shipped
 `one_function_per_file` default, and there are **no exemptions** — the unit tier reaches 100%
-line-and-branch coverage and kills all 60 whole-tree mutants. `move-major-tag-tests.yml` still runs
+line-and-branch coverage and kills all 62 whole-tree mutants. `move-major-tag-tests.yml` still runs
 the three tiers together.
 
 Two mutants on `advance` drove a change to the source rather than a test. `if action == "noop"`

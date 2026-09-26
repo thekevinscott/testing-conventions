@@ -9,7 +9,6 @@ from unittest.mock import patch
 
 import pytest
 
-import advance as advance_module
 import move_major_tag as m
 
 MISSING_SHA = "::error::a commit SHA is required (the released commit to advance the tag to)\n"
@@ -23,13 +22,15 @@ def advance():
         yield patched
 
 
-def test_main_reports_a_missing_sha_as_an_error(capsys):
+def test_main_reports_a_missing_sha_as_an_error(advance, capsys):
     assert m.main([]) == 1
     assert capsys.readouterr().out == MISSING_SHA
+    advance.assert_not_called()
 
 
-def test_main_treats_a_whitespace_only_sha_as_missing():
+def test_main_treats_a_whitespace_only_sha_as_missing(advance):
     assert m.main(["   "]) == 1
+    advance.assert_not_called()
 
 
 def test_main_advances_the_default_tag_when_none_is_named(advance):
@@ -91,11 +92,12 @@ def test_running_the_module_as_a_script_exits_with_mains_status():
 
 def test_running_the_module_as_a_script_hands_main_the_arguments_after_the_script_name():
     run_name = "".join(["__main", "__"])
-    with patch.object(advance_module, "advance") as advance:
+    argv = ["move_major_tag.py", "newsha", "v1"]
+    # Patched where `advance` lives, not on this module: the run re-imports the entry point.
+    with patch("advance.advance") as advance, patch.object(sys, "argv", argv):
         advance.return_value = "advance"
-        with patch.object(sys, "argv", ["move_major_tag.py", "newsha", "v1"]):
-            with pytest.raises(SystemExit) as exit_info:
-                runpy.run_path(m.__file__, run_name=run_name)
+        with pytest.raises(SystemExit) as exit_info:
+            runpy.run_path(m.__file__, run_name=run_name)
     assert exit_info.value.code == 0
     advance.assert_called_once_with("v1", "newsha")
 

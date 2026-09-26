@@ -63,6 +63,21 @@ fn clean_reports_no_violations() {
 }
 
 #[test]
+fn pure_imports_report_no_violations() {
+    let violations = find_unit_violations(fixture("pure")).unwrap();
+    assert!(violations.is_empty(), "got {violations:?}");
+}
+
+#[test]
+fn pure_imports_keep_other_members_and_shapes_red() {
+    let violations = find_unit_violations(fixture("pure_negative")).unwrap();
+    let messages = violations.iter().map(|v| v.message.as_str()).collect::<Vec<_>>().join("\n");
+    for module in ["yaml", "node:path", "path", "json5", "node:fs", "node:child_process", "undici"] {
+        assert!(messages.contains(module), "missing {module}: {messages}");
+    }
+}
+
+#[test]
 fn red_exits_nonzero() {
     assert_eq!(isolation_exit("red"), 1);
 }

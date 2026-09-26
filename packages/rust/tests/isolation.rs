@@ -44,7 +44,16 @@ fn red_flags_first_party_cross_module_call() {
 fn red_flags_effectful_std_call() {
     assert!(
         flagged("unit/red", "effectful_std.rs"),
-        "`std::fs::read(...)` in a unit test must be flagged"
+        "`std::net::TcpStream::connect(...)` in a unit test must be flagged"
+    );
+}
+
+#[test]
+fn clean_allows_a_fixture_read() {
+    assert!(
+        !flagged("unit/clean", "fixture_read.rs"),
+        "`std::fs` and `std::env::temp_dir` build the tree a private walker needs, and the \
+         inline module is the only tier that can reach a private item"
     );
 }
 
@@ -136,7 +145,15 @@ fn imports_red_flags_external_crate() {
 fn imports_red_flags_effectful_std() {
     assert!(
         import_flagged("imports/red", "effectful_std.rs"),
-        "`use std::fs` in a unit test must be flagged"
+        "`use std::net` in a unit test must be flagged"
+    );
+}
+
+#[test]
+fn imports_clean_allows_the_filesystem() {
+    assert!(
+        !import_flagged("unit/clean", "fixture_read.rs"),
+        "`use std::fs` follows the call: a unit test may build the tree it walks"
     );
 }
 

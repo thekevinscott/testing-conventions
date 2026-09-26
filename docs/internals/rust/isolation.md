@@ -98,13 +98,27 @@ Flag a `use` inside the test module whose **path root** is not `super` / `self`:
 
 | Flagged (effectful) | Allowed (pure) |
 | --- | --- |
-| `std::fs`, `std::net`, `std::process`, `std::env`, `std::thread`, `std::os` | `std::collections`, `std::fmt`, `std::ops`, `std::convert`, … |
+| `std::net`, `std::process`, `std::thread`, `std::os` | `std::collections`, `std::fmt`, `std::ops`, `std::convert`, … |
+| `std::env` (`var`, `set_var`, `args`, …) | `std::fs`, `std::env::temp_dir` |
 | `std::time::SystemTime::now`, `std::time::Instant::now` (clock) | `std::time::Duration` |
 | `std::io::{stdin,stdout,stderr}` (real handles) | `std::io::Cursor` + the `Read`/`Write`/`BufRead`/`Seek` **traits** |
 
 The `std::io` split is deliberate: [testing.md](testing.md) makes `Cursor::new(...)`
 the idiomatic in-memory unit-test tool, so `std::io` is **not** flagged wholesale —
-only the real-handle entry points are. "Randomness" (README) has no general std RNG;
+only the real-handle entry points are.
+
+The `std::fs` carve-out is the one place the Rust rule is deliberately looser than
+the Python and TypeScript equivalents, and privacy is why. A private item is visible
+only inside its own module, so an inline `#[cfg(test)]` module is the *only* tier that
+can test a private path-walker — and a path-walker's argument is a directory that has
+to exist. Flagging `fs` there forbids the sole tier that can see the unit from
+exercising it, which pushes the author to widen visibility to `pub(crate)` purely to
+satisfy a lint. Python and TypeScript have no such forcing function: a sibling test
+file reaches a module-private function directly, so filesystem work moves to the
+integration tier and stays flagged in the unit tier. `std::env` does **not** ride
+along: `var` reads ambient state the test never created, which is the collaborator the
+rule exists to catch. `temp_dir` is the exception inside the exception — it only names
+a writable directory, so it is matched by its last segment and allowed. "Randomness" (README) has no general std RNG;
 it's the `rand` crate, caught by the external-crate branch of D1.
 
 ## Integration detection

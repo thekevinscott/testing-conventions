@@ -8,8 +8,7 @@ import subprocess
 
 from click.testing import CliRunner
 
-from checks.agents_md_size.cli import cli
-from checks.agents_md_size.gate import MAX_CHARS
+from checks.agents_md_size.gate import MAX_CHARS, cli
 
 
 def _git(repo, *args):
@@ -95,7 +94,6 @@ def test_an_imported_file_counts_toward_the_importer_budget(tmp_path):
     result = _gate(tmp_path)
     assert result.exit_code == 1
     assert "::error file=AGENTS.md::" in result.output
-    assert "agents/style.md" in result.output
 
 
 def test_an_import_inside_a_fenced_block_is_not_expanded(tmp_path):

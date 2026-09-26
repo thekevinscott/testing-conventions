@@ -104,8 +104,7 @@ chain stops at five hops (Claude Code's own cap), a repeated target terminates a
 inside a fenced block or a code span is not an import, and an `@` mid-word — an email address, a
 scoped package name — is not one either. A `~` or absolute target reads a file no checkout
 contains, so it is skipped rather than counted: including it would make the gate's verdict depend
-on the machine it runs on. The annotation names every member of the closure and its character
-count, so an over-budget index says which import spent the budget.
+on the machine it runs on. A file two documents both import is loaded once, so it is counted once.
 
 ## The CLI command surface
 

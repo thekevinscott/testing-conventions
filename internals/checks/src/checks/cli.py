@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import click
 
-from checks.agents_md_size.cli import cli as agents_md_size
+from checks.agents_md_size.gate import cli as agents_md_size
 from checks.below_floor.cli import cli as below_floor
 from checks.build_command_wired.cli import cli as build_command_wired
 from checks.build_hermetic_cli.cli import cli as build_hermetic_cli

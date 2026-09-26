@@ -2,6 +2,10 @@
 from checks.cli import main
 
 
+def test_agents_md_size_is_registered():
+    assert "agents-md-size" in main.commands
+
+
 def test_below_floor_is_registered():
     assert "below-floor" in main.commands
 

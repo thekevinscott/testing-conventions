@@ -76,6 +76,36 @@ tracks. The cost is sequencing, not correctness: while #672's own offending dire
 `main` (fixed by #674, pending merge), this gate is red on any branch built on top of it,
 including this one, until that PR lands and this one rebases past it.
 
+## Instructions file size budget
+
+Every `AGENTS.md` and `CLAUDE.md` is always-on context: a model loads it at launch, before it has
+read a line of code, and a human reviewer is supposed to read it end to end. `tc-checks
+agents-md-size .` (`internals/checks`) holds every tracked one, resolved, to a character budget,
+and fails past it.
+
+**What it enforces is review discipline, not model attention.** The one controlled experiment on
+the question — McMillan, arXiv 2605.10039, 1,650 Claude Code sessions varying file length across
+25/100/250/500 lines — found no length effect that survived correction. What the cap buys is a file
+a reviewer still reads: past it they skim, stale rules accumulate unchallenged, and stale rules are
+what actually burn the instruction budget. State that, not a benchmark claim.
+
+**The budget is 30,000 characters**, `--max-chars`, one number and one axis. It is 400 lines of
+prose-dense instructions at roughly 75 characters a line: 200 lines is Anthropic's stated target
+for a memory file, and twice that is a judgment call with no source identifying a cliff there. It
+is an option rather than a constant so a repo that genuinely needs a larger budget raises it at the
+call site. It does not live in `testing-conventions.toml`: that schema is `deny_unknown_fields` on
+the Rust side (`packages/rust/src/config.rs`), so an `[agents_md_size]` table there would make
+every config-reading gate in the repo fail to load its config.
+
+**Counting happens after `@path` import resolution.** Imports load at launch, so a short index
+importing five files costs the same context as one long file and would game a naive gate. The
+resolver walks the closure of each entry: a target resolves relative to the *containing* file, the
+chain stops at five hops (Claude Code's own cap), a repeated target terminates a cycle, an `@`
+inside a fenced block or a code span is not an import, and an `@` mid-word — an email address, a
+scoped package name — is not one either. A `~` or absolute target reads a file no checkout
+contains, so it is skipped rather than counted: including it would make the gate's verdict depend
+on the machine it runs on. A file two documents both import is loaded once, so it is counted once.
+
 ## The CLI command surface
 
 Every subcommand `--help` lists does real work and can fail. A command that parses and exits `0`

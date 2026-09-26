@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import click
 
+from checks.agents_md_size.gate import cli as agents_md_size
 from checks.below_floor.cli import cli as below_floor
 from checks.build_command_wired.cli import cli as build_command_wired
 from checks.build_hermetic_cli.cli import cli as build_hermetic_cli
@@ -53,6 +54,7 @@ def main() -> None:
     """Repo-only self-test wiring and assertion checks."""
 
 
+main.add_command(agents_md_size, name="agents-md-size")
 main.add_command(below_floor, name="below-floor")
 main.add_command(build_command_wired, name="build-command-wired")
 main.add_command(build_hermetic_cli, name="build-hermetic-cli")

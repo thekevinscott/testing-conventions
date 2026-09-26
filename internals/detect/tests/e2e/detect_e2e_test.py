@@ -82,6 +82,26 @@ def run_detect(tmp_path):
         os.chdir(origin_cwd)
 
 
+@pytest.fixture
+def run_argv(tmp_path):
+    """A `run(*arguments) -> exit status` that runs detect.py as `__main__` over a raw argument
+    list — the command line an external caller composes, short arguments and all."""
+    origin_cwd = os.getcwd()
+    os.chdir(tmp_path)
+
+    def run(*arguments):
+        with patch.object(sys, "argv", [str(SCRIPT), *arguments]), \
+                patch.dict(os.environ, {"GITHUB_OUTPUT": ""}):
+            with pytest.raises(SystemExit) as exit_info:
+                runpy.run_path(str(SCRIPT), run_name="__main__")
+        return exit_info.value.code
+
+    try:
+        yield run
+    finally:
+        os.chdir(origin_cwd)
+
+
 def _parse_output_file(text):
     """Parse a GITHUB_OUTPUT file the way the Actions runner does: `name=value` lines
     plus the heredoc `name<<DELIM` / body / `DELIM` form for multi-line values."""
@@ -1134,6 +1154,27 @@ def test_the_script_path_is_not_read_as_an_argument():
 def test_every_declared_input_reaches_the_script():
     # An input nothing binds is a `with:` a caller can set and the scan never sees.
     assert _declared_inputs() == {input_name for _, input_name, _ in ARGUMENT_BINDINGS}
+
+
+def test_e2e_a_command_line_with_no_arguments_fails_rather_than_scanning_the_checkout_root(run_argv, capsys):
+    # The external caller's failure mode: a scan of the checkout root exits 0 and answers
+    # plausibly, so absence is an error, named on the annotation stream.
+    assert run_argv() == 1
+    error = capsys.readouterr().err
+    assert error.startswith("::error::")
+    assert "Missing: languages, scan_path, config, caller_repository, version" in error
+
+
+def test_e2e_a_command_line_that_stops_short_names_the_arguments_it_is_missing(run_argv, capsys):
+    assert run_argv("", "scan") == 1
+    assert "Missing: config, caller_repository, version" in capsys.readouterr().err
+
+
+def test_e2e_an_empty_argument_is_a_value_rather_than_an_absent_one(run_argv, capsys):
+    # Three of the five read empty as their documented normal: auto-detect every language, take
+    # the published CLI path, pin no version.
+    assert run_argv("", ".", "testing-conventions.toml", "", "") == 0
+    assert capsys.readouterr().err == ""
 
 
 def test_every_emitted_output_is_declared_by_the_composite_action(run_detect):

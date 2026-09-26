@@ -2,15 +2,15 @@
 
 Per the standard, an e2e test runs with no mocks. The `run_detect` fixture builds a real scan tree
 (and, at the checkout root, an optional `dist/` + attestation), then runs the script's `__main__`
-entry point in-process via `runpy` with `LANGUAGES` / `SCAN_PATH` / `GITHUB_OUTPUT` in the env —
-the inputs the composite action passes — and parses the `name=value` lines it writes. Running the
-real entry point in-process keeps the filesystem boundary and the `__main__` guard on the
-measured-coverage path; the env is set with `patch.dict` and the working directory is confined to
-the fixture.
+entry point in-process via `runpy` over the argument list the composite action passes, with
+`GITHUB_OUTPUT` in the env, and parses the `name=value` lines it writes. Running the real entry
+point in-process keeps the filesystem boundary and the `__main__` guard on the measured-coverage
+path; `sys.argv` is set with `patch.object` and the working directory is confined to the fixture.
 """
 import os
 import re
 import runpy
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,21 +18,23 @@ import pytest
 
 import cargo_workspace
 import derive_package_root
+import detect
 
 SCRIPT = Path(__file__).resolve().parents[2] / "src" / "detect.py"
 REPO_ROOT = Path(__file__).resolve().parents[4]
 ACTION_YML = REPO_ROOT / ".github" / "actions" / "detect" / "action.yml"
 WORKFLOW_YML = REPO_ROOT / ".github" / "workflows" / "testing-conventions.yml"
 
-# The manifest's input-to-environment contract, which `docs/internals/repo.md` also publishes to
-# the external evaluator that runs the scan itself.
-ENV_BINDINGS = {
-    "LANGUAGES": "languages",
-    "SCAN_PATH": "path",
-    "CONFIG": "config",
-    "CALLER_REPOSITORY": "caller_repository",
-    "VERSION": "version",
-}
+# The manifest's input-to-argument contract — shell variable, action input, script parameter — in
+# the order the invocation passes them. `docs/internals/repo.md` publishes it to the external
+# evaluator that runs the scan itself.
+ARGUMENT_BINDINGS = (
+    ("LANGUAGES", "languages", "languages"),
+    ("SCAN_PATH", "path", "scan_path"),
+    ("CONFIG", "config", "config"),
+    ("CALLER_REPOSITORY", "caller_repository", "caller_repository"),
+    ("VERSION", "version", "version"),
+)
 
 
 @pytest.fixture
@@ -64,15 +66,8 @@ def run_detect(tmp_path):
         out_path = Path(github_output) if github_output else None
         if out_path:
             out_path.write_text("")
-        env = {
-            "LANGUAGES": languages,
-            "SCAN_PATH": scan_path,
-            "GITHUB_OUTPUT": github_output,
-            "CONFIG": config,
-            "CALLER_REPOSITORY": caller_repository,
-            "VERSION": version,
-        }
-        with patch.dict(os.environ, env):
+        argv = [str(SCRIPT), languages, scan_path, config, caller_repository, version]
+        with patch.object(sys, "argv", argv), patch.dict(os.environ, {"GITHUB_OUTPUT": github_output}):
             try:
                 runpy.run_path(str(SCRIPT), run_name="__main__")
             except SystemExit:
@@ -80,6 +75,26 @@ def run_detect(tmp_path):
         if not out_path:
             return {}
         return _parse_output_file(out_path.read_text())
+
+    try:
+        yield run
+    finally:
+        os.chdir(origin_cwd)
+
+
+@pytest.fixture
+def run_argv(tmp_path):
+    """A `run(*arguments) -> exit status` that runs detect.py as `__main__` over a raw argument
+    list — the command line an external caller composes, short arguments and all."""
+    origin_cwd = os.getcwd()
+    os.chdir(tmp_path)
+
+    def run(*arguments):
+        with patch.object(sys, "argv", [str(SCRIPT), *arguments]), \
+                patch.dict(os.environ, {"GITHUB_OUTPUT": ""}):
+            with pytest.raises(SystemExit) as exit_info:
+                runpy.run_path(str(SCRIPT), run_name="__main__")
+        return exit_info.value.code
 
     try:
         yield run
@@ -163,10 +178,12 @@ def _scan_step_env():
     return bound
 
 
-def _env_names_the_script_reads():
-    """Every environment name the entry point reads, less the GITHUB_OUTPUT the runner sets."""
-    read = set(re.findall(r'os\.environ\.get\("([A-Z][A-Z0-9_]*)"', SCRIPT.read_text()))
-    return read - {"GITHUB_OUTPUT"}
+def _scan_step_arguments():
+    """The shell variables the step's one `run:` line passes, in argument order — a whole quoted
+    `"$NAME"`, which the mid-word `$GITHUB_ACTION_PATH` of the script path does not match."""
+    lines = ACTION_YML.read_text().split("\n")
+    invocation = next(line for line in lines if line.startswith("      run: "))
+    return re.findall(r'"\$([A-Z][A-Z0-9_]*)"', invocation)
 
 
 def _detect_job_outputs(text):
@@ -1106,21 +1123,58 @@ def test_published_outputs_when_a_version_is_pinned(run_detect):
     assert outputs["cli_command"] == ""
 
 
-@pytest.mark.parametrize(("variable", "input_name"), sorted(ENV_BINDINGS.items()))
-def test_each_environment_name_the_script_reads_is_bound_to_its_input(variable, input_name):
-    # The inputs half of the manifest contract. A binding wired to the wrong input — a typo, or a
-    # rename that reached one side — hands the script the empty string while reading as wired.
+@pytest.mark.parametrize(("variable", "input_name"), sorted((v, i) for v, i, _ in ARGUMENT_BINDINGS))
+def test_each_argument_the_invocation_passes_is_bound_to_its_input(variable, input_name):
+    # The inputs half of the manifest contract: `env:` is bash-local transport that keeps `${{ }}`
+    # out of the command line. A binding wired to the wrong input — a typo, or a rename that
+    # reached one side — hands the script the empty string while reading as wired.
     assert _scan_step_env()[variable] == "${{ inputs." + input_name + " }}"
 
 
-def test_the_manifest_binds_exactly_the_environment_names_the_script_reads():
-    # A name only the script knows defaults silently; a name only the manifest binds is dead.
-    assert set(_scan_step_env()) == _env_names_the_script_reads() == set(ENV_BINDINGS)
+def test_the_invocation_passes_exactly_the_arguments_the_script_reads():
+    # A parameter only the script knows defaults silently; a variable only the manifest binds is
+    # dead, and one bound but never passed reaches the templating layer and stops there.
+    assert set(_scan_step_arguments()) == set(_scan_step_env()) == {v for v, _, _ in ARGUMENT_BINDINGS}
+    assert set(detect.ARGUMENTS) == {parameter for _, _, parameter in ARGUMENT_BINDINGS}
+
+
+def test_the_arguments_are_passed_in_the_order_the_script_reads_them():
+    # argv is positional, so order is the contract: two arguments swapped scans the config file and
+    # configures the scan path, with every name still present on both sides.
+    assert _scan_step_arguments() == [variable for variable, _, _ in ARGUMENT_BINDINGS]
+    assert list(detect.ARGUMENTS) == [parameter for _, _, parameter in ARGUMENT_BINDINGS]
+
+
+def test_the_script_path_is_not_read_as_an_argument():
+    # The parse's trap: `$GITHUB_ACTION_PATH` opens the same `run:` line, and reading it as an
+    # argument would leave the list right by count and wrong by one.
+    assert "GITHUB_ACTION_PATH" not in _scan_step_arguments()
 
 
 def test_every_declared_input_reaches_the_script():
     # An input nothing binds is a `with:` a caller can set and the scan never sees.
-    assert _declared_inputs() == set(ENV_BINDINGS.values())
+    assert _declared_inputs() == {input_name for _, input_name, _ in ARGUMENT_BINDINGS}
+
+
+def test_e2e_a_command_line_with_no_arguments_fails_rather_than_scanning_the_checkout_root(run_argv, capsys):
+    # The external caller's failure mode: a scan of the checkout root exits 0 and answers
+    # plausibly, so absence is an error, named on the annotation stream.
+    assert run_argv() == 1
+    error = capsys.readouterr().err
+    assert error.startswith("::error::")
+    assert "Missing: languages, scan_path, config, caller_repository, version" in error
+
+
+def test_e2e_a_command_line_that_stops_short_names_the_arguments_it_is_missing(run_argv, capsys):
+    assert run_argv("", "scan") == 1
+    assert "Missing: config, caller_repository, version" in capsys.readouterr().err
+
+
+def test_e2e_an_empty_argument_is_a_value_rather_than_an_absent_one(run_argv, capsys):
+    # Three of the five read empty as their documented normal: auto-detect every language, take
+    # the published CLI path, pin no version.
+    assert run_argv("", ".", "testing-conventions.toml", "", "") == 0
+    assert capsys.readouterr().err == ""
 
 
 def test_every_emitted_output_is_declared_by_the_composite_action(run_detect):

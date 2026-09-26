@@ -1,5 +1,14 @@
 """Colocated unit tests for import resolution."""
+from pathlib import Path
+from typing import get_type_hints
+
 from checks.agents_md_size.resolve_agents_md.resolve_agents_md import resolve_agents_md
+
+
+def test_it_takes_a_path_written_either_way():
+    # Python 3.14 defers annotation evaluation, so without this the signature is never evaluated at
+    # all — a typo in it would go unnoticed and the mutation gate reports the union as unkillable.
+    assert get_type_hints(resolve_agents_md)["path_to_agents_md"] == str | Path
 
 
 def _chain(root, length):

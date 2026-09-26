@@ -108,11 +108,27 @@ fn pure_construction_reports_no_violations() {
 #[test]
 fn pure_allowlist_keeps_effectful_and_glob_reaches_red() {
     let violations = find_violations(fixture("unit/pure_negative")).unwrap();
-    let messages = violations.iter().map(|v| v.message.as_str()).collect::<Vec<_>>().join("\n");
-    for path in ["clap::*", "syn::parse::*", "std::process::Command", "std::os::unix::process::*", "toml::to_string", "zip::ZipWriter::new_append", "std::env::var", "std::thread::sleep"] {
+    let messages = violations
+        .iter()
+        .map(|v| v.message.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    for path in [
+        "clap::*",
+        "syn::parse::*",
+        "std::process::Command",
+        "std::os::unix::process::*",
+        "toml::to_string",
+        "zip::ZipWriter::new_append",
+        "std::env::var",
+        "std::thread::sleep",
+    ] {
         assert!(messages.contains(path), "missing {path}: {messages}");
     }
-    assert!(!messages.contains("clap::Command::new"), "pure call flagged: {messages}");
+    assert!(
+        !messages.contains("clap::Command::new"),
+        "pure call flagged: {messages}"
+    );
 }
 
 #[test]

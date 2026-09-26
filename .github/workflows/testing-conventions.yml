@@ -35,7 +35,7 @@ on:
         type: string
         default: ''
       gates:
-        description: 'Optional JSON array naming which gates run, e.g. ["colocated-test", "unit-lint", "integration-lint"]. Empty (the default) runs every applicable gate. Gate names: colocated-test, one-function-per-file, unit-lint, unit-coverage, mutation, integration-lint, packaging, e2e-verify, changelog. A named gate still applies its own conditions, and its diff-scoped variant rides with it (colocated-test covers the co-change job, unit-coverage the changed-line job). The allowlist is authoritative: a gate left out is skipped even when run_e2e / packaging_artifact is set.'
+        description: 'Optional JSON array naming which gates run, e.g. ["colocated-test", "unit-lint", "integration-lint"]. Empty (the default) runs every applicable gate. Gate names: colocated-test, one-function-per-file, unit-lint, unit-coverage, mutation, integration-lint, packaging, workflow-lint, e2e-verify, changelog. A named gate still applies its own conditions, and its diff-scoped variant rides with it (colocated-test covers the co-change job, unit-coverage the changed-line job). The allowlist is authoritative: a gate left out is skipped even when run_e2e / packaging_artifact is set.'
         type: string
         default: ''
       rust_toolchain:
@@ -563,3 +563,22 @@ jobs:
           # one sits where the manifest puts it, which is detect's `packaging_root`.
           PACKAGING_ROOT: ${{ inputs.packaging_artifact != '' && '_packaging_artifact' || needs.detect.outputs.packaging_root }}
         run: ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} packaging "$PACKAGING_ROOT"
+
+  workflow-lint:
+    name: Workflow lint (no logic in CI YAML)
+    needs: detect
+    if: ${{ inputs.gates == '' || contains(inputs.gates, '"workflow-lint"') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Download the CLI built from HEAD (hermetic)
+        if: needs.detect.outputs.cli_command != ''
+        uses: ./.github/actions/download-hermetic-cli
+      - name: Check the workflows carry no logic
+        env:
+          VERSION: ${{ inputs.version }}
+          CLI_COMMAND: ${{ needs.detect.outputs.cli_command }}
+        run: ${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} workflow-lint

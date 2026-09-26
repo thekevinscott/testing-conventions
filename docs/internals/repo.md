@@ -417,8 +417,8 @@ checks rows, so a consumer's checks UI is unchanged):
 - Each check job downloads the `hermetic-cli` artifact (and re-chmods the binary) when
   `cli_command` is non-empty via the shared `./.github/actions/download-hermetic-cli` composite
   action — one `uses:` line instead of the download-artifact-plus-chmod pair repeated across all
-  seven check jobs (`static`, `unit-coverage`, `coverage-changed`, `mutation`, `e2e-verify`,
-  `packaging`, `changelog` — the five static checks share the one `static` job) — and runs
+  eight check jobs (`static`, `unit-coverage`, `coverage-changed`, `mutation`, `e2e-verify`,
+  `packaging`, `workflow-lint`, `changelog` — the five static checks share the one `static` job) — and runs
   `${CLI_COMMAND:-npm --prefix "$RUNNER_TEMP" exec --yes -- "testing-conventions${VERSION:+@$VERSION}"} <subcommand> …`.
   That
   `cli_command` guard is load-bearing for the `uses:` line itself, not just for whether the

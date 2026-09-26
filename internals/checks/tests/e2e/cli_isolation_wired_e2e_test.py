@@ -43,4 +43,4 @@ def test_default_path_passes_against_the_real_workflow():
 
 
 def test_the_real_workflow_carries_every_known_invocation():
-    assert len(invocations((REPO_ROOT / REUSABLE_WORKFLOW).read_text())) == 11
+    assert len(invocations((REPO_ROOT / REUSABLE_WORKFLOW).read_text())) == 12

@@ -335,3 +335,134 @@ fn lines(out: &str) -> Vec<String> {
         .map(str::to_string)
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn owed_names_the_scope_kind_and_fragment_directory() {
+        let finding = owed(
+            "packages/parser ",
+            "packages/parser/changelog.d",
+            "changelog",
+        );
+        assert_eq!(finding.file, None);
+        assert!(finding
+            .message
+            .contains("packages/parser changed public surface"));
+        assert!(finding
+            .message
+            .contains("packages/parser/changelog.d/YYYY-MM-DD-<slug>.md"));
+        assert!(finding.message.contains("skip-changelog: <reason>"));
+    }
+
+    #[test]
+    fn fragment_recognizes_only_a_package_fragment_at_the_expected_depth() {
+        let layout = Layout::PerPackage(vec!["packages".to_string()]);
+        let found = fragment("packages/parser/changelog.d/2026-09-26-change.md", &layout).unwrap();
+        assert_eq!(found.pkg.as_deref(), Some("packages/parser"));
+        assert_eq!(found.kind, "changelog");
+        assert_eq!(found.name, "2026-09-26-change.md");
+        assert!(fragment("other/parser/changelog.d/2026-09-26-change.md", &layout).is_none());
+        assert!(fragment("packages/parser/changelog.d/nested/change.md", &layout).is_none());
+    }
+
+    #[test]
+    fn kind_of_accepts_only_the_two_fragment_directories() {
+        assert_eq!(kind_of("changelog.d"), Some("changelog"));
+        assert_eq!(kind_of("migrations.d"), Some("migrations"));
+        assert_eq!(kind_of("notes.d"), None);
+        assert_eq!(kind_of("changelog"), None);
+    }
+
+    #[test]
+    fn malformed_reports_entries_but_not_fragment_readmes() {
+        let layout = Layout::Pooled;
+        let changed = vec![
+            "changelog.d/README.md".to_string(),
+            "changelog.d/2026-09-26-valid.md".to_string(),
+            "migrations.d/bad-name.md".to_string(),
+            "src/bad-name.md".to_string(),
+        ];
+        assert_eq!(
+            malformed(&layout, &changed),
+            vec!["migrations.d/bad-name.md"]
+        );
+    }
+
+    #[test]
+    fn missing_kinds_requires_added_valid_fragments_for_the_same_package() {
+        let layout = Layout::PerPackage(vec!["packages".to_string()]);
+        let added = vec![
+            "packages/parser/changelog.d/2026-09-26-change.md".to_string(),
+            "packages/parser/migrations.d/bad-name.md".to_string(),
+            "packages/other/migrations.d/2026-09-26-change.md".to_string(),
+        ];
+        assert_eq!(
+            missing_kinds(&layout, &added, Some("packages/parser"), true),
+            vec!["migrations"]
+        );
+        assert!(missing_kinds(&layout, &added, Some("packages/parser"), false).is_empty());
+    }
+
+    #[test]
+    fn code_touched_ignores_fragments_and_tests_inside_the_package() {
+        let pkg = "packages/parser";
+        let exempt = vec![
+            "packages/parser/changelog.d/2026-09-26-change.md".to_string(),
+            "packages/parser/tests/parser.rs".to_string(),
+            "packages/other/src/parser.rs".to_string(),
+        ];
+        assert!(!code_touched(&exempt, pkg));
+        assert!(code_touched(
+            &["packages/parser/src/parser.rs".to_string()],
+            pkg
+        ));
+    }
+
+    #[test]
+    fn exempt_at_any_boundary_checks_nested_test_and_fragment_paths() {
+        assert!(exempt_at_any_boundary("packages/parser/tests/parser.rs"));
+        assert!(exempt_at_any_boundary(
+            "packages/parser/changelog.d/2026-09-26-change.md"
+        ));
+        assert!(!exempt_at_any_boundary("packages/parser/src/parser.rs"));
+    }
+
+    #[test]
+    fn exempt_shape_recognizes_archives_attestations_and_test_paths() {
+        assert!(exempt_shape("CHANGELOG.md"));
+        assert!(exempt_shape("MIGRATIONS.md"));
+        assert!(exempt_shape("e2e-attestations/run.json"));
+        assert!(exempt_shape("tests/parser.rs"));
+        assert!(exempt_shape("src/parser_test.py"));
+        assert!(!exempt_shape("src/parser.rs"));
+    }
+
+    #[test]
+    fn is_test_or_spec_matches_supported_extensions_only() {
+        assert!(is_test_or_spec("src/parser.test.rs"));
+        assert!(is_test_or_spec("src/parser.spec.tsx"));
+        assert!(!is_test_or_spec("src/parser.test.txt"));
+        assert!(!is_test_or_spec("src/parser.rs"));
+    }
+
+    #[test]
+    fn fragment_dirs_finds_shallow_directories_and_skips_build_trees() {
+        let root = std::env::temp_dir().join(format!("tc-changelog-inline-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("packages/parser/changelog.d")).unwrap();
+        std::fs::create_dir_all(root.join("target/debug/migrations.d")).unwrap();
+        std::fs::create_dir_all(root.join("packages/parser/deep/migrations.d")).unwrap();
+        let dirs = fragment_dirs(&root);
+        assert_eq!(
+            dirs,
+            vec![vec![
+                "packages".to_string(),
+                "parser".to_string(),
+                "changelog.d".to_string()
+            ]]
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}

@@ -1,5 +1,7 @@
-"""One instructions file's content, with every `@path` import resolved in — pure, read injected."""
+"""One instructions file's content, with every `@path` import resolved in."""
 from __future__ import annotations
+
+from pathlib import Path
 
 from checks.agents_md_size.resolve_agents_md.imported_paths import imported_paths
 
@@ -7,27 +9,24 @@ from checks.agents_md_size.resolve_agents_md.imported_paths import imported_path
 MAX_DEPTH = 5
 
 
-def resolve_agents_md(entry: str, read, max_depth: int = MAX_DEPTH) -> str:
-    """Everything loading `entry` pulls in, concatenated: the entry first, then imports breadth-first.
+def resolve_agents_md(path_to_agents_md: str | Path) -> str:
+    """Everything loading `path_to_agents_md` pulls in: the entry first, then imports breadth-first.
 
-    A target `read` reports missing is skipped, and a repeated target terminates a cycle — a file
-    two documents both import is loaded once, so it is counted once.
+    An unreadable target is skipped, and a repeated target terminates a cycle — a file two documents
+    both import is loaded once, so it is counted once.
     """
-    text = read(entry)
-    if text is None:
-        return ""
-    loaded = {entry: text}
-    frontier = [entry]
-    for _ in range(max_depth):
-        next_frontier = []
-        for path in frontier:
-            for target in imported_paths(path, loaded[path]):
-                if target in loaded:
-                    continue
-                imported = read(target)
-                if imported is None:
-                    continue
-                loaded[target] = imported
-                next_frontier.append(target)
+    loaded: dict[Path, str] = {}
+    frontier = [Path(path_to_agents_md).expanduser().resolve()]
+    for _ in range(MAX_DEPTH + 1):
+        next_frontier: list[Path] = []
+        for candidate in frontier:
+            if candidate in loaded:
+                continue
+            try:
+                text = candidate.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            loaded[candidate] = text
+            next_frontier.extend(imported_paths(candidate, text))
         frontier = next_frontier
     return "".join(loaded.values())

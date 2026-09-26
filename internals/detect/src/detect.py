@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
 """Entry point for the reusable workflow's `detect` job; sibling modules hold the derivations.
 
-The composite action passes the five inputs positionally, in `ARGUMENTS` order, and the detected
-sets are appended to the file `GITHUB_OUTPUT` names.
+The composite action passes one argument per input, in `ARGUMENTS` order, and the detected sets
+are appended to the file `GITHUB_OUTPUT` names. Every argument is required; an empty one is a value.
 """
 import os
 import sys
 
 from compute_outputs import compute_outputs
-from derive_config import CONFIG_DEFAULT
 from render_github_output import render_github_output
 
-ARGUMENTS = {
-    "languages": "",
-    "scan_path": ".",
-    "config": CONFIG_DEFAULT,
-    "caller_repository": "",
-    "version": "",
-}
+ARGUMENTS = ("languages", "scan_path", "config", "caller_repository", "version")
 
 
 def main(argv) -> int:
-    supplied = dict(zip(ARGUMENTS, argv))
-    arguments = {name: supplied.get(name, default) for name, default in ARGUMENTS.items()}
+    arguments = dict(zip(ARGUMENTS, argv))
+    missing = [name for name in ARGUMENTS if name not in arguments]
+    if missing:
+        order, absent = ", ".join(ARGUMENTS), ", ".join(missing)
+        print(
+            f"::error::detect.py takes an argument per input, in order: {order}."
+            f" Missing: {absent}",
+            file=sys.stderr,
+        )
+        return 1
+
     outputs = compute_outputs(
         arguments["languages"],
         arguments["scan_path"],

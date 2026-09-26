@@ -87,6 +87,9 @@ outputs:
   packaging_language:
     description: 'The primary language whose toolchain the packaging job provisions to run `packaging_build`, or empty when no build was derived — the job then falls back to a committed dist.'
     value: ${{ steps.scan.outputs.packaging_language }}
+  packaging_root:
+    description: 'The directory the packaging job scans for built distributions: `<package_root>/dist`, or `<package_root>/target/package` for Rust, where `cargo package` writes the crate. Derived from the primary language and never empty, because the job also scans a committed dist/ under a manifest that states no build. Not the package root itself: discovery recurses, so a package root also sweeps up every unrelated archive in the tree.'
+    value: ${{ steps.scan.outputs.packaging_root }}
   e2e_extra_scope:
     description: 'The `[e2e].extra_scope` freshness roots read from the discovered config file, rendered as repeated `--extra-scope <dir>` arguments the e2e-verify job appends, or empty when none are declared — a shared source tree beside the package that no `--scope` can reach.'
     value: ${{ steps.scan.outputs.e2e_extra_scope }}

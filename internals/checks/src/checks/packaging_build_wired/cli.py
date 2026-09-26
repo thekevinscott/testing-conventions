@@ -18,5 +18,5 @@ def cli(workflow: str) -> None:
         raise CheckFailed(problem)
     click.echo(
         "packaging gates on packaging_build, provisions packaging_language, builds the "
-        "distribution, and scans target/package"
+        "distribution, and scans detect's packaging_root"
     )

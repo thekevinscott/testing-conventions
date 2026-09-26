@@ -25,7 +25,9 @@ WIRED = """\
           PACKAGING_BUILD: ${{ needs.detect.outputs.packaging_build }}
         run: eval "$PACKAGING_BUILD"
       - name: Scan
-        run: check rust "$pkg/target/package"/**/*.crate
+        env:
+          PACKAGING_ROOT: ${{ needs.detect.outputs.packaging_root }}
+        run: testing-conventions packaging "$PACKAGING_ROOT"
 """
 
 UNWIRED = """\
@@ -42,7 +44,7 @@ def test_passes_on_a_wired_fixture(tmp_path):
     good.write_text(WIRED)
     result = CliRunner().invoke(cli, [str(good)])
     assert result.exit_code == 0
-    assert "scans target/package" in result.output
+    assert "scans detect's packaging_root" in result.output
 
 
 def test_fails_on_a_broken_fixture(tmp_path):
@@ -62,4 +64,4 @@ def test_default_path_passes_against_the_real_workflow():
     finally:
         os.chdir(old)
     assert result.exit_code == 0
-    assert "scans target/package" in result.output
+    assert "scans detect's packaging_root" in result.output

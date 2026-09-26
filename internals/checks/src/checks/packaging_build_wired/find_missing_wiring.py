@@ -15,8 +15,9 @@ _HAS_BUILD_GATE = re.compile(
 _HAS_LANGUAGE_PROVISION = re.compile(r"needs\.detect\.outputs\.packaging_language")
 _HAS_BUILD_EVAL = re.compile(r'eval "\$PACKAGING_BUILD"')
 _HAS_BUILD_FROM_DETECT = re.compile(r"PACKAGING_BUILD:\s*.*needs\.detect\.outputs\.packaging_build")
-# The scan must reach `target/package`, where `cargo package` writes the crate.
-_HAS_CRATE_SCAN = re.compile(r"target/package")
+# The scan root must come from detect, which is what reaches `target/package` for a crate — the job
+# itself no longer names either layout.
+_HAS_SCAN_ROOT_FROM_DETECT = re.compile(r"needs\.detect\.outputs\.packaging_root")
 
 _GATE_ERROR = (
     "the packaging job's `if:` doesn't run on detect's packaging_build output — a native "
@@ -33,15 +34,17 @@ _BUILD_ERROR = (
     "wired from detect's packaging_build output) before scanning — no distribution is built, "
     "so a package with no committed dist/ has nothing to scan"
 )
-_CRATE_SCAN_ERROR = (
-    "the packaging job doesn't scan target/package — a `cargo package` crate is written there, "
-    "not under dist/, so a built crate is never inspected for shipped test files"
+_SCAN_ROOT_ERROR = (
+    "the packaging job's scan root isn't wired from detect's packaging_root — a `cargo package` "
+    "crate is written under target/package, not dist/, and packaging_root is what carries that "
+    "per-language layout, so a hardcoded root leaves a built crate never inspected for shipped "
+    "test files"
 )
 
 
 def find_missing_wiring(workflow_text: str) -> Optional[str]:
     """None if the packaging job gates on packaging_build, provisions packaging_language, runs
-    the derived packaging_build, and scans target/package; else the first error message."""
+    the derived packaging_build, and scans detect's packaging_root; else the first error message."""
     block = extract_packaging_block(workflow_text)
     if not _HAS_BUILD_GATE.search(block):
         return _GATE_ERROR
@@ -49,6 +52,6 @@ def find_missing_wiring(workflow_text: str) -> Optional[str]:
         return _PROVISION_ERROR
     if not _HAS_BUILD_EVAL.search(block) or not _HAS_BUILD_FROM_DETECT.search(block):
         return _BUILD_ERROR
-    if not _HAS_CRATE_SCAN.search(block):
-        return _CRATE_SCAN_ERROR
+    if not _HAS_SCAN_ROOT_FROM_DETECT.search(block):
+        return _SCAN_ROOT_ERROR
     return None

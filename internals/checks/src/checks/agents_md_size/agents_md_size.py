@@ -1,6 +1,6 @@
 """Whether one instructions file fits its budget."""
-from __future__ import annotations
-
+# No `from __future__ import annotations`: it would make `str | Path` an unevaluated string, and the
+# mutation gate then reports every operator swap inside it as an unkillable survivor.
 from pathlib import Path
 
 from checks.agents_md_size.resolve_agents_md.resolve_agents_md import resolve_agents_md

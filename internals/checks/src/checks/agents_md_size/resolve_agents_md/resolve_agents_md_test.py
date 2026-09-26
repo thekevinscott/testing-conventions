@@ -64,6 +64,14 @@ def test_a_target_two_documents_import_is_counted_once(tmp_path):
     assert resolve_agents_md(entry) == "@shared.md @other.md\nshared\n@shared.md\n"
 
 
+def test_a_repeated_import_does_not_stop_the_ones_after_it(tmp_path):
+    entry = tmp_path / "AGENTS.md"
+    entry.write_text("@shared.md @shared.md @fresh.md\n", encoding="utf-8")
+    (tmp_path / "shared.md").write_text("shared\n", encoding="utf-8")
+    (tmp_path / "fresh.md").write_text("fresh\n", encoding="utf-8")
+    assert resolve_agents_md(entry) == "@shared.md @shared.md @fresh.md\nshared\nfresh\n"
+
+
 def test_a_cycle_terminates(tmp_path):
     entry = tmp_path / "AGENTS.md"
     entry.write_text("@loop.md\n", encoding="utf-8")

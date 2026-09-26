@@ -1,13 +1,13 @@
-"""One instructions file's text with its `@path` imports expanded — pure, the read injected."""
+"""One instructions file's content, with every `@path` import resolved in — pure, read injected."""
 from __future__ import annotations
 
-from checks.agents_md_size.imports import imported_paths
+from checks.agents_md_size.resolve_agents_md.imported_paths import imported_paths
 
 # Claude Code follows an import chain five hops deep; a sixth file is never loaded.
 MAX_DEPTH = 5
 
 
-def expanded(entry: str, read, max_depth: int = MAX_DEPTH) -> str:
+def resolve_agents_md(entry: str, read, max_depth: int = MAX_DEPTH) -> str:
     """Everything loading `entry` pulls in, concatenated: the entry first, then imports breadth-first.
 
     A target `read` reports missing is skipped, and a repeated target terminates a cycle — a file

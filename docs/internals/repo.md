@@ -80,7 +80,7 @@ including this one, until that PR lands and this one rebases past it.
 
 Every `AGENTS.md` and `CLAUDE.md` is always-on context: a model loads it at launch, before it has
 read a line of code, and a human reviewer is supposed to read it end to end. `tc-checks
-agents-md-size .` (`internals/checks`) holds every tracked one, expanded, to a character budget,
+agents-md-size .` (`internals/checks`) holds every tracked one, resolved, to a character budget,
 and fails past it.
 
 **What it enforces is review discipline, not model attention.** The one controlled experiment on
@@ -97,7 +97,7 @@ call site. It does not live in `testing-conventions.toml`: that schema is `deny_
 the Rust side (`packages/rust/src/config.rs`), so an `[agents_md_size]` table there would make
 every config-reading gate in the repo fail to load its config.
 
-**Counting happens after `@path` import expansion.** Imports load at launch, so a short index
+**Counting happens after `@path` import resolution.** Imports load at launch, so a short index
 importing five files costs the same context as one long file and would game a naive gate. The
 resolver walks the closure of each entry: a target resolves relative to the *containing* file, the
 chain stops at five hops (Claude Code's own cap), a repeated target terminates a cycle, an `@`

@@ -96,7 +96,7 @@ def test_an_imported_file_counts_toward_the_importer_budget(tmp_path):
     assert "::error file=AGENTS.md::" in result.output
 
 
-def test_an_import_inside_a_fenced_block_is_not_expanded(tmp_path):
+def test_an_import_inside_a_fenced_block_is_not_resolved(tmp_path):
     _repo(tmp_path)
     _write(tmp_path / "AGENTS.md", "```\n@agents/style.md\n```\n")
     _write(tmp_path / "agents" / "style.md", _document(MAX_CHARS + 1))

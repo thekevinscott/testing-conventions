@@ -1,5 +1,5 @@
 """Colocated unit tests for the `@path` import scan and its resolution against the importer."""
-from checks.agents_md_size.imports import imported_paths
+from checks.agents_md_size.resolve_agents_md.imported_paths import imported_paths
 
 
 def _at_root(text):

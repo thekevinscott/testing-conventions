@@ -1,11 +1,11 @@
 """End-to-end tests for the move-major-tag helper: real git, no mocks.
 
 Per the standard, an e2e test runs with no mocks. Each test builds a work repo wired to a local
-bare `origin`, then runs the script's `__main__` entry point in-process via `runpy` — with
-`SHA` / `TAG` set the way the workflow's env does — and reads the moving tag back *from the
+bare `origin`, then runs the script's `__main__` entry point in-process via `runpy` — with the
+command line the workflow's invocation hands it — and reads the moving tag back *from the
 remote*. Running the real entry point in-process keeps the whole fetch -> decide -> tag -> push
-path (and the `__main__` guard) on the measured-coverage path; the env is set with
-`patch.dict` and the working directory is confined to the fixture, never the test body.
+path (and the `__main__` guard) on the measured-coverage path; the command line is set with
+`patch.object` and the working directory is confined to the fixture, never the test body.
 """
 import os
 import runpy
@@ -56,15 +56,15 @@ def repo(tmp_path):
 @pytest.fixture
 def run_in_repo(repo):
     """A `run(sha, tag='v0') -> exit_code` that runs the script as `__main__` inside the work
-    repo, with the env set via `patch.dict`. Yields it with the repo handles; the chdir is
-    confined to this fixture so the helper's cwd-relative git resolves against the temp repo.
+    repo, with the command line set via `patch.object`. Yields it with the repo handles; the chdir
+    is confined to this fixture so the helper's cwd-relative git resolves against the temp repo.
     """
     work, origin, first = repo
     origin_cwd = os.getcwd()
     os.chdir(work)
 
     def run(sha, tag="v0"):
-        with patch.dict(os.environ, {"SHA": sha, "TAG": tag}):
+        with patch.object(sys, "argv", [str(SCRIPT), sha, tag]):
             try:
                 runpy.run_path(str(SCRIPT), run_name="__main__")
                 return 0
@@ -114,5 +114,5 @@ def test_e2e_missing_sha_fails_clearly(run_in_repo, capsys):
 
 def test_e2e_blank_tag_falls_back_to_v0(run_in_repo):
     run, origin, first = run_in_repo
-    assert run(first, tag="") == 0  # empty TAG -> default v0
+    assert run(first, tag="") == 0  # an empty tag argument -> default v0
     assert _remote_tag(origin, "v0") == first

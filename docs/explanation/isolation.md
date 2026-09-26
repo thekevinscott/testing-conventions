@@ -77,9 +77,18 @@ The unit suite's side: every collaborator is mocked.
   This matches TypeScript, where `index.test.ts` importing `./index.js` is the unit under test.
 - **Rust** — the same intent, structurally: `no-out-of-module-call` and `no-out-of-module-import`
   flag a unit test (an inline `#[cfg(test)]` module) that reaches out of its own module —
-  `crate::…`, an external crate, or effectful `std` (`fs`, `net`, `process`, `env`, `thread`, the
-  clock). A single `super::` (the unit under test), `self`, and pure `std` stay in-module. Inject
-  a trait double for a collaborator instead. A unit test is a module gated by a positively-required
+  `crate::…`, an external crate, or effectful `std` (`net`, `process`, `thread`, `os`, `env::var`
+  and its siblings, the clock). A single `super::` (the unit under test), `self`, and pure `std`
+  stay in-module. Inject a trait double for a collaborator instead. **The filesystem is the one
+  carve-out, and only in Rust**: `std::fs` and `std::env::temp_dir` stay in-module. Rust privacy
+  is the reason. A private item is reachable only from its own module, so the inline
+  `#[cfg(test)]` module is the *only* tier that can test a private path-walker — and that walker's
+  argument is a directory that has to exist. Forbidding `fs` there forbids the one tier that can
+  see the unit from exercising it. Python and TypeScript have no such constraint: a sibling test
+  file reaches a module-private function directly, so its filesystem work can move out to the
+  integration tier, and there it stays flagged. `std::env::var` is still a collaborator — it reads
+  ambient state the test did not create; `temp_dir` only names a writable directory. A unit test
+  is a module gated by a positively-required
   `test` (`#[cfg(test)]`, `#[cfg(all(test, …))]`); a `#[cfg(not(test))]` module compiles in
   *non-test* builds, so it is production code and its out-of-module calls are left alone. The scan
   reads the crate's own unit source, skipping `tests/` integration crates and the `target/` build

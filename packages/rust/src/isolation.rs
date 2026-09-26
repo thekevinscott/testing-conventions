@@ -683,13 +683,16 @@ mod tests {
     #[test]
     fn effectful_std_policy() {
         let segs = |p: &str| p.split("::").map(str::to_string).collect::<Vec<_>>();
-        assert!(is_effectful_std(&segs("std::fs::read")));
         assert!(is_effectful_std(&segs("std::net::TcpStream::connect")));
         assert!(is_effectful_std(&segs("std::env::var")));
+        assert!(is_effectful_std(&segs("std::env")));
         assert!(is_effectful_std(&segs("std::process::exit")));
         assert!(is_effectful_std(&segs("std::thread::sleep")));
         assert!(is_effectful_std(&segs("std::time::SystemTime::now")));
         assert!(is_effectful_std(&segs("std::io::stdout")));
+        assert!(!is_effectful_std(&segs("std::fs::read")));
+        assert!(!is_effectful_std(&segs("std::fs")));
+        assert!(!is_effectful_std(&segs("std::env::temp_dir")));
         assert!(!is_effectful_std(&segs("std::collections::HashMap")));
         assert!(!is_effectful_std(&segs("std::io::Cursor")));
         assert!(!is_effectful_std(&segs("std::time::Duration")));

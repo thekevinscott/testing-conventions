@@ -12,6 +12,7 @@ pub mod mutation;
 pub mod one_function;
 pub mod packaging;
 pub mod patch_coverage;
+mod subprocess_seam;
 pub mod tiers;
 pub mod ts;
 pub mod violation;

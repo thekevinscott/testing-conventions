@@ -63,6 +63,17 @@ fn is_hidden_from_tests(base: &Path, file: &str, line: u32) -> bool {
     crate::isolation::lines_hidden_from_tests(&source).contains(&line)
 }
 
+/// `true` when `mutant` replaces the whole body of a subprocess seam — cargo-mutants' `FnValue`
+/// genre, landing in a branch-free function that runs a `Command`. Calling such a function spawns,
+/// so no unit test can observe the replacement. Every other genre there is still judged.
+fn is_subprocess_seam(base: &Path, mutant: &MutantInfo) -> bool {
+    if mutant.genre != "FnValue" {
+        return false;
+    }
+    let source = std::fs::read_to_string(base.join(&mutant.file)).unwrap_or_default();
+    crate::subprocess_seam::subprocess_seam_lines(&source).contains(&mutant.span.start.line)
+}
+
 /// A cargo-mutants `outcomes.json` export, pared to what the rule reads. Unmodeled
 /// fields (`total_mutants`, `caught`, timings, …) are ignored.
 #[derive(Debug, Clone, Deserialize)]
@@ -88,13 +99,14 @@ pub enum Scenario {
 }
 
 /// The mutant a scenario describes, pared to the location + description the report
-/// needs. cargo-mutants also carries `function`, `genre`, `package`, `replacement`;
-/// those are ignored.
+/// needs, plus the `genre` naming which operator produced it. cargo-mutants also carries
+/// `function`, `package`, `replacement`; those are ignored.
 #[derive(Debug, Clone, Deserialize)]
 pub struct MutantInfo {
     pub file: String,
     pub span: Span,
     pub name: String,
+    pub genre: String,
 }
 
 /// A source span; the start and end lines are read.
@@ -430,6 +442,7 @@ pub fn measure_rust(
                                     &mutant.file,
                                     mutant.span.start.line,
                                 )
+                                && !is_subprocess_seam(&workspace_root, mutant)
                         })
                         .collect();
                 zero_mutant_verdict(&listed, diff, &run)?;
@@ -446,6 +459,7 @@ pub fn measure_rust(
         Scenario::Mutant(mutant) => {
             !is_declaration_only(root, &mutant.file, Language::Rust)
                 && !is_hidden_from_tests(root, &mutant.file, mutant.span.start.line)
+                && !is_subprocess_seam(root, mutant)
         }
     });
     let survivors = evaluate_scoped(
@@ -2383,7 +2397,7 @@ diff --git a/src/lib.rs b/src/lib.rs
     #[cfg(unix)]
     #[test]
     fn list_cargo_mutants_parses_the_listing_from_a_clean_run() {
-        let json = r#"[{"file": "src/lib.rs", "name": "replace add -> 0",
+        let json = r#"[{"file": "src/lib.rs", "name": "replace add -> 0", "genre": "FnValue",
             "span": {"start": {"line": 3, "column": 1}, "end": {"line": 5, "column": 2}}}]"#;
         let listed = drive_list(
             &["cli".to_string()],
@@ -2431,6 +2445,7 @@ diff --git a/src/lib.rs b/src/lib.rs
                 end: LineCol { line: end },
             },
             name: name.to_string(),
+            genre: "FnValue".to_string(),
         }
     }
 

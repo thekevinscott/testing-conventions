@@ -30,12 +30,16 @@ pub enum Language {
     Python,
 }
 
-/// Every isolation violation in the unit source under crate root `root`, sorted by
-/// `(file, line)`. `root`'s `Cargo.toml` names the external crates. `tests/`, `benches/`,
-/// `examples/`, and `target/` are not unit source, so a local build changes no result.
-pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
-    let root = root.as_ref();
-    let deps = external_deps(root)?;
+/// Every isolation violation in the unit source under `scan_root`, sorted by `(file, line)`.
+/// `crate_root`'s `Cargo.toml` names the external crates, so a scan pointed at `src/` still
+/// sees the dependency set. `tests/`, `benches/`, `examples/`, and `target/` are not unit
+/// source, so a local build changes no result.
+pub fn find_violations(
+    scan_root: impl AsRef<Path>,
+    crate_root: impl AsRef<Path>,
+) -> Result<Vec<Violation>> {
+    let root = scan_root.as_ref();
+    let deps = external_deps(crate_root.as_ref())?;
 
     let mut files = Vec::new();
     crate::colocated_test::collect_rust_source_files(root, &mut files)?;
@@ -1071,7 +1075,7 @@ mod tests {
     fn an_unreadable_unit_source_names_the_file() {
         let tree = TempTree::new(&[("src/widget.rs", "")]);
         std::fs::write(tree.path().join("src/widget.rs"), [0xFF, 0xFE]).unwrap();
-        let err = find_violations(tree.path()).unwrap_err();
+        let err = find_violations(tree.path(), tree.path()).unwrap_err();
         assert!(
             format!("{err:#}").contains("reading source file"),
             "got: {err:#}"
@@ -1081,7 +1085,7 @@ mod tests {
     #[test]
     fn an_unparsable_unit_source_names_the_file() {
         let tree = TempTree::new(&[("src/widget.rs", "fn broken( {\n")]);
-        let err = find_violations(tree.path()).unwrap_err();
+        let err = find_violations(tree.path(), tree.path()).unwrap_err();
         assert!(format!("{err:#}").contains("parsing"), "got: {err:#}");
     }
 

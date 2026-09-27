@@ -25,6 +25,11 @@ suite under `tests/changelog.rs` exercises the public API, and `changelog_e2e.rs
 built CLI. The crate's colocated-test integration and CLI suites also scan `src/`, so a new
 source file with behavior joins the inline tier.
 
+**The command tree is an integration subject, not an inline one.** `unknown_subcommands` is
+exercised through `tests/workflow.rs`, which builds the real `command()` and asserts the rule,
+the line and the parent named in the message. An inline test reaching for `crate::command()`
+duplicates that against the same tree, so the two inline cases are gone rather than exempted.
+
 **No mechanism-hygiene integration lint (by design).** Python's `integration lint` carries
 three mechanism lints — `no-monkeypatch`, `no-inline-patch`, `no-environ-mutation` — that
 police *how* a pytest test mocks. Rust has none, deliberately: there is no `monkeypatch`

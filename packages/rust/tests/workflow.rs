@@ -29,22 +29,32 @@ fn a_package_install_line_is_not_flagged_as_an_invocation() {
 #[test]
 fn red_flags_the_renamed_subcommand() {
     let violations = workflow::check(fixture("red"), &command()).unwrap();
+    let v = violations
+        .iter()
+        .find(|v| v.line == 9)
+        .expect("line 9 invokes a nested rule that no longer exists");
+    assert_eq!(v.rule, "no-unknown-subcommand");
+    assert!(v.message.contains("`location`"), "{}", v.message);
     assert!(
-        violations
-            .iter()
-            .any(|v| v.line == 9 && v.message.contains("location")),
-        "expected a violation naming `location` on line 9: {violations:?}"
+        v.message.contains("`unit`"),
+        "the message must name the parent that lost the rule: {}",
+        v.message
     );
 }
 
 #[test]
 fn red_flags_the_old_flat_form() {
     let violations = workflow::check(fixture("red"), &command()).unwrap();
+    let v = violations
+        .iter()
+        .find(|v| v.line == 11)
+        .expect("line 11 invokes a top-level command that no longer exists");
+    assert_eq!(v.rule, "no-unknown-subcommand");
+    assert!(v.message.contains("`unit-location`"), "{}", v.message);
     assert!(
-        violations
-            .iter()
-            .any(|v| v.line == 11 && v.message.contains("unit-location")),
-        "expected a violation naming `unit-location` on line 11: {violations:?}"
+        v.message.contains("`testing-conventions`"),
+        "the message must name the binary for a missing top-level command: {}",
+        v.message
     );
 }
 

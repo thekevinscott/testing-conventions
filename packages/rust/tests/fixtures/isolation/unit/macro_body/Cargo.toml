@@ -1,0 +1,11 @@
+# Fixture crate for macro token bodies. Parsed by `syn`, never compiled —
+# `[workspace]` keeps cargo from absorbing it into the tool's build.
+[package]
+name = "iso_macro_body"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8"
+
+[workspace]

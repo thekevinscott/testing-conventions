@@ -101,13 +101,14 @@ fn clean_exits_zero() {
 
 #[test]
 fn pure_construction_reports_no_violations() {
-    let violations = find_violations(fixture("unit/pure")).unwrap();
+    let violations = find_violations(fixture("unit/pure"), fixture("unit/pure")).unwrap();
     assert!(violations.is_empty(), "got {violations:?}");
 }
 
 #[test]
 fn pure_allowlist_keeps_effectful_and_glob_reaches_red() {
-    let violations = find_violations(fixture("unit/pure_negative")).unwrap();
+    let violations =
+        find_violations(fixture("unit/pure_negative"), fixture("unit/pure_negative")).unwrap();
     let messages = violations
         .iter()
         .map(|v| v.message.as_str())
@@ -284,6 +285,16 @@ fn local_build_crate_exits_zero() {
     assert_eq!(iso_exit("unit/local_build"), 0);
 }
 
+/// Every violation line in `fixture_name`'s file ending `file_suffix`.
+fn lines_in(fixture_name: &str, file_suffix: &str) -> Vec<usize> {
+    find_violations(fixture(fixture_name), fixture(fixture_name))
+        .expect("walking a readable tree should succeed")
+        .iter()
+        .filter(|v| v.file.ends_with(file_suffix))
+        .map(|v| v.line)
+        .collect()
+}
+
 /// Exit code of `unit lint --language rust <fixture>/<sub>`, naming the fixture's own config.
 fn iso_exit_subdir(fixture_name: &str, sub: &str) -> i32 {
     let argv: Vec<OsString> = vec![
@@ -330,6 +341,62 @@ fn an_exempt_path_stays_crate_root_relative_from_src() {
         "`path = \"src/widget.rs\"` must resolve from either scan path — the exempt root \
          is the crate root, not the scan path"
     );
+}
+
+#[test]
+fn a_reach_inside_assert_is_caught() {
+    let lines = lines_in("unit/macro_body", "asserted.rs");
+    assert!(
+        lines.contains(&14),
+        "`assert!(crate::other::load())` hides a first-party reach in a token body; got {lines:?}"
+    );
+}
+
+#[test]
+fn a_direct_and_an_asserted_reach_agree() {
+    let lines = lines_in("unit/macro_body", "asserted.rs");
+    assert!(
+        lines.contains(&9) && lines.contains(&14),
+        "the direct and macro-wrapped forms of the same reach must both be flagged; got {lines:?}"
+    );
+}
+
+#[test]
+fn an_external_reach_among_assert_eq_args_is_caught() {
+    let lines = lines_in("unit/macro_body", "asserted.rs");
+    assert!(
+        lines.contains(&19),
+        "every comma-separated argument is a written expression, including the format \
+         arguments; got {lines:?}"
+    );
+}
+
+#[test]
+fn a_quoted_template_is_not_a_reach() {
+    let lines = lines_in("unit/macro_body", "quoted.rs");
+    assert!(
+        lines.is_empty(),
+        "`quote!` tokens are a template for code emitted elsewhere, not a call made here; \
+         got {lines:?}"
+    );
+}
+
+#[test]
+fn an_import_inside_an_item_body_macro_is_caught() {
+    let imports: Vec<_> = find_violations(fixture("unit/macro_body"), fixture("unit/macro_body"))
+        .expect("walking a readable tree should succeed")
+        .into_iter()
+        .filter(|v| v.rule == "no-out-of-module-import" && v.file.ends_with("item_body.rs"))
+        .collect();
+    assert!(
+        !imports.is_empty(),
+        "a macro body that parses as items still carries a written `use`; got {imports:?}"
+    );
+}
+
+#[test]
+fn macro_body_exits_nonzero() {
+    assert_eq!(iso_exit("unit/macro_body"), 1);
 }
 
 #[test]

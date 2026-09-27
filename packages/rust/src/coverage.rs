@@ -701,12 +701,61 @@ fn run_llvm_cov(
     features: &[String],
     branch: bool,
 ) -> Result<LlvmCovReport> {
-    let json = run_cargo_llvm_cov(root, ignore, &["--json"], features, branch)?;
+    let (json, lcov) = run_cargo_llvm_cov_json_and_lcov(root, ignore, features, branch)?;
     let hidden = hidden_lines_by_file(&json)?;
-    Ok(llvm_cov_totals_less_hidden(
-        &parse_llvm_cov_export(&json)?,
-        &hidden,
-    ))
+    let mut report = llvm_cov_totals_less_hidden(&parse_llvm_cov_export(&json)?, &hidden);
+    let lines = lcov_lines_metric(&lcov, &hidden);
+    for data in &mut report.data {
+        data.totals.lines = lines;
+    }
+    Ok(report)
+}
+
+/// Every `DA:` record of an lcov export, as `line -> covered` per source file.
+fn lcov_lines(lcov: &str) -> BTreeMap<String, BTreeMap<u32, bool>> {
+    let mut out: BTreeMap<String, BTreeMap<u32, bool>> = BTreeMap::new();
+    let mut file: Option<&str> = None;
+    for record in lcov.lines() {
+        if let Some(name) = record.strip_prefix("SF:") {
+            file = Some(name);
+        } else if let Some((number, count)) =
+            record.strip_prefix("DA:").and_then(|da| da.split_once(','))
+        {
+            let (Some(file), Ok(number), Ok(count)) =
+                (file, number.parse::<u32>(), count.trim().parse::<u64>())
+            else {
+                continue;
+            };
+            *out.entry(file.to_string())
+                .or_default()
+                .entry(number)
+                .or_default() |= count > 0;
+        }
+    }
+    out
+}
+
+/// The line metric an lcov export reports, less the lines a `#[cfg(not(test))]` gate hides.
+///
+/// llvm-cov writes `DA:` records through the merged line view that `show`, `--text` and
+/// `--show-missing-lines` all read, where a line maps once however many instantiations carry
+/// it. A `--json` export's `totals` instead sum each instantiation group's own line tally, so a
+/// line two groups map counts twice — once covered and once not, when only one group ran it.
+/// That is how a 100% floor became unsatisfiable on a file where no view could name a missing
+/// line (#743): a crate built `--lib --bins` compiles its library twice.
+fn lcov_lines_metric(lcov: &str, hidden: &BTreeMap<String, BTreeSet<u32>>) -> LlvmCovMetric {
+    let mut tally = Tally::default();
+    for (file, lines) in lcov_lines(lcov) {
+        let gated = hidden.get(&file);
+        for (number, covered) in lines {
+            if gated.is_some_and(|gated| gated.contains(&number)) {
+                continue;
+            }
+            tally.count += 1;
+            tally.covered += u64::from(covered);
+        }
+    }
+    as_metric(tally.count, tally.covered)
 }
 
 /// The 1-based lines a `#[cfg(not(test))]` gate hides, per source file the export measured.
@@ -812,11 +861,18 @@ fn totals_less_hidden(
     }
 }
 
-/// One metric less the gated items' share, its percent recomputed. A metric the subtraction
-/// empties reads 100%: with nothing left to measure there is nothing left to miss.
+/// One metric less the gated items' share, its percent recomputed.
 fn metric_less(metric: LlvmCovMetric, delta: Tally) -> LlvmCovMetric {
     let count = metric.count.saturating_sub(delta.count);
-    let covered = metric.covered.saturating_sub(delta.covered).min(count);
+    as_metric(
+        count,
+        metric.covered.saturating_sub(delta.covered).min(count),
+    )
+}
+
+/// A metric from its pair. An empty denominator reads 100%: with nothing left to measure there
+/// is nothing left to miss.
+fn as_metric(count: u64, covered: u64) -> LlvmCovMetric {
     let percent = if count == 0 {
         100.0
     } else {
@@ -926,8 +982,77 @@ fn run_cargo_llvm_cov(
     features: &[String],
     branch: bool,
 ) -> Result<String> {
-    let target = TargetDir::new();
+    run_in(&TargetDir::new(), root, ignore, format, features, branch)
+}
 
+/// Both exports of a single run: `--json` for the per-function detail, then a `report --lcov`
+/// pass over the profile that run left in the target dir. The second pass re-reads the profile
+/// rather than running the suite again.
+fn run_cargo_llvm_cov_json_and_lcov(
+    root: &Path,
+    ignore: &[String],
+    features: &[String],
+    branch: bool,
+) -> Result<(String, String)> {
+    let target = TargetDir::new();
+    let json = run_in(&target, root, ignore, &["--json"], features, branch)?;
+    let lcov = report_in(&target, root, ignore, &["--lcov"])?;
+    Ok((json, lcov))
+}
+
+/// Re-export the profile already in `target`. `report` runs no tests, so the two views a caller
+/// compares come from one execution of the suite.
+fn report_in(
+    target: &TargetDir,
+    root: &Path,
+    ignore: &[String],
+    format: &[&str],
+) -> Result<String> {
+    let mut command = Command::new("cargo");
+    command
+        .current_dir(root)
+        .arg("llvm-cov")
+        .arg("report")
+        .args(format)
+        .env("CARGO_TARGET_DIR", &target.0);
+    if let Some(regex) = ignore_filename_regex(root, ignore) {
+        command.arg("--ignore-filename-regex").arg(regex);
+    }
+    scrub_outer_llvm_cov(&mut command);
+    let output = command
+        .output()
+        .context("running `cargo llvm-cov report` (is cargo-llvm-cov installed?)")?;
+    llvm_cov_stdout(
+        output.status.success(),
+        &output.stdout,
+        &output.stderr,
+        &format!(
+            "cargo llvm-cov could not re-export the profile it just wrote in `{}`:",
+            root.display()
+        ),
+    )
+}
+
+/// An invocation's stdout, or `failure` carrying both of its streams when it exited non-zero.
+fn llvm_cov_stdout(success: bool, stdout: &[u8], stderr: &[u8], failure: &str) -> Result<String> {
+    if !success {
+        bail!(
+            "{failure}\n{}{}",
+            String::from_utf8_lossy(stdout),
+            String::from_utf8_lossy(stderr)
+        );
+    }
+    Ok(String::from_utf8_lossy(stdout).into_owned())
+}
+
+fn run_in(
+    target: &TargetDir,
+    root: &Path,
+    ignore: &[String],
+    format: &[&str],
+    features: &[String],
+    branch: bool,
+) -> Result<String> {
     let mut command = Command::new("cargo");
     command
         .current_dir(root)
@@ -949,9 +1074,34 @@ fn run_cargo_llvm_cov(
     if let Some(regex) = ignore_filename_regex(root, ignore) {
         command.arg("--ignore-filename-regex").arg(regex);
     }
-    // When this check runs under an outer `cargo llvm-cov`, an inherited
-    // `RUSTC_WRAPPER` makes the inner run re-enter cargo-llvm-cov on every rustc
-    // invocation and hang until the runner is OOM-killed. Strip the outer state.
+    scrub_outer_llvm_cov(&mut command);
+    let output = command
+        .output()
+        .context("running `cargo llvm-cov` (is cargo-llvm-cov installed?)")?;
+    let hint = if branch {
+        "\n(the [rust].coverage `branch` floor runs with --branch, which requires a \
+         nightly toolchain — pin one in the crate's rust-toolchain.toml with \
+         llvm-tools-preview, or set a rustup directory override)"
+    } else {
+        ""
+    };
+    llvm_cov_stdout(
+        output.status.success(),
+        &output.stdout,
+        &output.stderr,
+        &format!(
+            "the unit suite did not run cleanly under cargo llvm-cov in `{}`:{hint}",
+            root.display()
+        ),
+    )
+}
+
+/// Strip the outer run's instrumentation state from `command`.
+///
+/// When this check runs under an outer `cargo llvm-cov`, an inherited `RUSTC_WRAPPER` makes the
+/// inner run re-enter cargo-llvm-cov on every rustc invocation and hang until the runner is
+/// OOM-killed.
+fn scrub_outer_llvm_cov(command: &mut Command) {
     for var in [
         "RUSTFLAGS",
         "CARGO_ENCODED_RUSTFLAGS",
@@ -976,25 +1126,6 @@ fn run_cargo_llvm_cov(
     ] {
         command.env_remove(var);
     }
-    let output = command
-        .output()
-        .context("running `cargo llvm-cov` (is cargo-llvm-cov installed?)")?;
-    if !output.status.success() {
-        let hint = if branch {
-            "\n(the [rust].coverage `branch` floor runs with --branch, which requires a \
-             nightly toolchain — pin one in the crate's rust-toolchain.toml with \
-             llvm-tools-preview, or set a rustup directory override)"
-        } else {
-            ""
-        };
-        bail!(
-            "the unit suite did not run cleanly under cargo llvm-cov in `{}`:{hint}\n{}{}",
-            root.display(),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 /// Per-file region detail from a `cargo llvm-cov --json` export — what
@@ -2022,6 +2153,56 @@ mod tests {
         );
         assert_eq!((emptied.count, emptied.covered), (0, 0));
         assert_eq!(emptied.percent, 100.0);
+    }
+
+    /// Two instantiation groups of one file, the second never run. The `--json` totals sum the
+    /// two — nine lines, one short — while lcov merges them into three, all covered.
+    const TWO_GROUPS_LCOV: &str = "SF:/abs/a.rs\nDA:1,4\nDA:2,4\nDA:3,0\n\
+                                   SF:/abs/a.rs\nDA:1,0\nDA:2,0\nDA:3,7\nend_of_record\n";
+
+    #[test]
+    fn a_line_one_instantiation_ran_counts_once_covered() {
+        let lines = lcov_lines_metric(TWO_GROUPS_LCOV, &BTreeMap::new());
+        assert_eq!((lines.count, lines.covered), (3, 3));
+        assert_eq!(lines.percent, 100.0);
+    }
+
+    #[test]
+    fn a_gated_line_leaves_the_lcov_denominator() {
+        let hidden = BTreeMap::from([("/abs/a.rs".to_string(), BTreeSet::from([3]))]);
+        let lines = lcov_lines_metric(TWO_GROUPS_LCOV, &hidden);
+        assert_eq!((lines.count, lines.covered), (2, 2));
+    }
+
+    #[test]
+    fn a_line_no_instantiation_ran_is_still_missing() {
+        let lcov = "SF:/abs/a.rs\nDA:1,4\nDA:2,0\nend_of_record\n";
+        let lines = lcov_lines_metric(lcov, &BTreeMap::new());
+        assert_eq!((lines.count, lines.covered), (2, 1));
+    }
+
+    #[test]
+    fn records_outside_a_source_file_are_not_lines() {
+        let lcov = "DA:1,4\nSF:/abs/a.rs\nFN:1,main\nDA:x,4\nDA:2\nDA:3,y\nDA:4,1\nLF:4\n";
+        assert_eq!(
+            lcov_lines(lcov),
+            BTreeMap::from([("/abs/a.rs".to_string(), BTreeMap::from([(4, true)]))]),
+            "a `DA:` before any `SF:`, and a malformed one after, name no line"
+        );
+    }
+
+    #[test]
+    fn a_failed_export_carries_both_streams() {
+        let err = llvm_cov_stdout(false, b"out\n", b"err\n", "could not re-export:")
+            .expect_err("a non-zero exit is an error");
+        assert_eq!(format!("{err}"), "could not re-export:\nout\nerr\n");
+    }
+
+    #[test]
+    fn an_export_measuring_nothing_reads_full() {
+        let lines = lcov_lines_metric("", &BTreeMap::new());
+        assert_eq!((lines.count, lines.covered), (0, 0));
+        assert_eq!(lines.percent, 100.0);
     }
 
     #[test]

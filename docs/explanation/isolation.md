@@ -85,12 +85,14 @@ The unit suite's side: every collaborator is mocked.
   flag a unit test (an inline `#[cfg(test)]` module) that reaches out of its own module —
   `crate::…`, an external crate, or effectful `std` (`net`, `thread`, `os`, `process::Command`
   and its siblings, `env::var` and its siblings, the clock). Exact named pure construction and
-  parsing paths are allowed: `clap::Command::new`,
+  parsing paths are allowed:
+  `clap::Command::new`,
   `clap::Arg::new`, `clap::Error::new`, `syn::parse_str`, `syn::parse_file`,
   `toml::from_str`, archive fixture constructors in `zip`, `flate2`, and `tar`, and
   `std::process::ExitStatus::from_raw`. Their named value-type imports are allowed
   separately; glob imports remain checked. Other calls and imports from those crates,
-  including `std::process::Command`, remain checked. A single `super::` (the unit under test), `self`, and pure `std`
+  including `std::process::Command`, remain checked. A single `super::` (the unit under test),
+  `self`, and pure `std`
   stay in-module. Inject a trait double for a collaborator instead. **The filesystem is a
   Rust-specific carve-out**: `std::fs` and `std::env::temp_dir` stay in-module. Rust privacy
   is the reason. A private item is reachable only from its own module, so the inline

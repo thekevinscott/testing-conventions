@@ -312,15 +312,6 @@ fn lines_in(fixture_name: &str, file_suffix: &str) -> Vec<usize> {
         .collect()
 }
 
-#[test]
-fn a_reach_inside_assert_is_caught() {
-    let lines = lines_in("unit/macro_body", "asserted.rs");
-    assert!(
-        lines.contains(&14),
-        "`assert!(crate::other::load())` hides a first-party reach in a token body; got {lines:?}"
-    );
-}
-
 /// Exit code of `unit lint --language rust <fixture>/<sub>`, naming the fixture's own config.
 fn iso_exit_subdir(fixture_name: &str, sub: &str) -> i32 {
     let argv: Vec<OsString> = vec![
@@ -351,20 +342,39 @@ fn scanning_src_still_reads_the_crate_manifest() {
 }
 
 #[test]
-fn a_direct_and_an_asserted_reach_agree() {
-    let lines = lines_in("unit/macro_body", "asserted.rs");
-    assert!(
-        lines.contains(&9) && lines.contains(&14),
-        "the direct and macro-wrapped forms of the same reach must both be flagged; got {lines:?}"
-    );
-}
-
-#[test]
 fn scanning_src_exits_nonzero() {
     assert_eq!(
         iso_exit_subdir("unit/red", "src"),
         1,
         "pointing the gate one level down must not turn a red tree green"
+    );
+}
+
+#[test]
+fn an_exempt_path_stays_crate_root_relative_from_src() {
+    assert_eq!(
+        iso_exit_subdir("unit/waived", "src"),
+        0,
+        "`path = \"src/widget.rs\"` must resolve from either scan path — the exempt root \
+         is the crate root, not the scan path"
+    );
+}
+
+#[test]
+fn a_reach_inside_assert_is_caught() {
+    let lines = lines_in("unit/macro_body", "asserted.rs");
+    assert!(
+        lines.contains(&14),
+        "`assert!(crate::other::load())` hides a first-party reach in a token body; got {lines:?}"
+    );
+}
+
+#[test]
+fn a_direct_and_an_asserted_reach_agree() {
+    let lines = lines_in("unit/macro_body", "asserted.rs");
+    assert!(
+        lines.contains(&9) && lines.contains(&14),
+        "the direct and macro-wrapped forms of the same reach must both be flagged; got {lines:?}"
     );
 }
 
@@ -404,16 +414,6 @@ fn an_import_inside_an_item_body_macro_is_caught() {
 #[test]
 fn macro_body_exits_nonzero() {
     assert_eq!(iso_exit("unit/macro_body"), 1);
-}
-
-#[test]
-fn an_exempt_path_stays_crate_root_relative_from_src() {
-    assert_eq!(
-        iso_exit_subdir("unit/waived", "src"),
-        0,
-        "`path = \"src/widget.rs\"` must resolve from either scan path — the exempt root \
-         is the crate root, not the scan path"
-    );
 }
 
 #[test]

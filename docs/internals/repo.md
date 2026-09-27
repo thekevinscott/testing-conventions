@@ -757,6 +757,13 @@ properties hold the ratchet:
 `packages/python`, `internals/move-major-tag`, `internals/detect`, and `internals/checks` all sit
 at the default and carry no config for it — the ratchet's end state.
 
+`packages/rust` entered the ratchet at `max_lines = 76` (#735), which is the tightest threshold
+the crate passes today rather than a judgement about Rust: `run` in `lib.rs` is exactly 76 lines,
+so the entry point carries no headroom and the next line added to it has to be paid for with a
+split. The measured curve is steep at the bottom and flat at the top — 288 violations at `1`, 132
+at `10`, 20 at `30`, 3 at `50`, 1 from `65` through `75` — so the first step down is cheap and the
+last is not. #750 holds the step sequence.
+
 ## The move-major-tag helper's package (`internals/move-major-tag`)
 
 `move_major_tag.py` (the forward-only `@v0` tag-advance helper) lives in its own uv package, `internals/move-major-tag`, mirroring `internals/detect`. `src/` holds four top-level modules, each with its colocated `_test.py`: the git boundary (`git_ops.py`), the pure decision (`decide.py`), the orchestration (`advance.py`), and the entry point (`move_major_tag.py`, which reads its two positional arguments and calls `advance`). Integration tests (the git boundary mocked) and e2e tests (a real repo with a local remote) sit under `tests/`, and pytest is a dev-dependency pinned in the package's `uv.lock`. `move-major-tag.yml` invokes the entry point as a plain stdlib script (`python3 internals/move-major-tag/src/move_major_tag.py "$SHA" "$TAG"`, no install step) — sibling imports resolve because the script's own directory leads `sys.path`; `move-major-tag-tests.yml` runs the three-tier suite from the package's own lock.
@@ -897,6 +904,27 @@ The `integration` job measures `packages/rust/src` over **all** cargo targets �
 `src/main.rs` is covered by that measurement like any other file. The e2e suites spawn the real binary through `env!("CARGO_BIN_EXE_testing-conventions")`, and llvm-cov attributes the child process's execution back to `main.rs` — three targets alone (`version_banner_e2e`, `config_unknown_key_e2e`, `workflow_e2e`) cover it at 100% lines, regions, and functions, one each for the `Ok` path, the `clap_err.exit()` path, and the `eprintln!` + `ExitCode::from(1)` path. The job once carried `--ignore-filename-regex 'main\.rs'`, which hid coverage the suite already had; `--ignore-filename-regex` is also a substring search, so the unanchored pattern would have silently dropped a future `domain.rs` or `subdomain.rs` from the denominator — the same over-match the consumer-facing path anchored away.
 
 The floor is **100**, matching the shipped check's default. It previously sat at 96: the full suite measured 96.96% lines (256 of 8,427 uncovered, across 15 of the crate's 17 source files), and that shortfall was uncovered code rather than an exempt surface, so tests closed it. The old floor's point of margin absorbed line-mapping drift between a local toolchain and CI's `stable`; at 100, a rustc bump that remaps a line surfaces as a red run, fixed by covering the line the new mapping exposes.
+
+## The Rust mutation tier (#736)
+
+`dogfood.yml`'s `mutation-rust` job runs the shipped gate unchanged: cargo-mutants judging with
+`--cargo-test-arg --lib --cargo-test-arg --bins`, the same targets `unit coverage` measures. The
+alternative — judging with the whole suite, so the integration and e2e tiers get to kill mutants —
+was rejected. It would make this repository's own mutation run a different check from the one every
+consumer gets, and dogfooding a check you have reconfigured proves nothing about the check.
+
+The cost of that choice is the **tier-scoping artifact**: a function whose only behaviour is to
+spawn a subprocess has no unit-tier assertion to make, so its whole-body replacement mutants
+survive even though `tests/` asserts them. #535 measured it whole-tree (301 unit-tier survivors,
+against 7.6% across all tiers on `internals/detect`). A diff-scoped run over #746's `coverage.rs`
+changes measured it on a real PR: 11 survivors, every one a `Command`-building function, ~7 minutes
+wall clock at `-j8`. That is the "a dozen at once" case #736 worried about, and it is real.
+
+No up-front exemptions were declared. The gate is diff-scoped (`if: github.event_name ==
+'pull_request'`), so it never runs whole-tree, and a blanket exemption over the high-density files
+would leave the gate nominally wired and actually off. A survivor that another tier does assert
+takes a line-scoped `[[rust.exempt]] rules = ["mutation"]` naming that test. Where that reason
+repeats verbatim it is a missing rule rather than a judgement — #752 holds the shape.
 
 ## Python CI: build the wheel once
 

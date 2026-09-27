@@ -1,0 +1,1 @@
+**Fixed** `unit lint` allows named pure constructors and parsers in Rust and TypeScript unit tests, matching Python's existing pure standard-library parser treatment. Effectful calls and imports remain checked.

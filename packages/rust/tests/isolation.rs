@@ -32,7 +32,7 @@ fn iso_exit(fixture_name: &str) -> i32 {
 /// `true` when scanning `fixture_name` yields an `no-out-of-module-call` violation
 /// in the file ending `file_suffix`.
 fn flagged(fixture_name: &str, file_suffix: &str) -> bool {
-    find_violations(fixture(fixture_name))
+    find_violations(fixture(fixture_name), fixture(fixture_name))
         .expect("walking a readable tree should succeed")
         .iter()
         .any(|v| v.rule == "no-out-of-module-call" && v.file.ends_with(file_suffix))
@@ -98,8 +98,8 @@ fn red_flags_ancestor_module_reach() {
 
 #[test]
 fn clean_reports_no_violations() {
-    let violations =
-        find_violations(fixture("unit/clean")).expect("walking a readable tree should succeed");
+    let violations = find_violations(fixture("unit/clean"), fixture("unit/clean"))
+        .expect("walking a readable tree should succeed");
     assert!(
         violations.is_empty(),
         "the clean fixture is well-isolated (super:: + injected double + Cursor); got {violations:?}"
@@ -117,8 +117,41 @@ fn clean_exits_zero() {
 }
 
 #[test]
+fn pure_construction_reports_no_violations() {
+    let violations = find_violations(fixture("unit/pure"), fixture("unit/pure")).unwrap();
+    assert!(violations.is_empty(), "got {violations:?}");
+}
+
+#[test]
+fn pure_allowlist_keeps_effectful_and_glob_reaches_red() {
+    let violations =
+        find_violations(fixture("unit/pure_negative"), fixture("unit/pure_negative")).unwrap();
+    let messages = violations
+        .iter()
+        .map(|v| v.message.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    for path in [
+        "clap::*",
+        "syn::parse::*",
+        "std::process::Command",
+        "std::os::unix::process::*",
+        "toml::to_string",
+        "zip::ZipWriter::new_append",
+        "std::env::var",
+        "std::thread::sleep",
+    ] {
+        assert!(messages.contains(path), "missing {path}: {messages}");
+    }
+    assert!(
+        !messages.contains("clap::Command::new"),
+        "pure call flagged: {messages}"
+    );
+}
+
+#[test]
 fn cfg_not_test_module_is_not_linted_as_test_code() {
-    let violations = find_violations(fixture("unit/cfg_not_test"))
+    let violations = find_violations(fixture("unit/cfg_not_test"), fixture("unit/cfg_not_test"))
         .expect("walking a readable tree should succeed");
     assert!(
         violations.is_empty(),
@@ -134,7 +167,7 @@ fn cfg_not_test_exits_zero() {
 /// `true` when scanning `fixture_name` yields a `no-out-of-module-import`
 /// violation in the file ending `file_suffix`.
 fn import_flagged(fixture_name: &str, file_suffix: &str) -> bool {
-    find_violations(fixture(fixture_name))
+    find_violations(fixture(fixture_name), fixture(fixture_name))
         .expect("walking a readable tree should succeed")
         .iter()
         .any(|v| v.rule == "no-out-of-module-import" && v.file.ends_with(file_suffix))
@@ -182,8 +215,8 @@ fn imports_clean_allows_the_filesystem() {
 
 #[test]
 fn imports_clean_reports_no_violations() {
-    let violations =
-        find_violations(fixture("imports/clean")).expect("walking a readable tree should succeed");
+    let violations = find_violations(fixture("imports/clean"), fixture("imports/clean"))
+        .expect("walking a readable tree should succeed");
     assert!(
         violations.is_empty(),
         "the clean fixture imports only super:: and pure std; got {violations:?}"
@@ -256,7 +289,7 @@ fn stale_exempt_entry_errors() {
 
 #[test]
 fn local_build_crate_neither_aborts_nor_false_flags() {
-    let violations = find_violations(fixture("unit/local_build"))
+    let violations = find_violations(fixture("unit/local_build"), fixture("unit/local_build"))
         .expect("a locally-built crate must not abort the rule on a tests/ or target/ file");
     assert!(
         violations.is_empty(),
@@ -271,12 +304,60 @@ fn local_build_crate_exits_zero() {
 
 /// Every violation line in `fixture_name`'s file ending `file_suffix`.
 fn lines_in(fixture_name: &str, file_suffix: &str) -> Vec<usize> {
-    find_violations(fixture(fixture_name))
+    find_violations(fixture(fixture_name), fixture(fixture_name))
         .expect("walking a readable tree should succeed")
         .iter()
         .filter(|v| v.file.ends_with(file_suffix))
         .map(|v| v.line)
         .collect()
+}
+
+/// Exit code of `unit lint --language rust <fixture>/<sub>`, naming the fixture's own config.
+fn iso_exit_subdir(fixture_name: &str, sub: &str) -> i32 {
+    let argv: Vec<OsString> = vec![
+        "testing-conventions".into(),
+        "unit".into(),
+        "lint".into(),
+        "--language".into(),
+        "rust".into(),
+        "--config".into(),
+        fixture(fixture_name)
+            .join("testing-conventions.toml")
+            .into_os_string(),
+        fixture(fixture_name).join(sub).into_os_string(),
+    ];
+    run(argv).expect("a readable tree should not error")
+}
+
+#[test]
+fn scanning_src_still_reads_the_crate_manifest() {
+    let violations = find_violations(fixture("unit/red").join("src"), fixture("unit/red"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.file.ends_with("external_crate.rs")),
+        "`rand::random()` must stay flagged when the scan path is `src/`; got {violations:?}"
+    );
+}
+
+#[test]
+fn scanning_src_exits_nonzero() {
+    assert_eq!(
+        iso_exit_subdir("unit/red", "src"),
+        1,
+        "pointing the gate one level down must not turn a red tree green"
+    );
+}
+
+#[test]
+fn an_exempt_path_stays_crate_root_relative_from_src() {
+    assert_eq!(
+        iso_exit_subdir("unit/waived", "src"),
+        0,
+        "`path = \"src/widget.rs\"` must resolve from either scan path — the exempt root \
+         is the crate root, not the scan path"
+    );
 }
 
 #[test]
@@ -319,7 +400,7 @@ fn a_quoted_template_is_not_a_reach() {
 
 #[test]
 fn an_import_inside_an_item_body_macro_is_caught() {
-    let imports: Vec<_> = find_violations(fixture("unit/macro_body"))
+    let imports: Vec<_> = find_violations(fixture("unit/macro_body"), fixture("unit/macro_body"))
         .expect("walking a readable tree should succeed")
         .into_iter()
         .filter(|v| v.rule == "no-out-of-module-import" && v.file.ends_with("item_body.rs"))
@@ -338,7 +419,7 @@ fn macro_body_exits_nonzero() {
 #[test]
 fn this_crate_has_no_out_of_module_command_reaches() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let reaches: Vec<_> = find_violations(&root)
+    let reaches: Vec<_> = find_violations(&root, &root)
         .unwrap()
         .into_iter()
         .filter(|v| v.message.contains("crate::command"))

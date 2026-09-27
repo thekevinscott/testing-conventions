@@ -11,9 +11,10 @@ from derive_packaging import derive_packaging
 from derive_packaging_root import derive_packaging_root
 from e2e_scope_flags import derive_e2e_exclude, derive_e2e_extra_scope
 from eligible import eligible
-from file_presence import has_rust_crate, has_source
+from file_presence import has_source
 from has_attestation import has_attestation
 from has_dist import has_dist
+from has_rust_crate import has_rust_crate
 from hermetic import HERMETIC_CLI_COMMAND, HERMETIC_TS_ADAPTER_ARGS, hermetic
 from primary_language import primary_language
 from provision_rust import provision_rust

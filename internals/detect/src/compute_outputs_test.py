@@ -88,6 +88,15 @@ def test_compute_outputs_keeps_rust_out_of_the_suite_matrix(tmp_path, in_dir, wr
     assert [outputs[name] for name in RUST_BEARING] == ['["python","rust"]'] * len(RUST_BEARING)
 
 
+def test_compute_outputs_finds_the_crate_from_a_src_scan(tmp_path, in_dir, write):
+    in_dir(tmp_path)
+    write(tmp_path / "crate" / "Cargo.toml", '[package]\nname = "c"\n')
+    write(tmp_path / "crate" / "src" / "lib.rs", "pub fn f() {}\n")
+    outputs = compute_outputs.compute_outputs("", "crate/src")
+    assert outputs["package_root"] == "crate"
+    assert [outputs[name] for name in RUST_BEARING] == ['["rust"]'] * len(RUST_BEARING)
+
+
 def test_compute_outputs_honors_a_restricted_language_list(tmp_path, in_dir, write):
     in_dir(tmp_path)
     write(tmp_path / "crate" / "Cargo.toml", '[package]\nname = "c"\n')

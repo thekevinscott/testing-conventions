@@ -144,8 +144,10 @@ a shared `../tsconfig`) resolves through the real tree, the package's `tsconfig.
 it lies, and tooling resolves from the package's own `node_modules`. Mutation stays scoped to the
 scanned path, and the scanned path's colocated unit suite is what judges each mutant; the package's
 other suite tiers (`tests/`) stay out of the run. Rust reaches that scope with
-`--cargo-test-arg --lib --cargo-test-arg --bins`, the same restriction
-[`unit coverage`](/explanation/coverage) applies, so the two checks measure one slice. The scan path narrows **which** of your test
+`--cargo-test-arg --lib`: binary unit tests and the `tests/` tree do not judge library mutants.
+A survivor under `--lib` means the library unit tier does not assert the mutated line. An
+integration or e2e test may legitimately assert it; a narrow line-scoped exemption can record
+that test and reason. The scan path narrows **which** of your test
 files judge the mutants, and your runner keeps deciding what counts as a test and where it is
 rooted — so a `vitest.config.ts` at the package root whose `include` names `src/**/*.test.ts`
 resolves that pattern against the package root, exactly as it does when you run vitest yourself.

@@ -282,6 +282,10 @@ agent can't satisfy without real assertions.
 - **TypeScript:** [Stryker](https://stryker-mutator.io/) over the unit suite.
 - **Rust:** [cargo-mutants](https://github.com/sourcefrog/cargo-mutants) over the unit suite.
 
+Rust mutation runs the library unit target with `--lib`. A survivor means that target does not
+assert the line; an integration or e2e test may cover it. A line-scoped exemption with a reason
+naming that test records the tier boundary.
+
 Mutation is a binary gate, not a score — equivalent mutants (mutations no test can
 ever kill) make 100% unreachable, and a score isn't comparable across engines.
 Instead the check is diff-scoped: **no unexplained surviving mutant on changed

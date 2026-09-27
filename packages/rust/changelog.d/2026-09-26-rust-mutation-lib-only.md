@@ -1,0 +1,1 @@
+**BREAKING** Rust `unit mutation` now judges mutants with the library unit target (`--lib`), matching the unit-tier rule. Binary unit tests no longer kill library mutants. A survivor asserted in an integration or e2e tier can carry a narrow line-scoped exemption naming that test and reason. See `../migrations.d/2026-09-26-rust-mutation-lib-only.md`.

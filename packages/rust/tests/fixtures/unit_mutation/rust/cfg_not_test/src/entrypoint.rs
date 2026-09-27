@@ -1,4 +1,4 @@
-//! A gated entry point beside a tested decision. `main` is absent from the `--lib --bins` build,
+//! A gated entry point beside a tested decision. `main` is absent from the `--lib` build,
 //! so no test can kill its mutants; `report` holds the decision and its test pins it.
 
 /// Run and map the outcome onto an exit code.

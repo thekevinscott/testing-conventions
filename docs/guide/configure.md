@@ -122,6 +122,10 @@ So the list is exactly the failing lines. `lines` is required with `coverage` / 
 rejected with any whole-file check, so the two never share an entry — a file exempt from both
 `colocated-test` and `coverage` is two entries.
 
+For a Rust mutation survivor asserted by an integration or e2e test, name that test in a
+`[[rust.exempt]]` entry with `rules = ["mutation"]` and the survivor's exact line. The `reason`
+states which behavior the other tier verifies.
+
 ## See also
 
 - [Reference — Configuration](../reference/config): every key and the full schema.

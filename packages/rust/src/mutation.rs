@@ -1258,13 +1258,7 @@ fn list_cargo_mutants(
     parse_mutants_list(&String::from_utf8_lossy(&output.stdout))
 }
 
-/// The argv for one cargo-mutants run: `mutants --output <out> --cargo-test-arg --lib
-/// --cargo-test-arg --bins [--in-diff <diff>] [--features <list>]`. The `--cargo-test-arg` pair
-/// reaches only the judging `cargo test` invocation, scoping it to the same targets
-/// `unit coverage` measures — the library and the binaries, never the integration tier under
-/// `tests/`. `features` rides on the engine's own `--features` so it reaches every cargo
-/// invocation, judging build included; after a `--` it would reach `cargo test` alone and the
-/// baseline build would fail.
+/// Build cargo-mutants arguments for the library unit tier and requested diff/features.
 fn mutants_argv(out: &Path, in_diff: Option<&Path>, features: &[String]) -> Vec<OsString> {
     let mut argv = vec![
         OsString::from("mutants"),
@@ -1272,8 +1266,6 @@ fn mutants_argv(out: &Path, in_diff: Option<&Path>, features: &[String]) -> Vec<
         out.as_os_str().to_os_string(),
         OsString::from("--cargo-test-arg"),
         OsString::from("--lib"),
-        OsString::from("--cargo-test-arg"),
-        OsString::from("--bins"),
     ];
     if let Some(diff) = in_diff {
         argv.push(OsString::from("--in-diff"));
@@ -2122,8 +2114,6 @@ diff --git a/src/lib.rs b/src/lib.rs
                 "/out",
                 "--cargo-test-arg",
                 "--lib",
-                "--cargo-test-arg",
-                "--bins",
                 "--features",
                 "cli,boost"
             ]
@@ -2136,8 +2126,6 @@ diff --git a/src/lib.rs b/src/lib.rs
                 "/out",
                 "--cargo-test-arg",
                 "--lib",
-                "--cargo-test-arg",
-                "--bins",
                 "--in-diff",
                 "/out/base.diff",
                 "--features",
@@ -2146,15 +2134,7 @@ diff --git a/src/lib.rs b/src/lib.rs
         );
         assert_eq!(
             argv(None, &[]),
-            vec![
-                "mutants",
-                "--output",
-                "/out",
-                "--cargo-test-arg",
-                "--lib",
-                "--cargo-test-arg",
-                "--bins"
-            ]
+            vec!["mutants", "--output", "/out", "--cargo-test-arg", "--lib"]
         );
     }
 

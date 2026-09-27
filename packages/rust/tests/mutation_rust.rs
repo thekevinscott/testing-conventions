@@ -101,6 +101,24 @@ fn integration_tests_do_not_pad_the_mutation_run() {
 }
 
 #[test]
+fn binary_unit_tests_do_not_judge_library_mutants() {
+    let (_, survivors) = expect_tested(
+        measure_rust(
+            &crate_dir("bin_unit_only"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &[],
+        )
+        .expect("cargo-mutants runs"),
+    );
+    assert!(
+        survivors.iter().any(|mutant| mutant.file == "src/lib.rs"),
+        "the binary unit test must not judge the library mutant; got {survivors:?}"
+    );
+}
+
+#[test]
 fn a_crate_with_no_mutants_reports_a_zero_count() {
     let (count, survivors) = expect_tested(
         measure_rust(
@@ -148,7 +166,7 @@ fn a_cfg_not_test_entry_point_leaves_no_survivors() {
     );
     assert!(
         survivors.is_empty(),
-        "a gated entry point is absent from the --lib --bins build, so no test can kill its \
+        "a gated entry point is absent from the --lib build, so no test can kill its \
          mutants; got {survivors:?}"
     );
     assert!(

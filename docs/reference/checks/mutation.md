@@ -36,7 +36,7 @@ subject: a mutant the engine finds there is dropped before judging, so editing o
 survivor explanation.
 
 In Rust, a mutant inside an item a `#[cfg(not(test))]` gate keeps out of the test build is dropped
-the same way. The unit tier runs `--lib --bins`, which sets `cfg(test)`, so that code is not in the
+the same way. The unit tier runs `--lib`, which sets `cfg(test)`, so that code is not in the
 binary the suite runs and no test can reach it — cargo-mutants mutates it anyway, because it reads
 the source rather than the build, and reports a survivor nothing could have killed. The exclusion is
 item-level and only covers a gate a test build genuinely cannot satisfy: `#[cfg(not(test))]` and
@@ -120,8 +120,9 @@ The check has **no percentage key** — the gate is binary, and config can't loo
 surface:
 
 - A `mutation` exemption is **line-scoped, never whole-file**: the entry carries a `lines` list
-  naming the exact lines whose survivors are explained (confirmed equivalent, or deliberately
-  defensive), with a required `reason` — see
+  naming the exact lines whose survivors are explained (confirmed equivalent, deliberately
+  defensive, or covered by an integration or e2e test outside the unit tier), with a required
+  `reason` that names the relevant test — see
   [the exemption schema](/reference/config#line-scoped-exemptions). The determinism guard rejects
   a listed line whose mutants were all caught.
 - [`[rust] features`](/reference/config#rust-features) — cargo features the run enables on every

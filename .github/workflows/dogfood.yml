@@ -79,6 +79,15 @@ jobs:
       source: packages/rust/src
       gates: '["one-function-per-file"]'
 
+  mutation-rust:
+    name: Mutation (packages/rust/src)
+    needs: [build-cli]
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      version: ${{ inputs.version }}
+      source: packages/rust/src
+      gates: '["mutation"]'
+
   unit-lint:
     name: Unit lint (packages/node/src)
     needs: [build-cli]

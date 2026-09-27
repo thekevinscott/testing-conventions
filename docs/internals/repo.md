@@ -905,6 +905,27 @@ The `integration` job measures `packages/rust/src` over **all** cargo targets �
 
 The floor is **100**, matching the shipped check's default. It previously sat at 96: the full suite measured 96.96% lines (256 of 8,427 uncovered, across 15 of the crate's 17 source files), and that shortfall was uncovered code rather than an exempt surface, so tests closed it. The old floor's point of margin absorbed line-mapping drift between a local toolchain and CI's `stable`; at 100, a rustc bump that remaps a line surfaces as a red run, fixed by covering the line the new mapping exposes.
 
+## The Rust mutation tier (#736)
+
+`dogfood.yml`'s `mutation-rust` job runs the shipped gate unchanged: cargo-mutants judging with
+`--cargo-test-arg --lib --cargo-test-arg --bins`, the same targets `unit coverage` measures. The
+alternative — judging with the whole suite, so the integration and e2e tiers get to kill mutants —
+was rejected. It would make this repository's own mutation run a different check from the one every
+consumer gets, and dogfooding a check you have reconfigured proves nothing about the check.
+
+The cost of that choice is the **tier-scoping artifact**: a function whose only behaviour is to
+spawn a subprocess has no unit-tier assertion to make, so its whole-body replacement mutants
+survive even though `tests/` asserts them. #535 measured it whole-tree (301 unit-tier survivors,
+against 7.6% across all tiers on `internals/detect`). A diff-scoped run over #746's `coverage.rs`
+changes measured it on a real PR: 11 survivors, every one a `Command`-building function, ~7 minutes
+wall clock at `-j8`. That is the "a dozen at once" case #736 worried about, and it is real.
+
+No up-front exemptions were declared. The gate is diff-scoped (`if: github.event_name ==
+'pull_request'`), so it never runs whole-tree, and a blanket exemption over the high-density files
+would leave the gate nominally wired and actually off. A survivor that another tier does assert
+takes a line-scoped `[[rust.exempt]] rules = ["mutation"]` naming that test. Where that reason
+repeats verbatim it is a missing rule rather than a judgement — #752 holds the shape.
+
 ## Python CI: build the wheel once
 
 `python.yml`'s `build` job used to run `maturin build --release` across the full `3.9`–`3.13`

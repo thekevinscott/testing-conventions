@@ -59,6 +59,17 @@ jobs:
       source: packages/node/src
       gates: '["colocated-test"]'
 
+  colocated-test-rust:
+    name: Colocated test (packages/rust/src)
+    # `source` is the crate's source dir, so the unit-tier gates recurse it while the suite tiers
+    # derive from the package root (packages/rust, where the Cargo.toml lives).
+    needs: [build-cli]
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      version: ${{ inputs.version }}
+      source: packages/rust/src
+      gates: '["colocated-test"]'
+
   one-function-rust:
     name: One function per file (packages/rust/src)
     needs: [build-cli]

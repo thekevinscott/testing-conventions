@@ -752,22 +752,35 @@ fn run_unit_one_function(
 }
 
 /// Run the unit-suite isolation lints over `root`, printing each violation and returning
-/// `1` when any are found.
+/// `1` when any are found. The Rust arm derives the crate root above `root` so that a scan
+/// pointed at `src/` still reads the manifest, and exempt paths stay crate-root-relative.
 fn run_unit_lint(
     root: &Path,
     language: isolation::Language,
     config_path: &Path,
 ) -> anyhow::Result<i32> {
-    let (raw, select): (Vec<lint::Violation>, ExemptSelect) = match language {
-        isolation::Language::Rust => (isolation::find_violations(root)?, |c| c.rust_exemptions()),
-        isolation::Language::TypeScript => (ts::find_unit_violations(root)?, |c| {
-            c.exemptions(colocated_test::Language::TypeScript)
-        }),
-        isolation::Language::Python => (lint::find_unit_isolation_violations(root)?, |c| {
-            c.exemptions(colocated_test::Language::Python)
-        }),
+    let crate_root = tiers::package_root(root, "Cargo.toml");
+    let (raw, select, waiver_root): (Vec<lint::Violation>, ExemptSelect, &Path) = match language {
+        isolation::Language::Rust => {
+            let crate_root = crate_root.as_deref().unwrap_or(root);
+            (
+                isolation::find_violations(root, crate_root)?,
+                |c| c.rust_exemptions(),
+                crate_root,
+            )
+        }
+        isolation::Language::TypeScript => (
+            ts::find_unit_violations(root)?,
+            |c| c.exemptions(colocated_test::Language::TypeScript),
+            root,
+        ),
+        isolation::Language::Python => (
+            lint::find_unit_isolation_violations(root)?,
+            |c| c.exemptions(colocated_test::Language::Python),
+            root,
+        ),
     };
-    let violations = apply_waivers(raw, root, config_path, select)?;
+    let violations = apply_waivers(raw, waiver_root, config_path, select)?;
     if violations.is_empty() {
         return Ok(0);
     }

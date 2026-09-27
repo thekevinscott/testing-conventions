@@ -1,6 +1,5 @@
-//! Rust unit-isolation lint: an inline `#[cfg(test)] mod` may call and import only into the
-//! unit under test, its parent module reached via `super::`. The AST walk is the deterministic
-//! `syn` heuristic; its design and precision limits live in `internals/rust/isolation.md`.
+//! Rust unit-isolation lint for inline `#[cfg(test)]` modules. The AST walk is a
+//! deterministic `syn` heuristic; its precision limits live in `internals/rust/isolation.md`.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -31,12 +30,16 @@ pub enum Language {
     Python,
 }
 
-/// Every isolation violation in the unit source under crate root `root`, sorted by
-/// `(file, line)`. `root`'s `Cargo.toml` names the external crates. `tests/`, `benches/`,
-/// `examples/`, and `target/` are not unit source, so a local build changes no result.
-pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
-    let root = root.as_ref();
-    let deps = external_deps(root)?;
+/// Every isolation violation in the unit source under `scan_root`, sorted by `(file, line)`.
+/// `crate_root`'s `Cargo.toml` names the external crates, so a scan pointed at `src/` still
+/// sees the dependency set. `tests/`, `benches/`, `examples/`, and `target/` are not unit
+/// source, so a local build changes no result.
+pub fn find_violations(
+    scan_root: impl AsRef<Path>,
+    crate_root: impl AsRef<Path>,
+) -> Result<Vec<Violation>> {
+    let root = scan_root.as_ref();
+    let deps = external_deps(crate_root.as_ref())?;
 
     let mut files = Vec::new();
     crate::colocated_test::collect_rust_source_files(root, &mut files)?;
@@ -123,6 +126,21 @@ impl<'ast> Visit<'ast> for DoubleVisitor<'_> {
         }
         visit::visit_item_use(self, node);
     }
+
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        if let MacroBody::Items(items) = macro_body(node) {
+            let mut inner = DoubleVisitor {
+                file: self.file,
+                first_party: self.first_party,
+                violations: Vec::new(),
+            };
+            for item in &items {
+                inner.visit_item(item);
+            }
+            self.violations.append(&mut inner.violations);
+        }
+        visit::visit_macro(self, node);
+    }
 }
 
 /// `true` for a `#[double]` / `#[mockall_double::double]` attribute.
@@ -208,7 +226,7 @@ impl<'ast> Visit<'ast> for IsolationVisitor<'_> {
                         rule: RULE_CALL,
                         message: format!(
                             "unit test calls `{}` out of its own module ({kind}); \
-                             inject a trait double — only `super::` is in-module",
+                             inject a trait double for effectful collaborators",
                             render_path(&path_expr.path),
                         ),
                     });
@@ -230,7 +248,7 @@ impl<'ast> Visit<'ast> for IsolationVisitor<'_> {
                         rule: RULE_IMPORT,
                         message: format!(
                             "unit test imports `{}` out of its own module ({kind}); \
-                             only `super::` (the unit) and pure `std` belong in a unit test",
+                             import the unit or a named pure value instead",
                             render_use(segs, *is_glob),
                         ),
                     });
@@ -239,12 +257,79 @@ impl<'ast> Visit<'ast> for IsolationVisitor<'_> {
         }
         visit::visit_item_use(self, node);
     }
+
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        if self.test_depth > 0 {
+            let mut inner = IsolationVisitor {
+                file: self.file,
+                deps: self.deps,
+                test_depth: self.test_depth,
+                violations: Vec::new(),
+            };
+            match macro_body(node) {
+                MacroBody::Items(items) => {
+                    for item in &items {
+                        inner.visit_item(item);
+                    }
+                }
+                MacroBody::Exprs(exprs) => {
+                    for expr in &exprs {
+                        inner.visit_expr(expr);
+                    }
+                }
+                MacroBody::Opaque => {}
+            }
+            self.violations.append(&mut inner.violations);
+        }
+        visit::visit_macro(self, node);
+    }
+}
+
+/// What a macro invocation's token body could be re-parsed as. `Opaque` covers both a body
+/// that is no valid Rust and one this check refuses to read — see [`macro_body`].
+enum MacroBody {
+    Items(Vec<syn::Item>),
+    Exprs(Vec<syn::Expr>),
+    Opaque,
+}
+
+/// Re-parse a macro invocation's tokens so the reaches inside them are visible. A macro node
+/// carries an unparsed `TokenStream`, so `assert!(crate::load())` never reaches `visit_expr_call`
+/// without this.
+///
+/// This reads the tokens the invocation was *written* with, not what the macro expands to:
+/// `assert!`, `vec!`, `write!` and their kin pass their arguments through, so what is written is
+/// what runs. A quoting macro is the opposite — its body is a template for code emitted
+/// elsewhere — so `quote!`/`quote_spanned!` and a `macro_rules!` definition are left opaque
+/// rather than read as if they executed here.
+fn macro_body(mac: &syn::Macro) -> MacroBody {
+    use syn::parse::Parser;
+
+    let name = mac.path.segments.last().map(|seg| seg.ident.to_string());
+    if matches!(
+        name.as_deref(),
+        Some("quote" | "quote_spanned" | "macro_rules")
+    ) {
+        return MacroBody::Opaque;
+    }
+    let tokens = mac.tokens.clone();
+    if let Ok(file) = syn::parse2::<syn::File>(tokens.clone()) {
+        return MacroBody::Items(file.items);
+    }
+    let args = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated;
+    match args.parse2(tokens) {
+        Ok(exprs) => MacroBody::Exprs(exprs.into_iter().collect()),
+        Err(_) => MacroBody::Opaque,
+    }
 }
 
 /// Why a call's leading path is out-of-module, or `None` when it stays in-module or is
 /// unresolvable — an unresolvable path is not flagged, the `syn` heuristic's known limit.
 fn classify(path: &syn::Path, deps: &BTreeSet<String>) -> Option<&'static str> {
     let segs: Vec<String> = path.segments.iter().map(|s| s.ident.to_string()).collect();
+    if is_pure_call_path(&segs) {
+        return None;
+    }
     match segs.first().map(String::as_str)? {
         "self" | "Self" => None,
         "super" => (segs.get(1).map(String::as_str) == Some("super")).then_some("ancestor module"),
@@ -257,6 +342,33 @@ fn classify(path: &syn::Path, deps: &BTreeSet<String>) -> Option<&'static str> {
     }
 }
 
+fn is_pure_call_path(segs: &[String]) -> bool {
+    const PATHS: &[&str] = &[
+        "clap::Command::new",
+        "clap::Arg::new",
+        "clap::Error::new",
+        "syn::parse_str",
+        "syn::parse_file",
+        "toml::from_str",
+        "zip::ZipWriter::new",
+        "zip::write::SimpleFileOptions::default",
+        "flate2::write::GzEncoder::new",
+        "flate2::Compression::default",
+        "tar::Builder::new",
+        "tar::Header::new_gnu",
+        "std::process::ExitStatus::from_raw",
+    ];
+    PATHS.contains(&segs.join("::").as_str())
+}
+
+fn is_pure_import_path(segs: &[String]) -> bool {
+    const PATHS: &[&str] = &[
+        "clap::error::ErrorKind",
+        "std::os::unix::process::ExitStatusExt",
+    ];
+    PATHS.contains(&segs.join("::").as_str())
+}
+
 /// `true` for an effectful `std` path — net, process, env, threads, OS, the clock, or
 /// real-handle I/O. Pure `std` stays in-module: `internals/rust/testing.md` makes
 /// `io::Cursor` the idiomatic in-memory unit-test tool.
@@ -265,10 +377,13 @@ fn classify(path: &syn::Path, deps: &BTreeSet<String>) -> Option<&'static str> {
 /// only tier that can reach a private item, so a private path-walker can be tested nowhere
 /// else — and its argument is a directory that has to exist. `env::temp_dir` rides along
 /// because it only names a writable directory; the rest of `env` reads ambient state the test
-/// never created, which is the collaborator this rule exists to catch.
+/// never created, which is the collaborator this rule exists to catch. `process::id` is the
+/// other half of that same naming idiom — the runner's own PID, with nothing to double — while
+/// the rest of `process` spawns, controls, or terminates.
 fn is_effectful_std(segs: &[String]) -> bool {
     match segs.get(1).map(String::as_str) {
-        Some("net" | "process" | "thread" | "os") => true,
+        Some("net" | "thread" | "os") => true,
+        Some("process") => segs.get(2).map(String::as_str) != Some("id"),
         Some("env") => segs.get(2).map(String::as_str) != Some("temp_dir"),
         Some("io") => matches!(
             segs.get(2).map(String::as_str),
@@ -315,6 +430,9 @@ fn flatten_use(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<(Vec
 /// Why a `use` reaches out of the test's own module, or `None` when it stays in-module.
 /// The one legal glob is `super::*`; a named import is judged by its root like a call.
 fn classify_use(segs: &[String], is_glob: bool, deps: &BTreeSet<String>) -> Option<&'static str> {
+    if !is_glob && is_pure_import_path(segs) {
+        return None;
+    }
     match segs.first().map(String::as_str)? {
         "super" => (segs.get(1).map(String::as_str) == Some("super")).then_some("ancestor module"),
         "self" | "Self" => None,
@@ -694,12 +812,15 @@ mod tests {
         assert!(is_effectful_std(&segs("std::env::var")));
         assert!(is_effectful_std(&segs("std::env")));
         assert!(is_effectful_std(&segs("std::process::exit")));
+        assert!(is_effectful_std(&segs("std::process::Command::new")));
+        assert!(is_effectful_std(&segs("std::process")));
         assert!(is_effectful_std(&segs("std::thread::sleep")));
         assert!(is_effectful_std(&segs("std::time::SystemTime::now")));
         assert!(is_effectful_std(&segs("std::io::stdout")));
         assert!(!is_effectful_std(&segs("std::fs::read")));
         assert!(!is_effectful_std(&segs("std::fs")));
         assert!(!is_effectful_std(&segs("std::env::temp_dir")));
+        assert!(!is_effectful_std(&segs("std::process::id")));
         assert!(!is_effectful_std(&segs("std::collections::HashMap")));
         assert!(!is_effectful_std(&segs("std::io::Cursor")));
         assert!(!is_effectful_std(&segs("std::time::Duration")));
@@ -1039,7 +1160,7 @@ mod tests {
     fn an_unreadable_unit_source_names_the_file() {
         let tree = TempTree::new(&[("src/widget.rs", "")]);
         std::fs::write(tree.path().join("src/widget.rs"), [0xFF, 0xFE]).unwrap();
-        let err = find_violations(tree.path()).unwrap_err();
+        let err = find_violations(tree.path(), tree.path()).unwrap_err();
         assert!(
             format!("{err:#}").contains("reading source file"),
             "got: {err:#}"
@@ -1049,7 +1170,7 @@ mod tests {
     #[test]
     fn an_unparsable_unit_source_names_the_file() {
         let tree = TempTree::new(&[("src/widget.rs", "fn broken( {\n")]);
-        let err = find_violations(tree.path()).unwrap_err();
+        let err = find_violations(tree.path(), tree.path()).unwrap_err();
         assert!(format!("{err:#}").contains("parsing"), "got: {err:#}");
     }
 

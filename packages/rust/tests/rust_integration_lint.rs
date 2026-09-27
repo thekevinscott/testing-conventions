@@ -69,6 +69,22 @@ fn waived_first_party_double_exits_zero() {
 }
 
 #[test]
+fn a_double_inside_a_macro_body_is_flagged() {
+    let violations = find_integration_violations(fixture("macro_body"))
+        .expect("walking a readable tree should succeed");
+    assert!(
+        violations.iter().any(|v| v.rule == "no-first-party-double"),
+        "a `#[double] use widget::Renderer` written in a macro's token body is written here \
+         and must be flagged; got {violations:?}"
+    );
+}
+
+#[test]
+fn macro_body_exits_nonzero() {
+    assert_eq!(lint_exit("macro_body"), 1);
+}
+
+#[test]
 fn tier_layout_tests_crate_is_linted_from_a_src_scan() {
     assert_eq!(lint_exit("derived/src"), 1);
 }

@@ -63,6 +63,45 @@ fn clean_reports_no_violations() {
 }
 
 #[test]
+fn pure_imports_report_no_violations() {
+    let violations = find_unit_violations(fixture("pure")).unwrap();
+    assert!(violations.is_empty(), "got {violations:?}");
+}
+
+/// An inline `{ type Foo }` specifier erases at compile time, exactly like the
+/// statement-level `import type …` the collector already skips.
+#[test]
+fn an_inline_type_specifier_is_not_a_reach() {
+    let violations = find_unit_violations(fixture("pure")).unwrap();
+    assert!(
+        !violations.iter().any(|v| v.message.contains("node:fs")),
+        "`import {{ type Dirent }} from 'node:fs'` imports no runtime value; got {violations:?}"
+    );
+}
+
+#[test]
+fn pure_imports_keep_other_members_and_shapes_red() {
+    let violations = find_unit_violations(fixture("pure_negative")).unwrap();
+    let messages = violations
+        .iter()
+        .map(|v| v.message.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    for module in [
+        "yaml",
+        "node:path",
+        "path",
+        "json5",
+        "node:fs",
+        "node:child_process",
+        "undici",
+        "node:os",
+    ] {
+        assert!(messages.contains(module), "missing {module}: {messages}");
+    }
+}
+
+#[test]
 fn red_exits_nonzero() {
     assert_eq!(isolation_exit("red"), 1);
 }

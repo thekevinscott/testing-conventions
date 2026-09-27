@@ -2,6 +2,13 @@
 # reads `Cargo.toml` there, and scanning `src` instead silently stops flagging every
 # external-crate reach.
 
+[rust]
+# The tightest threshold the crate passes today, deliberately with no headroom: `run` in
+# `lib.rs` is exactly 76 lines, so the next line added to it must be paid for with a split.
+# A ratchet, not a target — #750 holds the step sequence down to the Python/TypeScript
+# default of 1.
+one_function_per_file = { max_lines = 76 }
+
 # The provisioning lock's test spawns two real threads and holds the critical section with a
 # 50ms sleep: concurrency *is* the subject, so a double would prove nothing, and dropping the
 # sleep narrows the race window until a lock-less implementation can pass by luck. Whole-file

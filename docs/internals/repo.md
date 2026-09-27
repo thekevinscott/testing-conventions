@@ -757,6 +757,13 @@ properties hold the ratchet:
 `packages/python`, `internals/move-major-tag`, `internals/detect`, and `internals/checks` all sit
 at the default and carry no config for it — the ratchet's end state.
 
+`packages/rust` entered the ratchet at `max_lines = 76` (#735), which is the tightest threshold
+the crate passes today rather than a judgement about Rust: `run` in `lib.rs` is exactly 76 lines,
+so the entry point carries no headroom and the next line added to it has to be paid for with a
+split. The measured curve is steep at the bottom and flat at the top — 288 violations at `1`, 132
+at `10`, 20 at `30`, 3 at `50`, 1 from `65` through `75` — so the first step down is cheap and the
+last is not. #750 holds the step sequence.
+
 ## The move-major-tag helper's package (`internals/move-major-tag`)
 
 `move_major_tag.py` (the forward-only `@v0` tag-advance helper) lives in its own uv package, `internals/move-major-tag`, mirroring `internals/detect`. `src/` holds four top-level modules, each with its colocated `_test.py`: the git boundary (`git_ops.py`), the pure decision (`decide.py`), the orchestration (`advance.py`), and the entry point (`move_major_tag.py`, which reads its two positional arguments and calls `advance`). Integration tests (the git boundary mocked) and e2e tests (a real repo with a local remote) sit under `tests/`, and pytest is a dev-dependency pinned in the package's `uv.lock`. `move-major-tag.yml` invokes the entry point as a plain stdlib script (`python3 internals/move-major-tag/src/move_major_tag.py "$SHA" "$TAG"`, no install step) — sibling imports resolve because the script's own directory leads `sys.path`; `move-major-tag-tests.yml` runs the three-tier suite from the package's own lock.

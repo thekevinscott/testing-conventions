@@ -59,6 +59,15 @@ jobs:
       source: packages/node/src
       gates: '["colocated-test"]'
 
+  one-function-rust:
+    name: One function per file (packages/rust/src)
+    needs: [build-cli]
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      version: ${{ inputs.version }}
+      source: packages/rust/src
+      gates: '["one-function-per-file"]'
+
   unit-lint:
     name: Unit lint (packages/node/src)
     needs: [build-cli]

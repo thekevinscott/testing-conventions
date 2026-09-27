@@ -1,3 +1,4 @@
+import { type Dirent } from 'node:fs';
 import { parse } from 'json5';
 import { parse as parseYaml } from 'yaml';
 import { basename, join } from 'node:path';

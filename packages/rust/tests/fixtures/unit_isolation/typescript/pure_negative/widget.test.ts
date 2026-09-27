@@ -6,6 +6,7 @@ import 'yaml';
 import { readFile } from 'node:fs';
 import { exec } from 'node:child_process';
 import { get } from 'undici';
+import { type Stats, statSync } from 'node:os';
 
 parse('a: 1');
 basename('a/b');
@@ -16,3 +17,4 @@ json5.parse('{}');
 readFile('x', () => {});
 exec('true');
 get('https://example.com');
+statSync('x') as Stats;

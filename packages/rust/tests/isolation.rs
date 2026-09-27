@@ -100,6 +100,38 @@ fn clean_exits_zero() {
 }
 
 #[test]
+fn pure_construction_reports_no_violations() {
+    let violations = find_violations(fixture("unit/pure")).unwrap();
+    assert!(violations.is_empty(), "got {violations:?}");
+}
+
+#[test]
+fn pure_allowlist_keeps_effectful_and_glob_reaches_red() {
+    let violations = find_violations(fixture("unit/pure_negative")).unwrap();
+    let messages = violations
+        .iter()
+        .map(|v| v.message.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    for path in [
+        "clap::*",
+        "syn::parse::*",
+        "std::process::Command",
+        "std::os::unix::process::*",
+        "toml::to_string",
+        "zip::ZipWriter::new_append",
+        "std::env::var",
+        "std::thread::sleep",
+    ] {
+        assert!(messages.contains(path), "missing {path}: {messages}");
+    }
+    assert!(
+        !messages.contains("clap::Command::new"),
+        "pure call flagged: {messages}"
+    );
+}
+
+#[test]
 fn cfg_not_test_module_is_not_linted_as_test_code() {
     let violations = find_violations(fixture("unit/cfg_not_test"))
         .expect("walking a readable tree should succeed");

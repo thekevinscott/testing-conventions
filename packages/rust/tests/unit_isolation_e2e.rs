@@ -29,6 +29,11 @@ fn clean_exits_zero() {
 }
 
 #[test]
+fn pure_imports_exit_zero() {
+    assert_eq!(isolation_exit("pure"), 0);
+}
+
+#[test]
 fn untyped_red_exits_nonzero() {
     assert_eq!(isolation_exit("untyped_mock/red"), 1);
 }

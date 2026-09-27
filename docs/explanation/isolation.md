@@ -53,6 +53,11 @@ manifest — loose scripts — is scanned at `source` directly.
 The unit suite's side: every collaborator is mocked.
 
 - **TypeScript** — `unmocked-collaborator`: any runtime import a unit test doesn't `vi.mock()`.
+  Named imports of the pure `parse` function from `json5` and `yaml`, and pure Node path
+  functions `basename`, `dirname`, `extname`, `join`, and `normalize` from
+  `node:path` or `path`, are value preparation rather than collaborators. The allowlist
+  applies to those named imports; namespace, default, side-effect, and other imports
+  from the same modules remain checked.
   Three imports are never collaborators: the unit under test (`widget.test.ts` → `./widget`),
   type-only imports, and the test runner (`vitest`). A mock matches its import by resolved module,
   so the extension may differ between the two — Vitest resolves `./formatter` and `./formatter.js`
@@ -63,8 +68,9 @@ The unit suite's side: every collaborator is mocked.
   mock, both first-party and external (a third-party package, or effectful stdlib such as
   `socket`, `subprocess`, `random`). Never collaborators: the unit under test, the test framework,
   pure stdlib (`__future__` and the other underscore-prefixed modules included), and type-only
-  imports. The canonical unit test imports only the unit under test and
-  patches collaborators by string in a fixture — so it has no collaborator imports at all. When a
+  imports. Pure parsers `ast.parse`, `tomllib.loads`, and `json.loads` are allowed from their
+  standard-library modules. Third-party imports remain checked by default. The canonical unit
+  test imports the unit under test and patches collaborators by string in a fixture. When a
   collaborator *is* imported, a `patch(...)` mocks it only when its target names that import's own
   module: `from pkg.ledger import record` is mocked by `patch("pkg.ledger.record")`, and each
   imported symbol must be patched — a `from pkg.ledger import record, erase` that patches only
@@ -77,17 +83,26 @@ The unit suite's side: every collaborator is mocked.
   This matches TypeScript, where `index.test.ts` importing `./index.js` is the unit under test.
 - **Rust** — the same intent, structurally: `no-out-of-module-call` and `no-out-of-module-import`
   flag a unit test (an inline `#[cfg(test)]` module) that reaches out of its own module —
-  `crate::…`, an external crate, or effectful `std` (`net`, `process`, `thread`, `os`, `env::var`
-  and its siblings, the clock). A single `super::` (the unit under test), `self`, and pure `std`
-  stay in-module. Inject a trait double for a collaborator instead. **The filesystem is the one
-  carve-out, and only in Rust**: `std::fs` and `std::env::temp_dir` stay in-module. Rust privacy
+  `crate::…`, an external crate, or effectful `std` (`net`, `thread`, `os`, `process::Command`
+  and its siblings, `env::var` and its siblings, the clock). Exact named pure construction and
+  parsing paths are allowed:
+  `clap::Command::new`,
+  `clap::Arg::new`, `clap::Error::new`, `syn::parse_str`, `syn::parse_file`,
+  `toml::from_str`, archive fixture constructors in `zip`, `flate2`, and `tar`, and
+  `std::process::ExitStatus::from_raw`. Their named value-type imports are allowed
+  separately; glob imports remain checked. Other calls and imports from those crates,
+  including `std::process::Command`, remain checked. A single `super::` (the unit under test),
+  `self`, and pure `std`
+  stay in-module. Inject a trait double for a collaborator instead. **The filesystem is a
+  Rust-specific carve-out**: `std::fs` and `std::env::temp_dir` stay in-module. Rust privacy
   is the reason. A private item is reachable only from its own module, so the inline
   `#[cfg(test)]` module is the *only* tier that can test a private path-walker — and that walker's
   argument is a directory that has to exist. Forbidding `fs` there forbids the one tier that can
   see the unit from exercising it. Python and TypeScript have no such constraint: a sibling test
   file reaches a module-private function directly, so its filesystem work can move out to the
   integration tier, and there it stays flagged. `std::env::var` is still a collaborator — it reads
-  ambient state the test did not create; `temp_dir` only names a writable directory. A unit test
+  ambient state the test did not create; `temp_dir` only names a writable directory, and
+  `process::id` — the other half of that naming idiom — only reports the runner's own PID. A unit test
   is a module gated by a positively-required
   `test` (`#[cfg(test)]`, `#[cfg(all(test, …))]`); a `#[cfg(not(test))]` module compiles in
   *non-test* builds, so it is production code and its out-of-module calls are left alone. The scan

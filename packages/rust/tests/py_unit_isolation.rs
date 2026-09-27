@@ -68,6 +68,12 @@ fn clean_reports_no_violations() {
 }
 
 #[test]
+fn pure_parsers_report_no_violations() {
+    let violations = find_unit_isolation_violations(fixture("pure")).unwrap();
+    assert!(violations.is_empty(), "got {violations:?}");
+}
+
+#[test]
 fn red_exits_nonzero() {
     assert_eq!(isolation_exit("red"), 1);
 }

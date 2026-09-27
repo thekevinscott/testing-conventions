@@ -1,6 +1,5 @@
-# Exempt paths are relative to the scan path, which must be the crate root: `external_deps`
-# reads `Cargo.toml` there, and scanning `src` instead silently stops flagging every
-# external-crate reach.
+# Exempt paths are relative to the crate root — the nearest ancestor holding `Cargo.toml` —
+# so the same entry resolves whether the gate is pointed at the crate or at `src`.
 
 [rust]
 # The tightest threshold the crate passes today, deliberately with no headroom: `run` in

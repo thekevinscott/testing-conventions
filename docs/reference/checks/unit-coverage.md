@@ -45,6 +45,20 @@ compiles under `cargo test` and stays a subject. This is what makes the
 [binary entry point `colocated-test` documents](/reference/checks/colocated-test#a-rust-binary-s-entry-point)
 coverage-clean, the same way [`mutation`](./mutation) drops the mutants inside it.
 
+### Which view the Rust line ratio reads
+
+The same `--lib --bins` run compiles the library twice, so llvm-cov holds two instantiation
+groups for every file in it. A `--json` export's `totals` sum each group's own line tally, which
+counts a line both groups map twice — once covered and once not, when only one group ran it. The
+floor reads the `DA:` records of an `lcov` export instead: llvm-cov writes those through the
+merged line view that `llvm-cov show`, `--text` and `--show-missing-lines` all read, where a line
+maps once however many groups carry it.
+
+Both exports come from one run — the check re-reads the profile rather than running the suite
+twice — so a failing line ratio always names lines those views can show. Regions, functions and
+branches still come from the `--json` totals, where the same summing is what the gated-item
+subtraction above is written against.
+
 ## The changed-line job
 
 On pull requests, the same configured floor is also measured over only the lines the

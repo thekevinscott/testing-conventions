@@ -7,10 +7,13 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Exit code of `testing-conventions unit lint --language rust <codebase>`.
+/// Exit code of `testing-conventions unit lint --language rust <codebase>`. `--config` names
+/// the fixture's own file — usually absent — so the default relative to the crate root cannot
+/// apply this crate's exemptions to a fixture tree.
 fn iso_exit(codebase: &str) -> i32 {
     Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
-        .args(["unit", "lint", "--language", "rust"])
+        .args(["unit", "lint", "--language", "rust", "--config"])
+        .arg(fixture(codebase).join("testing-conventions.toml"))
         .arg(fixture(codebase))
         .status()
         .expect("the built binary should run")
@@ -56,7 +59,7 @@ fn this_crates_thread_reach_is_exempted() {
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "lint", "--language", "rust", "--config"])
         .arg(root.join("testing-conventions.toml"))
-        .arg(root.join("src"))
+        .arg(&root)
         .output()
         .expect("the built binary should run");
     let stderr = String::from_utf8(out.stderr).expect("stderr should be utf-8");

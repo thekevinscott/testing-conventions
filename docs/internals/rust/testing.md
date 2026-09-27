@@ -30,6 +30,21 @@ exercised through `tests/workflow.rs`, which builds the real `command()` and ass
 the line and the parent named in the message. An inline test reaching for `crate::command()`
 duplicates that against the same tree, so the two inline cases are gone rather than exempted.
 
+**This crate's own `testing-conventions.toml`** exempts `src/mutation.rs` from the two
+out-of-module rules: the provisioning lock's test spawns real threads and sleeps inside the
+critical section because concurrency is what it proves. Two consequences of the mechanism are
+worth knowing before adding an entry. The scan path has to be the crate root — `external_deps`
+reads `Cargo.toml` there, and scanning `src` instead silently stops flagging every
+external-crate reach — and exempt paths are relative to that scan path. And a lint rule takes
+whole-file entries only; `lines` is accepted for `coverage` and `mutation` alone.
+
+Shipping that file changed what "no config" means for the suite. `--config` defaults to
+`testing-conventions.toml` relative to the working directory, which under `cargo test` is this
+crate — so a test that wants the zero-config behavior has to name it: either the fixture's own
+config, or a path under the fixture that does not exist. Omitting the flag picks up this crate's
+instead, which fails a fixture scan on the stale-path check and silently raises the
+one-function threshold.
+
 **No mechanism-hygiene integration lint (by design).** Python's `integration lint` carries
 three mechanism lints — `no-monkeypatch`, `no-inline-patch`, `no-environ-mutation` — that
 police *how* a pytest test mocks. Rust has none, deliberately: there is no `monkeypatch`

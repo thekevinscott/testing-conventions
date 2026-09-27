@@ -10,7 +10,9 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 /// Exit code of `unit one-function-per-file --language <language> <fixture>`,
-/// with no config — the zero-config default threshold.
+/// with no config — the zero-config default threshold. `--config` names a path that does not
+/// exist rather than being omitted: its default is relative to the working directory, which
+/// under `cargo test` is this crate, and this crate ships a config of its own.
 fn exit(language: &str, fixture_name: &str) -> i32 {
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),
@@ -18,6 +20,10 @@ fn exit(language: &str, fixture_name: &str) -> i32 {
         "one-function-per-file".into(),
         "--language".into(),
         language.into(),
+        "--config".into(),
+        fixture(fixture_name)
+            .join("no-such-testing-conventions.toml")
+            .into_os_string(),
         fixture(fixture_name).into_os_string(),
     ];
     run(argv).expect("a readable tree should not error")

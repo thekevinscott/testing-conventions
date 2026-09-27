@@ -10,7 +10,9 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Exit code of `unit lint --language rust <fixture>`.
+/// Exit code of `unit lint --language rust <fixture>`. `--config` names the fixture's own
+/// file — usually absent, meaning nothing is exempt — so that `--config`'s CWD-relative
+/// default cannot pull this crate's config in over a fixture tree.
 fn iso_exit(fixture_name: &str) -> i32 {
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),
@@ -18,6 +20,10 @@ fn iso_exit(fixture_name: &str) -> i32 {
         "lint".into(),
         "--language".into(),
         "rust".into(),
+        "--config".into(),
+        fixture(fixture_name)
+            .join("testing-conventions.toml")
+            .into_os_string(),
         fixture(fixture_name).into_os_string(),
     ];
     run(argv).expect("a readable tree should not error")

@@ -344,10 +344,13 @@ fn classify(path: &syn::Path, deps: &BTreeSet<String>) -> Option<&'static str> {
 /// only tier that can reach a private item, so a private path-walker can be tested nowhere
 /// else — and its argument is a directory that has to exist. `env::temp_dir` rides along
 /// because it only names a writable directory; the rest of `env` reads ambient state the test
-/// never created, which is the collaborator this rule exists to catch.
+/// never created, which is the collaborator this rule exists to catch. `process::id` is the
+/// other half of that same naming idiom — the runner's own PID, with nothing to double — while
+/// the rest of `process` spawns, controls, or terminates.
 fn is_effectful_std(segs: &[String]) -> bool {
     match segs.get(1).map(String::as_str) {
-        Some("net" | "process" | "thread" | "os") => true,
+        Some("net" | "thread" | "os") => true,
+        Some("process") => segs.get(2).map(String::as_str) != Some("id"),
         Some("env") => segs.get(2).map(String::as_str) != Some("temp_dir"),
         Some("io") => matches!(
             segs.get(2).map(String::as_str),
@@ -773,12 +776,15 @@ mod tests {
         assert!(is_effectful_std(&segs("std::env::var")));
         assert!(is_effectful_std(&segs("std::env")));
         assert!(is_effectful_std(&segs("std::process::exit")));
+        assert!(is_effectful_std(&segs("std::process::Command::new")));
+        assert!(is_effectful_std(&segs("std::process")));
         assert!(is_effectful_std(&segs("std::thread::sleep")));
         assert!(is_effectful_std(&segs("std::time::SystemTime::now")));
         assert!(is_effectful_std(&segs("std::io::stdout")));
         assert!(!is_effectful_std(&segs("std::fs::read")));
         assert!(!is_effectful_std(&segs("std::fs")));
         assert!(!is_effectful_std(&segs("std::env::temp_dir")));
+        assert!(!is_effectful_std(&segs("std::process::id")));
         assert!(!is_effectful_std(&segs("std::collections::HashMap")));
         assert!(!is_effectful_std(&segs("std::io::Cursor")));
         assert!(!is_effectful_std(&segs("std::time::Duration")));

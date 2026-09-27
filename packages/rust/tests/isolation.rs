@@ -55,6 +55,23 @@ fn red_flags_effectful_std_call() {
 }
 
 #[test]
+fn red_flags_a_spawned_process() {
+    assert!(
+        flagged("unit/red", "spawned_process.rs"),
+        "`std::process::Command::new(...)` in a unit test must be flagged"
+    );
+}
+
+#[test]
+fn clean_allows_a_process_unique_temp_name() {
+    assert!(
+        !flagged("unit/clean", "unique_temp_name.rs"),
+        "`std::process::id` reports the runner's own PID, so it names a temp directory the \
+         way `env::temp_dir` does rather than reading ambient state"
+    );
+}
+
+#[test]
 fn clean_allows_a_fixture_read() {
     assert!(
         !flagged("unit/clean", "fixture_read.rs"),

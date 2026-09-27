@@ -77,8 +77,9 @@ The unit suite's side: every collaborator is mocked.
   This matches TypeScript, where `index.test.ts` importing `./index.js` is the unit under test.
 - **Rust** — the same intent, structurally: `no-out-of-module-call` and `no-out-of-module-import`
   flag a unit test (an inline `#[cfg(test)]` module) that reaches out of its own module —
-  `crate::…`, an external crate, or effectful `std` (`net`, `process`, `thread`, `os`, `env::var`
-  and its siblings, the clock). A single `super::` (the unit under test), `self`, and pure `std`
+  `crate::…`, an external crate, or effectful `std` (`net`, `thread`, `os`, `process::Command`
+  and its siblings, `env::var` and its siblings, the clock). A single `super::` (the unit under
+  test), `self`, and pure `std`
   stay in-module. Inject a trait double for a collaborator instead. **The filesystem is the one
   carve-out, and only in Rust**: `std::fs` and `std::env::temp_dir` stay in-module. Rust privacy
   is the reason. A private item is reachable only from its own module, so the inline
@@ -87,7 +88,8 @@ The unit suite's side: every collaborator is mocked.
   see the unit from exercising it. Python and TypeScript have no such constraint: a sibling test
   file reaches a module-private function directly, so its filesystem work can move out to the
   integration tier, and there it stays flagged. `std::env::var` is still a collaborator — it reads
-  ambient state the test did not create; `temp_dir` only names a writable directory. A unit test
+  ambient state the test did not create; `temp_dir` only names a writable directory, and
+  `process::id` — the other half of that naming idiom — only reports the runner's own PID. A unit test
   is a module gated by a positively-required
   `test` (`#[cfg(test)]`, `#[cfg(all(test, …))]`); a `#[cfg(not(test))]` module compiles in
   *non-test* builds, so it is production code and its out-of-module calls are left alone. The scan

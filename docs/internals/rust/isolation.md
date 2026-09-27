@@ -98,8 +98,9 @@ Flag a `use` inside the test module whose **path root** is not `super` / `self`:
 
 | Flagged (effectful) | Allowed (pure) |
 | --- | --- |
-| `std::net`, `std::process`, `std::thread`, `std::os` | `std::collections`, `std::fmt`, `std::ops`, `std::convert`, … |
+| `std::net`, `std::thread`, `std::os` | `std::collections`, `std::fmt`, `std::ops`, `std::convert`, … |
 | `std::env` (`var`, `set_var`, `args`, …) | `std::fs`, `std::env::temp_dir` |
+| `std::process` (`Command`, `exit`, `abort`, …) | `std::process::id` |
 | `std::time::SystemTime::now`, `std::time::Instant::now` (clock) | `std::time::Duration` |
 | `std::io::{stdin,stdout,stderr}` (real handles) | `std::io::Cursor` + the `Read`/`Write`/`BufRead`/`Seek` **traits** |
 
@@ -118,7 +119,10 @@ file reaches a module-private function directly, so filesystem work moves to the
 integration tier and stays flagged in the unit tier. `std::env` does **not** ride
 along: `var` reads ambient state the test never created, which is the collaborator the
 rule exists to catch. `temp_dir` is the exception inside the exception — it only names
-a writable directory, so it is matched by its last segment and allowed. "Randomness" (README) has no general std RNG;
+a writable directory, so it is matched by its last segment and allowed. `std::process::id` is
+the other half of that same naming idiom (`temp_dir().join(format!("…-{}", process::id()))`):
+it returns the runner's own PID, so there is nothing ambient to read and nothing to double,
+while the rest of `process` spawns, controls, or terminates. "Randomness" (README) has no general std RNG;
 it's the `rand` crate, caught by the external-crate branch of D1.
 
 ## Integration detection

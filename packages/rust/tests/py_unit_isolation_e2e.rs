@@ -41,6 +41,11 @@ fn clean_exits_zero() {
 }
 
 #[test]
+fn pure_parsers_exit_zero() {
+    assert_eq!(isolation_exit("pure"), 0);
+}
+
+#[test]
 fn waived_exits_zero() {
     assert_eq!(
         isolation_exit_with_config("waived", "waived/testing-conventions.toml"),

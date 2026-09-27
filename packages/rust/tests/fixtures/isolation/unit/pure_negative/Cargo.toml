@@ -1,0 +1,12 @@
+[package]
+name = "iso_unit_pure_negative"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+clap = "4"
+syn = "2"
+toml = "0.8"
+zip = "2"
+
+[workspace]

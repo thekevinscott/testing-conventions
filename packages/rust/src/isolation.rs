@@ -1,6 +1,5 @@
-//! Rust unit-isolation lint: an inline `#[cfg(test)] mod` may call and import only into the
-//! unit under test, its parent module reached via `super::`. The AST walk is the deterministic
-//! `syn` heuristic; its design and precision limits live in `internals/rust/isolation.md`.
+//! Rust unit-isolation lint for inline `#[cfg(test)]` modules. The AST walk is a
+//! deterministic `syn` heuristic; its precision limits live in `internals/rust/isolation.md`.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -227,7 +226,7 @@ impl<'ast> Visit<'ast> for IsolationVisitor<'_> {
                         rule: RULE_CALL,
                         message: format!(
                             "unit test calls `{}` out of its own module ({kind}); \
-                             inject a trait double — only `super::` is in-module",
+                             inject a trait double for effectful collaborators",
                             render_path(&path_expr.path),
                         ),
                     });
@@ -249,7 +248,7 @@ impl<'ast> Visit<'ast> for IsolationVisitor<'_> {
                         rule: RULE_IMPORT,
                         message: format!(
                             "unit test imports `{}` out of its own module ({kind}); \
-                             only `super::` (the unit) and pure `std` belong in a unit test",
+                             import the unit or a named pure value instead",
                             render_use(segs, *is_glob),
                         ),
                     });
@@ -328,6 +327,9 @@ fn macro_body(mac: &syn::Macro) -> MacroBody {
 /// unresolvable — an unresolvable path is not flagged, the `syn` heuristic's known limit.
 fn classify(path: &syn::Path, deps: &BTreeSet<String>) -> Option<&'static str> {
     let segs: Vec<String> = path.segments.iter().map(|s| s.ident.to_string()).collect();
+    if is_pure_call_path(&segs) {
+        return None;
+    }
     match segs.first().map(String::as_str)? {
         "self" | "Self" => None,
         "super" => (segs.get(1).map(String::as_str) == Some("super")).then_some("ancestor module"),
@@ -338,6 +340,33 @@ fn classify(path: &syn::Path, deps: &BTreeSet<String>) -> Option<&'static str> {
         // A local type or fn, including one imported by `super::*`, is in-module.
         other => deps.contains(other).then_some("external crate"),
     }
+}
+
+fn is_pure_call_path(segs: &[String]) -> bool {
+    const PATHS: &[&str] = &[
+        "clap::Command::new",
+        "clap::Arg::new",
+        "clap::Error::new",
+        "syn::parse_str",
+        "syn::parse_file",
+        "toml::from_str",
+        "zip::ZipWriter::new",
+        "zip::write::SimpleFileOptions::default",
+        "flate2::write::GzEncoder::new",
+        "flate2::Compression::default",
+        "tar::Builder::new",
+        "tar::Header::new_gnu",
+        "std::process::ExitStatus::from_raw",
+    ];
+    PATHS.contains(&segs.join("::").as_str())
+}
+
+fn is_pure_import_path(segs: &[String]) -> bool {
+    const PATHS: &[&str] = &[
+        "clap::error::ErrorKind",
+        "std::os::unix::process::ExitStatusExt",
+    ];
+    PATHS.contains(&segs.join("::").as_str())
 }
 
 /// `true` for an effectful `std` path — net, process, env, threads, OS, the clock, or
@@ -401,6 +430,9 @@ fn flatten_use(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<(Vec
 /// Why a `use` reaches out of the test's own module, or `None` when it stays in-module.
 /// The one legal glob is `super::*`; a named import is judged by its root like a call.
 fn classify_use(segs: &[String], is_glob: bool, deps: &BTreeSet<String>) -> Option<&'static str> {
+    if !is_glob && is_pure_import_path(segs) {
+        return None;
+    }
     match segs.first().map(String::as_str)? {
         "super" => (segs.get(1).map(String::as_str) == Some("super")).then_some("ancestor module"),
         "self" | "Self" => None,

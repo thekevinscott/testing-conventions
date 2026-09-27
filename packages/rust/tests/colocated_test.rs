@@ -145,6 +145,13 @@ fn rust_clean_tree_exits_zero() {
 }
 
 #[test]
+fn this_crates_rust_sources_have_inline_unit_tests() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    let orphans = missing_inline_tests(&root, &BTreeSet::new()).unwrap();
+    assert!(orphans.is_empty(), "missing inline unit tests: {orphans:?}");
+}
+
+#[test]
 fn rust_red_tree_exits_nonzero() {
     assert_eq!(unit_colocated_test_exit("rust/red", "rust"), 1);
 }

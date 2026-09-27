@@ -19,6 +19,12 @@
 
 Inline `#[cfg(test)] mod tests` is the Rust default — tests only in `tests/` when an inline module would work is a sign of treating Rust like Python.
 
+The changelog check keeps direct unit tests beside its private path and fragment helpers in
+`src/changelog.rs`. Rust privacy gives that inline module access to the helpers; the integration
+suite under `tests/changelog.rs` exercises the public API, and `changelog_e2e.rs` exercises the
+built CLI. The crate's colocated-test integration and CLI suites also scan `src/`, so a new
+source file with behavior joins the inline tier.
+
 **No mechanism-hygiene integration lint (by design).** Python's `integration lint` carries
 three mechanism lints — `no-monkeypatch`, `no-inline-patch`, `no-environ-mutation` — that
 police *how* a pytest test mocks. Rust has none, deliberately: there is no `monkeypatch`

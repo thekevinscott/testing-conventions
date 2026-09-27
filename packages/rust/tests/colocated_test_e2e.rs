@@ -59,6 +59,22 @@ fn rust_clean_tree_exits_zero() {
 }
 
 #[test]
+fn this_crates_rust_sources_pass_the_colocated_check() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    let output = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "colocated-test", "--language", "rust", "--config"])
+        .arg(root.join("missing-testing-conventions.toml"))
+        .arg(&root)
+        .output()
+        .expect("the built binary should run");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn rust_red_tree_flags_the_untested_module() {
     let (code, stderr) = unit_colocated_test_output("rust/red", "rust");
     assert_eq!(

@@ -39,7 +39,7 @@ def fs():
         return state["attestation"]
 
     with patch.object(compute_outputs, "has_source", lambda root, language: state[language]), \
-            patch.object(compute_outputs, "has_rust_crate", lambda root: state["rust_crate"]), \
+            patch.object(compute_outputs, "has_rust_crate", lambda root, package_root: state["rust_crate"]), \
             patch.object(
                 compute_outputs, "has_dist",
                 lambda root: state["dist"] and root == (state["dist_root"] or state["package_root"]),

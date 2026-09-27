@@ -1,0 +1,10 @@
+# Fixture crate `mut_subprocess_seam_argv`: a spawner whose body also decides an argument. The
+# whole-body mutant has no unit-tier contract, but the comparison that picks the argument does —
+# it is killable by lifting the argv assembly into a pure builder — so it stays a survivor.
+# `[workspace]` keeps it standalone (not part of the repo's cargo workspace).
+[package]
+name = "mut_subprocess_seam_argv"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

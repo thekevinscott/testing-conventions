@@ -236,3 +236,54 @@ fn a_bad_base_ref_is_an_error() {
         "got: {err:#}"
     );
 }
+
+#[test]
+fn a_subprocess_seam_leaves_no_survivors() {
+    let (count, survivors) = expect_tested(
+        measure_rust(
+            &crate_dir("subprocess_seam"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &[],
+        )
+        .expect("cargo-mutants runs"),
+    );
+    assert!(
+        survivors.is_empty(),
+        "a unit test cannot call a spawner without spawning, so its whole-body mutants have \
+         no unit-tier contract; got {survivors:?}"
+    );
+    assert!(
+        count > 0,
+        "the pure verdict beside the seam was still judged"
+    );
+}
+
+#[test]
+fn a_spawner_that_also_decides_is_not_a_seam() {
+    let (_, survivors) = expect_tested(
+        measure_rust(
+            &crate_dir("subprocess_seam_argv"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+            &[],
+        )
+        .expect("cargo-mutants runs"),
+    );
+    assert!(
+        survivors
+            .iter()
+            .any(|m| m.description.contains("replace > with")),
+        "the comparison picking an argument is killable by lifting the argv into a pure \
+         builder, so it stays reported; got {survivors:?}"
+    );
+    assert!(
+        survivors
+            .iter()
+            .any(|m| m.description.contains("replace probe -> bool")),
+        "a body holding a decision keeps its whole-body mutant too — the drop is for the \
+         irreducible spawn, not for anything that spawns; got {survivors:?}"
+    );
+}

@@ -184,6 +184,11 @@ workflow change:
   whenever a crate is present. Rust coverage is zero-config (`lines = 100` by default), and all
   three mutation arms are at parity, so the two sets are identical today.
 
+"A crate is present" means `.rs` files under `source` and a `Cargo.toml` at the derived
+`package_root` — or under `source` itself, for a scan pointed at the crate. Looking for the
+manifest only under `source` would have made `source: packages/rust/src` detect no rust at all and
+skip every rust gate silently, which is the shape `packages/node/src` already uses.
+
 It also emits two presence flags the packaging and e2e-verify jobs gate on — **`packaging_dist`**
 (a built distribution is discoverable at `package_root`) and **`e2e_attestation`** (committed
 receipts sit in `e2e-attestations/` there) — so both checks run by default and skip, never fail,

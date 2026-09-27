@@ -45,10 +45,10 @@ def compute_outputs(
         for language in ("python", "typescript")
         if eligible(languages_input, language) and has_source(root, language)
     ]
-    rust_crate = eligible(languages_input, "rust") and has_rust_crate(root)
-    with_rust = present + (["rust"] if rust_crate else [])
     repo = Path(repo_root)
     package_root = derive_package_root(root, repo)
+    rust_crate = eligible(languages_input, "rust") and has_rust_crate(root, package_root)
+    with_rust = present + (["rust"] if rust_crate else [])
     try:
         package_root_rel = package_root.relative_to(repo.resolve())
     except ValueError:

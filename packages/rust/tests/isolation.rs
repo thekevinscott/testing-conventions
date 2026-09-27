@@ -245,3 +245,18 @@ fn local_build_crate_neither_aborts_nor_false_flags() {
 fn local_build_crate_exits_zero() {
     assert_eq!(iso_exit("unit/local_build"), 0);
 }
+
+#[test]
+fn this_crate_has_no_out_of_module_command_reaches() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let reaches: Vec<_> = find_violations(&root)
+        .unwrap()
+        .into_iter()
+        .filter(|v| v.message.contains("crate::command"))
+        .collect();
+    assert!(
+        reaches.is_empty(),
+        "tests/workflow.rs covers the real command tree, so no inline test needs to \
+         build one; got {reaches:?}"
+    );
+}

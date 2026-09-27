@@ -48,6 +48,24 @@ fn local_build_exits_zero() {
     assert_eq!(iso_exit("unit/local_build"), 0);
 }
 
+/// The provisioning test spawns real threads because the lock it proves *is* concurrency;
+/// the crate's own config exempts that import, so the shipped binary must not report it.
+#[test]
+fn this_crates_thread_reach_is_exempted() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "lint", "--language", "rust", "--config"])
+        .arg(root.join("testing-conventions.toml"))
+        .arg(root.join("src"))
+        .output()
+        .expect("the built binary should run");
+    let stderr = String::from_utf8(out.stderr).expect("stderr should be utf-8");
+    assert!(
+        !stderr.contains("std::thread"),
+        "the exemption should lift the provisioning test's thread import; got {stderr}"
+    );
+}
+
 #[test]
 fn waived_exits_zero() {
     let code = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))

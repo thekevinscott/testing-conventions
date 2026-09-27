@@ -15,10 +15,15 @@ fn empty_scan_dir() -> PathBuf {
     dir
 }
 
-/// Output of `unit one-function-per-file --language <language> <path>`.
+/// Output of `unit one-function-per-file --language <language> <path>`, with no config — the
+/// zero-config default threshold. `--config` names a path that does not exist rather than being
+/// omitted: its default is relative to the working directory, which under `cargo test` is this
+/// crate, and this crate ships a config of its own.
 fn run_at(language: &str, path: &std::path::Path) -> Output {
     Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "one-function-per-file", "--language", language])
+        .arg("--config")
+        .arg(path.join("no-such-testing-conventions.toml"))
         .arg(path)
         .output()
         .expect("the built binary should run")

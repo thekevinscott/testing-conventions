@@ -14,3 +14,7 @@ jobs:
       - run: npx -y testing-conventions integration lint --language python src
       - run: npx -y testing-conventions packaging --language python dist
       - run: npx -y testing-conventions install
+      - run: npx -y testing-conventions unit lint --language rust .
+      # A flag-only and a bare invocation name no subcommand and must stay accepted.
+      - run: npx -y testing-conventions --version
+      - run: npx -y testing-conventions

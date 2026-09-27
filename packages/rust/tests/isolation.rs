@@ -252,6 +252,72 @@ fn local_build_crate_exits_zero() {
     assert_eq!(iso_exit("unit/local_build"), 0);
 }
 
+/// Every violation line in `fixture_name`'s file ending `file_suffix`.
+fn lines_in(fixture_name: &str, file_suffix: &str) -> Vec<usize> {
+    find_violations(fixture(fixture_name))
+        .expect("walking a readable tree should succeed")
+        .iter()
+        .filter(|v| v.file.ends_with(file_suffix))
+        .map(|v| v.line)
+        .collect()
+}
+
+#[test]
+fn a_reach_inside_assert_is_caught() {
+    let lines = lines_in("unit/macro_body", "asserted.rs");
+    assert!(
+        lines.contains(&14),
+        "`assert!(crate::other::load())` hides a first-party reach in a token body; got {lines:?}"
+    );
+}
+
+#[test]
+fn a_direct_and_an_asserted_reach_agree() {
+    let lines = lines_in("unit/macro_body", "asserted.rs");
+    assert!(
+        lines.contains(&9) && lines.contains(&14),
+        "the direct and macro-wrapped forms of the same reach must both be flagged; got {lines:?}"
+    );
+}
+
+#[test]
+fn an_external_reach_among_assert_eq_args_is_caught() {
+    let lines = lines_in("unit/macro_body", "asserted.rs");
+    assert!(
+        lines.contains(&19),
+        "every comma-separated argument is a written expression, including the format \
+         arguments; got {lines:?}"
+    );
+}
+
+#[test]
+fn a_quoted_template_is_not_a_reach() {
+    let lines = lines_in("unit/macro_body", "quoted.rs");
+    assert!(
+        lines.is_empty(),
+        "`quote!` tokens are a template for code emitted elsewhere, not a call made here; \
+         got {lines:?}"
+    );
+}
+
+#[test]
+fn an_import_inside_an_item_body_macro_is_caught() {
+    let imports: Vec<_> = find_violations(fixture("unit/macro_body"))
+        .expect("walking a readable tree should succeed")
+        .into_iter()
+        .filter(|v| v.rule == "no-out-of-module-import" && v.file.ends_with("item_body.rs"))
+        .collect();
+    assert!(
+        !imports.is_empty(),
+        "a macro body that parses as items still carries a written `use`; got {imports:?}"
+    );
+}
+
+#[test]
+fn macro_body_exits_nonzero() {
+    assert_eq!(iso_exit("unit/macro_body"), 1);
+}
+
 #[test]
 fn this_crate_has_no_out_of_module_command_reaches() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

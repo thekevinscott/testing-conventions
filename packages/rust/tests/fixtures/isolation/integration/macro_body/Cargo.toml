@@ -1,0 +1,11 @@
+# Fixture: a library `widget` whose integration test hides a first-party `#[double]`
+# inside a macro token body. Parsed by `syn`, never compiled.
+[package]
+name = "widget"
+version = "0.0.0"
+edition = "2021"
+
+[dev-dependencies]
+mockall_double = "0.3"
+
+[workspace]

@@ -123,6 +123,21 @@ impl<'ast> Visit<'ast> for DoubleVisitor<'_> {
         }
         visit::visit_item_use(self, node);
     }
+
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        if let MacroBody::Items(items) = macro_body(node) {
+            let mut inner = DoubleVisitor {
+                file: self.file,
+                first_party: self.first_party,
+                violations: Vec::new(),
+            };
+            for item in &items {
+                inner.visit_item(item);
+            }
+            self.violations.append(&mut inner.violations);
+        }
+        visit::visit_macro(self, node);
+    }
 }
 
 /// `true` for a `#[double]` / `#[mockall_double::double]` attribute.
@@ -238,6 +253,70 @@ impl<'ast> Visit<'ast> for IsolationVisitor<'_> {
             }
         }
         visit::visit_item_use(self, node);
+    }
+
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        if self.test_depth > 0 {
+            let mut inner = IsolationVisitor {
+                file: self.file,
+                deps: self.deps,
+                test_depth: self.test_depth,
+                violations: Vec::new(),
+            };
+            match macro_body(node) {
+                MacroBody::Items(items) => {
+                    for item in &items {
+                        inner.visit_item(item);
+                    }
+                }
+                MacroBody::Exprs(exprs) => {
+                    for expr in &exprs {
+                        inner.visit_expr(expr);
+                    }
+                }
+                MacroBody::Opaque => {}
+            }
+            self.violations.append(&mut inner.violations);
+        }
+        visit::visit_macro(self, node);
+    }
+}
+
+/// What a macro invocation's token body could be re-parsed as. `Opaque` covers both a body
+/// that is no valid Rust and one this check refuses to read — see [`macro_body`].
+enum MacroBody {
+    Items(Vec<syn::Item>),
+    Exprs(Vec<syn::Expr>),
+    Opaque,
+}
+
+/// Re-parse a macro invocation's tokens so the reaches inside them are visible. A macro node
+/// carries an unparsed `TokenStream`, so `assert!(crate::load())` never reaches `visit_expr_call`
+/// without this.
+///
+/// This reads the tokens the invocation was *written* with, not what the macro expands to:
+/// `assert!`, `vec!`, `write!` and their kin pass their arguments through, so what is written is
+/// what runs. A quoting macro is the opposite — its body is a template for code emitted
+/// elsewhere — so `quote!`/`quote_spanned!` and a `macro_rules!` definition are left opaque
+/// rather than read as if they executed here.
+fn macro_body(mac: &syn::Macro) -> MacroBody {
+    use syn::parse::Parser;
+
+    let name = mac.path.segments.last().map(|seg| seg.ident.to_string());
+    if matches!(
+        name.as_deref(),
+        Some("quote" | "quote_spanned" | "macro_rules")
+    ) {
+        return MacroBody::Opaque;
+    }
+    let tokens = mac.tokens.clone();
+    if let Ok(file) = syn::parse2::<syn::File>(tokens.clone()) {
+        return MacroBody::Items(file.items);
+    }
+    let args = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated;
+    match args.parse2(tokens) {
+        Ok(exprs) => MacroBody::Exprs(exprs.into_iter().collect()),
+        Err(_) => MacroBody::Opaque,
     }
 }
 

@@ -1,0 +1,12 @@
+# Exempt paths are relative to the scan path, which must be the crate root: `external_deps`
+# reads `Cargo.toml` there, and scanning `src` instead silently stops flagging every
+# external-crate reach.
+
+# The provisioning lock's test spawns two real threads and holds the critical section with a
+# 50ms sleep: concurrency *is* the subject, so a double would prove nothing, and dropping the
+# sleep narrows the race window until a lock-less implementation can pass by luck. Whole-file
+# because line-scoped exemptions apply only to `coverage` and `mutation`.
+[[rust.exempt]]
+path = "src/mutation.rs"
+rules = ["no-out-of-module-call", "no-out-of-module-import"]
+reason = "the provisioning lock's unit test spawns real threads and sleeps inside the critical section — concurrency is the unit under test, so a double would assert nothing"

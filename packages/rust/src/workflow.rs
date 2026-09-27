@@ -426,31 +426,6 @@ mod tests {
     }
 
     #[test]
-    fn unknown_subcommands_flags_a_renamed_nested_rule() {
-        let v = unknown_subcommands(
-            &[inv(9, &["unit", "location", "--language", "python", "src"])],
-            &crate::command(),
-        );
-        assert_eq!(v.len(), 1);
-        assert_eq!(v[0].line, 9);
-        assert_eq!(v[0].rule, "no-unknown-subcommand");
-        assert!(v[0].message.contains("`location`"), "{}", v[0].message);
-        assert!(v[0].message.contains("`unit`"), "{}", v[0].message);
-    }
-
-    #[test]
-    fn unknown_subcommands_flags_a_removed_top_level_command() {
-        let v = unknown_subcommands(
-            &[inv(1, &["unit-location", "--lang", "python", "src"])],
-            &crate::command(),
-        );
-        assert_eq!(v.len(), 1);
-        let m = &v[0].message;
-        assert!(m.contains("`unit-location`"), "{m}");
-        assert!(m.contains("`testing-conventions`"), "{m}");
-    }
-
-    #[test]
     fn a_short_flag_consumes_its_value() {
         let root = clap::Command::new("tc").arg(
             clap::Arg::new("config")

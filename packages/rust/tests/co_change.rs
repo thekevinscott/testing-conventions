@@ -98,12 +98,15 @@ fn run_co_change(
         "--base".into(),
         base.into(),
     ];
-    if let Some(name) = config {
-        argv.push("--config".into());
-        argv.push(repo.0.join(name).into_os_string());
-    }
+    argv.push("--config".into());
+    argv.push(repo.0.join(config.unwrap_or(NO_CONFIG)).into_os_string());
     run(argv)
 }
+
+/// A config name no test writes, so `--config` resolves to an absent file. Omitting the flag
+/// would instead take its working-directory-relative default, which under `cargo test` is this
+/// crate's own `testing-conventions.toml`.
+const NO_CONFIG: &str = "no-such-testing-conventions.toml";
 
 /// Result of `unit colocated-test <repo> --language <lang>` with no `--base` — the
 /// presence-only scope.
@@ -115,6 +118,8 @@ fn run_colocated_presence(repo: &TempRepo, language: &str) -> anyhow::Result<i32
         repo.0.clone().into_os_string(),
         "--language".into(),
         language.into(),
+        "--config".into(),
+        repo.0.join(NO_CONFIG).into_os_string(),
     ])
 }
 

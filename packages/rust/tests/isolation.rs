@@ -10,7 +10,9 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Exit code of `unit lint --language rust <fixture>`.
+/// Exit code of `unit lint --language rust <fixture>`. `--config` names the fixture's own
+/// file — usually absent, meaning nothing is exempt — so that `--config`'s CWD-relative
+/// default cannot pull this crate's config in over a fixture tree.
 fn iso_exit(fixture_name: &str) -> i32 {
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),
@@ -18,6 +20,10 @@ fn iso_exit(fixture_name: &str) -> i32 {
         "lint".into(),
         "--language".into(),
         "rust".into(),
+        "--config".into(),
+        fixture(fixture_name)
+            .join("testing-conventions.toml")
+            .into_os_string(),
         fixture(fixture_name).into_os_string(),
     ];
     run(argv).expect("a readable tree should not error")
@@ -244,4 +250,19 @@ fn local_build_crate_neither_aborts_nor_false_flags() {
 #[test]
 fn local_build_crate_exits_zero() {
     assert_eq!(iso_exit("unit/local_build"), 0);
+}
+
+#[test]
+fn this_crate_has_no_out_of_module_command_reaches() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let reaches: Vec<_> = find_violations(&root)
+        .unwrap()
+        .into_iter()
+        .filter(|v| v.message.contains("crate::command"))
+        .collect();
+    assert!(
+        reaches.is_empty(),
+        "tests/workflow.rs covers the real command tree, so no inline test needs to \
+         build one; got {reaches:?}"
+    );
 }

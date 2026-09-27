@@ -33,10 +33,11 @@ duplicates that against the same tree, so the two inline cases are gone rather t
 **This crate's own `testing-conventions.toml`** exempts `src/mutation.rs` from the two
 out-of-module rules: the provisioning lock's test spawns real threads and sleeps inside the
 critical section because concurrency is what it proves. Two consequences of the mechanism are
-worth knowing before adding an entry. The scan path has to be the crate root — `external_deps`
-reads `Cargo.toml` there, and scanning `src` instead silently stops flagging every
-external-crate reach — and exempt paths are relative to that scan path. And a lint rule takes
-whole-file entries only; `lines` is accepted for `coverage` and `mutation` alone.
+worth knowing before adding an entry. Exempt paths are relative to the **crate root** — the
+nearest ancestor holding `Cargo.toml`, which is also where `external_deps` reads the dependency
+set — so `src/mutation.rs` resolves whether the gate is pointed at `packages/rust` or at
+`packages/rust/src`. And a lint rule takes whole-file entries only; `lines` is accepted for
+`coverage` and `mutation` alone.
 
 Shipping that file changed what "no config" means for the suite. `--config` defaults to
 `testing-conventions.toml` relative to the working directory, which under `cargo test` is this

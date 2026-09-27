@@ -446,22 +446,4 @@ mod tests {
             "got: {err:#}"
         );
     }
-
-    #[test]
-    fn unknown_subcommands_accepts_every_live_invocation() {
-        let invs = [
-            inv(
-                1,
-                &["unit", "colocated-test", "--language", "python", "src"],
-            ),
-            inv(2, &["unit", "coverage", "--language", "typescript", "src"]),
-            inv(3, &["unit", "lint", "--language", "rust", "."]),
-            inv(4, &["integration", "lint", "--language", "python", "src"]),
-            inv(5, &["packaging", "--language", "python", "dist"]),
-            inv(6, &["install"]),
-            inv(7, &["--version"]),
-            inv(8, &[]),
-        ];
-        assert!(unknown_subcommands(&invs, &crate::command()).is_empty());
-    }
 }

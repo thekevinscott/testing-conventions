@@ -72,6 +72,14 @@ Flag a call expression `A::B::…::f(args)` by its **leading segment `A`**:
 | an external crate name (from `Cargo.toml`) | **flag** | an un-doubled external dep |
 | effectful `std`/`core`/`alloc` path (see below) | **flag** | filesystem / clock / net / env / process |
 
+Exact pure call paths override the external-crate and `std::process` rows:
+`clap::{Command,Arg,Error}::new`, `syn::{parse_str,parse_file}`,
+`toml::from_str`, `zip::ZipWriter::new`,
+`zip::write::SimpleFileOptions::default`,
+`flate2::write::GzEncoder::new`, `flate2::Compression::default`,
+`tar::Builder::new`, `tar::Header::new_gnu`, and
+`std::process::ExitStatus::from_raw`. Other calls under those roots stay flagged.
+
 Macros (`assert_eq!`, `vec!`, `format!`, `println!`, …) are **not** analyzed — they
 are the test's assertion vocabulary, and a macro is a different AST node
 (`Macro`, not `ExprCall`). A macro hiding an effectful call is a
@@ -91,6 +99,10 @@ Flag a `use` inside the test module whose **path root** is not `super` / `self`:
 - `use std::…;` — flag **only if effectful** (below); `use std::collections::HashMap;`
   is allowed.
 
+Exact named value imports `clap::error::ErrorKind` and
+`std::os::unix::process::ExitStatusExt` are allowed. A glob at either root is
+flagged. Call and import allowlists are independent.
+
 ### Effectful-`std` policy
 
 `std` is effectful only in these subtrees — everything else (`collections`, `cmp`,
@@ -98,8 +110,9 @@ Flag a `use` inside the test module whose **path root** is not `super` / `self`:
 
 | Flagged (effectful) | Allowed (pure) |
 | --- | --- |
-| `std::net`, `std::process`, `std::thread`, `std::os` | `std::collections`, `std::fmt`, `std::ops`, `std::convert`, … |
+| `std::net`, `std::thread`, `std::os` | `std::collections`, `std::fmt`, `std::ops`, `std::convert`, … |
 | `std::env` (`var`, `set_var`, `args`, …) | `std::fs`, `std::env::temp_dir` |
+| `std::process` (`Command`, `exit`, `abort`, …) | `std::process::id` |
 | `std::time::SystemTime::now`, `std::time::Instant::now` (clock) | `std::time::Duration` |
 | `std::io::{stdin,stdout,stderr}` (real handles) | `std::io::Cursor` + the `Read`/`Write`/`BufRead`/`Seek` **traits** |
 
@@ -118,7 +131,10 @@ file reaches a module-private function directly, so filesystem work moves to the
 integration tier and stays flagged in the unit tier. `std::env` does **not** ride
 along: `var` reads ambient state the test never created, which is the collaborator the
 rule exists to catch. `temp_dir` is the exception inside the exception — it only names
-a writable directory, so it is matched by its last segment and allowed. "Randomness" (README) has no general std RNG;
+a writable directory, so it is matched by its last segment and allowed. `std::process::id` is
+the other half of that same naming idiom (`temp_dir().join(format!("…-{}", process::id()))`):
+it returns the runner's own PID, so there is nothing ambient to read and nothing to double,
+while the rest of `process` spawns, controls, or terminates. "Randomness" (README) has no general std RNG;
 it's the `rand` crate, caught by the external-crate branch of D1.
 
 ## Integration detection
@@ -205,9 +221,23 @@ Deliberately **not** caught by the `syn` heuristic — left to review / a future
   its source path and flags it there, and the aliased call site reads to D1 as a bare path.
 - A **trait method** whose impl lives out of module (method-call syntax carries no
   resolvable path).
-- An effectful call **hidden in a macro** (`println!`, a custom `macro_rules!`).
+- A reach that only exists **after macro expansion** — a `macro_rules!` body that emits
+  `crate::other::load()` at each call site. The tokens a `macro_rules!` definition holds are a
+  template, not a call, and resolving what it expands to is the `dylint` upgrade. (A reach
+  *written* in the invocation's own token body — `assert!(crate::other::load())` — **is**
+  caught; see below.)
 - The fuzzier integration doubles (`mock!` / `#[automock]` bodies) beyond the
   `#[double] use` signal.
+
+**What macro token bodies do cost.** `assert!`, `assert_eq!`, `vec!`, `write!` and their kin
+pass their arguments through, so what is written in the invocation is what runs. The visitor
+re-parses an invocation's tokens — as items first, then as comma-separated expressions — and
+walks the result, which makes `assert!(crate::other::load())` read exactly like the bare call.
+A body that parses as neither is left alone, so an unreadable macro under-reports rather than
+guessing. `quote!`, `quote_spanned!` and `macro_rules!` are skipped by name: their bodies are
+templates for code emitted elsewhere, and reading them as executed here is a false positive. A
+code-generating macro under some other name is the remaining exposure, and is the reason the
+parse is best-effort rather than an error.
 
 D2's specific-import flagging closes the most common of these (named foreign import +
 unqualified use); the rest are the documented `dylint` upgrade.

@@ -59,6 +59,15 @@ jobs:
       source: packages/node/src
       gates: '["colocated-test"]'
 
+  unit-lint-rust:
+    name: Unit lint (packages/rust/src)
+    needs: [build-cli]
+    uses: ./.github/workflows/testing-conventions.yml
+    with:
+      version: ${{ inputs.version }}
+      source: packages/rust/src
+      gates: '["unit-lint"]'
+
   unit-lint:
     name: Unit lint (packages/node/src)
     needs: [build-cli]

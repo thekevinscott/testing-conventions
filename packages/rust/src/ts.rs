@@ -10,7 +10,8 @@ use oxc::allocator::Allocator;
 use oxc::ast::ast::{
     Argument, ArrowFunctionExpression, CallExpression, ConditionalExpression, DoWhileStatement,
     Expression, ForInStatement, ForOfStatement, ForStatement, Function, IfStatement,
-    ImportDeclaration, ImportOrExportKind, SwitchStatement, TryStatement, WhileStatement,
+    ImportDeclaration, ImportDeclarationSpecifier, ImportOrExportKind, SwitchStatement,
+    TryStatement, WhileStatement,
 };
 use oxc::ast_visit::{walk, Visit};
 use oxc::parser::Parser;
@@ -209,9 +210,10 @@ fn unit_violations_in(file: &Path, source: &str) -> Result<Vec<Violation>> {
         .map(|m| strip_module_ext(m))
         .collect();
     let mut violations = Vec::new();
-    for (spec, line) in &collector.imports {
+    for (spec, line, pure) in &collector.imports {
         if is_unit_under_test(spec, &unit)
             || is_test_runner(spec)
+            || *pure
             || mocked_modules.contains(strip_module_ext(spec))
         {
             continue;
@@ -245,7 +247,7 @@ fn unit_violations_in(file: &Path, source: &str) -> Result<Vec<Violation>> {
 /// Collects a unit test's imports, `vi.mock()` targets, and untyped factories in one pass.
 struct UnitCollector<'s> {
     source: &'s str,
-    imports: Vec<(String, usize)>,
+    imports: Vec<(String, usize, bool)>,
     mocked: BTreeSet<String>,
     untyped: Vec<(String, usize)>,
 }
@@ -259,6 +261,7 @@ impl<'a> Visit<'a> for UnitCollector<'_> {
         self.imports.push((
             decl.source.value.to_string(),
             line_of(self.source, decl.span.start),
+            is_pure_named_import(decl),
         ));
     }
 
@@ -274,6 +277,32 @@ impl<'a> Visit<'a> for UnitCollector<'_> {
         }
         walk::walk_call_expression(self, call);
     }
+}
+
+fn is_pure_named_import(decl: &ImportDeclaration<'_>) -> bool {
+    let Some(specifiers) = decl.specifiers.as_ref() else {
+        return false;
+    };
+    !specifiers.is_empty()
+        && specifiers.iter().all(|specifier| match specifier {
+            ImportDeclarationSpecifier::ImportSpecifier(named) => {
+                if matches!(named.import_kind, ImportOrExportKind::Type) {
+                    return true;
+                }
+                let name = named.imported.name();
+                match decl.source.value.as_str() {
+                    "json5" | "yaml" => name == "parse",
+                    "node:path" | "path" => {
+                        matches!(
+                            name.as_str(),
+                            "basename" | "dirname" | "extname" | "join" | "normalize"
+                        )
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        })
 }
 
 /// The unit-under-test specifier for a test file: `pkg/widget.test.ts` → `./widget`.

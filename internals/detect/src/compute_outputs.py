@@ -11,9 +11,10 @@ from derive_packaging import derive_packaging
 from derive_packaging_root import derive_packaging_root
 from e2e_scope_flags import derive_e2e_exclude, derive_e2e_extra_scope
 from eligible import eligible
-from file_presence import has_rust_crate, has_source
+from file_presence import has_source
 from has_attestation import has_attestation
 from has_dist import has_dist
+from has_rust_crate import has_rust_crate
 from hermetic import HERMETIC_CLI_COMMAND, HERMETIC_TS_ADAPTER_ARGS, hermetic
 from primary_language import primary_language
 from provision_rust import provision_rust
@@ -45,10 +46,10 @@ def compute_outputs(
         for language in ("python", "typescript")
         if eligible(languages_input, language) and has_source(root, language)
     ]
-    rust_crate = eligible(languages_input, "rust") and has_rust_crate(root)
-    with_rust = present + (["rust"] if rust_crate else [])
     repo = Path(repo_root)
     package_root = derive_package_root(root, repo)
+    rust_crate = eligible(languages_input, "rust") and has_rust_crate(root, package_root)
+    with_rust = present + (["rust"] if rust_crate else [])
     try:
         package_root_rel = package_root.relative_to(repo.resolve())
     except ValueError:

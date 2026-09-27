@@ -32,6 +32,11 @@ fn clean_exits_zero() {
 }
 
 #[test]
+fn pure_construction_exits_zero() {
+    assert_eq!(iso_exit("unit/pure"), 0);
+}
+
+#[test]
 fn cfg_not_test_exits_zero() {
     assert_eq!(iso_exit("unit/cfg_not_test"), 0);
 }

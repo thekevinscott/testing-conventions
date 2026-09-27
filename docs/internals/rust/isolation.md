@@ -72,6 +72,14 @@ Flag a call expression `A::B::…::f(args)` by its **leading segment `A`**:
 | an external crate name (from `Cargo.toml`) | **flag** | an un-doubled external dep |
 | effectful `std`/`core`/`alloc` path (see below) | **flag** | filesystem / clock / net / env / process |
 
+Exact pure call paths override the external-crate and `std::process` rows:
+`clap::{Command,Arg,Error}::new`, `syn::{parse_str,parse_file}`,
+`toml::from_str`, `zip::ZipWriter::new`,
+`zip::write::SimpleFileOptions::default`,
+`flate2::write::GzEncoder::new`, `flate2::Compression::default`,
+`tar::Builder::new`, `tar::Header::new_gnu`, and
+`std::process::ExitStatus::from_raw`. Other calls under those roots stay flagged.
+
 Macros (`assert_eq!`, `vec!`, `format!`, `println!`, …) are **not** analyzed — they
 are the test's assertion vocabulary, and a macro is a different AST node
 (`Macro`, not `ExprCall`). A macro hiding an effectful call is a
@@ -90,6 +98,10 @@ Flag a `use` inside the test module whose **path root** is not `super` / `self`:
   site has no path prefix). Same `super`-only carve-out applies.
 - `use std::…;` — flag **only if effectful** (below); `use std::collections::HashMap;`
   is allowed.
+
+Exact named value imports `clap::error::ErrorKind` and
+`std::os::unix::process::ExitStatusExt` are allowed. A glob at either root is
+flagged. Call and import allowlists are independent.
 
 ### Effectful-`std` policy
 

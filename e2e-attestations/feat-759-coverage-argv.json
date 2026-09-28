@@ -1,0 +1,7 @@
+{
+  "command": "cd packages/rust && cargo test --test coverage_rust --test coverage_rust_e2e",
+  "ran_at": 1790588737,
+  "exit_code": 0,
+  "commit": "56040ee7f87b2c227e7e885f9f3d17fb87f64012",
+  "branch": "feat/759-coverage-argv"
+}

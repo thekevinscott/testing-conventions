@@ -757,12 +757,22 @@ properties hold the ratchet:
 `packages/python`, `internals/move-major-tag`, `internals/detect`, and `internals/checks` all sit
 at the default and carry no config for it — the ratchet's end state.
 
-`packages/rust` entered the ratchet at `max_lines = 76` (#735), which is the tightest threshold
-the crate passes today rather than a judgement about Rust: `run` in `lib.rs` is exactly 76 lines,
-so the entry point carries no headroom and the next line added to it has to be paid for with a
-split. The measured curve is steep at the bottom and flat at the top — 288 violations at `1`, 132
-at `10`, 20 at `30`, 3 at `50`, 1 from `65` through `75` — so the first step down is cheap and the
-last is not. #750 holds the step sequence.
+`packages/rust` entered the ratchet at `max_lines = 76` (#735) and sits at `64`. Each value is the
+tightest threshold the crate passes at that point rather than a judgement about Rust, so the
+package always carries zero headroom: at `76` it was `run` in `lib.rs`, at exactly 76 lines; at
+`64` it is `run_unit_mutation`, sharing `lib.rs` with `run` at exactly 64. The measured curve is
+steep at the bottom and flat at the top — 288 violations at `1`, 132 at `10`, 20 at `30`, 2 at
+`55`, 1 at `63` — so the first step down is cheap and the last is not. #750 holds the step
+sequence.
+
+The first step down, `76` → `64`, moved `run_unit_coverage` out of `lib.rs` into `unit_coverage.rs`
+as `run`. The `run_*` dispatchers in `lib.rs` are each a module's worth of work, so the ratchet's
+remaining steps through that file are the same move repeated. A move alone leaves the dispatcher's
+decisions unasserted, and the mutation gate says so: the three copies of the
+`--base` / line-exemption branch and the exit-code mapping survived. Both are now named functions —
+`scope` returns which measurement a run selects, once for all three languages, and `exit_code` maps
+an outcome — so the colocated test drives every decision the dispatcher makes, and what is left in
+`run` is the call into `coverage` or `patch_coverage`.
 
 ## The move-major-tag helper's package (`internals/move-major-tag`)
 

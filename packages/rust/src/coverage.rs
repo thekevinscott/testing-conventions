@@ -1011,13 +1011,8 @@ fn report_in(
     let mut command = Command::new("cargo");
     command
         .current_dir(root)
-        .arg("llvm-cov")
-        .arg("report")
-        .args(format)
+        .args(report_argv(format, ignore_filename_regex(root, ignore)))
         .env("CARGO_TARGET_DIR", &target.0);
-    if let Some(regex) = ignore_filename_regex(root, ignore) {
-        command.arg("--ignore-filename-regex").arg(regex);
-    }
     scrub_outer_llvm_cov(&mut command);
     let output = command
         .output()
@@ -1031,6 +1026,15 @@ fn report_in(
             root.display()
         ),
     )
+}
+
+fn report_argv(format: &[&str], ignore_regex: Option<String>) -> Vec<String> {
+    let mut argv = vec!["llvm-cov".to_string(), "report".to_string()];
+    argv.extend(format.iter().map(|arg| (*arg).to_string()));
+    if let Some(regex) = ignore_regex {
+        argv.extend(["--ignore-filename-regex".to_string(), regex]);
+    }
+    argv
 }
 
 /// An invocation's stdout, or `failure` carrying both of its streams when it exited non-zero.
@@ -1056,44 +1060,61 @@ fn run_in(
     let mut command = Command::new("cargo");
     command
         .current_dir(root)
-        .arg("llvm-cov")
-        // cargo-llvm-cov's default runs every test target, which lets the integration
-        // tier under `tests/` pad the number. `--bins` adds the binary targets' own
-        // `#[cfg(test)]` modules, which `colocated-test` requires but `--lib` never ran.
-        .arg("--lib")
-        .arg("--bins")
-        .args(format)
+        .args(run_argv(
+            format,
+            features,
+            branch,
+            ignore_filename_regex(root, ignore),
+        ))
         .env("CARGO_TARGET_DIR", &target.0);
-    if !features.is_empty() {
-        command.arg("--features").arg(features.join(","));
-    }
-    if branch {
-        // Instruments only on a nightly toolchain — the error below names that.
-        command.arg("--branch");
-    }
-    if let Some(regex) = ignore_filename_regex(root, ignore) {
-        command.arg("--ignore-filename-regex").arg(regex);
-    }
     scrub_outer_llvm_cov(&mut command);
     let output = command
         .output()
         .context("running `cargo llvm-cov` (is cargo-llvm-cov installed?)")?;
-    let hint = if branch {
-        "\n(the [rust].coverage `branch` floor runs with --branch, which requires a \
-         nightly toolchain — pin one in the crate's rust-toolchain.toml with \
-         llvm-tools-preview, or set a rustup directory override)"
-    } else {
-        ""
-    };
     llvm_cov_stdout(
         output.status.success(),
         &output.stdout,
         &output.stderr,
         &format!(
-            "the unit suite did not run cleanly under cargo llvm-cov in `{}`:{hint}",
-            root.display()
+            "the unit suite did not run cleanly under cargo llvm-cov in `{}`:{}",
+            root.display(),
+            branch_hint(branch)
         ),
     )
+}
+
+fn run_argv(
+    format: &[&str],
+    features: &[String],
+    branch: bool,
+    ignore_regex: Option<String>,
+) -> Vec<String> {
+    let mut argv = vec![
+        "llvm-cov".to_string(),
+        "--lib".to_string(),
+        "--bins".to_string(),
+    ];
+    argv.extend(format.iter().map(|arg| (*arg).to_string()));
+    if !features.is_empty() {
+        argv.extend(["--features".to_string(), features.join(",")]);
+    }
+    if branch {
+        argv.push("--branch".to_string());
+    }
+    if let Some(regex) = ignore_regex {
+        argv.extend(["--ignore-filename-regex".to_string(), regex]);
+    }
+    argv
+}
+
+fn branch_hint(branch: bool) -> &'static str {
+    if branch {
+        "\n(the [rust].coverage `branch` floor runs with --branch, which requires a \
+         nightly toolchain — pin one in the crate's rust-toolchain.toml with \
+         llvm-tools-preview, or set a rustup directory override)"
+    } else {
+        ""
+    }
 }
 
 /// Strip the outer run's instrumentation state from `command`.
@@ -1981,8 +2002,15 @@ mod tests {
                 Some("src/ignored\\.rs$".to_string()),
             ),
             [
-                "llvm-cov", "--lib", "--bins", "--json", "--features", "alpha,beta",
-                "--branch", "--ignore-filename-regex", "src/ignored\\.rs$",
+                "llvm-cov",
+                "--lib",
+                "--bins",
+                "--json",
+                "--features",
+                "alpha,beta",
+                "--branch",
+                "--ignore-filename-regex",
+                "src/ignored\\.rs$",
             ]
         );
         assert_eq!(
@@ -1995,9 +2023,18 @@ mod tests {
     fn rust_report_argv_carries_format_and_optional_ignore_regex() {
         assert_eq!(
             report_argv(&["--lcov"], Some("src/ignored\\.rs$".to_string())),
-            ["llvm-cov", "report", "--lcov", "--ignore-filename-regex", "src/ignored\\.rs$"]
+            [
+                "llvm-cov",
+                "report",
+                "--lcov",
+                "--ignore-filename-regex",
+                "src/ignored\\.rs$"
+            ]
         );
-        assert_eq!(report_argv(&["--json"], None), ["llvm-cov", "report", "--json"]);
+        assert_eq!(
+            report_argv(&["--json"], None),
+            ["llvm-cov", "report", "--json"]
+        );
     }
 
     #[test]
@@ -2010,12 +2047,23 @@ mod tests {
     fn scrub_removes_outer_llvm_cov_state_from_a_command() {
         let mut command = Command::new("cargo");
         for name in [
-            "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTDOCFLAGS",
-            "CARGO_ENCODED_RUSTDOCFLAGS", "LLVM_PROFILE_FILE", "CARGO_LLVM_COV",
-            "CARGO_LLVM_COV_SHOW_ENV", "CARGO_LLVM_COV_TARGET_DIR",
-            "CARGO_LLVM_COV_BUILD_DIR", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER",
-            "__CARGO_LLVM_COV_RUSTC_WRAPPER", "__CARGO_LLVM_COV_RUSTC_WRAPPER_RUSTFLAGS",
-            "__CARGO_LLVM_COV_RUSTC_WRAPPER_CRATE_NAMES", "RUSTUP_TOOLCHAIN", "CARGO", "RUSTC",
+            "RUSTFLAGS",
+            "CARGO_ENCODED_RUSTFLAGS",
+            "RUSTDOCFLAGS",
+            "CARGO_ENCODED_RUSTDOCFLAGS",
+            "LLVM_PROFILE_FILE",
+            "CARGO_LLVM_COV",
+            "CARGO_LLVM_COV_SHOW_ENV",
+            "CARGO_LLVM_COV_TARGET_DIR",
+            "CARGO_LLVM_COV_BUILD_DIR",
+            "RUSTC_WRAPPER",
+            "RUSTC_WORKSPACE_WRAPPER",
+            "__CARGO_LLVM_COV_RUSTC_WRAPPER",
+            "__CARGO_LLVM_COV_RUSTC_WRAPPER_RUSTFLAGS",
+            "__CARGO_LLVM_COV_RUSTC_WRAPPER_CRATE_NAMES",
+            "RUSTUP_TOOLCHAIN",
+            "CARGO",
+            "RUSTC",
         ] {
             command.env(name, "outer");
         }
@@ -2023,10 +2071,13 @@ mod tests {
         scrub_outer_llvm_cov(&mut command);
         let envs: Vec<_> = command.get_envs().collect();
         assert_eq!(envs.len(), 18);
-        assert!(envs.iter().all(|(name, value)| {
-            name == &"KEEP" || value.is_none()
-        }));
-        assert_eq!(envs.iter().find(|(name, _)| *name == "KEEP").unwrap().1, Some("value".as_ref()));
+        assert!(envs
+            .iter()
+            .all(|(name, value)| { name == &"KEEP" || value.is_none() }));
+        assert_eq!(
+            envs.iter().find(|(name, _)| *name == "KEEP").unwrap().1,
+            Some("value".as_ref())
+        );
     }
 
     #[test]

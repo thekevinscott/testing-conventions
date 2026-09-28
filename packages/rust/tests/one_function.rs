@@ -165,6 +165,32 @@ fn rust_clean_exits_zero() {
 }
 
 #[test]
+fn own_rust_source_passes_at_step_two_threshold() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let config = std::fs::read_to_string(root.join("testing-conventions.toml"))
+        .expect("the crate's config should be readable");
+    let configured: toml::Value = config.parse().expect("the crate's config should parse");
+    let threshold = configured["rust"]["one_function_per_file"]["max_lines"]
+        .as_integer()
+        .expect("the crate should set a threshold");
+    assert!(
+        threshold <= 50,
+        "step two lowers the threshold to at most 50"
+    );
+    let argv: Vec<OsString> = vec![
+        "testing-conventions".into(),
+        "unit".into(),
+        "one-function-per-file".into(),
+        "--language".into(),
+        "rust".into(),
+        "--config".into(),
+        root.join("testing-conventions.toml").into_os_string(),
+        root.join("src").into_os_string(),
+    ];
+    assert_eq!(run(argv).expect("the crate should be scannable"), 0);
+}
+
+#[test]
 fn rust_raised_is_unjudged_without_a_config() {
     assert_eq!(exit("rust", "rust/raised"), 0);
 }

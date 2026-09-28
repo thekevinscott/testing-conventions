@@ -12,10 +12,12 @@ pub mod mutation;
 pub mod one_function;
 pub mod packaging;
 pub mod patch_coverage;
+mod rust_patch_coverage;
 mod subprocess_seam;
 pub mod tiers;
 pub mod ts;
 mod unit_coverage;
+mod unit_mutation;
 pub mod violation;
 mod walk;
 pub mod workflow;
@@ -328,7 +330,7 @@ where
                 base,
                 config,
                 ts_adapter,
-            } => run_unit_mutation(
+            } => unit_mutation::run(
                 &path,
                 language,
                 base.as_deref(),
@@ -513,82 +515,6 @@ fn split_scopes(
         }
     }
     (whole_file, line_scoped)
-}
-
-/// Run the per-language mutation engine over `root` and fail on any surviving mutant
-/// not lifted by a `mutation` exemption. `base` scopes the run to the diff.
-fn run_unit_mutation(
-    root: &Path,
-    language: colocated_test::Language,
-    base: Option<&str>,
-    config_path: &Path,
-    ts_adapter: Option<&Path>,
-) -> anyhow::Result<i32> {
-    let config = if config_path.exists() {
-        config::load_config(config_path)?
-    } else {
-        config::Config::default()
-    };
-    let measurement = match language {
-        colocated_test::Language::Rust => {
-            let rust = config.rust.unwrap_or_default();
-            let scopes = config::resolve_exempt_scoped(root, &rust.exempt, config::Rule::Mutation)?;
-            let (exempt, exempt_lines) = split_scopes(scopes);
-            mutation::measure_rust(root, &exempt, &exempt_lines, base, &rust.features)?
-        }
-        colocated_test::Language::TypeScript => {
-            let typescript = config.typescript.unwrap_or_default();
-            let scopes =
-                config::resolve_exempt_scoped(root, &typescript.exempt, config::Rule::Mutation)?;
-            let (exempt, exempt_lines) = split_scopes(scopes);
-            let adapter = ts_adapter.ok_or_else(|| {
-                anyhow::anyhow!(
-                    "the TypeScript mutation adapter path is required: pass \
-                     `--ts-mutation-adapter <path>`. The npm `testing-conventions` CLI appends it \
-                     automatically — run the check through that CLI, not the raw binary."
-                )
-            })?;
-            mutation::measure_typescript(root, &exempt, &exempt_lines, base, adapter)?
-        }
-        colocated_test::Language::Python => {
-            let python = config.python.unwrap_or_default();
-            let scopes =
-                config::resolve_exempt_scoped(root, &python.exempt, config::Rule::Mutation)?;
-            let (exempt, exempt_lines) = split_scopes(scopes);
-            mutation::measure_python(root, &exempt, &exempt_lines, base)?
-        }
-    };
-    let (count, survivors) = match measurement {
-        mutation::Measurement::EngineNotRun => {
-            println!("unit mutation: no mutatable changed lines — engine not run");
-            return Ok(0);
-        }
-        mutation::Measurement::Tested { count, survivors } => (count, survivors),
-    };
-    if survivors.is_empty() {
-        if count == 0 {
-            println!("unit mutation: the engine found no mutants to test");
-        } else {
-            println!(
-                "unit mutation: no surviving mutants — every mutation was caught \
-                 ({count} mutant(s) tested)"
-            );
-        }
-        return Ok(0);
-    }
-
-    eprintln!(
-        "error: {} unexplained surviving mutant(s) — kill each with an assertion, or lift an \
-         equivalent/defensive one with a reason-required `[[<language>.exempt]] rules = [\"mutation\"]`:",
-        survivors.len()
-    );
-    for survivor in &survivors {
-        eprintln!(
-            "  {}:{}: {}",
-            survivor.file, survivor.line, survivor.description
-        );
-    }
-    Ok(1)
 }
 
 /// Run the one-function-per-file rule over `root`, printing each violation and returning

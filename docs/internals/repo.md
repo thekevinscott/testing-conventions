@@ -757,15 +757,16 @@ properties hold the ratchet:
 `packages/python`, `internals/move-major-tag`, `internals/detect`, and `internals/checks` all sit
 at the default and carry no config for it — the ratchet's end state.
 
-`packages/rust` entered the ratchet at `max_lines = 76` (#735) and sits at `64`. Each value is the
+`packages/rust` entered the ratchet at `max_lines = 76` (#735) and sits at `46`. Each value is the
 tightest threshold the crate passes at that point rather than a judgement about Rust, so the
 package always carries zero headroom: at `76` it was `run` in `lib.rs`, at exactly 76 lines; at
-`64` it is `run_unit_mutation`, sharing `lib.rs` with `run` at exactly 64. The measured curve is
+`64` it was `run_unit_mutation`, sharing `lib.rs` with `run` at exactly 64; at `46`, the next
+line down flags `run_unit_one_function` in `lib.rs`. The measured curve is
 steep at the bottom and flat at the top — 288 violations at `1`, 132 at `10`, 20 at `30`, 2 at
 `55`, 1 at `63` — so the first step down is cheap and the last is not. #750 holds the step
 sequence.
 
-The second step lowers the threshold to the tightest passing value at or below `50` by moving
+The second step lowers the threshold to `46`, the tightest passing value, by moving
 `run_unit_mutation` and the Rust patch coverage evaluator into their own modules. The first step
 down, `76` → `64`, moved `run_unit_coverage` out of `lib.rs` into `unit_coverage.rs`
 as `run`. The `run_*` dispatchers in `lib.rs` are each a module's worth of work, so the ratchet's

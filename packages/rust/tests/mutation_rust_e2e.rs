@@ -315,3 +315,27 @@ fn an_exempted_survivor_passes_the_gate() {
         0
     );
 }
+
+#[test]
+fn a_subprocess_seam_passes_the_gate() {
+    assert_eq!(unit_mutation_exit("subprocess_seam", None), 0);
+}
+
+#[test]
+fn a_spawner_that_also_decides_fails_the_gate() {
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "rust"])
+        .arg(fixtures().join("rust").join("subprocess_seam_argv"))
+        .output()
+        .expect("the built binary should run");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "the argv comparison is killable, so it still fails; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("replace > with"),
+        "the comparison picking an argument is reported; stderr: {stderr}"
+    );
+}

@@ -45,6 +45,19 @@ item-level and only covers a gate a test build genuinely cannot satisfy: `#[cfg(
 [binary entry point `colocated-test` documents](/reference/checks/colocated-test#a-rust-binary-s-entry-point)
 mutation-clean.
 
+In Rust, cargo-mutants' whole-body replacement is also dropped on a **subprocess seam**: a
+**branch-free** function that runs a `std::process::Command`, directly or through another function
+in the same file that does. Calling one spawns a process, so no unit test can observe that its body
+was replaced by `Ok(String::new())` — and the tiers that can, `tests/` and the e2e suite, are
+outside the unit-tier `--lib --bins` scoping. Nothing else is dropped: the mutant's genre must be
+cargo-mutants' `FnValue`, so a mutation *inside* a seam is still judged.
+
+Branch-free is the whole line. A body holding a decision — the comparison that picks an argument,
+the `if` that adds a flag — keeps every mutant it has, including the whole-body one, because the
+decision is assertable once it moves out: a pure function that returns the argv, and a seam that
+runs it. That is the shape the mutation adapter's own `install_argv` + `execute` pair already
+takes. The drop is for the irreducible last mile, not for everything that spawns.
+
 <!--@include: ../../explanation/mutation.md#engines-->
 
 ### Timeouts

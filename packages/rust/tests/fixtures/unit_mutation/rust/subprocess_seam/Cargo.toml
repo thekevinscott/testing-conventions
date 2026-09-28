@@ -1,0 +1,10 @@
+# Fixture crate `mut_subprocess_seam`: a function whose body spawns a process, beside the pure
+# verdict its caller asserts. A unit test cannot call the spawner without spawning, so nothing
+# at this tier can kill a mutant that replaces its whole body. `[workspace]` keeps it standalone
+# (not part of the repo's cargo workspace).
+[package]
+name = "mut_subprocess_seam"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

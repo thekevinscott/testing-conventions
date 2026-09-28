@@ -84,6 +84,31 @@ can't reach"* — and it ports cleanly across languages, where a score does not.
 what makes a binary gate tractable: whole-tree mutation is too slow to run, so the job runs on
 pull requests only, over the `<base>...HEAD` changed lines.
 
+## The last mile of a subprocess
+
+One survivor class is not a gap and not an equivalent mutant: the function that actually spawns.
+cargo-mutants replaces a whole function body with a plausible return value, so a wrapper around
+`cargo llvm-cov` yields `Ok(String::new())` — and no unit test can tell the difference, because
+calling the wrapper at all runs the subprocess. The tiers that would notice are `tests/` and the
+e2e suite, and the unit tier deliberately does not run them.
+
+The answer is not an exemption per wrapper. An exemption records a judgement, and a hundred copies
+of "this is a subprocess seam" records a missing rule. Nor is it "inject the `Command`" — that is
+the right move one level up, and it is what makes the argv assembly assertable, but injection
+bottoms out: something has to hold the `.output()` call. So the rule names that bottom. A
+**branch-free** function that runs a `Command`, directly or by delegating to one in the same file,
+has no unit-tier contract for its own body, and cargo-mutants' `FnValue` mutant on it is dropped.
+
+Branch-free is what keeps this from swallowing real gaps. A body that decides *and* spawns keeps
+every mutant, so the pressure to split it stays: move the decision into a function that returns the
+argv, assert that, and what is left delegates and qualifies. The gate rewards the split rather than
+waiving the function.
+
+This is Rust-only, and deliberately. It keys on a cargo-mutants genre; Stryker and cosmic-ray
+produce their own mutators over these wrappers, and whether the same argument holds for each is a
+question about that engine's operator set, not about the language. A TypeScript or Python wrapper
+that hits the equivalent still takes a line-scoped exemption.
+
 ## A pass names its evidence
 
 The check has three green outcomes, and they are different facts — so the run reports which one

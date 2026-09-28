@@ -936,6 +936,12 @@ would leave the gate nominally wired and actually off. A survivor that another t
 takes a line-scoped `[[rust.exempt]] rules = ["mutation"]` naming that test. Where that reason
 repeats verbatim it is a missing rule rather than a judgement — #752 holds the shape.
 
+The Rust coverage runner keeps cargo argument selection in pure `run_argv` and `report_argv`
+functions. Colocated tests assert the features, branch instrumentation, export format, and ignore
+regex arguments, plus the branch-toolchain failure hint. The `run_in` and `report_in` functions
+then build and execute the command as branch-free subprocess seams. A separate colocated test
+checks that `scrub_outer_llvm_cov` removes inherited instrumentation variables from the command.
+
 ## Python CI: build the wheel once
 
 `python.yml`'s `build` job used to run `maturin build --release` across the full `3.9`–`3.13`

@@ -57,14 +57,7 @@ fn exit_code(measurement: mutation::Measurement) -> i32 {
         mutation::Measurement::Tested { count, survivors } => (count, survivors),
     };
     if survivors.is_empty() {
-        if count == 0 {
-            println!("unit mutation: the engine found no mutants to test");
-        } else {
-            println!(
-                "unit mutation: no surviving mutants — every mutation was caught \
-                 ({count} mutant(s) tested)"
-            );
-        }
+        println!("{}", clean_message(count));
         return 0;
     }
 
@@ -80,6 +73,14 @@ fn exit_code(measurement: mutation::Measurement) -> i32 {
         );
     }
     1
+}
+
+fn clean_message(count: usize) -> String {
+    if count == 0 {
+        "unit mutation: the engine found no mutants to test".to_string()
+    } else {
+        format!("unit mutation: no surviving mutants — every mutation was caught ({count} mutant(s) tested)")
+    }
 }
 
 #[cfg(test)]
@@ -98,6 +99,18 @@ mod tests {
                 0
             );
         }
+    }
+
+    #[test]
+    fn clean_results_name_whether_mutants_were_tested() {
+        assert_eq!(
+            clean_message(0),
+            "unit mutation: the engine found no mutants to test"
+        );
+        assert_eq!(
+            clean_message(3),
+            "unit mutation: no surviving mutants — every mutation was caught (3 mutant(s) tested)"
+        );
     }
 
     #[test]

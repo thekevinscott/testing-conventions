@@ -54,16 +54,15 @@ pub(crate) fn evaluate_patch_rust(
     };
     // `regions` is opt-in: skip the region check unless a config set a floor,
     // matching the whole-tree `coverage::evaluate_rust`.
-    let mut checks: Vec<(&str, f64, u8)> = Vec::new();
+    let mut checks: Vec<(&str, u64, u64, u8)> = Vec::new();
     if let Some(regions) = thresholds.regions {
-        checks.push(("regions", pct(r_cov, r_tot), regions));
+        checks.push(("regions", r_cov, r_tot, regions));
     }
-    checks.push(("lines", pct(l_cov, l_tot), thresholds.lines));
+    checks.push(("lines", l_cov, l_tot, thresholds.lines));
     let mut shortfalls = Vec::new();
-    for (name, actual, required) in checks {
-        // A hair of tolerance so a percent that rounds to the floor isn't failed by
-        // float noise (matches the whole-tree `coverage::evaluate_rust`).
-        if actual + 1e-9 < f64::from(required) {
+    for (name, covered, total, required) in checks {
+        if u128::from(covered) * 100 < u128::from(total) * u128::from(required) {
+            let actual = pct(covered, total);
             shortfalls.push(format!("{name} {actual:.2}% < {required}%"));
         }
     }
@@ -151,6 +150,30 @@ mod tests {
         };
         assert_eq!(
             evaluate_patch_rust(&changed(&[("w.rs", &[1, 2, 3, 4])]), &detail, floor_70),
+            Outcome::Pass
+        );
+    }
+
+    #[test]
+    fn rust_patch_passes_at_the_exact_floor() {
+        let detail = rust_detail(&[(
+            "w.rs",
+            RustPatchCoverage {
+                regions: vec![
+                    (1, 1, true),
+                    (2, 2, true),
+                    (3, 3, true),
+                    (4, 4, true),
+                    (5, 5, false),
+                ],
+            },
+        )]);
+        assert_eq!(
+            evaluate_patch_rust(
+                &changed(&[("w.rs", &[1, 2, 3, 4, 5])]),
+                &detail,
+                RUST_FLOOR_80
+            ),
             Outcome::Pass
         );
     }

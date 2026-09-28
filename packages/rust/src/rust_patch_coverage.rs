@@ -45,13 +45,6 @@ pub(crate) fn evaluate_patch_rust(
         }
     }
 
-    let pct = |covered: u64, total: u64| {
-        if total == 0 {
-            100.0
-        } else {
-            100.0 * covered as f64 / total as f64
-        }
-    };
     // `regions` is opt-in: skip the region check unless a config set a floor,
     // matching the whole-tree `coverage::evaluate_rust`.
     let mut checks: Vec<(&str, u64, u64, u8)> = Vec::new();
@@ -62,7 +55,7 @@ pub(crate) fn evaluate_patch_rust(
     let mut shortfalls = Vec::new();
     for (name, covered, total, required) in checks {
         if u128::from(covered) * 100 < u128::from(total) * u128::from(required) {
-            let actual = pct(covered, total);
+            let actual = 100.0 * covered as f64 / total as f64;
             shortfalls.push(format!("{name} {actual:.2}% < {required}%"));
         }
     }

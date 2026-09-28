@@ -761,10 +761,9 @@ at the default and carry no config for it — the ratchet's end state.
 tightest threshold the crate passes at that point rather than a judgement about Rust, so the
 package always carries zero headroom: at `76` it was `run` in `lib.rs`, at exactly 76 lines; at
 `64` it was `run_unit_mutation`, sharing `lib.rs` with `run` at exactly 64; at `46`, the next
-line down flags `run_unit_one_function` in `lib.rs`. The measured curve is
-steep at the bottom and flat at the top — 288 violations at `1`, 132 at `10`, 20 at `30`, 2 at
-`55`, 1 at `63` — so the first step down is cheap and the last is not. #750 holds the step
-sequence.
+line down flags `run_unit_one_function` in `lib.rs`. Before the second split, a scan at `50`
+flagged two functions; after it, `46` passes and `45` flags one. #750 holds the remaining
+step sequence.
 
 The second step lowers the threshold to `46`, the tightest passing value, by moving
 `run_unit_mutation` and the Rust patch coverage evaluator into their own modules. The first step

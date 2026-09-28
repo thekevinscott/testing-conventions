@@ -1972,6 +1972,64 @@ mod tests {
     }
 
     #[test]
+    fn rust_run_argv_carries_format_features_branch_and_ignore_regex() {
+        assert_eq!(
+            run_argv(
+                &["--json"],
+                &["alpha".to_string(), "beta".to_string()],
+                true,
+                Some("src/ignored\\.rs$".to_string()),
+            ),
+            [
+                "llvm-cov", "--lib", "--bins", "--json", "--features", "alpha,beta",
+                "--branch", "--ignore-filename-regex", "src/ignored\\.rs$",
+            ]
+        );
+        assert_eq!(
+            run_argv(&["--lcov"], &[], false, None),
+            ["llvm-cov", "--lib", "--bins", "--lcov"]
+        );
+    }
+
+    #[test]
+    fn rust_report_argv_carries_format_and_optional_ignore_regex() {
+        assert_eq!(
+            report_argv(&["--lcov"], Some("src/ignored\\.rs$".to_string())),
+            ["llvm-cov", "report", "--lcov", "--ignore-filename-regex", "src/ignored\\.rs$"]
+        );
+        assert_eq!(report_argv(&["--json"], None), ["llvm-cov", "report", "--json"]);
+    }
+
+    #[test]
+    fn branch_hint_names_the_nightly_requirement_only_for_branch_coverage() {
+        assert_eq!(branch_hint(false), "");
+        assert!(branch_hint(true).contains("requires a nightly toolchain"));
+    }
+
+    #[test]
+    fn scrub_removes_outer_llvm_cov_state_from_a_command() {
+        let mut command = Command::new("cargo");
+        for name in [
+            "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTDOCFLAGS",
+            "CARGO_ENCODED_RUSTDOCFLAGS", "LLVM_PROFILE_FILE", "CARGO_LLVM_COV",
+            "CARGO_LLVM_COV_SHOW_ENV", "CARGO_LLVM_COV_TARGET_DIR",
+            "CARGO_LLVM_COV_BUILD_DIR", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER",
+            "__CARGO_LLVM_COV_RUSTC_WRAPPER", "__CARGO_LLVM_COV_RUSTC_WRAPPER_RUSTFLAGS",
+            "__CARGO_LLVM_COV_RUSTC_WRAPPER_CRATE_NAMES", "RUSTUP_TOOLCHAIN", "CARGO", "RUSTC",
+        ] {
+            command.env(name, "outer");
+        }
+        command.env("KEEP", "value");
+        scrub_outer_llvm_cov(&mut command);
+        let envs: Vec<_> = command.get_envs().collect();
+        assert_eq!(envs.len(), 18);
+        assert!(envs.iter().all(|(name, value)| {
+            name == &"KEEP" || value.is_none()
+        }));
+        assert_eq!(envs.iter().find(|(name, _)| *name == "KEEP").unwrap().1, Some("value".as_ref()));
+    }
+
+    #[test]
     fn rust_ignore_regex_anchors_each_exempt_path_to_its_full_path() {
         // `/repo` doesn't exist, so `canonicalize` falls back to the plain join.
         let exempt = vec!["src/shim.rs".to_string(), "src/gen.rs".to_string()];

@@ -286,6 +286,82 @@ fn probe(flag: Option<&str>) -> bool {
     }
 
     #[test]
+    fn a_for_loop_is_a_branch() {
+        let source = "\
+fn probe(args: &[String]) -> bool {
+    let mut command = Command::new(\"true\");
+    for arg in args {
+        command.arg(arg);
+    }
+    command.output().is_ok()
+}
+";
+        assert_eq!(subprocess_seam_lines(source), BTreeSet::new());
+    }
+
+    #[test]
+    fn a_while_loop_is_a_branch() {
+        let source = "\
+fn probe(mut args: Vec<String>) -> bool {
+    let mut command = Command::new(\"true\");
+    while let Some(arg) = args.pop() {
+        command.arg(arg);
+    }
+    command.output().is_ok()
+}
+";
+        assert_eq!(subprocess_seam_lines(source), BTreeSet::new());
+    }
+
+    #[test]
+    fn a_loop_is_a_branch() {
+        let source = "\
+fn probe() -> bool {
+    loop {
+        break;
+    }
+    Command::new(\"true\").output().is_ok()
+}
+";
+        assert_eq!(subprocess_seam_lines(source), BTreeSet::new());
+    }
+
+    #[test]
+    fn a_closure_is_a_branch() {
+        let source = "\
+fn probe(args: &[String]) -> bool {
+    let mut command = Command::new(\"true\");
+    args.iter().for_each(|arg| {
+        command.arg(arg);
+    });
+    command.output().is_ok()
+}
+";
+        assert_eq!(subprocess_seam_lines(source), BTreeSet::new());
+    }
+
+    #[test]
+    fn a_try_block_is_a_branch() {
+        let source = "\
+fn probe() -> bool {
+    let attempted: Result<(), ()> = try { () };
+    attempted.is_ok() && Command::new(\"true\").output().is_ok()
+}
+";
+        assert_eq!(subprocess_seam_lines(source), BTreeSet::new());
+    }
+
+    #[test]
+    fn output_on_something_other_than_a_command_is_not_a_seam() {
+        let source = "\
+fn probe(runner: &mut Runner) -> bool {
+    runner.output().is_ok()
+}
+";
+        assert_eq!(subprocess_seam_lines(source), BTreeSet::new());
+    }
+
+    #[test]
     fn a_body_that_runs_no_command_is_not_a_seam() {
         let source = "\
 fn verdict(ok: bool) -> &'static str {

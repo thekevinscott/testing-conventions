@@ -74,6 +74,15 @@ fn is_subprocess_seam(base: &Path, mutant: &MutantInfo) -> bool {
     crate::subprocess_seam::subprocess_seam_lines(&source).contains(&mutant.span.start.line)
 }
 
+/// `true` when `mutant` faces the unit tier's judgment. Three shapes do not: a mutant in a
+/// declaration-only module, one inside an item the test build never compiles, and a whole-body
+/// replacement in a subprocess seam.
+fn is_judged(base: &Path, mutant: &MutantInfo) -> bool {
+    !is_declaration_only(base, &mutant.file, Language::Rust)
+        && !is_hidden_from_tests(base, &mutant.file, mutant.span.start.line)
+        && !is_subprocess_seam(base, mutant)
+}
+
 /// A cargo-mutants `outcomes.json` export, pared to what the rule reads. Unmodeled
 /// fields (`total_mutants`, `caught`, timings, …) are ignored.
 #[derive(Debug, Clone, Deserialize)]
@@ -435,15 +444,7 @@ pub fn measure_rust(
                 let listed: Vec<MutantInfo> =
                     list_cargo_mutants(&engine, root, features, |command| command.output())?
                         .into_iter()
-                        .filter(|mutant| {
-                            !is_declaration_only(&workspace_root, &mutant.file, Language::Rust)
-                                && !is_hidden_from_tests(
-                                    &workspace_root,
-                                    &mutant.file,
-                                    mutant.span.start.line,
-                                )
-                                && !is_subprocess_seam(&workspace_root, mutant)
-                        })
+                        .filter(|mutant| is_judged(&workspace_root, mutant))
                         .collect();
                 zero_mutant_verdict(&listed, diff, &run)?;
             }
@@ -456,11 +457,7 @@ pub fn measure_rust(
     let mut report = rebase_report_paths(parse_mutants_report(&json)?, prefix.as_deref());
     report.outcomes.retain(|outcome| match &outcome.scenario {
         Scenario::Baseline => true,
-        Scenario::Mutant(mutant) => {
-            !is_declaration_only(root, &mutant.file, Language::Rust)
-                && !is_hidden_from_tests(root, &mutant.file, mutant.span.start.line)
-                && !is_subprocess_seam(root, mutant)
-        }
+        Scenario::Mutant(mutant) => is_judged(root, mutant),
     });
     let survivors = evaluate_scoped(
         cargo_mutants_survivors(&report),
@@ -1631,6 +1628,78 @@ diff --git a/src/lib.rs b/src/lib.rs
     fn is_declaration_only_is_false_for_an_unreadable_file() {
         let dir = unique_tmp();
         assert!(!is_declaration_only(&dir, "missing.rs", Language::Rust));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn mutant_at(file: &str, line: u32, genre: &str) -> MutantInfo {
+        MutantInfo {
+            file: file.to_string(),
+            span: Span {
+                start: LineCol { line },
+                end: LineCol { line },
+            },
+            name: format!("a mutant at {file}:{line}"),
+            genre: genre.to_string(),
+        }
+    }
+
+    #[test]
+    fn is_judged_is_true_for_an_ordinary_mutant() {
+        let dir = unique_tmp();
+        std::fs::write(
+            dir.join("add.rs"),
+            "pub fn add(a: u64) -> u64 {\n    a + 1\n}\n",
+        )
+        .unwrap();
+        assert!(is_judged(&dir, &mutant_at("add.rs", 2, "FnValue")));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn is_judged_is_false_in_a_declaration_only_module() {
+        let dir = unique_tmp();
+        std::fs::write(
+            dir.join("settings.rs"),
+            "pub const TIMEOUT: u64 = 30 * 60;\n",
+        )
+        .unwrap();
+        assert!(!is_judged(&dir, &mutant_at("settings.rs", 1, "FnValue")));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn is_judged_is_false_inside_an_item_the_test_build_skips() {
+        let dir = unique_tmp();
+        std::fs::write(
+            dir.join("entrypoint.rs"),
+            "#[cfg(not(test))]\npub fn main() -> u8 {\n    1\n}\n",
+        )
+        .unwrap();
+        assert!(!is_judged(&dir, &mutant_at("entrypoint.rs", 3, "FnValue")));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn is_judged_is_false_for_a_whole_body_replacement_in_a_seam() {
+        let dir = unique_tmp();
+        std::fs::write(
+            dir.join("probe.rs"),
+            "pub fn probe() -> bool {\n    Command::new(\"true\").output().is_ok()\n}\n",
+        )
+        .unwrap();
+        assert!(!is_judged(&dir, &mutant_at("probe.rs", 2, "FnValue")));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn is_judged_still_judges_an_operator_swap_in_a_seam() {
+        let dir = unique_tmp();
+        std::fs::write(
+            dir.join("probe.rs"),
+            "pub fn probe() -> bool {\n    Command::new(\"true\").output().is_ok()\n}\n",
+        )
+        .unwrap();
+        assert!(is_judged(&dir, &mutant_at("probe.rs", 2, "BinaryOperator")));
         std::fs::remove_dir_all(&dir).ok();
     }
 

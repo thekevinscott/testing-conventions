@@ -14,6 +14,7 @@ pub mod packaging;
 pub mod patch_coverage;
 pub mod tiers;
 pub mod ts;
+mod unit_coverage;
 pub mod violation;
 mod walk;
 pub mod workflow;
@@ -309,7 +310,7 @@ where
                 language,
                 base,
                 config,
-            } => run_unit_coverage(&path, language, base.as_deref(), &config),
+            } => unit_coverage::run(&path, language, base.as_deref(), &config),
             UnitRule::OneFunctionPerFile {
                 path,
                 language,
@@ -511,113 +512,6 @@ fn split_scopes(
         }
     }
     (whole_file, line_scoped)
-}
-
-/// Run the unit coverage check over `root`, measuring the configured floor over the
-/// whole tree or, with `base` set, over the `<base>...HEAD` diff. `0` when the floor is met.
-fn run_unit_coverage(
-    root: &Path,
-    language: colocated_test::Language,
-    base: Option<&str>,
-    config_path: &Path,
-) -> anyhow::Result<i32> {
-    let config = if config_path.exists() {
-        config::load_config(config_path)?
-    } else {
-        config::Config::default()
-    };
-    let outcome = match language {
-        colocated_test::Language::Python => {
-            let python = config.python.unwrap_or_default();
-            let coverage = python.coverage.unwrap_or_default();
-            let thresholds = coverage::Thresholds {
-                fail_under: coverage.fail_under,
-                branch: coverage.branch,
-            };
-            let scopes =
-                config::resolve_exempt_scoped(root, &python.exempt, config::Rule::Coverage)?;
-            let (omit, exempt_lines) = split_scopes(scopes);
-            match base {
-                Some(base) => {
-                    patch_coverage::measure(root, base, thresholds, &omit, &exempt_lines)?
-                }
-                None if exempt_lines.is_empty() => coverage::measure(root, thresholds, &omit)?,
-                None => {
-                    patch_coverage::measure_line_exempt(root, thresholds, &omit, &exempt_lines)?
-                }
-            }
-        }
-        colocated_test::Language::TypeScript => {
-            let typescript = config.typescript.unwrap_or_default();
-            let coverage = typescript.coverage.unwrap_or_default();
-            let thresholds = coverage::TypeScriptThresholds {
-                lines: coverage.lines,
-                branches: coverage.branches,
-                functions: coverage.functions,
-                statements: coverage.statements,
-            };
-            let scopes =
-                config::resolve_exempt_scoped(root, &typescript.exempt, config::Rule::Coverage)?;
-            let (exclude, exempt_lines) = split_scopes(scopes);
-            match base {
-                Some(base) => patch_coverage::measure_typescript(
-                    root,
-                    base,
-                    thresholds,
-                    &exclude,
-                    &exempt_lines,
-                )?,
-                None if exempt_lines.is_empty() => {
-                    coverage::measure_typescript(root, thresholds, &exclude)?
-                }
-                None => patch_coverage::measure_line_exempt_typescript(
-                    root,
-                    thresholds,
-                    &exclude,
-                    &exempt_lines,
-                )?,
-            }
-        }
-        colocated_test::Language::Rust => {
-            let rust = config.rust.unwrap_or_default();
-            let coverage = rust.coverage.unwrap_or_default();
-            let thresholds = coverage::RustThresholds {
-                regions: coverage.regions,
-                lines: coverage.lines,
-                functions: coverage.functions,
-                branch: coverage.branch,
-            };
-            let scopes = config::resolve_exempt_scoped(root, &rust.exempt, config::Rule::Coverage)?;
-            let (ignore, exempt_lines) = split_scopes(scopes);
-            match base {
-                Some(base) => patch_coverage::measure_rust(
-                    root,
-                    base,
-                    thresholds,
-                    &ignore,
-                    &exempt_lines,
-                    &rust.features,
-                )?,
-                None if exempt_lines.is_empty() => {
-                    coverage::measure_rust(root, thresholds, &ignore, &rust.features)?
-                }
-                None => patch_coverage::measure_line_exempt_rust(
-                    root,
-                    thresholds,
-                    &ignore,
-                    &exempt_lines,
-                    &rust.features,
-                )?,
-            }
-        }
-    };
-    match outcome {
-        coverage::Outcome::Pass => Ok(0),
-        coverage::Outcome::Fail(reason) => {
-            eprintln!("error: coverage check failed — {reason}");
-            Ok(1)
-        }
-    }
 }
 
 /// Run the per-language mutation engine over `root` and fail on any surviving mutant

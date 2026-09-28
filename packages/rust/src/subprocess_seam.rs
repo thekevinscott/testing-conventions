@@ -225,6 +225,20 @@ fn probe_again() -> bool {
     }
 
     #[test]
+    fn a_computed_callee_names_no_same_file_function() {
+        let source = "\
+fn probe() -> bool {
+    Command::new(\"true\").output().is_ok()
+}
+
+fn indirect(run: fn() -> bool) -> bool {
+    (run)()
+}
+";
+        assert_eq!(subprocess_seam_lines(source), BTreeSet::from([1, 2, 3]));
+    }
+
+    #[test]
     fn delegation_carries_through_a_chain() {
         let source = "\
 fn probe() -> bool {

@@ -765,7 +765,9 @@ steep at the bottom and flat at the top — 288 violations at `1`, 132 at `10`, 
 `55`, 1 at `63` — so the first step down is cheap and the last is not. #750 holds the step
 sequence.
 
-The first step down, `76` → `64`, moved `run_unit_coverage` out of `lib.rs` into `unit_coverage.rs`
+The second step lowers the threshold to the tightest passing value at or below `50` by moving
+`run_unit_mutation` and the Rust patch coverage evaluator into their own modules. The first step
+down, `76` → `64`, moved `run_unit_coverage` out of `lib.rs` into `unit_coverage.rs`
 as `run`. The `run_*` dispatchers in `lib.rs` are each a module's worth of work, so the ratchet's
 remaining steps through that file are the same move repeated. A move alone leaves the dispatcher's
 decisions unasserted, and the mutation gate says so: the three copies of the

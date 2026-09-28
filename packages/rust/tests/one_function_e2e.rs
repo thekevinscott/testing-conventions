@@ -285,6 +285,29 @@ fn rust_clean_exits_zero() {
 }
 
 #[test]
+fn own_rust_source_passes_at_step_two_threshold() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let config = std::fs::read_to_string(root.join("testing-conventions.toml"))
+        .expect("the crate's config should be readable");
+    let configured: toml::Value = config.parse().expect("the crate's config should parse");
+    let threshold = configured["rust"]["one_function_per_file"]["max_lines"]
+        .as_integer()
+        .expect("the crate should set a threshold");
+    assert!(
+        threshold <= 50,
+        "step two lowers the threshold to at most 50"
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "one-function-per-file", "--language", "rust"])
+        .arg("--config")
+        .arg(root.join("testing-conventions.toml"))
+        .arg(root.join("src"))
+        .output()
+        .expect("the built binary should run");
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+}
+
+#[test]
 fn rust_clean_reports_the_files_it_scanned() {
     let output = run_with_config("rust", "rust/clean", "rust/clean/testing-conventions.toml");
     assert!(

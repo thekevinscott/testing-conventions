@@ -790,6 +790,32 @@ before: that `vitest_coverage_argv` never passes `--yes` (previously only a comm
 run judges every mutant where a diff-scoped one judges only changed lines, and what a Rust
 status code narrows to.
 
+The mutation gate then judged eleven mutants no assertion covered, and four of them sat in
+functions this step only *moved*. That is the general lesson, not an accident of this step: the
+gate is diff-scoped, so a move puts a function's lines into the diff and the gate reaches it for
+the first time. Budget mutation work for every move, not only for every rewrite.
+
+Two of the eleven were whole-body replacements of a function that spawns a subprocess, which no
+unit test can judge. The #758 seam rule exists for exactly that, but it drops a whole-body mutant
+only for a **branch-free** spawning function, and both still carried a decision — so the rule
+correctly declined to cover them. `run_vitest_coverage` held `if !run.status.success()`, now
+`vitest_exit`, the sibling of `llvm_cov_stdout` next door; `rust_diff_scope` held a `let … else`
+and the "no Rust source, no run" test, now `rust_scope`, which takes the written path and the
+diff text and so needs no filesystem to assert. Reading the diff became
+`.map(read_base_diff).transpose()?` rather than a closure, because `subprocess_seam.rs` counts a
+closure as a branch. The pattern generalises: to bring a spawning seam under the rule, move every
+decision out of it until nothing but calls and `?` remain.
+
+The remaining seven were decisions that simply had no case. `unquote_c_path` had never seen a
+path quoted on one end only — where stripping the first and last byte eats a real character — nor
+an empty quoted path, nor an octal escape running up to the closing quote, which indexes past the
+end once the digit walk stops only on the three-digit cap. `consume_hunk` had never seen a
+deletion-only hunk, whose old-side count must still be walked or the line after it, which may
+itself begin `---` or `+++`, reads as a file header in the caller. `unknown_subcommands` had never
+seen an invocation ending on a parent subcommand. `kept_lines` had no direct test at all,
+including for the `u32` bound its own doc comment names, and neither did `workflow::check` — three
+lines of wiring, which is not a reason to skip it. None of the eleven was exempted.
+
 The second step lowers the threshold to `46`, the tightest passing value, by moving
 `run_unit_mutation` and the Rust patch coverage evaluator into their own modules. The first step
 down, `76` → `64`, moved `run_unit_coverage` out of `lib.rs` into `unit_coverage.rs`

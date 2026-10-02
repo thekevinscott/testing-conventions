@@ -426,18 +426,26 @@ fn run_vitest_coverage(
         .env("CI", "1")
         .output()
         .context("running `npx --no-install vitest run --coverage`")?;
-    if !run.status.success() {
+    vitest_exit(run.status.success(), root, &run.stdout, &run.stderr)?;
+    read_vitest_report(&reports.0.join(report_file), reporter)
+}
+
+/// `Ok` when the vitest run exited clean, else the failure naming both of its streams and why
+/// the check never downloads vitest. Held apart from [`run_vitest_coverage`] so that seam is
+/// branch-free: its body spawns, so no unit test can judge a replacement of the whole body,
+/// but this decision is pure and asserted. The sibling of [`llvm_cov_stdout`].
+fn vitest_exit(success: bool, root: &Path, stdout: &[u8], stderr: &[u8]) -> Result<()> {
+    if !success {
         bail!(
             "the unit suite did not run cleanly under vitest in `{}`. The check runs the \
              project's own vitest via `npx --no-install` and never downloads it, so `vitest` \
              and `@vitest/coverage-v8` must be installed in the project. vitest output:\n{}{}",
             root.display(),
-            String::from_utf8_lossy(&run.stdout),
-            String::from_utf8_lossy(&run.stderr),
+            String::from_utf8_lossy(stdout),
+            String::from_utf8_lossy(stderr),
         );
     }
-
-    read_vitest_report(&reports.0.join(report_file), reporter)
+    Ok(())
 }
 
 /// The `npx vitest run` argv for one coverage pass. `--coverage.all=true` counts source files
@@ -2581,5 +2589,28 @@ mod tests {
             BTreeMap::from([(gated.display().to_string(), BTreeSet::from([1, 2]))]),
             "an unreadable source hides nothing"
         );
+    }
+
+    #[test]
+    fn a_clean_vitest_exit_raises_nothing() {
+        assert!(vitest_exit(true, Path::new("/tmp/project"), b"ignored", b"ignored").is_ok());
+    }
+
+    #[test]
+    fn a_failed_vitest_exit_names_the_project_both_streams_and_the_no_install_rule() {
+        let err = vitest_exit(
+            false,
+            Path::new("/tmp/project"),
+            b"out detail",
+            b"err detail",
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("/tmp/project"), "got: {err}");
+        assert!(err.contains("out detail"), "got: {err}");
+        assert!(err.contains("err detail"), "got: {err}");
+        assert!(err.contains("npx --no-install"), "got: {err}");
+        assert!(err.contains("@vitest/coverage-v8"), "got: {err}");
     }
 }

@@ -70,4 +70,26 @@ mod tests {
         assert_eq!(unquote_c_path(""), "");
         assert_eq!(unquote_c_path("\"a\\\""), "a\\");
     }
+
+    #[test]
+    fn a_path_quoted_on_only_one_end_is_not_a_quoted_path() {
+        // Git quotes both ends or neither, so a lone quote is part of the name. Stripping
+        // the first and last byte here would eat a real character.
+        assert_eq!(unquote_c_path("\"abc"), "\"abc");
+        assert_eq!(unquote_c_path("abc\""), "abc\"");
+    }
+
+    #[test]
+    fn an_empty_quoted_path_decodes_to_the_empty_string() {
+        // The shortest path that is genuinely quoted: both quotes, nothing between.
+        assert_eq!(unquote_c_path("\"\""), "");
+    }
+
+    #[test]
+    fn an_octal_escape_shorter_than_three_digits_ends_at_the_closing_quote() {
+        // Git writes as many octal digits as the byte needs, so an escape can run right up
+        // to the end of the path. The digit walk has to stop on the end, not only on the
+        // three-digit cap.
+        assert_eq!(unquote_c_path("\"\\12\""), "\n");
+    }
 }

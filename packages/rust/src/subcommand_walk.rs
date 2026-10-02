@@ -126,4 +126,14 @@ mod tests {
         assert!(flag_takes_value(&root, "-c"));
         assert!(!flag_takes_value(&root, "-x"));
     }
+
+    #[test]
+    fn an_invocation_stopping_at_a_parent_subcommand_ends_the_walk() {
+        // `tc unit` names a real subcommand and nothing after it. The walk has to end on the
+        // token list running out, not only on reaching a node with no children — clap itself
+        // rejects the incomplete invocation, and this rule has nothing to say about it.
+        let root = clap::Command::new("tc")
+            .subcommand(clap::Command::new("unit").subcommand(clap::Command::new("coverage")));
+        assert!(unknown_subcommands(&[inv(1, &["unit"])], &root).is_empty());
+    }
 }

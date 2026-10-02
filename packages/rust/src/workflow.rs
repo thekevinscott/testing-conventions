@@ -330,4 +330,18 @@ mod tests {
             "got: {err:#}"
         );
     }
+
+    #[test]
+    fn check_flags_an_invocation_naming_a_subcommand_the_cli_dropped() {
+        let root = clap::Command::new("tc")
+            .subcommand(clap::Command::new("unit").subcommand(clap::Command::new("coverage")));
+
+        let dropped = TempTree::new(&[("ci.yml", "- run: testing-conventions unit location .\n")]);
+        let flagged = check(dropped.path(), &root).unwrap();
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert!(flagged[0].message.contains("location"), "{flagged:?}");
+
+        let kept = TempTree::new(&[("ci.yml", "- run: testing-conventions unit coverage .\n")]);
+        assert!(check(kept.path(), &root).unwrap().is_empty());
+    }
 }

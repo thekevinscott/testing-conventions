@@ -1105,4 +1105,25 @@ mod tests {
         assert_eq!(changed["shim.py"], [1, 4].into_iter().collect());
         assert_eq!(changed["core.py"], [5].into_iter().collect());
     }
+
+    #[test]
+    fn kept_lines_drops_only_the_exempt_lines() {
+        let measured = BTreeSet::from([3u64, 4, 5]);
+        assert_eq!(
+            kept_lines(&measured, Some(&BTreeSet::from([4u32]))),
+            BTreeSet::from([3, 5])
+        );
+        assert_eq!(kept_lines(&measured, None), measured);
+    }
+
+    #[test]
+    fn a_measured_line_too_large_for_a_u32_can_carry_no_exemption() {
+        // An exemption is written as a u32, so a line number that cannot be one is kept
+        // however the exemption set reads.
+        let measured = BTreeSet::from([u64::from(u32::MAX) + 1]);
+        assert_eq!(
+            kept_lines(&measured, Some(&BTreeSet::from([u32::MAX]))),
+            measured
+        );
+    }
 }

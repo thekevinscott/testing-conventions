@@ -451,14 +451,23 @@ fn rust_diff_scope(
     base: &str,
     out: &MutantsOut,
 ) -> Result<Option<(PathBuf, BaseDiff)>> {
-    let Some(path) = write_base_diff(root, workspace_root, prefix, base, out)? else {
-        return Ok(None);
-    };
-    let parsed = parse_base_diff(&read_base_diff(&path)?);
+    let written = write_base_diff(root, workspace_root, prefix, base, out)?;
+    let read = written.as_deref().map(read_base_diff).transpose()?;
+    Ok(rust_scope(written, read))
+}
+
+/// The scope a base diff describes, as the diff file and the tool's own reading of it. `None`
+/// when `git diff` wrote nothing, or when the diff touches no Rust source — then no mutant of
+/// it could be in scope and the engine should not run. Held apart from [`rust_diff_scope`] so
+/// that seam is branch-free: its body spawns `git`, so no unit test can judge a replacement of
+/// the whole body, while every decision it used to carry is pure and asserted here.
+fn rust_scope(path: Option<PathBuf>, diff: Option<String>) -> Option<(PathBuf, BaseDiff)> {
+    let (path, diff) = (path?, diff?);
+    let parsed = parse_base_diff(&diff);
     if !parsed.files.iter().any(|file| file.ends_with(".rs")) {
-        return Ok(None);
+        return None;
     }
-    Ok(Some((path, parsed)))
+    Some((path, parsed))
 }
 
 /// The measurement a finished run's `outcomes.json` reports: the survivors no exemption lifts,
@@ -2754,5 +2763,57 @@ diff --git a/src/lib.rs b/src/lib.rs
         assert_eq!(CARGO_MUTANTS_BIN_NAME, "cargo-mutants.exe");
         #[cfg(not(windows))]
         assert_eq!(CARGO_MUTANTS_BIN_NAME, "cargo-mutants");
+    }
+
+    /// A one-file unified diff inserting a single line, for scope decisions.
+    fn one_file_diff(file: &str) -> String {
+        format!("diff --git a/{file} b/{file}\n--- a/{file}\n+++ b/{file}\n@@ -1,0 +1,1 @@\n+x\n")
+    }
+
+    #[test]
+    fn a_diff_touching_rust_source_is_in_scope_with_its_parsed_reading() {
+        let (path, parsed) = rust_scope(
+            Some(PathBuf::from("base.diff")),
+            Some(one_file_diff("src/lib.rs")),
+        )
+        .expect("a diff touching a .rs file is in scope");
+
+        assert_eq!(path, PathBuf::from("base.diff"));
+        assert_eq!(parsed.files, vec!["src/lib.rs".to_string()]);
+    }
+
+    #[test]
+    fn a_diff_touching_no_rust_source_is_out_of_scope() {
+        assert!(rust_scope(
+            Some(PathBuf::from("base.diff")),
+            Some(one_file_diff("docs/readme.md")),
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn a_run_whose_git_diff_wrote_nothing_is_out_of_scope() {
+        assert!(rust_scope(None, None).is_none());
+        assert!(rust_scope(Some(PathBuf::from("base.diff")), None).is_none());
+    }
+
+    #[test]
+    fn a_deletion_only_hunk_still_consumes_the_lines_it_declared() {
+        // The old-side count has to be walked even when the hunk inserts nothing, or the
+        // line after the hunk — which may itself begin `---` or `+++` — reads as a file
+        // header in the caller.
+        let text = "-gone\n--- a/not-a-file.rs\n";
+        let mut lines = text.lines();
+        let mut inserted = BTreeMap::new();
+
+        consume_hunk(
+            &mut lines,
+            (1, 1, 0),
+            Some(&"src/lib.rs".to_string()),
+            &mut inserted,
+        );
+
+        assert!(inserted.is_empty(), "a deletion inserts nothing");
+        assert_eq!(lines.next(), Some("--- a/not-a-file.rs"));
     }
 }

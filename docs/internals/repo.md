@@ -757,18 +757,38 @@ properties hold the ratchet:
 `packages/python`, `internals/move-major-tag`, `internals/detect`, and `internals/checks` all sit
 at the default and carry no config for it — the ratchet's end state.
 
-`packages/rust` entered the ratchet at `max_lines = 76` (#735) and sits at `46`. Each value is the
+`packages/rust` entered the ratchet at `max_lines = 76` (#735) and sits at `29`. Each value is the
 tightest threshold the crate passes at that point rather than a judgement about Rust, so the
 package always carries zero headroom: at `76` it was `run` in `lib.rs`, at exactly 76 lines; at
 `64` it was `run_unit_mutation`, sharing `lib.rs` with `run` at exactly 64; at `46`, the next
-line down flags `run_unit_one_function` in `lib.rs`. Before the second split, a scan at `50`
-flagged two functions; after it, `46` passes and `45` flags one. #750 holds the remaining
-step sequence.
+line down flagged `run_unit_one_function` in `lib.rs`; at `29`, `28` flags four more. #750 holds
+the remaining step sequence.
 
-The third step lowers the threshold to the tightest passing value at or below `30`, where the
-gate flags seventeen functions across seven files: the remaining `run_*` dispatchers and the
-waiver helper in `lib.rs`, and the measurement evaluators in `coverage.rs`, `mutation.rs`,
-`patch_coverage.rs`, `co_change.rs`, `lint.rs`, and `workflow.rs`.
+The third step lowers the threshold to `29`, the tightest passing value at or below the `30`
+ceiling #763 named. At `30` the gate flagged seventeen functions across seven files, and seven
+of them wanted a move: `lib.rs`'s remaining `run_*` dispatchers and its waiver helper
+(`unit_one_function.rs`, `unit_lint.rs`, `integration_lint.rs`, `waivers.rs`), git's C-quoted
+path decoder and `diff --name-status` read (`git_path.rs`, `git_diff.rs`), and the clap-tree walk
+behind the workflow guard (`subcommand_walk.rs`). The other ten were one function holding
+several decisions, and the step names each decision in place rather than moving the whole.
+
+What that exposed is the step's real yield. `evaluate_rust` and `evaluate_typescript` in
+`coverage.rs` and `evaluate_patch_typescript` in `patch_coverage.rs` carried three copies of the
+same floor comparison, the same `{name} {actual:.2}% < {required}%` wording, and the same
+"coverage below thresholds" verdict; all three now call `coverage::shortfall` and
+`coverage::verdict`, and the "measured no code" message two of them spelled out is one const.
+`evaluate_patch_typescript`'s branch-arm and function tallies were the same loop over
+`(line, covered)` pairs twice, now `on_line_tally` once. Three `lib.rs` dispatchers each printed
+violations with an identical seven-line loop, now `violation::rendered`, which returns the
+rendering rather than printing it so the mutation gate can kill its body mutant. `lint.rs`'s
+`module_scope` needed no new module at all: its statement match was the dispatcher between
+`ModuleScope`'s existing `bind_*` methods, so it became one of them.
+
+Each named decision carries a colocated test, and several assert behaviour nothing asserted
+before: that `vitest_coverage_argv` never passes `--yes` (previously only a comment), that
+`patch_region` rejects a short region and a negative file id, that an unscoped Python mutation
+run judges every mutant where a diff-scoped one judges only changed lines, and what a Rust
+status code narrows to.
 
 The second step lowers the threshold to `46`, the tightest passing value, by moving
 `run_unit_mutation` and the Rust patch coverage evaluator into their own modules. The first step

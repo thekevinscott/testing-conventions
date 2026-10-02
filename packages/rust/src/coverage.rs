@@ -83,7 +83,7 @@ const NOTHING_MEASURED: &str =
 
 /// `Some` naming the gap when `actual` falls below the `required` floor, else `None`.
 /// Tolerance so a percent that rounds to the floor isn't failed by float noise.
-fn shortfall(name: &str, actual: f64, required: u8) -> Option<String> {
+pub(crate) fn shortfall(name: &str, actual: f64, required: u8) -> Option<String> {
     if actual + 1e-9 < f64::from(required) {
         Some(format!("{name} {actual:.2}% < {required}%"))
     } else {
@@ -92,7 +92,7 @@ fn shortfall(name: &str, actual: f64, required: u8) -> Option<String> {
 }
 
 /// `Pass` when nothing fell short, else one `Fail` naming every shortfall.
-fn verdict(shortfalls: Vec<String>) -> Outcome {
+pub(crate) fn verdict(shortfalls: Vec<String>) -> Outcome {
     if shortfalls.is_empty() {
         Outcome::Pass
     } else {

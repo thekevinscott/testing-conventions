@@ -1,0 +1,7 @@
+{
+  "command": "PATH=\"$PWD/internals/checks/.venv/bin:$PATH\" PYTHONPATH=\"$PWD/packages/python/python\" cargo test --manifest-path packages/rust/Cargo.toml --test one_function_e2e --test workflow_e2e --test co_change_e2e --test coverage_e2e --test coverage_rust_e2e --test coverage_ts_e2e --test coverage_metrics_e2e --test coverage_base_e2e --test coverage_base_rust_e2e --test coverage_base_ts_e2e --test mutation_rust_e2e --test mutation_python_e2e --test mutation_features_e2e",
+  "ran_at": 1790970093,
+  "exit_code": 0,
+  "commit": "885816d9208c641fe3e33e62fa9169c2d2e41b2c",
+  "branch": "chore/750-ratchet-rust-step3"
+}

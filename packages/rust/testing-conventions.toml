@@ -2,9 +2,10 @@
 # so the same entry resolves whether the gate is pointed at the crate or at `src`.
 
 [rust]
-# `run_unit_one_function` in `lib.rs` runs 46 lines and shares its file with `run`.
-# At 45 the gate fails; the next ratchet step splits that dispatcher.
-one_function_per_file = { max_lines = 46 }
+# Ratcheted down toward the shipped default of 1, one step per child of #750. This is the
+# tightest value the crate passes — at 28 the gate fails. The next step splits whatever it
+# flags then; measure, rather than trusting any inventory recorded here.
+one_function_per_file = { max_lines = 29 }
 
 # The provisioning lock's test spawns two real threads and holds the critical section with a
 # 50ms sleep: concurrency *is* the subject, so a double would prove nothing, and dropping the

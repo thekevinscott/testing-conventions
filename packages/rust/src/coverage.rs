@@ -77,6 +77,32 @@ pub enum Outcome {
     Fail(String),
 }
 
+/// A run that measured nothing at all — a wrong path, or a suite that never ran.
+const NOTHING_MEASURED: &str =
+    "the unit suite measured no code — check the path and that the suite runs";
+
+/// `Some` naming the gap when `actual` falls below the `required` floor, else `None`.
+/// Tolerance so a percent that rounds to the floor isn't failed by float noise.
+pub(crate) fn shortfall(name: &str, actual: f64, required: u8) -> Option<String> {
+    if actual + 1e-9 < f64::from(required) {
+        Some(format!("{name} {actual:.2}% < {required}%"))
+    } else {
+        None
+    }
+}
+
+/// `Pass` when nothing fell short, else one `Fail` naming every shortfall.
+pub(crate) fn verdict(shortfalls: Vec<String>) -> Outcome {
+    if shortfalls.is_empty() {
+        Outcome::Pass
+    } else {
+        Outcome::Fail(format!(
+            "coverage below thresholds: {}",
+            shortfalls.join(", ")
+        ))
+    }
+}
+
 /// Parse a coverage.py JSON report (the output of `coverage json`).
 pub fn parse_report(json: &str) -> Result<CoverageReport> {
     serde_json::from_str(json).context("parsing coverage.py JSON report")
@@ -318,9 +344,7 @@ pub fn evaluate_typescript(report: &VitestReport, thresholds: TypeScriptThreshol
     let total = &report.total;
     // Every source file has lines, so a zero denominator means nothing was measured.
     if total.lines.total == 0 {
-        return Outcome::Fail(
-            "the unit suite measured no code — check the path and that the suite runs".to_string(),
-        );
+        return Outcome::Fail(NOTHING_MEASURED.to_string());
     }
     let checks = [
         ("lines", total.lines, thresholds.lines),
@@ -328,23 +352,16 @@ pub fn evaluate_typescript(report: &VitestReport, thresholds: TypeScriptThreshol
         ("functions", total.functions, thresholds.functions),
         ("statements", total.statements, thresholds.statements),
     ];
-    let mut shortfalls = Vec::new();
-    for (name, metric, required) in checks {
-        // An empty denominator (branch-free code) has nothing to cover — vacuously full.
-        let actual = metric.pct.unwrap_or(100.0);
-        // Tolerance so a percent that rounds to the floor isn't failed by float noise.
-        if actual + 1e-9 < f64::from(required) {
-            shortfalls.push(format!("{name} {actual:.2}% < {required}%"));
-        }
-    }
-    if shortfalls.is_empty() {
-        Outcome::Pass
-    } else {
-        Outcome::Fail(format!(
-            "coverage below thresholds: {}",
-            shortfalls.join(", ")
-        ))
-    }
+    verdict(
+        checks
+            .into_iter()
+            .filter_map(|(name, metric, required)| {
+                // An empty denominator (branch-free code) has nothing to cover —
+                // vacuously full.
+                shortfall(name, metric.pct.unwrap_or(100.0), required)
+            })
+            .collect(),
+    )
 }
 
 /// Run the unit suite under vitest coverage in `root` and check it against
@@ -388,8 +405,7 @@ fn run_vitest(root: &Path, exclude: &[String]) -> Result<VitestReport> {
 }
 
 /// Run vitest coverage over the unit suite in `root` and return the contents of the
-/// `report_file` the `reporter` wrote. `all=true` counts source files the suite never
-/// imported, so an untested file is measured rather than vanishing.
+/// `report_file` the `reporter` wrote.
 fn run_vitest_coverage(
     root: &Path,
     exclude: &[String],
@@ -397,50 +413,77 @@ fn run_vitest_coverage(
     report_file: &str,
 ) -> Result<String> {
     let reports = ReportDir::new();
+    let excludes = vitest_default_excludes(root)?;
 
-    let mut command = Command::new("npx");
-    command
+    let run = Command::new("npx")
         .current_dir(root)
-        // `--no-install`, never `--yes`: with `--yes` a missing vitest is silently
-        // downloaded, where the other arms fail clean on a missing binary.
-        .args(["--no-install", "vitest", "run", "--no-cache"])
-        .args(["--coverage.enabled", "--coverage.provider=v8"])
-        .arg(format!("--coverage.reporter={reporter}"))
-        .arg("--coverage.all=true")
-        .arg(format!(
-            "--coverage.reportsDirectory={}",
-            reports.0.display()
+        .args(vitest_coverage_argv(
+            reporter,
+            &reports.0,
+            excludes.iter().chain(exclude),
         ))
-        .arg(format!("--coverage.include={TS_INCLUDE}"))
-        // A consumer config's own `coverage.thresholds` neither decide the gate's exit
-        // nor rewrite the config file — `autoUpdate` never writes during a gate run.
-        .args([
-            "--coverage.thresholds.lines=0",
-            "--coverage.thresholds.branches=0",
-            "--coverage.thresholds.functions=0",
-            "--coverage.thresholds.statements=0",
-            "--coverage.thresholds.autoUpdate=false",
-        ]);
-    for path in vitest_default_excludes(root)?.iter().chain(exclude) {
-        command.arg(format!("--coverage.exclude={path}"));
-    }
-    // CI=1 keeps vitest non-interactive (no watch prompt, plain output).
-    let run = command
+        // CI=1 keeps vitest non-interactive (no watch prompt, plain output).
         .env("CI", "1")
         .output()
         .context("running `npx --no-install vitest run --coverage`")?;
-    if !run.status.success() {
+    vitest_exit(run.status.success(), root, &run.stdout, &run.stderr)?;
+    read_vitest_report(&reports.0.join(report_file), reporter)
+}
+
+/// `Ok` when the vitest run exited clean, else the failure naming both of its streams and why
+/// the check never downloads vitest. Held apart from [`run_vitest_coverage`] so that seam is
+/// branch-free: its body spawns, so no unit test can judge a replacement of the whole body,
+/// but this decision is pure and asserted. The sibling of [`llvm_cov_stdout`].
+fn vitest_exit(success: bool, root: &Path, stdout: &[u8], stderr: &[u8]) -> Result<()> {
+    if !success {
         bail!(
             "the unit suite did not run cleanly under vitest in `{}`. The check runs the \
              project's own vitest via `npx --no-install` and never downloads it, so `vitest` \
              and `@vitest/coverage-v8` must be installed in the project. vitest output:\n{}{}",
             root.display(),
-            String::from_utf8_lossy(&run.stdout),
-            String::from_utf8_lossy(&run.stderr),
+            String::from_utf8_lossy(stdout),
+            String::from_utf8_lossy(stderr),
         );
     }
+    Ok(())
+}
 
-    read_vitest_report(&reports.0.join(report_file), reporter)
+/// The `npx vitest run` argv for one coverage pass. `--coverage.all=true` counts source files
+/// the suite never imported, so an untested file is measured rather than vanishing.
+fn vitest_coverage_argv<'a>(
+    reporter: &str,
+    reports_dir: &Path,
+    exclude: impl Iterator<Item = &'a String>,
+) -> Vec<String> {
+    let mut argv: Vec<String> = [
+        // `--no-install`, never `--yes`: with `--yes` a missing vitest is silently
+        // downloaded, where the other arms fail clean on a missing binary.
+        "--no-install",
+        "vitest",
+        "run",
+        "--no-cache",
+        "--coverage.enabled",
+        "--coverage.provider=v8",
+        "--coverage.all=true",
+        // A consumer config's own `coverage.thresholds` neither decide the gate's exit
+        // nor rewrite the config file — `autoUpdate` never writes during a gate run.
+        "--coverage.thresholds.lines=0",
+        "--coverage.thresholds.branches=0",
+        "--coverage.thresholds.functions=0",
+        "--coverage.thresholds.statements=0",
+        "--coverage.thresholds.autoUpdate=false",
+    ]
+    .iter()
+    .map(|arg| (*arg).to_string())
+    .collect();
+    argv.push(format!("--coverage.reporter={reporter}"));
+    argv.push(format!(
+        "--coverage.reportsDirectory={}",
+        reports_dir.display()
+    ));
+    argv.push(format!("--coverage.include={TS_INCLUDE}"));
+    argv.extend(exclude.map(|path| format!("--coverage.exclude={path}")));
+    argv
 }
 
 /// The report the vitest run wrote, read back for parsing.
@@ -619,12 +662,20 @@ pub fn evaluate_rust(report: &LlvmCovReport, thresholds: RustThresholds) -> Outc
     };
     // Every compiled crate has regions, so a zero denominator measured nothing.
     if totals.regions.count == 0 {
-        return Outcome::Fail(
-            "the unit suite measured no code — check the path and that the suite runs".to_string(),
-        );
+        return Outcome::Fail(NOTHING_MEASURED.to_string());
     }
-    // The zero-config default floors lines only; the rest are opt-in.
-    let mut checks: Vec<(&str, f64, u8)> = Vec::new();
+    verdict(
+        rust_checks(totals, thresholds)
+            .into_iter()
+            .filter_map(|(name, actual, required)| shortfall(name, actual, required))
+            .collect(),
+    )
+}
+
+/// The floors that apply to `totals`, as `(metric, measured percent, required percent)`.
+/// The zero-config default floors lines only; the rest are opt-in.
+fn rust_checks(totals: &LlvmCovTotals, thresholds: RustThresholds) -> Vec<(&'static str, f64, u8)> {
+    let mut checks = Vec::new();
     if let Some(regions) = thresholds.regions {
         checks.push(("regions", totals.regions.percent, regions));
     }
@@ -639,21 +690,7 @@ pub fn evaluate_rust(report: &LlvmCovReport, thresholds: RustThresholds) -> Outc
             checks.push(("branches", branches.percent, branch));
         }
     }
-    let mut shortfalls = Vec::new();
-    for (name, actual, required) in checks {
-        // Tolerance so a percent that rounds to the floor isn't failed by float noise.
-        if actual + 1e-9 < f64::from(required) {
-            shortfalls.push(format!("{name} {actual:.2}% < {required}%"));
-        }
-    }
-    if shortfalls.is_empty() {
-        Outcome::Pass
-    } else {
-        Outcome::Fail(format!(
-            "coverage below thresholds: {}",
-            shortfalls.join(", ")
-        ))
-    }
+    checks
 }
 
 /// Run the unit suite under `cargo llvm-cov` in `root` and check it against
@@ -1220,9 +1257,7 @@ fn parse_llvm_cov_export(json: &str) -> Result<LlvmCovExport> {
 }
 
 /// Pure: per-file [`RustPatchCoverage`] from a `cargo llvm-cov --json` export, keyed
-/// by the absolute path llvm-cov reports. Only `kind == 0` code regions in the `files`
-/// allowlist count; a malformed short region is skipped rather than indexed, and a region
-/// starting on a line `hidden` names is dropped — no test can execute it.
+/// by the absolute path llvm-cov reports.
 fn llvm_cov_patch_detail(
     json: &str,
     hidden: &BTreeMap<String, BTreeSet<u32>>,
@@ -1233,43 +1268,52 @@ fn llvm_cov_patch_detail(
         let measured: BTreeSet<&str> = data.files.iter().map(|f| f.filename.as_str()).collect();
         for function in &data.functions {
             for region in &function.regions {
-                if region.len() < 8 {
-                    continue;
-                }
-                // gap (1) / expansion (2) / branch regions carry no line-coverage signal.
-                if region[7] != 0 {
-                    continue;
-                }
-                let file_id = region[5];
-                let Ok(file_id) = usize::try_from(file_id) else {
-                    continue;
-                };
-                let Some(file) = function.filenames.get(file_id) else {
-                    continue;
-                };
-                // A `coverage` exemption drops the file's regions, lifting its lines.
-                if !measured.contains(file.as_str()) {
-                    continue;
-                }
-                let start = region[0].max(0) as u64;
-                let end = region[2].max(0) as u64;
-                // A gated item is instrumented in the bin target's test harness, where
-                // `cfg(test)` is unset, and no test can reach it.
-                if hidden
-                    .get(file)
-                    .is_some_and(|lines| lines.contains(&(start as u32)))
+                if let Some((file, start, end, covered)) =
+                    patch_region(region, &function.filenames, &measured, hidden)
                 {
-                    continue;
+                    out.entry(file)
+                        .or_default()
+                        .regions
+                        .push((start, end, covered));
                 }
-                let covered = region[4] > 0;
-                out.entry(file.clone())
-                    .or_default()
-                    .regions
-                    .push((start, end, covered));
             }
         }
     }
     Ok(out)
+}
+
+/// One llvm-cov region's contribution as `(file, start line, end line, covered)`, or `None`
+/// when it carries no line-coverage signal: only `kind == 0` code regions in the `measured`
+/// allowlist count, a malformed short region is skipped rather than indexed, and a region
+/// starting on a line `hidden` names is dropped — no test can execute it.
+fn patch_region(
+    region: &[i64],
+    filenames: &[String],
+    measured: &BTreeSet<&str>,
+    hidden: &BTreeMap<String, BTreeSet<u32>>,
+) -> Option<(String, u64, u64, bool)> {
+    if region.len() < 8 {
+        return None;
+    }
+    // gap (1) / expansion (2) / branch regions carry no line-coverage signal.
+    if region[7] != 0 {
+        return None;
+    }
+    let file = filenames.get(usize::try_from(region[5]).ok()?)?;
+    // A `coverage` exemption drops the file's regions, lifting its lines.
+    if !measured.contains(file.as_str()) {
+        return None;
+    }
+    let start = region[0].max(0) as u64;
+    // A gated item is instrumented in the bin target's test harness, where `cfg(test)`
+    // is unset, and no test can reach it.
+    if hidden
+        .get(file)
+        .is_some_and(|lines| lines.contains(&(start as u32)))
+    {
+        return None;
+    }
+    Some((file.clone(), start, region[2].max(0) as u64, region[4] > 0))
 }
 
 /// The single `--ignore-filename-regex` for the run, or `None` when nothing is exempt.
@@ -2020,6 +2064,178 @@ mod tests {
     }
 
     #[test]
+    fn vitest_coverage_argv_names_the_reporter_the_report_dir_and_every_exclude() {
+        let excludes = ["dist/**".to_string(), "src/generated/**".to_string()];
+        let argv = vitest_coverage_argv("json-summary", Path::new("/tmp/reports"), excludes.iter());
+
+        assert_eq!(argv[0], "--no-install");
+        assert_eq!(argv[1], "vitest");
+        assert!(argv.contains(&"--coverage.all=true".to_string()));
+        assert!(argv.contains(&"--coverage.thresholds.autoUpdate=false".to_string()));
+        assert!(argv.contains(&"--coverage.reporter=json-summary".to_string()));
+        assert!(argv.contains(&"--coverage.reportsDirectory=/tmp/reports".to_string()));
+        assert!(argv.contains(&format!("--coverage.include={TS_INCLUDE}")));
+        assert_eq!(
+            argv.iter()
+                .filter(|arg| arg.starts_with("--coverage.exclude="))
+                .collect::<Vec<_>>(),
+            [
+                "--coverage.exclude=dist/**",
+                "--coverage.exclude=src/generated/**"
+            ]
+        );
+    }
+
+    #[test]
+    fn vitest_coverage_argv_never_passes_yes_so_a_missing_vitest_fails_clean() {
+        let argv = vitest_coverage_argv("json", Path::new("/tmp/r"), [].iter());
+
+        assert!(!argv.iter().any(|arg| arg == "--yes"));
+    }
+
+    #[test]
+    fn a_metric_at_or_above_its_floor_names_no_shortfall() {
+        assert_eq!(shortfall("lines", 100.0, 100), None);
+        assert_eq!(shortfall("lines", 90.0, 90), None);
+        // A percent that rounds to the floor is not failed by float noise.
+        assert_eq!(shortfall("lines", 89.999999999, 90), None);
+    }
+
+    #[test]
+    fn a_metric_below_its_floor_names_the_gap() {
+        assert_eq!(
+            shortfall("branches", 72.5, 80),
+            Some("branches 72.50% < 80%".to_string())
+        );
+    }
+
+    #[test]
+    fn a_verdict_passes_on_no_shortfalls_and_names_every_one_otherwise() {
+        assert_eq!(verdict(Vec::new()), Outcome::Pass);
+        assert_eq!(
+            verdict(vec![
+                "lines 1.00% < 2%".to_string(),
+                "b 3.00% < 4%".to_string()
+            ]),
+            Outcome::Fail("coverage below thresholds: lines 1.00% < 2%, b 3.00% < 4%".to_string())
+        );
+    }
+
+    #[test]
+    fn rust_checks_floor_lines_always_and_the_rest_only_when_configured() {
+        let totals = rust_report_full(10.0, 20.0, 30.0, (4, 50.0)).data[0].totals;
+
+        assert_eq!(
+            rust_checks(
+                &totals,
+                RustThresholds {
+                    lines: 90,
+                    regions: None,
+                    functions: None,
+                    branch: None,
+                }
+            ),
+            [("lines", 20.0, 90)]
+        );
+        assert_eq!(
+            rust_checks(
+                &totals,
+                RustThresholds {
+                    lines: 90,
+                    regions: Some(80),
+                    functions: Some(70),
+                    branch: Some(60),
+                }
+            ),
+            [
+                ("regions", 10.0, 80),
+                ("lines", 20.0, 90),
+                ("functions", 30.0, 70),
+                ("branches", 50.0, 60),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_branch_floor_over_a_branchless_crate_is_vacuously_satisfied() {
+        let totals = rust_report_full(10.0, 20.0, 30.0, (0, 0.0)).data[0].totals;
+
+        assert_eq!(
+            rust_checks(
+                &totals,
+                RustThresholds {
+                    lines: 90,
+                    regions: None,
+                    functions: None,
+                    branch: Some(60),
+                }
+            ),
+            [("lines", 20.0, 90)]
+        );
+    }
+
+    #[test]
+    fn a_code_region_in_a_measured_file_contributes_its_span_and_hit_state() {
+        let names = ["src/a.rs".to_string()];
+
+        assert_eq!(
+            patch_region(
+                &[7, 1, 9, 20, 3, 0, 0, 0],
+                &names,
+                &BTreeSet::from(["src/a.rs"]),
+                &BTreeMap::new()
+            ),
+            Some(("src/a.rs".to_string(), 7, 9, true))
+        );
+        assert_eq!(
+            patch_region(
+                &[7, 1, 9, 20, 0, 0, 0, 0],
+                &names,
+                &BTreeSet::from(["src/a.rs"]),
+                &BTreeMap::new()
+            ),
+            Some(("src/a.rs".to_string(), 7, 9, false))
+        );
+    }
+
+    #[test]
+    fn a_region_carrying_no_line_signal_contributes_nothing() {
+        let names = ["src/a.rs".to_string()];
+        let measured = BTreeSet::from(["src/a.rs"]);
+        let nothing_hidden = BTreeMap::new();
+        let reject = |region: &[i64]| patch_region(region, &names, &measured, &nothing_hidden);
+
+        // Too short to index.
+        assert_eq!(reject(&[7, 1, 9, 20, 3, 0, 0]), None);
+        // A gap region.
+        assert_eq!(reject(&[7, 1, 9, 20, 3, 0, 0, 1]), None);
+        // A file id outside the function's filename table.
+        assert_eq!(reject(&[7, 1, 9, 20, 3, 9, 0, 0]), None);
+        // A negative file id.
+        assert_eq!(reject(&[7, 1, 9, 20, 3, -1, 0, 0]), None);
+        // A file the `coverage` exemptions dropped from the measured set.
+        assert_eq!(
+            patch_region(
+                &[7, 1, 9, 20, 3, 0, 0, 0],
+                &names,
+                &BTreeSet::new(),
+                &nothing_hidden
+            ),
+            None
+        );
+        // A region starting on a `cfg(not(test))`-gated line.
+        assert_eq!(
+            patch_region(
+                &[7, 1, 9, 20, 3, 0, 0, 0],
+                &names,
+                &measured,
+                &BTreeMap::from([("src/a.rs".to_string(), BTreeSet::from([7u32]))])
+            ),
+            None
+        );
+    }
+
+    #[test]
     fn rust_report_argv_carries_format_and_optional_ignore_regex() {
         assert_eq!(
             report_argv(&["--lcov"], Some("src/ignored\\.rs$".to_string())),
@@ -2373,5 +2589,28 @@ mod tests {
             BTreeMap::from([(gated.display().to_string(), BTreeSet::from([1, 2]))]),
             "an unreadable source hides nothing"
         );
+    }
+
+    #[test]
+    fn a_clean_vitest_exit_raises_nothing() {
+        assert!(vitest_exit(true, Path::new("/tmp/project"), b"ignored", b"ignored").is_ok());
+    }
+
+    #[test]
+    fn a_failed_vitest_exit_names_the_project_both_streams_and_the_no_install_rule() {
+        let err = vitest_exit(
+            false,
+            Path::new("/tmp/project"),
+            b"out detail",
+            b"err detail",
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("/tmp/project"), "got: {err}");
+        assert!(err.contains("out detail"), "got: {err}");
+        assert!(err.contains("err detail"), "got: {err}");
+        assert!(err.contains("npx --no-install"), "got: {err}");
+        assert!(err.contains("@vitest/coverage-v8"), "got: {err}");
     }
 }

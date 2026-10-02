@@ -165,7 +165,7 @@ fn rust_clean_exits_zero() {
 }
 
 #[test]
-fn own_rust_source_passes_at_step_two_threshold() {
+fn own_rust_source_passes_at_step_three_threshold() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let config = std::fs::read_to_string(root.join("testing-conventions.toml"))
         .expect("the crate's config should be readable");
@@ -174,8 +174,8 @@ fn own_rust_source_passes_at_step_two_threshold() {
         .as_integer()
         .expect("the crate should set a threshold");
     assert!(
-        threshold <= 50,
-        "step two lowers the threshold to at most 50"
+        threshold <= 30,
+        "step three lowers the threshold to at most 30"
     );
     let argv: Vec<OsString> = vec![
         "testing-conventions".into(),

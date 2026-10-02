@@ -765,6 +765,11 @@ line down flags `run_unit_one_function` in `lib.rs`. Before the second split, a 
 flagged two functions; after it, `46` passes and `45` flags one. #750 holds the remaining
 step sequence.
 
+The third step lowers the threshold to the tightest passing value at or below `30`, where the
+gate flags seventeen functions across seven files: the remaining `run_*` dispatchers and the
+waiver helper in `lib.rs`, and the measurement evaluators in `coverage.rs`, `mutation.rs`,
+`patch_coverage.rs`, `co_change.rs`, `lint.rs`, and `workflow.rs`.
+
 The second step lowers the threshold to `46`, the tightest passing value, by moving
 `run_unit_mutation` and the Rust patch coverage evaluator into their own modules. The first step
 down, `76` → `64`, moved `run_unit_coverage` out of `lib.rs` into `unit_coverage.rs`

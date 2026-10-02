@@ -1160,6 +1160,44 @@ impl ModuleScope {
             _ => {}
         }
     }
+
+    /// Bind what one top-level statement declares. A statement that binds no name —
+    /// an expression, a conditional, a loop — leaves the scope unchanged.
+    fn bind_stmt(&mut self, stmt: &ast::Stmt, package: &[String]) {
+        match stmt {
+            ast::Stmt::Import(node) => {
+                for alias in &node.names {
+                    match &alias.asname {
+                        Some(asname) => {
+                            self.bind(asname.to_string(), Binding::Module(alias.name.to_string()));
+                        }
+                        None => {
+                            let head = import_head(alias.name.as_str());
+                            self.bind(head.to_string(), Binding::Module(head.to_string()));
+                        }
+                    }
+                }
+            }
+            ast::Stmt::ImportFrom(node) => self.bind_import_from(node, package),
+            ast::Stmt::FunctionDef(node) => self.bind(node.name.to_string(), Binding::Defined),
+            ast::Stmt::AsyncFunctionDef(node) => {
+                self.bind(node.name.to_string(), Binding::Defined);
+            }
+            ast::Stmt::ClassDef(node) => self.bind(node.name.to_string(), Binding::Defined),
+            ast::Stmt::Assign(node) => {
+                let literal = is_literal(&node.value);
+                for target in &node.targets {
+                    self.bind_assign_target(target, literal);
+                }
+            }
+            ast::Stmt::AnnAssign(node) => {
+                if let Some(value) = &node.value {
+                    self.bind_assign_target(&node.target, is_literal(value));
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// The top-level name bindings of a module's source. `package` is the dotted package its
@@ -1171,39 +1209,7 @@ fn module_scope(source: &str, package: &[String]) -> Option<ModuleScope> {
         has_star_import: false,
     };
     for stmt in &suite {
-        match stmt {
-            ast::Stmt::Import(node) => {
-                for alias in &node.names {
-                    match &alias.asname {
-                        Some(asname) => {
-                            scope.bind(asname.to_string(), Binding::Module(alias.name.to_string()));
-                        }
-                        None => {
-                            let head = import_head(alias.name.as_str());
-                            scope.bind(head.to_string(), Binding::Module(head.to_string()));
-                        }
-                    }
-                }
-            }
-            ast::Stmt::ImportFrom(node) => scope.bind_import_from(node, package),
-            ast::Stmt::FunctionDef(node) => scope.bind(node.name.to_string(), Binding::Defined),
-            ast::Stmt::AsyncFunctionDef(node) => {
-                scope.bind(node.name.to_string(), Binding::Defined);
-            }
-            ast::Stmt::ClassDef(node) => scope.bind(node.name.to_string(), Binding::Defined),
-            ast::Stmt::Assign(node) => {
-                let literal = is_literal(&node.value);
-                for target in &node.targets {
-                    scope.bind_assign_target(target, literal);
-                }
-            }
-            ast::Stmt::AnnAssign(node) => {
-                if let Some(value) = &node.value {
-                    scope.bind_assign_target(&node.target, is_literal(value));
-                }
-            }
-            _ => {}
-        }
+        scope.bind_stmt(stmt, package);
     }
     Some(scope)
 }

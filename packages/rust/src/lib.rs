@@ -6,6 +6,7 @@ pub mod config;
 pub mod coverage;
 pub mod e2e;
 pub mod entrypoint;
+mod integration_lint;
 pub mod isolation;
 pub mod lint;
 pub mod mutation;
@@ -17,8 +18,11 @@ mod subprocess_seam;
 pub mod tiers;
 pub mod ts;
 mod unit_coverage;
+mod unit_lint;
 mod unit_mutation;
+mod unit_one_function;
 pub mod violation;
+mod waivers;
 mod walk;
 pub mod workflow;
 pub mod workflow_lint;
@@ -318,12 +322,12 @@ where
                 path,
                 language,
                 config,
-            } => run_unit_one_function(&path, language, &config),
+            } => unit_one_function::run(&path, language, &config),
             UnitRule::Lint {
                 path,
                 language,
                 config,
-            } => run_unit_lint(&path, language, &config),
+            } => unit_lint::run(&path, language, &config),
             UnitRule::Mutation {
                 path,
                 language,
@@ -343,7 +347,7 @@ where
                 path,
                 language,
                 config,
-            } => run_integration_lint(&path, language, &config),
+            } => integration_lint::run(&path, language, &config),
         },
         Some(Command::Packaging { path, language }) => run_packaging(&path, language),
         Some(Command::Changelog { base, path }) => run_changelog(&base, &path),
@@ -515,204 +519,6 @@ fn split_scopes(
         }
     }
     (whole_file, line_scoped)
-}
-
-/// Run the one-function-per-file rule over `root`, printing each violation and returning
-/// `1` when any are found. A language with no configured threshold reports that and exits `0`.
-fn run_unit_one_function(
-    root: &Path,
-    language: colocated_test::Language,
-    config_path: &Path,
-) -> anyhow::Result<i32> {
-    let threshold = if config_path.exists() {
-        config::load_config(config_path)?.one_function_threshold(language)
-    } else {
-        config::Config::default().one_function_threshold(language)
-    };
-    let key = match language {
-        colocated_test::Language::Python => "python",
-        colocated_test::Language::TypeScript => "typescript",
-        colocated_test::Language::Rust => "rust",
-    };
-    let Some(max_lines) = threshold else {
-        println!(
-            "unit one-function-per-file: not enabled for {key} — \
-             set `[{key}].one_function_per_file` to opt in"
-        );
-        return Ok(0);
-    };
-    let (raw, scanned) = one_function::find_violations(root, language, max_lines)?;
-    let select: ExemptSelect = match language {
-        colocated_test::Language::Python => |c| c.exemptions(colocated_test::Language::Python),
-        colocated_test::Language::TypeScript => {
-            |c| c.exemptions(colocated_test::Language::TypeScript)
-        }
-        colocated_test::Language::Rust => |c| c.rust_exemptions(),
-    };
-    let violations = apply_waivers(raw, root, config_path, select)?;
-    if violations.is_empty() {
-        eprintln!("one-function-per-file: scanned {scanned} file(s), 0 violations");
-        return Ok(0);
-    }
-    for v in &violations {
-        eprintln!(
-            "{}:{}: {} — {}",
-            v.file.display(),
-            v.line,
-            v.rule,
-            v.message
-        );
-    }
-    eprintln!(
-        "error: {} function(s) sharing a file with another function over the \
-         {max_lines}-line threshold (move each to its own module, or add an \
-         `exempt` entry with a reason)",
-        violations.len()
-    );
-    Ok(1)
-}
-
-/// Run the unit-suite isolation lints over `root`, printing each violation and returning
-/// `1` when any are found. The Rust arm derives the crate root above `root` so that a scan
-/// pointed at `src/` still reads the manifest, and exempt paths stay crate-root-relative.
-fn run_unit_lint(
-    root: &Path,
-    language: isolation::Language,
-    config_path: &Path,
-) -> anyhow::Result<i32> {
-    let crate_root = tiers::package_root(root, "Cargo.toml");
-    let (raw, select, waiver_root): (Vec<lint::Violation>, ExemptSelect, &Path) = match language {
-        isolation::Language::Rust => {
-            let crate_root = crate_root.as_deref().unwrap_or(root);
-            (
-                isolation::find_violations(root, crate_root)?,
-                |c| c.rust_exemptions(),
-                crate_root,
-            )
-        }
-        isolation::Language::TypeScript => (
-            ts::find_unit_violations(root)?,
-            |c| c.exemptions(colocated_test::Language::TypeScript),
-            root,
-        ),
-        isolation::Language::Python => (
-            lint::find_unit_isolation_violations(root)?,
-            |c| c.exemptions(colocated_test::Language::Python),
-            root,
-        ),
-    };
-    let violations = apply_waivers(raw, waiver_root, config_path, select)?;
-    if violations.is_empty() {
-        return Ok(0);
-    }
-    for v in &violations {
-        eprintln!(
-            "{}:{}: {} — {}",
-            v.file.display(),
-            v.line,
-            v.rule,
-            v.message
-        );
-    }
-    eprintln!("error: {} isolation violation(s)", violations.len());
-    Ok(1)
-}
-
-/// Run the integration-test lints over the package root above `root`, printing each
-/// violation and returning `1` when any are found. A tree with no manifest is scanned at `root`.
-fn run_integration_lint(
-    root: &Path,
-    language: IntegrationLintLanguage,
-    config_path: &Path,
-) -> anyhow::Result<i32> {
-    let manifest = match language {
-        IntegrationLintLanguage::Python => "pyproject.toml",
-        IntegrationLintLanguage::TypeScript => "package.json",
-        IntegrationLintLanguage::Rust => "Cargo.toml",
-    };
-    let package_root = tiers::package_root(root, manifest);
-    let scan_root = package_root.as_deref().unwrap_or(root);
-    let (raw, select): (Vec<lint::Violation>, ExemptSelect) = match language {
-        IntegrationLintLanguage::Python => (
-            match &package_root {
-                Some(package_root) => lint::find_suite_violations(package_root)?,
-                None => lint::find_violations(root)?,
-            },
-            |c| c.exemptions(colocated_test::Language::Python),
-        ),
-        IntegrationLintLanguage::TypeScript => (
-            match &package_root {
-                Some(package_root) => ts::find_suite_violations(package_root)?,
-                None => ts::find_integration_violations(root)?,
-            },
-            |c| c.exemptions(colocated_test::Language::TypeScript),
-        ),
-        IntegrationLintLanguage::Rust => {
-            (isolation::find_integration_violations(scan_root)?, |c| {
-                c.rust_exemptions()
-            })
-        }
-    };
-    let violations = apply_waivers(raw, scan_root, config_path, select)?;
-    if violations.is_empty() {
-        return Ok(0);
-    }
-    for v in &violations {
-        eprintln!(
-            "{}:{}: {} — {}",
-            v.file.display(),
-            v.line,
-            v.rule,
-            v.message
-        );
-    }
-    eprintln!("error: {} lint violation(s)", violations.len());
-    Ok(1)
-}
-
-/// Selects a language's `[[<lang>.exempt]]` table from a loaded config.
-type ExemptSelect = fn(&config::Config) -> &[config::Exemption];
-
-/// Drop the violations whose `root`-relative path is exempt for their rule.
-fn apply_waivers(
-    violations: Vec<lint::Violation>,
-    root: &Path,
-    config_path: &Path,
-    exemptions: ExemptSelect,
-) -> anyhow::Result<Vec<lint::Violation>> {
-    use std::collections::hash_map::Entry;
-
-    if !config_path.exists() {
-        return Ok(violations);
-    }
-    let config = config::load_config(config_path)?;
-    let exempt = exemptions(&config);
-    let mut resolved: std::collections::HashMap<config::Rule, std::collections::BTreeSet<String>> =
-        std::collections::HashMap::new();
-    let mut kept = Vec::new();
-    for violation in violations {
-        let waived = match config::Rule::from_id(violation.rule) {
-            Some(rule) => {
-                let exempt_paths = match resolved.entry(rule) {
-                    Entry::Occupied(entry) => entry.into_mut(),
-                    Entry::Vacant(entry) => {
-                        entry.insert(config::resolve_exempt(root, exempt, rule)?)
-                    }
-                };
-                violation
-                    .file
-                    .strip_prefix(root)
-                    .ok()
-                    .map(|rel| rel.to_string_lossy().replace('\\', "/"))
-                    .is_some_and(|rel| exempt_paths.contains(&rel))
-            }
-            None => false,
-        };
-        if !waived {
-            kept.push(violation);
-        }
-    }
-    Ok(kept)
 }
 
 /// Report every scope in `<base>...HEAD` that changed public surface without adding the
@@ -941,82 +747,6 @@ mod tests {
             line_scoped["widget.py"],
             std::collections::BTreeSet::from([3])
         );
-    }
-
-    fn python_exemptions(config: &config::Config) -> &[config::Exemption] {
-        config.exemptions(colocated_test::Language::Python)
-    }
-
-    #[test]
-    fn a_violation_with_an_unwaivable_rule_id_is_kept() {
-        let dir = std::env::temp_dir().join(format!("tc-lib-waiver-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let config_path = dir.join("testing-conventions.toml");
-        std::fs::write(&config_path, "").unwrap();
-        let violation = lint::Violation {
-            file: dir.join("widget_test.py"),
-            line: 1,
-            rule: "not-a-waivable-rule",
-            message: "synthetic".to_string(),
-        };
-        let kept = apply_waivers(
-            vec![violation.clone()],
-            &dir,
-            &config_path,
-            python_exemptions,
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-        assert_eq!(kept.unwrap(), vec![violation]);
-    }
-
-    #[test]
-    fn a_missing_config_keeps_every_violation() {
-        let violation = lint::Violation {
-            file: PathBuf::from("/tree/widget_test.py"),
-            line: 1,
-            rule: "no-monkeypatch",
-            message: "synthetic".to_string(),
-        };
-        let kept = apply_waivers(
-            vec![violation.clone()],
-            Path::new("/tree"),
-            Path::new("/nonexistent-tc-lib.toml"),
-            python_exemptions,
-        );
-        assert_eq!(kept.unwrap(), vec![violation]);
-    }
-
-    #[test]
-    fn waivers_resolve_each_rule_once_and_keep_out_of_root_files() {
-        let dir = std::env::temp_dir().join(format!("tc-lib-waiver-full-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("widget_test.py"), "def test_widget():\n    pass\n").unwrap();
-        let config_path = dir.join("testing-conventions.toml");
-        std::fs::write(
-            &config_path,
-            "[[python.exempt]]\n\
-             path = \"widget_test.py\"\n\
-             rules = [\"no-monkeypatch\"]\n\
-             reason = \"synthetic waiver for the resolution paths\"\n",
-        )
-        .unwrap();
-        let violation = |file: PathBuf| lint::Violation {
-            file,
-            line: 1,
-            rule: "no-monkeypatch",
-            message: "synthetic".to_string(),
-        };
-        let waived = violation(dir.join("widget_test.py"));
-        let kept_in_root = violation(dir.join("other_test.py"));
-        let outside_root = violation(PathBuf::from("/elsewhere/widget_test.py"));
-        let kept = apply_waivers(
-            vec![waived, kept_in_root.clone(), outside_root.clone()],
-            &dir,
-            &config_path,
-            python_exemptions,
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-        assert_eq!(kept.unwrap(), vec![kept_in_root, outside_root]);
     }
 
     #[test]

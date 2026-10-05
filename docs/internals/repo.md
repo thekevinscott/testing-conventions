@@ -804,6 +804,34 @@ load-bearing entries, `--no-install` over `--yes` and the zeroed thresholds with
 comments buried mid-array. Both are honest homes, not escape hatches, and the test for each is
 the same: is the thing really one value, or really a constant?
 
+The step's four stubborn survivors all taught the same lesson, and it is about where a test has
+to live rather than what it has to assert. The diff-scoped Rust mutation gate runs cargo-mutants
+with `--cargo-test-arg --lib`, so **only colocated tests can kill a library mutant** — an
+integration test under `tests/` links the library and exercises the code, and still leaves every
+mutant in it standing. That rules out the usual escape for a function whose fixture is
+effectful. The other half is the subprocess-seam rule (#758): it propagates `runs_a_command`
+through calls *in the same file*, so a function is a seam only where the `Command` it reaches is
+a file-local hop away.
+
+Put together, those two decide placement. `run_changelog` sat in `lib.rs` and could not satisfy
+either: its `0`-vs-`1` verdict needs a real repository, a repository fixture in the composition
+root is an out-of-module call because `lib.rs` owns no git plumbing, and `lib.rs` names no
+`Command`, so the seam rule could never cover it. Moving it to `changelog.rs` — where every
+piece it calls already lives — let it split into `facts` (reads the repository), `verdict`
+(pure, all four outcomes unit-tested) and a branch-free `run` the seam rule does cover.
+`run_ts_adapter` was the same shape in miniature: two `if let`s around an otherwise pure argv
+build were the only thing keeping a spawning seam out of the rule, and `ts_adapter_args` removed
+them. **A survivor in a function that spawns is usually a placement problem, not a missing
+assertion** — ask which file owns the effect before reaching for an exemption.
+
+One cost is worth recording because it is the general shape of this trade. `facts` gathers
+eagerly, where the old code skipped the git calls when no fragment directory existed. The lazy
+version cannot be split into a decision and a seam, because the laziness *is* the branch. Every
+repository behaves identically — one with no fragment directories still reports "skipped", since
+the layout and not the diff decides that — and only a path that is not a repository at all
+changes, now erroring rather than reporting a clean skip. When laziness and testability conflict
+at a seam, prefer testability and say in the commit what moved.
+
 The third step lowers the threshold to `29`, the tightest passing value at or below the `30`
 ceiling #763 named. At `30` the gate flagged seventeen functions across seven files, and seven
 of them wanted a move: `lib.rs`'s remaining `run_*` dispatchers and its waiver helper

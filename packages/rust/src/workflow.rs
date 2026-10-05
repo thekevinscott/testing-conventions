@@ -160,70 +160,13 @@ fn tokenize(line: &str) -> Vec<String> {
     tokens
 }
 
-/// Of `invocations`, the ones whose subcommand chain names a subcommand the clap tree
-/// `root` no longer exposes.
-pub fn unknown_subcommands(invocations: &[Invocation], root: &clap::Command) -> Vec<Violation> {
-    let mut out = Vec::new();
-    for inv in invocations {
-        let mut node = root;
-        let mut i = 0;
-        while i < inv.args.len() {
-            // Past the last subcommand the remaining tokens are positionals, so walking on
-            // would flag a path argument as an unknown subcommand.
-            if !node.has_subcommands() {
-                break;
-            }
-            let tok = &inv.args[i];
-            if tok.starts_with('-') {
-                i += if flag_takes_value(node, tok) { 2 } else { 1 };
-                continue;
-            }
-            match node.find_subcommand(tok.as_str()) {
-                Some(sub) => {
-                    node = sub;
-                    i += 1;
-                }
-                None => {
-                    out.push(Violation {
-                        file: inv.file.clone(),
-                        line: inv.line,
-                        rule: "no-unknown-subcommand",
-                        message: format!(
-                            "`{}` is not a `{}` subcommand — the published binary no longer exposes it",
-                            tok,
-                            node.get_name()
-                        ),
-                    });
-                    break;
-                }
-            }
-        }
-    }
-    out
-}
-
-/// `true` when the flag `token` is an option of `node` that consumes a following value,
-/// so the subcommand walk must skip that value too.
-fn flag_takes_value(node: &clap::Command, token: &str) -> bool {
-    if token.contains('=') {
-        return false;
-    }
-    let name = token.trim_start_matches('-');
-    node.get_arguments().any(|arg| {
-        let matches_long = arg.get_long() == Some(name);
-        let matches_short = name.len() == 1 && arg.get_short().is_some_and(|c| name.starts_with(c));
-        (matches_long || matches_short)
-            && matches!(
-                arg.get_action(),
-                clap::ArgAction::Set | clap::ArgAction::Append
-            )
-    })
-}
-
 /// One [`Violation`] per invocation under `path` naming a subcommand `root` no longer
 /// exposes.
 pub fn check(path: impl AsRef<Path>, root: &clap::Command) -> Result<Vec<Violation>> {
-    Ok(unknown_subcommands(&invocations(path)?, root))
+    Ok(crate::subcommand_walk::unknown_subcommands(
+        &invocations(path)?,
+        root,
+    ))
 }
 
 #[cfg(test)]
@@ -348,46 +291,6 @@ mod tests {
     }
 
     #[test]
-    fn unknown_subcommands_validates_across_leading_global_flags() {
-        let root = clap::Command::new("tc")
-            .arg(
-                clap::Arg::new("config")
-                    .long("config")
-                    .action(clap::ArgAction::Set),
-            )
-            .subcommand(clap::Command::new("unit").subcommand(clap::Command::new("coverage")));
-        let flagged = unknown_subcommands(&[inv(1, &["--config", "x", "unit", "location"])], &root);
-        assert_eq!(flagged.len(), 1, "{flagged:?}");
-        let m = &flagged[0].message;
-        assert!(m.contains("location"), "{m}");
-        assert!(
-            unknown_subcommands(&[inv(2, &["--config", "x", "unit", "coverage"])], &root)
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn a_flag_carrying_its_value_inline_consumes_no_extra_token() {
-        let root = clap::Command::new("tc").arg(
-            clap::Arg::new("config")
-                .long("config")
-                .action(clap::ArgAction::Set),
-        );
-        assert!(flag_takes_value(&root, "--config"));
-        assert!(!flag_takes_value(&root, "--config=x"));
-    }
-
-    #[test]
-    fn a_boolean_flag_consumes_no_value() {
-        let root = clap::Command::new("tc").arg(
-            clap::Arg::new("verbose")
-                .long("verbose")
-                .action(clap::ArgAction::SetTrue),
-        );
-        assert!(!flag_takes_value(&root, "--verbose"));
-    }
-
-    #[test]
     fn a_line_starting_with_the_binary_is_an_invocation() {
         let line = "testing-conventions install";
         assert_eq!(line_invocation(line), Some(vec!["install".to_string()]));
@@ -417,25 +320,6 @@ mod tests {
         assert!(invocations(&missing).is_err());
     }
 
-    fn inv(line: usize, args: &[&str]) -> Invocation {
-        Invocation {
-            file: PathBuf::from("ci.yml"),
-            line,
-            args: args.iter().map(|s| s.to_string()).collect(),
-        }
-    }
-
-    #[test]
-    fn a_short_flag_consumes_its_value() {
-        let root = clap::Command::new("tc").arg(
-            clap::Arg::new("config")
-                .short('c')
-                .action(clap::ArgAction::Set),
-        );
-        assert!(flag_takes_value(&root, "-c"));
-        assert!(!flag_takes_value(&root, "-x"));
-    }
-
     #[test]
     fn an_unreadable_workflow_names_the_file() {
         let tree = TempTree::new(&[("ci.yml", "")]);
@@ -445,5 +329,19 @@ mod tests {
             format!("{err:#}").contains("reading workflow"),
             "got: {err:#}"
         );
+    }
+
+    #[test]
+    fn check_flags_an_invocation_naming_a_subcommand_the_cli_dropped() {
+        let root = clap::Command::new("tc")
+            .subcommand(clap::Command::new("unit").subcommand(clap::Command::new("coverage")));
+
+        let dropped = TempTree::new(&[("ci.yml", "- run: testing-conventions unit location .\n")]);
+        let flagged = check(dropped.path(), &root).unwrap();
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert!(flagged[0].message.contains("location"), "{flagged:?}");
+
+        let kept = TempTree::new(&[("ci.yml", "- run: testing-conventions unit coverage .\n")]);
+        assert!(check(kept.path(), &root).unwrap().is_empty());
     }
 }

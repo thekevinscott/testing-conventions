@@ -757,13 +757,64 @@ properties hold the ratchet:
 `packages/python`, `internals/move-major-tag`, `internals/detect`, and `internals/checks` all sit
 at the default and carry no config for it — the ratchet's end state.
 
-`packages/rust` entered the ratchet at `max_lines = 76` (#735) and sits at `46`. Each value is the
+`packages/rust` entered the ratchet at `max_lines = 76` (#735) and sits at `29`. Each value is the
 tightest threshold the crate passes at that point rather than a judgement about Rust, so the
 package always carries zero headroom: at `76` it was `run` in `lib.rs`, at exactly 76 lines; at
 `64` it was `run_unit_mutation`, sharing `lib.rs` with `run` at exactly 64; at `46`, the next
-line down flags `run_unit_one_function` in `lib.rs`. Before the second split, a scan at `50`
-flagged two functions; after it, `46` passes and `45` flags one. #750 holds the remaining
-step sequence.
+line down flagged `run_unit_one_function` in `lib.rs`; at `29`, `28` flags four more. #750 holds
+the remaining step sequence.
+
+The third step lowers the threshold to `29`, the tightest passing value at or below the `30`
+ceiling #763 named. At `30` the gate flagged seventeen functions across seven files, and seven
+of them wanted a move: `lib.rs`'s remaining `run_*` dispatchers and its waiver helper
+(`unit_one_function.rs`, `unit_lint.rs`, `integration_lint.rs`, `waivers.rs`), git's C-quoted
+path decoder and `diff --name-status` read (`git_path.rs`, `git_diff.rs`), and the clap-tree walk
+behind the workflow guard (`subcommand_walk.rs`). The other ten were one function holding
+several decisions, and the step names each decision in place rather than moving the whole.
+
+What that exposed is the step's real yield. `evaluate_rust` and `evaluate_typescript` in
+`coverage.rs` and `evaluate_patch_typescript` in `patch_coverage.rs` carried three copies of the
+same floor comparison, the same `{name} {actual:.2}% < {required}%` wording, and the same
+"coverage below thresholds" verdict; all three now call `coverage::shortfall` and
+`coverage::verdict`, and the "measured no code" message two of them spelled out is one const.
+`evaluate_patch_typescript`'s branch-arm and function tallies were the same loop over
+`(line, covered)` pairs twice, now `on_line_tally` once. Three `lib.rs` dispatchers each printed
+violations with an identical seven-line loop, now `violation::rendered`, which returns the
+rendering rather than printing it so the mutation gate can kill its body mutant. `lint.rs`'s
+`module_scope` needed no new module at all: its statement match was the dispatcher between
+`ModuleScope`'s existing `bind_*` methods, so it became one of them.
+
+Each named decision carries a colocated test, and several assert behaviour nothing asserted
+before: that `vitest_coverage_argv` never passes `--yes` (previously only a comment), that
+`patch_region` rejects a short region and a negative file id, that an unscoped Python mutation
+run judges every mutant where a diff-scoped one judges only changed lines, and what a Rust
+status code narrows to.
+
+The mutation gate then judged eleven mutants no assertion covered, and four of them sat in
+functions this step only *moved*. That is the general lesson, not an accident of this step: the
+gate is diff-scoped, so a move puts a function's lines into the diff and the gate reaches it for
+the first time. Budget mutation work for every move, not only for every rewrite.
+
+Two of the eleven were whole-body replacements of a function that spawns a subprocess, which no
+unit test can judge. The #758 seam rule exists for exactly that, but it drops a whole-body mutant
+only for a **branch-free** spawning function, and both still carried a decision — so the rule
+correctly declined to cover them. `run_vitest_coverage` held `if !run.status.success()`, now
+`vitest_exit`, the sibling of `llvm_cov_stdout` next door; `rust_diff_scope` held a `let … else`
+and the "no Rust source, no run" test, now `rust_scope`, which takes the written path and the
+diff text and so needs no filesystem to assert. Reading the diff became
+`.map(read_base_diff).transpose()?` rather than a closure, because `subprocess_seam.rs` counts a
+closure as a branch. The pattern generalises: to bring a spawning seam under the rule, move every
+decision out of it until nothing but calls and `?` remain.
+
+The remaining seven were decisions that simply had no case. `unquote_c_path` had never seen a
+path quoted on one end only — where stripping the first and last byte eats a real character — nor
+an empty quoted path, nor an octal escape running up to the closing quote, which indexes past the
+end once the digit walk stops only on the three-digit cap. `consume_hunk` had never seen a
+deletion-only hunk, whose old-side count must still be walked or the line after it, which may
+itself begin `---` or `+++`, reads as a file header in the caller. `unknown_subcommands` had never
+seen an invocation ending on a parent subcommand. `kept_lines` had no direct test at all,
+including for the `u32` bound its own doc comment names, and neither did `workflow::check` — three
+lines of wiring, which is not a reason to skip it. None of the eleven was exempted.
 
 The second step lowers the threshold to `46`, the tightest passing value, by moving
 `run_unit_mutation` and the Rust patch coverage evaluator into their own modules. The first step

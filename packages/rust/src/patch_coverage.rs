@@ -147,98 +147,110 @@ pub fn measure_typescript(
     Ok(evaluate_patch_typescript(&changed, &detail, thresholds))
 }
 
-/// Pure: the four vitest floors over the changed lines. A statement counts when the diff
-/// touches any line it spans, a line when a statement *starts* on it, a branch arm and a
-/// function on their own line; an empty denominator is vacuously full, not a failure.
+/// A covered-of-total tally over the changed lines.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+struct Tally {
+    covered: u64,
+    total: u64,
+}
+
+impl Tally {
+    /// Count one site. An uncovered site raises only the denominator.
+    fn count(&mut self, covered: bool) {
+        self.total += 1;
+        self.covered += u64::from(covered);
+    }
+
+    fn add(&mut self, other: Tally) {
+        self.covered += other.covered;
+        self.total += other.total;
+    }
+
+    /// The tally as a percent. An empty denominator is vacuously full, not a failure.
+    fn percent(self) -> f64 {
+        if self.total == 0 {
+            100.0
+        } else {
+            100.0 * self.covered as f64 / self.total as f64
+        }
+    }
+}
+
+/// Pure: the four vitest floors over the changed lines.
 fn evaluate_patch_typescript(
     changed: &BTreeMap<String, BTreeSet<u64>>,
     detail: &BTreeMap<String, coverage::TsPatchCoverage>,
     thresholds: TypeScriptThresholds,
 ) -> Outcome {
-    let (mut s_cov, mut s_tot) = (0u64, 0u64);
-    let (mut l_cov, mut l_tot) = (0u64, 0u64);
-    let (mut b_cov, mut b_tot) = (0u64, 0u64);
-    let (mut f_cov, mut f_tot) = (0u64, 0u64);
+    let mut statements = Tally::default();
+    let mut lines = Tally::default();
+    let mut branches = Tally::default();
+    let mut functions = Tally::default();
 
-    for (file, lines) in changed {
+    for (file, touched) in changed {
         let Some(cov) = detail.get(file) else {
             continue;
         };
-
-        for &(start, end, covered) in &cov.statements {
-            if (start..=end).any(|line| lines.contains(&line)) {
-                s_tot += 1;
-                if covered {
-                    s_cov += 1;
-                }
-            }
-        }
-
-        for &line in lines {
-            let mut starts_here = false;
-            let mut covered_here = false;
-            for &(start, _end, covered) in &cov.statements {
-                if start == line {
-                    starts_here = true;
-                    covered_here |= covered;
-                }
-            }
-            if starts_here {
-                l_tot += 1;
-                if covered_here {
-                    l_cov += 1;
-                }
-            }
-        }
-
-        for &(source_line, covered) in &cov.branch_arms {
-            if lines.contains(&source_line) {
-                b_tot += 1;
-                if covered {
-                    b_cov += 1;
-                }
-            }
-        }
-
-        for &(decl_line, covered) in &cov.functions {
-            if lines.contains(&decl_line) {
-                f_tot += 1;
-                if covered {
-                    f_cov += 1;
-                }
-            }
-        }
+        statements.add(statements_tally(&cov.statements, touched));
+        lines.add(lines_tally(&cov.statements, touched));
+        branches.add(on_line_tally(&cov.branch_arms, touched));
+        functions.add(on_line_tally(&cov.functions, touched));
     }
 
-    let pct = |covered: u64, total: u64| {
-        if total == 0 {
-            100.0
-        } else {
-            100.0 * covered as f64 / total as f64
-        }
-    };
     let checks = [
-        ("lines", pct(l_cov, l_tot), thresholds.lines),
-        ("branches", pct(b_cov, b_tot), thresholds.branches),
-        ("functions", pct(f_cov, f_tot), thresholds.functions),
-        ("statements", pct(s_cov, s_tot), thresholds.statements),
+        ("lines", lines.percent(), thresholds.lines),
+        ("branches", branches.percent(), thresholds.branches),
+        ("functions", functions.percent(), thresholds.functions),
+        ("statements", statements.percent(), thresholds.statements),
     ];
-    let mut shortfalls = Vec::new();
-    for (name, actual, required) in checks {
-        // A hair of tolerance so a percent that rounds to the floor isn't failed by
-        // float noise (matches the whole-tree `coverage::evaluate_typescript`).
-        if actual + 1e-9 < f64::from(required) {
-            shortfalls.push(format!("{name} {actual:.2}% < {required}%"));
+    coverage::verdict(
+        checks
+            .into_iter()
+            .filter_map(|(name, actual, required)| coverage::shortfall(name, actual, required))
+            .collect(),
+    )
+}
+
+/// A statement counts when the diff touches any line it spans.
+fn statements_tally(statements: &[(u64, u64, bool)], touched: &BTreeSet<u64>) -> Tally {
+    let mut tally = Tally::default();
+    for &(start, end, covered) in statements {
+        if (start..=end).any(|line| touched.contains(&line)) {
+            tally.count(covered);
         }
     }
-    if shortfalls.is_empty() {
-        Outcome::Pass
-    } else {
-        Outcome::Fail(format!(
-            "coverage below thresholds: {}",
-            shortfalls.join(", ")
-        ))
+    tally
+}
+
+/// A changed line counts when a statement *starts* on it, and is covered when any statement
+/// starting there ran — one line can hold several.
+fn lines_tally(statements: &[(u64, u64, bool)], touched: &BTreeSet<u64>) -> Tally {
+    let mut tally = Tally::default();
+    for &line in touched {
+        let mut starts_here = false;
+        let mut covered_here = false;
+        for &(start, _end, covered) in statements {
+            if start == line {
+                starts_here = true;
+                covered_here |= covered;
+            }
+        }
+        if starts_here {
+            tally.count(covered_here);
+        }
     }
+    tally
+}
+
+/// A branch arm or a function declaration counts when the diff touches its own line.
+fn on_line_tally(sites: &[(u64, bool)], touched: &BTreeSet<u64>) -> Tally {
+    let mut tally = Tally::default();
+    for &(line, covered) in sites {
+        if touched.contains(&line) {
+            tally.count(covered);
+        }
+    }
+    tally
 }
 
 /// Diff-scoped Rust coverage floor: the `cargo llvm-cov` regions/lines metrics measured
@@ -342,54 +354,9 @@ fn new_side_path(header: &str) -> Option<String> {
         return None;
     }
     // Git quotes the whole thing including the prefix (`"b/föö.py"`), so decode first.
-    let unquoted = unquote_c_path(raw);
+    let unquoted = crate::git_path::unquote_c_path(raw);
     let path = unquoted.strip_prefix("b/").unwrap_or(&unquoted);
     Some(path.replace('\\', "/"))
-}
-
-/// Decode a git C-quoted path to its real bytes. Git wraps a path holding a `"`, a
-/// backslash, a control byte — or, with `core.quotepath` on, a high-bit byte — in quotes
-/// and C-escapes it. An unquoted path is returned unchanged.
-pub(crate) fn unquote_c_path(path: &str) -> String {
-    let bytes = path.as_bytes();
-    if bytes.len() < 2 || bytes[0] != b'"' || bytes[bytes.len() - 1] != b'"' {
-        return path.to_string();
-    }
-    let inner = &bytes[1..bytes.len() - 1];
-    let mut out: Vec<u8> = Vec::with_capacity(inner.len());
-    let mut i = 0;
-    while i < inner.len() {
-        if inner[i] != b'\\' || i + 1 >= inner.len() {
-            out.push(inner[i]);
-            i += 1;
-            continue;
-        }
-        let next = inner[i + 1];
-        if (b'0'..=b'7').contains(&next) {
-            let mut value: u32 = 0;
-            let mut k = i + 1;
-            while k < inner.len() && k < i + 4 && (b'0'..=b'7').contains(&inner[k]) {
-                value = value * 8 + u32::from(inner[k] - b'0');
-                k += 1;
-            }
-            out.push(value as u8);
-            i = k;
-        } else {
-            let decoded = match next {
-                b'a' => 0x07,
-                b'b' => 0x08,
-                b't' => b'\t',
-                b'n' => b'\n',
-                b'v' => 0x0b,
-                b'f' => 0x0c,
-                b'r' => b'\r',
-                other => other, // `\"`, `\\`, and any other escaped byte are literal.
-            };
-            out.push(decoded);
-            i += 2;
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// The new-side start line from a hunk header `@@ -a,b +c,d @@ …` — the `c`. With
@@ -575,12 +542,24 @@ fn rust_measured_missed(
 }
 
 /// The per-file line set the floor is measured over — every measured line minus the exempt
-/// ones — after the determinism guard: each exempt line must be genuinely failing, so an
-/// exemption can't excuse working code.
+/// ones, after the determinism guard.
 fn apply_line_exemptions(
     detail: &BTreeMap<String, (BTreeSet<u64>, BTreeSet<u64>)>,
     exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
 ) -> Result<BTreeMap<String, BTreeSet<u64>>> {
+    guard_exempt_lines_are_failing(detail, exempt_lines)?;
+    Ok(detail
+        .iter()
+        .map(|(file, (measured, _))| (file.clone(), kept_lines(measured, exempt_lines.get(file))))
+        .collect())
+}
+
+/// The determinism guard: each exempt line must be genuinely failing, so an exemption can't
+/// excuse working code.
+fn guard_exempt_lines_are_failing(
+    detail: &BTreeMap<String, (BTreeSet<u64>, BTreeSet<u64>)>,
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
+) -> Result<()> {
     let mut over: Vec<String> = Vec::new();
     for (file, lines) in exempt_lines {
         let missed = detail.get(file).map(|(_, missed)| missed);
@@ -598,21 +577,20 @@ fn apply_line_exemptions(
             over.concat()
         );
     }
-    let mut line_set = BTreeMap::new();
-    for (file, (measured, _)) in detail {
-        let exempt = exempt_lines.get(file);
-        let kept: BTreeSet<u64> = measured
-            .iter()
-            .copied()
-            .filter(|&line| {
-                !exempt.is_some_and(|exempt| {
-                    u32::try_from(line).is_ok_and(|line| exempt.contains(&line))
-                })
-            })
-            .collect();
-        line_set.insert(file.clone(), kept);
-    }
-    Ok(line_set)
+    Ok(())
+}
+
+/// `measured` less the `exempt` lines. A measured line too large for a `u32` can carry no
+/// exemption, since an exemption is written as one.
+fn kept_lines(measured: &BTreeSet<u64>, exempt: Option<&BTreeSet<u32>>) -> BTreeSet<u64> {
+    measured
+        .iter()
+        .copied()
+        .filter(|&line| {
+            !exempt
+                .is_some_and(|exempt| u32::try_from(line).is_ok_and(|line| exempt.contains(&line)))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -726,28 +704,6 @@ mod tests {
             Some("src/föö.py")
         );
         assert_eq!(new_side_path("b/src/föö.py").as_deref(), Some("src/föö.py"));
-    }
-
-    #[test]
-    fn unquote_c_path_decodes_octal_and_named_escapes() {
-        assert_eq!(
-            unquote_c_path("\"src/f\\303\\266\\303\\266.py\""),
-            "src/föö.py"
-        );
-        assert_eq!(unquote_c_path("\"a\\tb\\\"c\\\\d\""), "a\tb\"c\\d");
-        assert_eq!(
-            unquote_c_path("\"\\a\\b\\n\\v\\f\\r\""),
-            "\u{7}\u{8}\n\u{b}\u{c}\r"
-        );
-        assert_eq!(unquote_c_path("\"\\1015\""), "A5");
-    }
-
-    #[test]
-    fn unquote_c_path_leaves_an_unquoted_path_unchanged() {
-        assert_eq!(unquote_c_path("src/föö.py"), "src/föö.py");
-        assert_eq!(unquote_c_path("\""), "\"");
-        assert_eq!(unquote_c_path(""), "");
-        assert_eq!(unquote_c_path("\"a\\\""), "a\\");
     }
 
     fn cov(
@@ -1148,5 +1104,26 @@ mod tests {
         );
         assert_eq!(changed["shim.py"], [1, 4].into_iter().collect());
         assert_eq!(changed["core.py"], [5].into_iter().collect());
+    }
+
+    #[test]
+    fn kept_lines_drops_only_the_exempt_lines() {
+        let measured = BTreeSet::from([3u64, 4, 5]);
+        assert_eq!(
+            kept_lines(&measured, Some(&BTreeSet::from([4u32]))),
+            BTreeSet::from([3, 5])
+        );
+        assert_eq!(kept_lines(&measured, None), measured);
+    }
+
+    #[test]
+    fn a_measured_line_too_large_for_a_u32_can_carry_no_exemption() {
+        // An exemption is written as a u32, so a line number that cannot be one is kept
+        // however the exemption set reads.
+        let measured = BTreeSet::from([u64::from(u32::MAX) + 1]);
+        assert_eq!(
+            kept_lines(&measured, Some(&BTreeSet::from([u32::MAX]))),
+            measured
+        );
     }
 }

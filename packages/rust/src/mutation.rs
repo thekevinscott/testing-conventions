@@ -414,18 +414,11 @@ pub fn measure_rust(
     // workspace-relative prefix. A standalone crate is its own workspace root: no prefix.
     let workspace_root = cargo_workspace_root(root)?;
     let prefix = canonical_scan_prefix(root, &workspace_root);
-    let scope = match base {
-        Some(base) => {
-            match rust_diff_scope(root, &workspace_root, prefix.as_deref(), base, &out)? {
-                None => return Ok(Measurement::EngineNotRun),
-                Some(scope) => Some(scope),
-            }
-        }
-        None => None,
-    };
+    let scope = rust_base_scope(root, &workspace_root, prefix.as_deref(), base, &out)?;
     let (diff, base_diff) = match &scope {
-        Some((path, parsed)) => (Some(path.as_path()), Some(parsed)),
-        None => (None, None),
+        RustScope::NothingToJudge => return Ok(Measurement::EngineNotRun),
+        RustScope::WholeCrate => (None, None),
+        RustScope::Diff(path, parsed) => (Some(path.as_path()), Some(parsed)),
     };
 
     let engine = ensure_cargo_mutants()?;
@@ -439,6 +432,68 @@ pub fn measure_rust(
             zero_mutant_measurement(&engine, root, &workspace_root, features, base_diff, &run)
         }
     }
+}
+
+/// Where to run the `--base` diff and with what argv. With no prefix the scan path is its own
+/// cargo workspace root, so the diff runs there unscoped; with one, it runs at the workspace
+/// root scoped by the prefix pathspec, because that is the frame cargo-mutants reads
+/// `--in-diff` paths in. `--relative` either way.
+fn base_diff_command<'a>(
+    root: &'a Path,
+    workspace_root: &'a Path,
+    prefix: Option<&'a str>,
+    range: &'a str,
+) -> (&'a Path, Vec<&'a str>) {
+    match prefix {
+        None => (root, vec!["diff", "--relative", range]),
+        Some(prefix) => (
+            workspace_root,
+            vec!["diff", "--relative", range, "--", prefix],
+        ),
+    }
+}
+
+/// The error a failed `--base` diff becomes. Kept beside [`base_diff_command`] so the spawn
+/// itself stays a thin seam.
+fn base_diff_exit(output: &std::process::Output, range: &str) -> Result<()> {
+    if !output.status.success() {
+        bail!(
+            "git diff {range} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(())
+}
+
+/// What a Rust run is scoped to.
+enum RustScope {
+    /// `--base` changed no lines, or no Rust source, under the crate: the engine has nothing
+    /// to judge and should not run at all.
+    NothingToJudge,
+    /// No `--base`: every mutant in the crate is in scope.
+    WholeCrate,
+    /// `--base` given and non-empty: the written diff file, and the tool's reading of it.
+    Diff(PathBuf, BaseDiff),
+}
+
+/// Resolve what `base` scopes the Rust engine to. Without a `base` the whole crate is in
+/// scope; with one, an empty diff means there is nothing to judge.
+fn rust_base_scope(
+    root: &Path,
+    workspace_root: &Path,
+    prefix: Option<&str>,
+    base: Option<&str>,
+    out: &MutantsOut,
+) -> Result<RustScope> {
+    let Some(base) = base else {
+        return Ok(RustScope::WholeCrate);
+    };
+    Ok(
+        match rust_diff_scope(root, workspace_root, prefix, base, out)? {
+            None => RustScope::NothingToJudge,
+            Some((path, parsed)) => RustScope::Diff(path, parsed),
+        },
+    )
 }
 
 /// The diff to scope the engine by, as the written diff file and the tool's own reading of it.
@@ -546,15 +601,9 @@ pub fn measure_typescript(
     let package_root =
         crate::tiers::package_root(root, "package.json").unwrap_or_else(|| root.to_path_buf());
     let prefix = scan_prefix(root, &package_root);
-    let mutate = match base {
-        Some(base) => {
-            let ranges = mutate_ranges(root, base)?;
-            if ranges.is_empty() {
-                return Ok(Measurement::EngineNotRun);
-            }
-            Some(prefix_mutate_specs(ranges, prefix.as_deref()))
-        }
-        None => prefix.as_deref().map(scan_scoped_mutate_globs),
+    let mutate = match ts_base_scope(root, base, prefix.as_deref())? {
+        TsScope::NothingToJudge => return Ok(Measurement::EngineNotRun),
+        TsScope::Mutate(specs) => specs,
     };
     let test_files = prefix.as_deref().map(scan_scoped_test_file_globs);
     let json = run_ts_adapter(
@@ -570,6 +619,29 @@ pub fn measure_typescript(
         count: normalized_conclusive_count(&mutants),
         survivors,
     })
+}
+
+/// What a TypeScript run is scoped to.
+enum TsScope {
+    /// `--base` changed no mutable lines: the engine has nothing to judge.
+    NothingToJudge,
+    /// The adapter's `--mutate` specs. `None` leaves the whole package in scope, which is
+    /// what a scan path that *is* the package root wants.
+    Mutate(Option<Vec<String>>),
+}
+
+/// Resolve what `base` scopes the TypeScript adapter to. With a `base`, the changed ranges
+/// become `--mutate` specs and an empty set means there is nothing to judge; without one,
+/// the scan prefix alone scopes the run.
+fn ts_base_scope(root: &Path, base: Option<&str>, prefix: Option<&str>) -> Result<TsScope> {
+    let Some(base) = base else {
+        return Ok(TsScope::Mutate(prefix.map(scan_scoped_mutate_globs)));
+    };
+    let ranges = mutate_ranges(root, base)?;
+    if ranges.is_empty() {
+        return Ok(TsScope::NothingToJudge);
+    }
+    Ok(TsScope::Mutate(Some(prefix_mutate_specs(ranges, prefix))))
 }
 
 /// The scan path relative to its package root, as a `/`-joined string. `None` when the scan
@@ -671,10 +743,7 @@ fn run_ts_adapter(
     mutate: Option<&[String]>,
     test_files: Option<&[String]>,
 ) -> Result<String> {
-    let out = AdapterOut::new();
-    std::fs::create_dir_all(&out.0).context("creating the mutation adapter output dir")?;
-    let results = out.0.join("results.json");
-
+    let (_out, results) = adapter_results_path()?;
     let cwd = adapter_cwd(package_root, "TypeScript")?;
 
     let mut command = Command::new("node");
@@ -693,14 +762,7 @@ fn run_ts_adapter(
         command
             .output()
             .context(spawn_context("node", &adapter.display().to_string(), cwd))?;
-    if !output.status.success() {
-        bail!(
-            "the TypeScript mutation adapter failed in `{}`:\n{}{}",
-            cwd.display(),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
-    }
+    adapter_exit(&output, "TypeScript", cwd)?;
     read_adapter_results(&results, "TypeScript")
 }
 
@@ -716,6 +778,31 @@ fn read_adapter_results(results: &Path, engine: &str) -> Result<String> {
 
 /// A unique temp dir for one TS mutation adapter run's `--out` JSON, removed on drop so
 /// the scanned project stays pristine and parallel runs don't collide.
+/// Where an adapter run writes its normalized results, with the directory's lifetime guard.
+/// Results go to a file the adapter names via `--out`, never to stdout, so the engine's own
+/// logging cannot corrupt them. Hold the guard for as long as the file is wanted.
+fn adapter_results_path() -> Result<(AdapterOut, PathBuf)> {
+    let out = AdapterOut::new();
+    std::fs::create_dir_all(&out.0).context("creating the mutation adapter output dir")?;
+    let results = out.0.join("results.json");
+    Ok((out, results))
+}
+
+/// The error a failed mutation adapter becomes. Both adapters report the same way, so both
+/// surface the same thing: the directory the run happened in, then its captured stdout and
+/// stderr, because the engine puts the actual cause in one or the other.
+fn adapter_exit(output: &std::process::Output, language: &str, cwd: &Path) -> Result<()> {
+    if !output.status.success() {
+        bail!(
+            "the {language} mutation adapter failed in `{}`:\n{}{}",
+            cwd.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+    Ok(())
+}
+
 struct AdapterOut(PathBuf);
 
 impl AdapterOut {
@@ -842,10 +929,7 @@ fn judged_py_mutants(
 /// JSON it writes. `modules`, when non-empty, scopes the run to those source files; empty
 /// runs the whole project. `PYTHONDONTWRITEBYTECODE` keeps `__pycache__` out of the tree.
 fn run_py_adapter(root: &Path, modules: &[String]) -> Result<String> {
-    let out = AdapterOut::new();
-    std::fs::create_dir_all(&out.0).context("creating the mutation adapter output dir")?;
-    let results = out.0.join("results.json");
-
+    let (_out, results) = adapter_results_path()?;
     let cwd = adapter_cwd(root, "Python")?;
 
     const ENTRY: &str = "-m testing_conventions.mutation.main";
@@ -861,14 +945,7 @@ fn run_py_adapter(root: &Path, modules: &[String]) -> Result<String> {
     let output = command
         .output()
         .context(spawn_context("python3", ENTRY, cwd))?;
-    if !output.status.success() {
-        bail!(
-            "the Python mutation adapter failed in `{}`:\n{}{}",
-            cwd.display(),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
-    }
+    adapter_exit(&output, "Python", cwd)?;
     read_adapter_results(&results, "Python")
 }
 
@@ -954,24 +1031,13 @@ fn write_base_diff(
     out: &MutantsOut,
 ) -> Result<Option<PathBuf>> {
     let range = format!("{base}...HEAD");
-    let (dir, args) = match prefix {
-        None => (root, vec!["diff", "--relative", &range]),
-        Some(prefix) => (
-            workspace_root,
-            vec!["diff", "--relative", &range, "--", prefix],
-        ),
-    };
+    let (dir, args) = base_diff_command(root, workspace_root, prefix, &range);
     let output = Command::new("git")
         .current_dir(dir)
         .args(&args)
         .output()
         .context("running `git diff` for `--base` (is git installed?)")?;
-    if !output.status.success() {
-        bail!(
-            "git diff {range} failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
+    base_diff_exit(&output, &range)?;
     if output.stdout.is_empty() {
         return Ok(None);
     }
@@ -1149,17 +1215,10 @@ fn resolve_cache_base(xdg: Option<OsString>, home: Option<OsString>) -> PathBuf 
     std::env::temp_dir()
 }
 
-/// Return `bin` if it already exists, otherwise take an exclusive advisory lock at
-/// `lock_path`, re-check, and run `install` if still absent. The lock keeps N concurrent
-/// callers to one from-source compile instead of N. An install producing no binary is an error.
-fn provision(
-    bin: &Path,
-    lock_path: &Path,
-    install: impl FnOnce() -> Result<()>,
-) -> Result<PathBuf> {
-    if bin.exists() {
-        return Ok(bin.to_path_buf());
-    }
+/// Take the exclusive advisory lock at `lock_path`, creating its parent if needed, and
+/// return the held file. The lock releases when the returned handle drops, so the caller
+/// must keep it alive for the critical section.
+fn hold_lock(lock_path: &Path) -> Result<std::fs::File> {
     if let Some(parent) = lock_path.parent() {
         std::fs::create_dir_all(parent).context("creating the provisioning lock's parent dir")?;
     }
@@ -1172,11 +1231,12 @@ fn provision(
     lock_file
         .lock()
         .context("acquiring the provisioning lock")?;
-    // Re-check: another caller may have installed while this one waited for the lock.
-    if bin.exists() {
-        return Ok(bin.to_path_buf());
-    }
-    install()?;
+    Ok(lock_file)
+}
+
+/// `bin`, once an install claims to have put it there. An install that reports success
+/// without producing the binary is an error rather than a path nothing will find.
+fn installed_binary(bin: &Path) -> Result<PathBuf> {
     if !bin.exists() {
         bail!(
             "provisioning reported success but cargo-mutants is not at `{}`",
@@ -1184,6 +1244,26 @@ fn provision(
         );
     }
     Ok(bin.to_path_buf())
+}
+
+/// Return `bin` if it already exists, otherwise take an exclusive advisory lock at
+/// `lock_path`, re-check, and run `install` if still absent. The lock keeps N concurrent
+/// callers to one from-source compile instead of N. An install producing no binary is an error.
+fn provision(
+    bin: &Path,
+    lock_path: &Path,
+    install: impl FnOnce() -> Result<()>,
+) -> Result<PathBuf> {
+    if bin.exists() {
+        return Ok(bin.to_path_buf());
+    }
+    let _lock = hold_lock(lock_path)?;
+    // Re-check: another caller may have installed while this one waited for the lock.
+    if bin.exists() {
+        return Ok(bin.to_path_buf());
+    }
+    install()?;
+    installed_binary(bin)
 }
 
 /// The argv provisioning the pinned cargo-mutants into `root` (`cargo install cargo-mutants

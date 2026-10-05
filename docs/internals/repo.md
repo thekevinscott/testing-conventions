@@ -757,12 +757,52 @@ properties hold the ratchet:
 `packages/python`, `internals/move-major-tag`, `internals/detect`, and `internals/checks` all sit
 at the default and carry no config for it — the ratchet's end state.
 
-`packages/rust` entered the ratchet at `max_lines = 76` (#735) and sits at `29`. Each value is the
+`packages/rust` entered the ratchet at `max_lines = 76` (#735) and sits at `24`. Each value is the
 tightest threshold the crate passes at that point rather than a judgement about Rust, so the
 package always carries zero headroom: at `76` it was `run` in `lib.rs`, at exactly 76 lines; at
 `64` it was `run_unit_mutation`, sharing `lib.rs` with `run` at exactly 64; at `46`, the next
-line down flagged `run_unit_one_function` in `lib.rs`; at `29`, `28` flags four more. #750 holds
-the remaining step sequence.
+line down flagged `run_unit_one_function` in `lib.rs`; at `29`, `28` flagged four more; at `24`,
+`23` flags four more again. #750 holds the remaining step sequence.
+
+The fourth step is the first where the threshold's *ceiling* was argued down before any code was
+written. #764 asked for `≤ 10`, and #750 had already flagged it as the step to reconsider at
+rather than commit to. The measurement is why: the curve has a cliff just below `26` — 7
+functions flagged at `26`, 20 at `24` — and compounds from there to 143 functions across 19 files
+at `10`. That is a redesign of the crate's module structure, not a splitting step, and it would
+not be reviewable as one pull request. #764 was re-scoped to `≤ 24`, one rung past the cliff.
+Read a number from the bottom of that curve as a signal about the crate's shape, not as a
+backlog.
+
+What `24` flagged is the step's actual finding: **not one of the twenty wanted a new module.**
+Through `29`, most of what the gate caught was a long function sharing a file with another long
+one, and the fix was a move — `run_unit_coverage`, `run_unit_mutation`, the `lib.rs` dispatchers.
+At `24` the gate stops pointing at functions that want their own file and starts pointing at
+functions doing two things. Every one of the twenty was a decision its enclosing function was
+carrying, and naming it in place both cleared the violation and gave the decision a signature a
+test can reach.
+
+Three kinds recur. Some were a *reading* of an external tool's output with no name:
+`coverage.rs`'s `code_regions` (llvm-cov tags a region's kind in slot 7) and
+`hidden_line_coverage` (several regions over one line OR together), `istanbul_file_detail` (how a
+v8 Istanbul report maps onto our model), `patch_coverage.rs`'s `is_missed` (with a region floor
+on, *any* uncovered region misses the line; with lines only, *one* covered region redeems it).
+Some were a *scope* resolved by a match with an early return buried in an arm — `measure_rust`
+and `measure_typescript` now ask for a `RustScope` or `TsScope`, where "nothing to judge" is a
+variant rather than a control-flow accident. And some were plain duplication: the two mutation
+adapters shared their whole frame, now `adapter_results_path` and `adapter_exit`, and
+`colocated_test.rs` held two copies of the same root-relative, separator-normalized exempt
+lookup, now `exempt_key`.
+
+Two structures that are not module-scope functions earned their place rather than dodging the
+gate. `parse_unified_diff`'s four locals advanced in lockstep across one `else if` chain, which
+is a scan position rather than four variables, so they became `DiffScan::feed` — the same
+argument that made `lint.rs`'s `module_scope` a `ModuleScope` method one step earlier. And
+`vitest_coverage_argv`'s fixed flags became the const `VITEST_BASE_ARGV`, which is lossless for
+the mutation gate because the function still returns the whole argv; the win is that the two
+load-bearing entries, `--no-install` over `--yes` and the zeroed thresholds with
+`autoUpdate=false`, get a doc comment explaining what they defend against instead of two
+comments buried mid-array. Both are honest homes, not escape hatches, and the test for each is
+the same: is the thing really one value, or really a constant?
 
 The third step lowers the threshold to `29`, the tightest passing value at or below the `30`
 ceiling #763 named. At `30` the gate flagged seventeen functions across seven files, and seven

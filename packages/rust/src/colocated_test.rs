@@ -135,18 +135,35 @@ pub fn missing_unit_tests(
         if !language.is_subject(&contents, source) {
             continue;
         }
-        let relative = source
-            .strip_prefix(root)
-            .unwrap_or(source)
-            .to_string_lossy()
-            .replace('\\', "/");
-        if exempt.contains(&relative) {
+        if exempt.contains(&exempt_key(root, source)) {
             continue;
         }
         orphans.push(source.clone());
     }
     orphans.sort();
     Ok(orphans)
+}
+
+/// The key `exempt` sets are indexed by: `file` relative to `root`, with Windows separators
+/// normalized to `/` so a config written on either platform matches. The path itself when it
+/// does not sit under `root`.
+fn exempt_key(root: &Path, file: &Path) -> String {
+    file.strip_prefix(root)
+        .unwrap_or(file)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+/// `true` when `file` defines testable behavior — a function with a body outside any
+/// `#[cfg(test)]` module — but carries no inline `#[cfg(test)]` module of its own.
+fn lacks_inline_tests(file: &Path) -> Result<bool> {
+    let source = std::fs::read_to_string(file)
+        .with_context(|| format!("reading source file `{}`", file.display()))?;
+    let ast =
+        syn::parse_file(&source).map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
+    let mut visitor = PresenceVisitor::default();
+    visitor.visit_file(&ast);
+    Ok(visitor.has_testable_fn && !visitor.has_test_module)
 }
 
 /// Recursively collect every file `language` tracks under `dir` into `out`.
@@ -178,24 +195,12 @@ pub fn missing_inline_tests(
 
     let mut orphans = Vec::new();
     for file in &files {
-        let source = std::fs::read_to_string(file)
-            .with_context(|| format!("reading source file `{}`", file.display()))?;
-        let ast = syn::parse_file(&source)
-            .map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
-        let mut visitor = PresenceVisitor::default();
-        visitor.visit_file(&ast);
-        if !visitor.has_testable_fn || visitor.has_test_module {
+        if exempt.contains(&exempt_key(root, file)) {
             continue;
         }
-        let relative = file
-            .strip_prefix(root)
-            .unwrap_or(file)
-            .to_string_lossy()
-            .replace('\\', "/");
-        if exempt.contains(&relative) {
-            continue;
+        if lacks_inline_tests(file)? {
+            orphans.push(file.clone());
         }
-        orphans.push(file.clone());
     }
     // `files` is already sorted, so `orphans` is in order.
     Ok(orphans)

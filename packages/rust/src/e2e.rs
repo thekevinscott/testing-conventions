@@ -169,6 +169,52 @@ pub fn verify_extra_scoped(
     validate_scopes(repo, scope, extra_scopes)?;
 
     // Question 1 — did this branch change the scoped source?
+    let args = scoped_source_args(repo, scope, base, extra_scopes, excludes);
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    if !git_diff_changed(repo, &arg_refs)? {
+        return Ok(Verification::Fresh);
+    }
+
+    // Question 2 — does the acting branch's diff add or update *its own* receipt?
+    receipt_freshness(repo, base, branch)
+}
+
+/// Question 2: `Fresh` when `base...HEAD` adds or updates the acting branch's own receipt.
+/// The acting branch is `branch`, else the checked-out one, else none — and with none to
+/// name, every receipt counts. `--diff-filter=ACMRT` drops deletions, so sweeping a stale
+/// receipt by hand never passes as freshness.
+fn receipt_freshness(repo: &Path, base: &str, branch: Option<&str>) -> Result<Verification> {
+    let range = format!("{base}...HEAD");
+    let acting_branch = branch
+        .map(str::to_string)
+        .or_else(|| current_branch(repo).ok());
+    let pathspec = receipt_pathspec(acting_branch.as_deref());
+    let receipt_diff = [
+        "diff",
+        "--name-only",
+        "--diff-filter=ACMRT",
+        &range,
+        "--",
+        &pathspec,
+    ];
+    let out = git_capture(repo, &receipt_diff)?;
+    Ok(if out.is_empty() {
+        Verification::Missing
+    } else {
+        Verification::Fresh
+    })
+}
+
+/// The full `git diff --quiet` argv asking whether `base...HEAD` touched scoped source:
+/// `scope` plus every extra scope, minus `excludes` and minus every receipt path anywhere in
+/// the tree — a receipt is never scoped source, not even a monorepo sibling's.
+fn scoped_source_args(
+    repo: &Path,
+    scope: &Path,
+    base: &str,
+    extra_scopes: &[PathBuf],
+    excludes: &[PathBuf],
+) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "diff".into(),
         "--quiet".into(),
@@ -181,43 +227,22 @@ pub fn verify_extra_scoped(
     }
     args.push(format!(":(exclude){RECEIPTS_DIR}"));
     args.push(format!(":(exclude){LEGACY_ATTESTATION}"));
-    // A receipt anywhere in the tree — a monorepo sibling's, an extra scope's — is not scoped
-    // source either.
     args.push(format!(":(top,exclude,glob)**/{RECEIPTS_DIR}/**"));
     args.push(format!(":(top,exclude,glob)**/{LEGACY_ATTESTATION}"));
     for exclude in excludes {
         args.push(format!(":(top,exclude){}", exclude.display()));
     }
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    if !git_diff_changed(repo, &arg_refs)? {
-        return Ok(Verification::Fresh);
-    }
+    args
+}
 
-    // Question 2 — does the acting branch's diff add or update *its own* receipt? The
-    // filter drops deletions, so sweeping a stale receipt by hand never counts. With no
-    // acting branch to name, every receipt counts.
-    let range = format!("{base}...HEAD");
-    let acting_branch = branch
-        .map(str::to_string)
-        .or_else(|| current_branch(repo).ok());
-    let receipt_pathspec = match &acting_branch {
-        Some(b) => format!("{RECEIPTS_DIR}/{}.json", branch_slug(b)),
+/// The pathspec Question 2 counts receipts under: the acting branch's own receipt file when
+/// there is a branch to name, and otherwise the whole receipts directory, so every receipt
+/// counts.
+fn receipt_pathspec(acting_branch: Option<&str>) -> String {
+    match acting_branch {
+        Some(branch) => format!("{RECEIPTS_DIR}/{}.json", branch_slug(branch)),
         None => RECEIPTS_DIR.to_string(),
-    };
-    let receipt_diff = [
-        "diff",
-        "--name-only",
-        "--diff-filter=ACMRT",
-        &range,
-        "--",
-        &receipt_pathspec,
-    ];
-    let out = git_capture(repo, &receipt_diff)?;
-    Ok(if out.is_empty() {
-        Verification::Missing
-    } else {
-        Verification::Fresh
-    })
+    }
 }
 
 /// `true` when a receipt (`*.json` under [`RECEIPTS_DIR`]) sits at `repo`.

@@ -734,6 +734,22 @@ fn spawn_context(interpreter: &str, entry: &str, cwd: &Path) -> String {
     )
 }
 
+/// The adapter's optional argv: a `--mutate` pair when the run is scoped to a file list, and
+/// a `--test-files` pair when it is scoped to a test-glob list. Either absent means "no
+/// restriction", which is not the same as an empty list.
+fn ts_adapter_args(mutate: Option<&[String]>, test_files: Option<&[String]>) -> Vec<String> {
+    let mut args = Vec::new();
+    if let Some(specs) = mutate {
+        args.push("--mutate".to_string());
+        args.push(specs.join(","));
+    }
+    if let Some(globs) = test_files {
+        args.push("--test-files".to_string());
+        args.push(globs.join(","));
+    }
+    args
+}
+
 /// Run the bundled TS mutation `adapter` at `package_root` and return the normalized-results
 /// JSON it writes. Results go to a temp file the adapter names via `--out`, so Stryker's own
 /// stdout logging can't corrupt them; a non-zero adapter exit surfaces its captured output.
@@ -751,13 +767,8 @@ fn run_ts_adapter(
         .current_dir(cwd)
         .arg(adapter)
         .arg("--out")
-        .arg(&results);
-    if let Some(specs) = mutate {
-        command.arg("--mutate").arg(specs.join(","));
-    }
-    if let Some(globs) = test_files {
-        command.arg("--test-files").arg(globs.join(","));
-    }
+        .arg(&results)
+        .args(ts_adapter_args(mutate, test_files));
     let output =
         command
             .output()
@@ -1470,6 +1481,40 @@ fn classify_mutants_exit(root: &Path, output: &Output) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn neither_scope_adds_an_argument() {
+        assert!(ts_adapter_args(None, None).is_empty());
+    }
+
+    #[test]
+    fn each_scope_contributes_its_own_flag_and_a_comma_joined_list() {
+        let mutate = vec!["src/a.ts".to_string(), "src/b.ts".to_string()];
+        let tests = vec!["src/a.test.ts".to_string()];
+        assert_eq!(
+            ts_adapter_args(Some(&mutate), None),
+            vec!["--mutate", "src/a.ts,src/b.ts"]
+        );
+        assert_eq!(
+            ts_adapter_args(None, Some(&tests)),
+            vec!["--test-files", "src/a.test.ts"]
+        );
+        assert_eq!(
+            ts_adapter_args(Some(&mutate), Some(&tests)),
+            vec![
+                "--mutate",
+                "src/a.ts,src/b.ts",
+                "--test-files",
+                "src/a.test.ts"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_empty_list_still_passes_its_flag() {
+        // `Some(&[])` is "restrict to nothing", which is not `None`'s "do not restrict".
+        assert_eq!(ts_adapter_args(Some(&[]), None), vec!["--mutate", ""]);
+    }
 
     #[test]
     fn with_no_prefix_the_base_diff_runs_unscoped_at_the_scan_path() {

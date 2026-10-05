@@ -1390,8 +1390,11 @@ mod tests {
                 "s": {"0": 2, "1": 0},
                 "branchMap": {"0": {"loc": {"start": {"line": 4}, "end": {"line": 7}}}},
                 "b": {"0": [1, 0]},
-                "fnMap": {"0": {"decl": {"start": {"line": 2}, "end": {"line": 2}}}},
-                "f": {"0": 0}
+                "fnMap": {
+                    "0": {"decl": {"start": {"line": 2}, "end": {"line": 2}}},
+                    "1": {"decl": {"start": {"line": 8}, "end": {"line": 8}}}
+                },
+                "f": {"0": 0, "1": 3}
             }
         }"#;
         let detail = istanbul_patch_detail(json).unwrap();
@@ -1401,8 +1404,9 @@ mod tests {
         assert!(file.statements.contains(&(9, 9, false)));
         // One tuple per arm, every arm on the branch's start line.
         assert_eq!(file.branch_arms, vec![(4, true), (4, false)]);
-        // A function is pinned to its declaration line, not its body.
-        assert_eq!(file.functions, vec![(2, false)]);
+        // A function is pinned to its declaration line, not its body, and a positive call
+        // count is the only thing that makes it covered.
+        assert_eq!(file.functions, vec![(2, false), (8, true)]);
     }
 
     #[test]

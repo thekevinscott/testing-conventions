@@ -353,7 +353,7 @@ where
             } => integration_lint::run(&path, language, &config),
         },
         Some(Command::Packaging { path, language }) => run_packaging(&path, language),
-        Some(Command::Changelog { base, path }) => run_changelog(&base, &path),
+        Some(Command::Changelog { base, path }) => changelog::run(&path, &base),
         Some(Command::Workflow { path }) => run_workflow(&path),
         Some(Command::WorkflowLint { path }) => run_workflow_lint(&path),
         Some(Command::E2e { command }) => match command {
@@ -529,34 +529,6 @@ fn split_scopes(
         }
     }
     (whole_file, line_scoped)
-}
-
-/// Report every scope in `<base>...HEAD` that changed public surface without adding the
-/// fragments recording it. `0` when `root` keeps no fragment directories.
-fn run_changelog(base: &str, root: &Path) -> anyhow::Result<i32> {
-    let Some(layout) = changelog::discover_layout(root) else {
-        println!(
-            "No fragment directories under `{}`; changelog check skipped.",
-            root.display()
-        );
-        return Ok(0);
-    };
-    if changelog::has_skip_line(&changelog::commit_bodies(root, base)?) {
-        println!("A `skip-changelog:` line is present; changelog check bypassed.");
-        return Ok(0);
-    }
-    let changed = changelog::changed_files(root, base)?;
-    let added = changelog::added_files(root, base)?;
-    let migrations = changelog::migrations_enforced(root);
-    let found = changelog::findings(&layout, migrations, &changed, &added);
-    if found.is_empty() {
-        println!("Every scope that changed public surface added its fragments.");
-        return Ok(0);
-    }
-    for finding in &found {
-        println!("{}", changelog::annotation(finding));
-    }
-    Ok(1)
 }
 
 /// Inspect the built distributions at `path` for test files. With `language`, `path` is that
@@ -759,14 +731,6 @@ mod tests {
             std::fs::write(full, contents).unwrap();
         }
         root
-    }
-
-    #[test]
-    fn a_tree_with_no_fragment_directories_skips_the_changelog_check() {
-        // No git call is reached: the layout guard returns before any of them, which is what
-        // lets a non-repository tree pass rather than erroring.
-        let root = scratch("changelog-none", &[("README.md", "hi\n")]);
-        assert_eq!(run_changelog("HEAD~1", &root).unwrap(), 0);
     }
 
     #[test]

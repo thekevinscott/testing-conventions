@@ -27,6 +27,73 @@ pub struct Finding {
     pub message: String,
 }
 
+/// Everything the changelog verdict reads from the repository.
+///
+/// Gathered in one go rather than on demand. The lazy shape — skip the git calls when no
+/// fragment directory exists — cannot be split into a testable decision and an untestable
+/// seam, because the laziness *is* the branch. Every repository behaves identically either
+/// way: a repository with no fragment directories still reports "skipped", because the
+/// layout, not the diff, decides that. Only a path that is not a repository at all changes,
+/// and it now errors rather than reporting a clean skip.
+struct Facts {
+    layout: Option<Layout>,
+    bodies: String,
+    changed: Vec<String>,
+    added: Vec<String>,
+    migrations: bool,
+}
+
+/// Read the repository facts the verdict decides on.
+fn facts(root: &Path, base: &str) -> Result<Facts> {
+    Ok(Facts {
+        layout: discover_layout(root),
+        bodies: commit_bodies(root, base)?,
+        changed: changed_files(root, base)?,
+        added: added_files(root, base)?,
+        migrations: migrations_enforced(root),
+    })
+}
+
+/// The exit code and the lines to print for gathered `facts`. The whole decision, with no
+/// repository in reach: `0` for a tree keeping no fragments, `0` for a bypass, `0` when every
+/// scope paid, and `1` with one annotation per scope that did not.
+fn verdict(root: &Path, facts: &Facts) -> (i32, Vec<String>) {
+    let Some(layout) = &facts.layout else {
+        return (
+            0,
+            vec![format!(
+                "No fragment directories under `{}`; changelog check skipped.",
+                root.display()
+            )],
+        );
+    };
+    if has_skip_line(&facts.bodies) {
+        return (
+            0,
+            vec!["A `skip-changelog:` line is present; changelog check bypassed.".to_string()],
+        );
+    }
+    let found = findings(layout, facts.migrations, &facts.changed, &facts.added);
+    if found.is_empty() {
+        return (
+            0,
+            vec!["Every scope that changed public surface added its fragments.".to_string()],
+        );
+    }
+    (1, found.iter().map(annotation).collect())
+}
+
+/// Report every scope in `<base>...HEAD` that changed public surface without adding the
+/// fragments recording it. `0` when `root` keeps no fragment directories.
+///
+/// Branch-free on purpose: it reads the repository through [`facts`], so replacing its body
+/// whole has no unit-tier contract. [`verdict`] holds the decision and is tested directly.
+pub fn run(root: &Path, base: &str) -> Result<i32> {
+    let (code, lines) = verdict(root, &facts(root, base)?);
+    println!("{}", lines.join("\n"));
+    Ok(code)
+}
+
 /// `finding` as the GitHub Actions annotation that reports it: file-scoped when the finding
 /// names a file, workflow-scoped when it does not.
 pub fn annotation(finding: &Finding) -> String {
@@ -348,6 +415,93 @@ fn lines(out: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn facts_with(layout: Option<Layout>, bodies: &str, changed: &[&str], added: &[&str]) -> Facts {
+        Facts {
+            layout,
+            bodies: bodies.to_string(),
+            changed: changed.iter().map(|s| s.to_string()).collect(),
+            added: added.iter().map(|s| s.to_string()).collect(),
+            migrations: false,
+        }
+    }
+
+    #[test]
+    fn no_layout_skips_the_check_and_names_the_tree() {
+        let facts = facts_with(None, "", &["packages/parser/src/a.ts"], &[]);
+        let (code, lines) = verdict(Path::new("/repo"), &facts);
+        assert_eq!(code, 0);
+        assert_eq!(
+            lines,
+            vec!["No fragment directories under `/repo`; changelog check skipped."]
+        );
+    }
+
+    #[test]
+    fn a_skip_line_bypasses_a_tree_that_would_otherwise_owe_fragments() {
+        let owing = &["packages/parser/src/a.ts"];
+        let layout = Some(Layout::PerPackage(vec!["packages".to_string()]));
+        // Same facts, with and without the trailer: the trailer is the only difference.
+        assert_eq!(
+            verdict(
+                Path::new("/repo"),
+                &facts_with(layout.clone(), "", owing, &[])
+            )
+            .0,
+            1
+        );
+        let (code, lines) = verdict(
+            Path::new("/repo"),
+            &facts_with(
+                layout,
+                "refactor: rename\n\nskip-changelog: no public surface",
+                owing,
+                &[],
+            ),
+        );
+        assert_eq!(code, 0);
+        assert_eq!(
+            lines,
+            vec!["A `skip-changelog:` line is present; changelog check bypassed."]
+        );
+    }
+
+    #[test]
+    fn a_scope_that_added_its_fragment_passes() {
+        let facts = facts_with(
+            Some(Layout::PerPackage(vec!["packages".to_string()])),
+            "",
+            &["packages/parser/src/a.ts"],
+            &["packages/parser/changelog.d/2026-10-05-change-a.md"],
+        );
+        let (code, lines) = verdict(Path::new("/repo"), &facts);
+        assert_eq!(code, 0);
+        assert_eq!(
+            lines,
+            vec!["Every scope that changed public surface added its fragments."]
+        );
+    }
+
+    #[test]
+    fn an_unpaid_scope_fails_with_one_annotation_per_finding() {
+        let facts = facts_with(
+            Some(Layout::PerPackage(vec!["packages".to_string()])),
+            "",
+            &["packages/parser/src/a.ts"],
+            &[],
+        );
+        let (code, lines) = verdict(Path::new("/repo"), &facts);
+        assert_eq!(code, 1);
+        // One line per finding, each already rendered as an annotation.
+        let found = findings(
+            facts.layout.as_ref().unwrap(),
+            facts.migrations,
+            &facts.changed,
+            &facts.added,
+        );
+        assert_eq!(lines.len(), found.len());
+        assert!(lines.iter().all(|line| line.starts_with("::error")));
+    }
 
     #[test]
     fn a_finding_with_a_file_annotates_that_file() {

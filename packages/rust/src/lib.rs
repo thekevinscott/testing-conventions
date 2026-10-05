@@ -738,7 +738,68 @@ fn run_e2e_slug(branch: Option<&str>) -> anyhow::Result<i32> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
     use super::*;
+
+    /// A process-unique scratch tree holding `files`, rebuilt from scratch on every call.
+    fn scratch(slug: &str, files: &[(&str, &str)]) -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "tc-lib-{}-{}-{}",
+            slug,
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed),
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        for (rel, contents) in files {
+            let full = root.join(rel);
+            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+            std::fs::write(full, contents).unwrap();
+        }
+        root
+    }
+
+    #[test]
+    fn a_tree_with_no_fragment_directories_skips_the_changelog_check() {
+        // No git call is reached: the layout guard returns before any of them, which is what
+        // lets a non-repository tree pass rather than erroring.
+        let root = scratch("changelog-none", &[("README.md", "hi\n")]);
+        assert_eq!(run_changelog("HEAD~1", &root).unwrap(), 0);
+    }
+
+    #[test]
+    fn a_directory_holding_no_distribution_is_an_error_rather_than_a_clean_run() {
+        // `Ok(0)` here would read as "checked nothing, nothing shipped" — a pass by vacancy.
+        let root = scratch("packaging-empty", &[("README.md", "hi\n")]);
+        assert!(run_packaging(&root, None).is_err());
+    }
+
+    #[test]
+    fn a_rust_file_with_no_inline_tests_makes_the_presence_report_unclean() {
+        let root = scratch(
+            "presence-orphan",
+            &[("src/widget.rs", "pub fn f() -> u8 { 1 }\n")],
+        );
+        let config = root.join("testing-conventions.toml");
+        assert!(
+            !report_colocated_presence(&root, colocated_test::Language::Rust, &config).unwrap()
+        );
+    }
+
+    #[test]
+    fn a_rust_file_carrying_inline_tests_makes_the_presence_report_clean() {
+        let root = scratch(
+            "presence-clean",
+            &[(
+                "src/widget.rs",
+                "pub fn f() -> u8 { 1 }\n#[cfg(test)]\nmod tests { #[test] fn t() {} }\n",
+            )],
+        );
+        let config = root.join("testing-conventions.toml");
+        assert!(report_colocated_presence(&root, colocated_test::Language::Rust, &config).unwrap());
+    }
 
     #[test]
     fn rust_is_told_about_inline_test_modules_and_the_others_about_sibling_files() {

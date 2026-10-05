@@ -477,6 +477,100 @@ fn stem_of(path: &Path) -> String {
 mod tests {
     use super::*;
 
+    /// A process-unique scratch tree, rebuilt from scratch on every call.
+    fn scratch(name: &str, files: &[(&str, &str)]) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "testing-conventions-colocated-{name}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        for (path, contents) in files {
+            let full = root.join(path);
+            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+            std::fs::write(&full, contents).unwrap();
+        }
+        root
+    }
+
+    #[test]
+    fn a_rust_file_with_a_body_and_no_test_module_lacks_inline_tests() {
+        let root = scratch(
+            "lacks-yes",
+            &[("src/widget.rs", "pub fn f() -> u8 { 1 }\n")],
+        );
+        assert!(lacks_inline_tests(&root.join("src/widget.rs")).unwrap());
+    }
+
+    #[test]
+    fn a_rust_file_carrying_its_own_test_module_does_not() {
+        let root = scratch(
+            "lacks-no",
+            &[(
+                "src/widget.rs",
+                "pub fn f() -> u8 { 1 }\n#[cfg(test)]\nmod tests { #[test] fn t() {} }\n",
+            )],
+        );
+        assert!(!lacks_inline_tests(&root.join("src/widget.rs")).unwrap());
+    }
+
+    #[test]
+    fn a_rust_file_with_no_testable_body_does_not_want_inline_tests() {
+        let root = scratch("lacks-decl", &[("src/types.rs", "pub struct Widget;\n")]);
+        assert!(!lacks_inline_tests(&root.join("src/types.rs")).unwrap());
+    }
+
+    #[test]
+    fn missing_inline_tests_names_the_orphan_and_only_the_orphan() {
+        let root = scratch(
+            "inline-orphans",
+            &[
+                ("src/orphan.rs", "pub fn f() -> u8 { 1 }\n"),
+                (
+                    "src/tested.rs",
+                    "pub fn g() -> u8 { 2 }\n#[cfg(test)]\nmod tests { #[test] fn t() {} }\n",
+                ),
+            ],
+        );
+        let orphans = missing_inline_tests(&root, &BTreeSet::new()).unwrap();
+        assert_eq!(orphans, vec![root.join("src/orphan.rs")]);
+    }
+
+    #[test]
+    fn an_exempt_rust_file_is_never_an_orphan() {
+        let root = scratch(
+            "inline-exempt",
+            &[("src/orphan.rs", "pub fn f() -> u8 { 1 }\n")],
+        );
+        let exempt: BTreeSet<String> = ["src/orphan.rs".to_string()].into_iter().collect();
+        assert!(missing_inline_tests(&root, &exempt).unwrap().is_empty());
+    }
+
+    #[test]
+    fn missing_unit_tests_names_the_source_with_no_colocated_twin() {
+        let root = scratch(
+            "unit-orphans",
+            &[
+                ("pkg/orphan.py", "def f():\n    return 1\n"),
+                ("pkg/tested.py", "def g():\n    return 2\n"),
+                ("pkg/tested_test.py", "def test_g():\n    assert True\n"),
+            ],
+        );
+        let orphans = missing_unit_tests(&root, Language::Python, &BTreeSet::new()).unwrap();
+        assert_eq!(orphans, vec![root.join("pkg/orphan.py")]);
+    }
+
+    #[test]
+    fn an_exempt_source_has_no_missing_unit_test() {
+        let root = scratch(
+            "unit-exempt",
+            &[("pkg/orphan.py", "def f():\n    return 1\n")],
+        );
+        let exempt: BTreeSet<String> = ["pkg/orphan.py".to_string()].into_iter().collect();
+        assert!(missing_unit_tests(&root, Language::Python, &exempt)
+            .unwrap()
+            .is_empty());
+    }
+
     #[test]
     fn the_exempt_key_is_root_relative_with_forward_slashes() {
         assert_eq!(

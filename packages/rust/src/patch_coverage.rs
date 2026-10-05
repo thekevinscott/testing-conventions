@@ -765,12 +765,19 @@ mod tests {
         }
     }
 
+    /// An exit status built directly rather than spawned: `/bin/true` and `/bin/false` would
+    /// be two real processes to manufacture a value `ExitStatusExt` hands over for free.
+    fn status(code: i32) -> std::process::ExitStatus {
+        use std::os::unix::process::ExitStatusExt;
+        std::process::ExitStatus::from_raw(code << 8)
+    }
+
     fn ok_status() -> std::process::ExitStatus {
-        std::process::Command::new("true").status().unwrap()
+        status(0)
     }
 
     fn failed_status() -> std::process::ExitStatus {
-        std::process::Command::new("false").status().unwrap()
+        status(1)
     }
 
     fn changed(entries: &[(&str, &[u64])]) -> BTreeMap<String, BTreeSet<u64>> {

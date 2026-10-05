@@ -1379,6 +1379,50 @@ mod tests {
     use super::*;
 
     #[test]
+    fn istanbul_detail_reads_statements_branches_and_functions() {
+        let json = r#"{
+            "/pkg/src/widget.ts": {
+                "path": "/pkg/src/widget.ts",
+                "statementMap": {
+                    "0": {"start": {"line": 3}, "end": {"line": 5}},
+                    "1": {"start": {"line": 9}, "end": {"line": 9}}
+                },
+                "s": {"0": 2, "1": 0},
+                "branchMap": {"0": {"loc": {"start": {"line": 4}, "end": {"line": 7}}}},
+                "b": {"0": [1, 0]},
+                "fnMap": {"0": {"decl": {"start": {"line": 2}, "end": {"line": 2}}}},
+                "f": {"0": 0}
+            }
+        }"#;
+        let detail = istanbul_patch_detail(json).unwrap();
+        let file = &detail["/pkg/src/widget.ts"];
+        // A statement spans start..end, and is covered only on a *positive* hit count.
+        assert!(file.statements.contains(&(3, 5, true)));
+        assert!(file.statements.contains(&(9, 9, false)));
+        // One tuple per arm, every arm on the branch's start line.
+        assert_eq!(file.branch_arms, vec![(4, true), (4, false)]);
+        // A function is pinned to its declaration line, not its body.
+        assert_eq!(file.functions, vec![(2, false)]);
+    }
+
+    #[test]
+    fn a_zero_hit_count_is_uncovered_rather_than_covered() {
+        let json = r#"{
+            "/pkg/src/widget.ts": {
+                "path": "/pkg/src/widget.ts",
+                "statementMap": {"0": {"start": {"line": 1}, "end": {"line": 1}}},
+                "s": {"0": 0},
+                "branchMap": {},
+                "b": {},
+                "fnMap": {},
+                "f": {}
+            }
+        }"#;
+        let detail = istanbul_patch_detail(json).unwrap();
+        assert_eq!(detail["/pkg/src/widget.ts"].statements, vec![(1, 1, false)]);
+    }
+
+    #[test]
     fn only_kind_zero_regions_count_as_code() {
         let function = LlvmCovFunction {
             filenames: vec!["a.rs".into()],

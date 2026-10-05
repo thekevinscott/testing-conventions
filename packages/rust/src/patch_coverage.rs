@@ -182,26 +182,20 @@ fn evaluate_patch_typescript(
     detail: &BTreeMap<String, coverage::TsPatchCoverage>,
     thresholds: TypeScriptThresholds,
 ) -> Outcome {
-    let mut statements = Tally::default();
-    let mut lines = Tally::default();
-    let mut branches = Tally::default();
-    let mut functions = Tally::default();
-
-    for (file, touched) in changed {
-        let Some(cov) = detail.get(file) else {
-            continue;
-        };
-        statements.add(statements_tally(&cov.statements, touched));
-        lines.add(lines_tally(&cov.statements, touched));
-        branches.add(on_line_tally(&cov.branch_arms, touched));
-        functions.add(on_line_tally(&cov.functions, touched));
-    }
-
+    let tallies = typescript_tallies(changed, detail);
     let checks = [
-        ("lines", lines.percent(), thresholds.lines),
-        ("branches", branches.percent(), thresholds.branches),
-        ("functions", functions.percent(), thresholds.functions),
-        ("statements", statements.percent(), thresholds.statements),
+        ("lines", tallies.lines.percent(), thresholds.lines),
+        ("branches", tallies.branches.percent(), thresholds.branches),
+        (
+            "functions",
+            tallies.functions.percent(),
+            thresholds.functions,
+        ),
+        (
+            "statements",
+            tallies.statements.percent(),
+            thresholds.statements,
+        ),
     ];
     coverage::verdict(
         checks
@@ -209,6 +203,41 @@ fn evaluate_patch_typescript(
             .filter_map(|(name, actual, required)| coverage::shortfall(name, actual, required))
             .collect(),
     )
+}
+
+/// The four vitest tallies the diff-scoped floor enforces, accumulated together.
+#[derive(Default)]
+struct TsTallies {
+    statements: Tally,
+    lines: Tally,
+    branches: Tally,
+    functions: Tally,
+}
+
+/// Accumulate the four tallies over only the changed lines of each file vitest measured. A
+/// changed file absent from `detail` contributes nothing — vitest never measured it, so it
+/// has no coverage to judge rather than zero coverage.
+fn typescript_tallies(
+    changed: &BTreeMap<String, BTreeSet<u64>>,
+    detail: &BTreeMap<String, coverage::TsPatchCoverage>,
+) -> TsTallies {
+    let mut tallies = TsTallies::default();
+    for (file, touched) in changed {
+        let Some(cov) = detail.get(file) else {
+            continue;
+        };
+        tallies
+            .statements
+            .add(statements_tally(&cov.statements, touched));
+        tallies.lines.add(lines_tally(&cov.statements, touched));
+        tallies
+            .branches
+            .add(on_line_tally(&cov.branch_arms, touched));
+        tallies
+            .functions
+            .add(on_line_tally(&cov.functions, touched));
+    }
+    tallies
 }
 
 /// A statement counts when the diff touches any line it spans.
@@ -286,21 +315,36 @@ pub fn changed_lines(repo: &Path, base: &str) -> Result<BTreeMap<String, BTreeSe
     let range = format!("{base}...HEAD");
     let output = Command::new("git")
         .current_dir(repo)
-        .args([
-            "-c",
-            "core.quotepath=off",
-            "diff",
-            "--no-color",
-            "--no-ext-diff",
-            "--no-renames",
-            "--unified=0",
-            "--relative",
-            "--src-prefix=a/",
-            "--dst-prefix=b/",
-            &range,
-        ])
+        .args(unified_diff_argv(&range))
         .output()
         .with_context(|| format!("running `git diff` in `{}`", repo.display()))?;
+    diff_exit(&output, repo, &range)?;
+    Ok(parse_unified_diff(&String::from_utf8_lossy(&output.stdout)))
+}
+
+/// The `git diff` argv `changed_lines` runs. Every flag is load-bearing: the config
+/// overrides and prefix flags pin the output against the caller's git config so
+/// [`new_side_path`]'s `b/` strip holds, and `--unified=0` keeps context lines out of the
+/// changed set.
+fn unified_diff_argv(range: &str) -> [&str; 11] {
+    [
+        "-c",
+        "core.quotepath=off",
+        "diff",
+        "--no-color",
+        "--no-ext-diff",
+        "--no-renames",
+        "--unified=0",
+        "--relative",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+        range,
+    ]
+}
+
+/// The error a failed `git diff` becomes, naming the range and the repo. Kept out of
+/// [`changed_lines`] so that seam stays branch-free.
+fn diff_exit(output: &std::process::Output, repo: &Path, range: &str) -> Result<()> {
     if !output.status.success() {
         bail!(
             "`git diff {range}` failed in `{}`: {}",
@@ -308,38 +352,56 @@ pub fn changed_lines(repo: &Path, base: &str) -> Result<BTreeMap<String, BTreeSe
             String::from_utf8_lossy(&output.stderr).trim()
         );
     }
-    Ok(parse_unified_diff(&String::from_utf8_lossy(&output.stdout)))
+    Ok(())
 }
 
 /// Pure: parse `git diff --unified=0` output into the new-side lines each file gained.
 /// Hunk state guards header detection: a `+++ ` line is a file header only before the
 /// first `@@`; inside a hunk it is body — an added line whose content began `++ `.
 fn parse_unified_diff(diff: &str) -> BTreeMap<String, BTreeSet<u64>> {
-    let mut changed: BTreeMap<String, BTreeSet<u64>> = BTreeMap::new();
-    let mut current: Option<String> = None;
-    let mut next_line: u64 = 0;
-    let mut in_hunk = false;
+    let mut scan = DiffScan::default();
     for line in diff.lines() {
+        scan.feed(line);
+    }
+    scan.changed
+}
+
+/// The walk's position in a `git diff --unified=0` stream: which file's header was last
+/// seen, which new-side line the next `+` lands on, and whether a hunk is open. The four
+/// move together, so they are one value rather than four locals.
+#[derive(Default)]
+struct DiffScan {
+    changed: BTreeMap<String, BTreeSet<u64>>,
+    current: Option<String>,
+    next_line: u64,
+    in_hunk: bool,
+}
+
+impl DiffScan {
+    /// Advance the scan by one line of diff output.
+    fn feed(&mut self, line: &str) {
         if line.starts_with("diff --git ") {
-            in_hunk = false;
-            current = None;
+            self.in_hunk = false;
+            self.current = None;
         } else if line.starts_with("@@") {
-            in_hunk = true;
+            self.in_hunk = true;
             if let Some(start) = hunk_new_start(line) {
-                next_line = start;
+                self.next_line = start;
             }
-        } else if !in_hunk {
+        } else if !self.in_hunk {
             if let Some(header) = line.strip_prefix("+++ ") {
-                current = new_side_path(header);
+                self.current = new_side_path(header);
             }
         } else if line.starts_with('+') {
-            if let Some(file) = &current {
-                changed.entry(file.clone()).or_default().insert(next_line);
+            if let Some(file) = &self.current {
+                self.changed
+                    .entry(file.clone())
+                    .or_default()
+                    .insert(self.next_line);
             }
-            next_line += 1;
+            self.next_line += 1;
         }
     }
-    changed
 }
 
 /// The `repo`-relative new-side path from a `+++` diff header, or `None` for a deletion
@@ -510,35 +572,47 @@ fn rust_measured_missed(
     cov: &coverage::RustPatchCoverage,
     thresholds: RustThresholds,
 ) -> (BTreeSet<u64>, BTreeSet<u64>) {
+    let measured = measured_lines(cov);
+    let missed = measured
+        .iter()
+        .copied()
+        .filter(|&line| is_missed(cov, line, thresholds))
+        .collect();
+    (measured, missed)
+}
+
+/// Every line any region of `cov` spans — the lines llvm-cov actually measured for the file.
+fn measured_lines(cov: &coverage::RustPatchCoverage) -> BTreeSet<u64> {
     let mut measured = BTreeSet::new();
     for &(start, end, _covered) in &cov.regions {
         for line in start..=end {
             measured.insert(line);
         }
     }
-    let mut missed = BTreeSet::new();
-    for &line in &measured {
-        let mut covered_here = false;
-        let mut uncovered_region = false;
-        for &(start, end, covered) in &cov.regions {
-            if start <= line && line <= end {
-                if covered {
-                    covered_here = true;
-                } else {
-                    uncovered_region = true;
-                }
+    measured
+}
+
+/// Whether `line` counts as missed, which the enforced metrics decide. With a region floor
+/// on, a line is missed when *any* region over it is uncovered — region coverage is the
+/// stricter reading. With lines only, a line is missed when *no* region over it is covered,
+/// so one covered region redeems it.
+fn is_missed(cov: &coverage::RustPatchCoverage, line: u64, thresholds: RustThresholds) -> bool {
+    let mut covered_here = false;
+    let mut uncovered_region = false;
+    for &(start, end, covered) in &cov.regions {
+        if start <= line && line <= end {
+            if covered {
+                covered_here = true;
+            } else {
+                uncovered_region = true;
             }
         }
-        let is_missed = if thresholds.regions.is_some() {
-            uncovered_region
-        } else {
-            !covered_here
-        };
-        if is_missed {
-            missed.insert(line);
-        }
     }
-    (measured, missed)
+    if thresholds.regions.is_some() {
+        uncovered_region
+    } else {
+        !covered_here
+    }
 }
 
 /// The per-file line set the floor is measured over — every measured line minus the exempt

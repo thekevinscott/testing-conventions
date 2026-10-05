@@ -428,7 +428,19 @@ fn report_colocated_presence(
     if orphans.is_empty() {
         return Ok(true);
     }
-    let (label, summary) = match language {
+    let (label, summary) = orphan_wording(language);
+    for orphan in &orphans {
+        eprintln!("{label}: {}", orphan.display());
+    }
+    eprintln!("error: {} {summary}", orphans.len());
+    Ok(false)
+}
+
+/// How the `colocated-test` rule names what is missing for `language`: the per-file label and
+/// the summary line. Rust wants an inline `#[cfg(test)]` module; the others want a sibling
+/// test file.
+fn orphan_wording(language: colocated_test::Language) -> (&'static str, &'static str) {
+    match language {
         colocated_test::Language::Rust => (
             "missing inline `#[cfg(test)]` tests",
             "source file(s) with testable code but no inline `#[cfg(test)]` module \
@@ -439,12 +451,7 @@ fn report_colocated_presence(
             "source file(s) missing a colocated unit test \
              (add a colocated test, or an `exempt` entry with a reason)",
         ),
-    };
-    for orphan in &orphans {
-        eprintln!("{label}: {}", orphan.display());
     }
-    eprintln!("error: {} {summary}", orphans.len());
-    Ok(false)
 }
 
 /// The `colocated-test`-rule exempt paths for `language`; empty when the config is absent.
@@ -547,10 +554,7 @@ fn run_changelog(base: &str, root: &Path) -> anyhow::Result<i32> {
         return Ok(0);
     }
     for finding in &found {
-        match &finding.file {
-            Some(file) => println!("::error file={file}::{}", finding.message),
-            None => println!("::error::{}", finding.message),
-        }
+        println!("{}", changelog::annotation(finding));
     }
     Ok(1)
 }
@@ -559,19 +563,7 @@ fn run_changelog(base: &str, root: &Path) -> anyhow::Result<i32> {
 /// language's distribution or unpacked artifact root; without it, `path` is searched and every
 /// distribution found takes the language its file name names. `1` when any test file ships.
 fn run_packaging(path: &Path, language: Option<colocated_test::Language>) -> anyhow::Result<i32> {
-    let distributions = match language {
-        Some(language) => vec![packaging::Distribution {
-            path: path.to_path_buf(),
-            language,
-        }],
-        None => packaging::discover(path)?,
-    };
-    if distributions.is_empty() {
-        anyhow::bail!(
-            "no recognized built distribution (`.whl`, `.tar.gz`, `.tgz`, `.crate`) at `{}`",
-            path.display()
-        );
-    }
+    let distributions = distributions_at(path, language)?;
     let mut shipped = 0;
     for distribution in &distributions {
         shipped += report_shipped_test_files(distribution)?;
@@ -588,6 +580,29 @@ fn run_packaging(path: &Path, language: Option<colocated_test::Language>) -> any
         distributions.len()
     );
     Ok(0)
+}
+
+/// The distributions `run_packaging` inspects. With `language`, `path` is itself that
+/// language's distribution; without it, `path` is searched. An error when neither yields one,
+/// because an empty run would otherwise pass as a clean one.
+fn distributions_at(
+    path: &Path,
+    language: Option<colocated_test::Language>,
+) -> anyhow::Result<Vec<packaging::Distribution>> {
+    let distributions = match language {
+        Some(language) => vec![packaging::Distribution {
+            path: path.to_path_buf(),
+            language,
+        }],
+        None => packaging::discover(path)?,
+    };
+    if distributions.is_empty() {
+        anyhow::bail!(
+            "no recognized built distribution (`.whl`, `.tar.gz`, `.tgz`, `.crate`) at `{}`",
+            path.display()
+        );
+    }
+    Ok(distributions)
 }
 
 /// Name every test file `distribution` ships, and how many there were.

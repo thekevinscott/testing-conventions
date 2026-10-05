@@ -27,6 +27,15 @@ pub struct Finding {
     pub message: String,
 }
 
+/// `finding` as the GitHub Actions annotation that reports it: file-scoped when the finding
+/// names a file, workflow-scoped when it does not.
+pub fn annotation(finding: &Finding) -> String {
+    match &finding.file {
+        Some(file) => format!("::error file={file}::{}", finding.message),
+        None => format!("::error::{}", finding.message),
+    }
+}
+
 /// Directories the fragment walk never descends into.
 const SKIPPED_DIRS: [&str; 2] = ["node_modules", "target"];
 

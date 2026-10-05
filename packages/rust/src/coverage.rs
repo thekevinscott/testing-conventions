@@ -448,6 +448,28 @@ fn vitest_exit(success: bool, root: &Path, stdout: &[u8], stderr: &[u8]) -> Resu
     Ok(())
 }
 
+/// The part of the `npx vitest run` argv that never varies between passes. Two entries are
+/// load-bearing against footguns rather than merely configuring the run:
+///
+/// - `--no-install`, never `--yes`: with `--yes` a missing vitest is silently downloaded,
+///   where every other arm fails clean on a missing binary.
+/// - the zeroed `coverage.thresholds` with `autoUpdate=false`: a consumer config's own
+///   thresholds neither decide the gate's exit nor rewrite the config file during a run.
+const VITEST_BASE_ARGV: [&str; 12] = [
+    "--no-install",
+    "vitest",
+    "run",
+    "--no-cache",
+    "--coverage.enabled",
+    "--coverage.provider=v8",
+    "--coverage.all=true",
+    "--coverage.thresholds.lines=0",
+    "--coverage.thresholds.branches=0",
+    "--coverage.thresholds.functions=0",
+    "--coverage.thresholds.statements=0",
+    "--coverage.thresholds.autoUpdate=false",
+];
+
 /// The `npx vitest run` argv for one coverage pass. `--coverage.all=true` counts source files
 /// the suite never imported, so an untested file is measured rather than vanishing.
 fn vitest_coverage_argv<'a>(
@@ -455,27 +477,10 @@ fn vitest_coverage_argv<'a>(
     reports_dir: &Path,
     exclude: impl Iterator<Item = &'a String>,
 ) -> Vec<String> {
-    let mut argv: Vec<String> = [
-        // `--no-install`, never `--yes`: with `--yes` a missing vitest is silently
-        // downloaded, where the other arms fail clean on a missing binary.
-        "--no-install",
-        "vitest",
-        "run",
-        "--no-cache",
-        "--coverage.enabled",
-        "--coverage.provider=v8",
-        "--coverage.all=true",
-        // A consumer config's own `coverage.thresholds` neither decide the gate's exit
-        // nor rewrite the config file — `autoUpdate` never writes during a gate run.
-        "--coverage.thresholds.lines=0",
-        "--coverage.thresholds.branches=0",
-        "--coverage.thresholds.functions=0",
-        "--coverage.thresholds.statements=0",
-        "--coverage.thresholds.autoUpdate=false",
-    ]
-    .iter()
-    .map(|arg| (*arg).to_string())
-    .collect();
+    let mut argv: Vec<String> = VITEST_BASE_ARGV
+        .iter()
+        .map(|arg| (*arg).to_string())
+        .collect();
     argv.push(format!("--coverage.reporter={reporter}"));
     argv.push(format!(
         "--coverage.reportsDirectory={}",
@@ -577,32 +582,37 @@ pub fn measure_patch_typescript_detail(
 fn istanbul_patch_detail(json: &str) -> Result<BTreeMap<String, TsPatchCoverage>> {
     let files: BTreeMap<String, IstanbulFile> = serde_json::from_str(json)
         .context("parsing vitest coverage-final (Istanbul) JSON report")?;
-    let mut out = BTreeMap::new();
-    for (path, file) in files {
-        let mut detail = TsPatchCoverage::default();
-        for (id, span) in &file.statement_map {
-            let covered = file.s.get(id).is_some_and(|&count| count > 0);
-            detail
-                .statements
-                .push((span.start.line, span.end.line, covered));
-        }
-        // v8 models a branch as one arm (a `[count]` array) or several; one tuple per
-        // arm either way.
-        for (id, branch) in &file.branch_map {
-            let line = branch.loc.start.line;
-            if let Some(counts) = file.b.get(id) {
-                for &count in counts {
-                    detail.branch_arms.push((line, count > 0));
-                }
+    Ok(files
+        .into_iter()
+        .map(|(path, file)| (path, istanbul_file_detail(&file)))
+        .collect())
+}
+
+/// One Istanbul file entry as a [`TsPatchCoverage`]. A statement spans its start and end
+/// line and is covered on a non-zero hit count; a function is pinned to its declaration
+/// line. v8 models a branch as one arm (a `[count]` array) or several, and either way this
+/// records one tuple per arm, all on the branch's start line.
+fn istanbul_file_detail(file: &IstanbulFile) -> TsPatchCoverage {
+    let mut detail = TsPatchCoverage::default();
+    for (id, span) in &file.statement_map {
+        let covered = file.s.get(id).is_some_and(|&count| count > 0);
+        detail
+            .statements
+            .push((span.start.line, span.end.line, covered));
+    }
+    for (id, branch) in &file.branch_map {
+        let line = branch.loc.start.line;
+        if let Some(counts) = file.b.get(id) {
+            for &count in counts {
+                detail.branch_arms.push((line, count > 0));
             }
         }
-        for (id, function) in &file.fn_map {
-            let covered = file.f.get(id).is_some_and(|&count| count > 0);
-            detail.functions.push((function.decl.start.line, covered));
-        }
-        out.insert(path, detail);
     }
-    Ok(out)
+    for (id, function) in &file.fn_map {
+        let covered = file.f.get(id).is_some_and(|&count| count > 0);
+        detail.functions.push((function.decl.start.line, covered));
+    }
+    detail
 }
 
 /// The `cargo llvm-cov` coverage floors, from a `[rust].coverage` table. `lines` is
@@ -969,19 +979,8 @@ fn function_start(function: &LlvmCovFunction) -> Option<(String, i64, i64)> {
 /// One record's share: its code regions, the gated source lines they map, its own execution,
 /// and the two outcomes llvm-cov counts per branch region.
 fn function_totals(function: &LlvmCovFunction, hidden: &BTreeSet<u32>) -> HiddenTotals {
-    let code: Vec<&Vec<i64>> = function
-        .regions
-        .iter()
-        .filter(|region| region.len() >= 8 && region[7] == 0)
-        .collect();
-    let mut lines: BTreeMap<u32, bool> = BTreeMap::new();
-    for region in &code {
-        for line in region[0].max(0) as u32..=region[2].max(0) as u32 {
-            if hidden.contains(&line) {
-                *lines.entry(line).or_default() |= region[4] > 0;
-            }
-        }
-    }
+    let code = code_regions(function);
+    let lines = hidden_line_coverage(&code, hidden);
     HiddenTotals {
         regions: Tally {
             count: code.len() as u64,
@@ -997,6 +996,30 @@ fn function_totals(function: &LlvmCovFunction, hidden: &BTreeSet<u32>) -> Hidden
         },
         branches: branch_tally(&function.branches),
     }
+}
+
+/// The record's *code* regions — llvm-cov tags a region's kind in slot 7, and only kind 0
+/// is code. Anything shorter than eight slots is not a region this reading understands.
+fn code_regions(function: &LlvmCovFunction) -> Vec<&Vec<i64>> {
+    function
+        .regions
+        .iter()
+        .filter(|region| region.len() >= 8 && region[7] == 0)
+        .collect()
+}
+
+/// Which of the gated `hidden` lines `code` covers. A line spanned by several regions is
+/// covered when *any* of them executed, so the entries OR together.
+fn hidden_line_coverage(code: &[&Vec<i64>], hidden: &BTreeSet<u32>) -> BTreeMap<u32, bool> {
+    let mut lines: BTreeMap<u32, bool> = BTreeMap::new();
+    for region in code {
+        for line in region[0].max(0) as u32..=region[2].max(0) as u32 {
+            if hidden.contains(&line) {
+                *lines.entry(line).or_default() |= region[4] > 0;
+            }
+        }
+    }
+    lines
 }
 
 /// Two outcomes per branch region: llvm-cov counts the true and false arms separately.

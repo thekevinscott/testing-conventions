@@ -357,9 +357,60 @@ fn git_run(repo: &Path, args: &[&str]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        branch_slug, git_capture, git_diff_changed, git_run, pathspec_matches_tracked, run_shell,
+        branch_slug, git_capture, git_diff_changed, git_run, pathspec_matches_tracked,
+        receipt_pathspec, run_shell, scoped_source_args, LEGACY_ATTESTATION, RECEIPTS_DIR,
     };
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn a_named_branch_scopes_question_two_to_its_own_receipt() {
+        assert_eq!(
+            receipt_pathspec(Some("chore/750-ratchet-rust-step4")),
+            format!("{RECEIPTS_DIR}/chore-750-ratchet-rust-step4.json")
+        );
+    }
+
+    #[test]
+    fn with_no_branch_to_name_every_receipt_counts() {
+        assert_eq!(receipt_pathspec(None), RECEIPTS_DIR);
+    }
+
+    #[test]
+    fn the_scoped_source_argv_excludes_every_receipt_path_in_the_tree() {
+        let args = scoped_source_args(
+            Path::new("/repo"),
+            Path::new("/repo/packages/rust"),
+            "main",
+            &[],
+            &[],
+        );
+        assert!(args.starts_with(&[
+            "diff".to_string(),
+            "--quiet".to_string(),
+            "main...HEAD".to_string(),
+            "--".to_string(),
+            "packages/rust".to_string(),
+        ]));
+        // Both the scope-local and the tree-wide form, so a monorepo sibling's receipt is
+        // not scoped source either.
+        assert!(args.contains(&format!(":(exclude){RECEIPTS_DIR}")));
+        assert!(args.contains(&format!(":(top,exclude,glob)**/{RECEIPTS_DIR}/**")));
+        assert!(args.contains(&format!(":(exclude){LEGACY_ATTESTATION}")));
+        assert!(args.contains(&format!(":(top,exclude,glob)**/{LEGACY_ATTESTATION}")));
+    }
+
+    #[test]
+    fn extra_scopes_join_the_argv_and_excludes_subtract_from_it() {
+        let args = scoped_source_args(
+            Path::new("/repo"),
+            Path::new("/repo/packages/rust"),
+            "main",
+            &[PathBuf::from("packages/node")],
+            &[PathBuf::from("packages/rust/docs")],
+        );
+        assert!(args.contains(&":(top)packages/node".to_string()));
+        assert!(args.contains(&":(top,exclude)packages/rust/docs".to_string()));
+    }
 
     const NOWHERE: &str = "/nonexistent-tc-e2e";
 

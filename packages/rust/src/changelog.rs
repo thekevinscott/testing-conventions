@@ -350,6 +350,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_finding_with_a_file_annotates_that_file() {
+        let finding = Finding {
+            file: Some("packages/rust/src/lib.rs".into()),
+            message: "changed public surface".into(),
+        };
+        assert_eq!(
+            annotation(&finding),
+            "::error file=packages/rust/src/lib.rs::changed public surface"
+        );
+    }
+
+    #[test]
+    fn a_finding_with_no_file_annotates_the_workflow() {
+        let finding = Finding {
+            file: None,
+            message: "changed public surface".into(),
+        };
+        assert_eq!(annotation(&finding), "::error::changed public surface");
+    }
+
+    #[test]
     fn owed_names_the_scope_kind_and_fragment_directory() {
         let finding = owed(
             "packages/parser ",

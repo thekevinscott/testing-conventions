@@ -741,6 +741,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn rust_is_told_about_inline_test_modules_and_the_others_about_sibling_files() {
+        let (label, summary) = orphan_wording(colocated_test::Language::Rust);
+        assert!(label.contains("inline"), "got: {label}");
+        assert!(summary.contains("inline test module"), "got: {summary}");
+
+        let (label, summary) = orphan_wording(colocated_test::Language::Python);
+        assert!(label.contains("colocated unit test"), "got: {label}");
+        assert!(summary.contains("add a colocated test"), "got: {summary}");
+    }
+
+    #[test]
+    fn a_named_language_makes_the_path_itself_the_distribution() {
+        let found = distributions_at(
+            Path::new("/tmp/pkg.whl"),
+            Some(colocated_test::Language::Python),
+        )
+        .unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].path, Path::new("/tmp/pkg.whl"));
+    }
+
+    #[test]
+    fn a_search_that_finds_nothing_is_an_error_not_a_clean_run() {
+        let dir = std::env::temp_dir().join(format!(
+            "testing-conventions-no-distributions-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let err = distributions_at(&dir, None).unwrap_err();
+        assert!(
+            err.to_string().contains("no recognized built distribution"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
     fn no_args_returns_ok_zero() {
         assert_eq!(run(["testing-conventions"]).unwrap(), 0);
     }

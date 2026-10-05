@@ -1378,6 +1378,55 @@ fn regex_escape(s: &str) -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn only_kind_zero_regions_count_as_code() {
+        let function = LlvmCovFunction {
+            filenames: vec!["a.rs".into()],
+            // slot 7 is the region kind: 0 is code, anything else is not.
+            regions: vec![vec![1, 0, 3, 0, 1, 0, 0, 0], vec![4, 0, 6, 0, 1, 0, 0, 2]],
+            count: 1,
+            branches: Vec::new(),
+        };
+        let code = code_regions(&function);
+        assert_eq!(code.len(), 1);
+        assert_eq!(code[0][0], 1);
+    }
+
+    #[test]
+    fn a_region_too_short_to_carry_a_kind_is_not_code() {
+        let function = LlvmCovFunction {
+            filenames: vec!["a.rs".into()],
+            regions: vec![vec![1, 0, 3, 0, 1]],
+            count: 1,
+            branches: Vec::new(),
+        };
+        assert!(code_regions(&function).is_empty());
+    }
+
+    #[test]
+    fn several_regions_over_one_hidden_line_or_together() {
+        let uncovered = vec![1i64, 0, 1, 0, 0, 0, 0, 0];
+        let covered = vec![1i64, 0, 1, 0, 4, 0, 0, 0];
+        let hidden: BTreeSet<u32> = [1].into_iter().collect();
+        let code: Vec<&Vec<i64>> = vec![&uncovered, &covered];
+        assert_eq!(hidden_line_coverage(&code, &hidden).get(&1), Some(&true));
+
+        let only_uncovered: Vec<&Vec<i64>> = vec![&uncovered];
+        assert_eq!(
+            hidden_line_coverage(&only_uncovered, &hidden).get(&1),
+            Some(&false)
+        );
+    }
+
+    #[test]
+    fn a_line_outside_the_gated_set_is_not_tallied() {
+        let region = vec![1i64, 0, 9, 0, 1, 0, 0, 0];
+        let code: Vec<&Vec<i64>> = vec![&region];
+        let hidden: BTreeSet<u32> = [4].into_iter().collect();
+        let lines = hidden_line_coverage(&code, &hidden);
+        assert_eq!(lines.keys().copied().collect::<Vec<u32>>(), vec![4]);
+    }
+
     fn report(percent_covered: f64, num_branches: u64) -> CoverageReport {
         CoverageReport {
             totals: Totals {

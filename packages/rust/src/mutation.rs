@@ -1471,6 +1471,98 @@ fn classify_mutants_exit(root: &Path, output: &Output) -> Result<()> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn with_no_prefix_the_base_diff_runs_unscoped_at_the_scan_path() {
+        let (dir, args) = base_diff_command(
+            Path::new("/crate"),
+            Path::new("/workspace"),
+            None,
+            "main...HEAD",
+        );
+        assert_eq!(dir, Path::new("/crate"));
+        assert_eq!(args, vec!["diff", "--relative", "main...HEAD"]);
+    }
+
+    #[test]
+    fn with_a_prefix_the_base_diff_runs_at_the_workspace_root_scoped_by_it() {
+        // cargo-mutants reads `--in-diff` paths relative to the cargo workspace root, so
+        // the diff has to be generated in that frame.
+        let (dir, args) = base_diff_command(
+            Path::new("/workspace/crate"),
+            Path::new("/workspace"),
+            Some("crate/src"),
+            "main...HEAD",
+        );
+        assert_eq!(dir, Path::new("/workspace"));
+        assert_eq!(
+            args,
+            vec!["diff", "--relative", "main...HEAD", "--", "crate/src"]
+        );
+    }
+
+    #[test]
+    fn a_failed_base_diff_names_the_range() {
+        let output = std::process::Output {
+            status: std::process::Command::new("false").status().unwrap(),
+            stdout: Vec::new(),
+            stderr: b"fatal: bad revision".to_vec(),
+        };
+        let err = base_diff_exit(&output, "nope...HEAD").unwrap_err();
+        assert!(err.to_string().contains("nope...HEAD"), "got: {err}");
+    }
+
+    #[test]
+    fn an_adapter_failure_surfaces_both_captured_streams() {
+        let output = std::process::Output {
+            status: std::process::Command::new("false").status().unwrap(),
+            stdout: b"stryker said this".to_vec(),
+            stderr: b"and then this".to_vec(),
+        };
+        let err = adapter_exit(&output, "TypeScript", Path::new("/pkg")).unwrap_err();
+        let text = err.to_string();
+        assert!(
+            text.contains("TypeScript mutation adapter failed"),
+            "got: {text}"
+        );
+        assert!(text.contains("/pkg"), "got: {text}");
+        assert!(text.contains("stryker said this"), "got: {text}");
+        assert!(text.contains("and then this"), "got: {text}");
+    }
+
+    #[test]
+    fn an_adapter_that_succeeded_is_not_an_error() {
+        let output = std::process::Output {
+            status: std::process::Command::new("true").status().unwrap(),
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        };
+        assert!(adapter_exit(&output, "Python", Path::new("/pkg")).is_ok());
+    }
+
+    #[test]
+    fn an_install_that_produced_no_binary_is_an_error() {
+        let missing = scratch_dir("installed-binary-absent").join("cargo-mutants");
+        let err = installed_binary(&missing).unwrap_err();
+        assert!(
+            err.to_string().contains("provisioning reported success"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn an_install_that_produced_the_binary_returns_its_path() {
+        let dir = scratch_dir("installed-binary-present");
+        std::fs::create_dir_all(&dir).unwrap();
+        let bin = dir.join("cargo-mutants");
+        std::fs::write(&bin, "").unwrap();
+        assert_eq!(installed_binary(&bin).unwrap(), bin);
+    }
+
+    /// A process-unique scratch path, so concurrent test binaries never collide.
+    fn scratch_dir(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("testing-conventions-{name}-{}", std::process::id()))
+    }
+
     const NORMALIZED: &str = r#"[
         {"file": "src/a.ts", "line": 2, "status": "survived",
          "mutator": "ConditionalExpression", "replacement": "true", "id": "ignored"},

@@ -1408,6 +1408,32 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
+    #[test]
+    fn the_unmocked_violation_names_the_import_and_says_to_patch_by_string() {
+        let import = ImportRecord {
+            display: "myproject.ledger".into(),
+            line: 7,
+            is_uut: false,
+            symbols: Vec::new(),
+            source: None,
+            module: None,
+        };
+        let violation = unmocked_violation(Path::new("tests/widget_test.py"), &import);
+        assert_eq!(violation.line, 7);
+        assert_eq!(violation.rule, "unmocked-collaborator");
+        assert_eq!(violation.file, Path::new("tests/widget_test.py"));
+        assert!(
+            violation.message.contains("myproject.ledger"),
+            "got: {}",
+            violation.message
+        );
+        assert!(
+            violation.message.contains("patch it by string"),
+            "got: {}",
+            violation.message
+        );
+    }
+
     /// A throwaway directory, removed on drop — for the `pyproject.toml` discovery.
     struct TempDir(PathBuf);
 

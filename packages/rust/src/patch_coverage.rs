@@ -671,6 +671,108 @@ fn kept_lines(measured: &BTreeSet<u64>, exempt: Option<&BTreeSet<u32>>) -> BTree
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_diff_argv_pins_every_flag_its_doc_comment_calls_load_bearing() {
+        let argv = unified_diff_argv("main...HEAD");
+        // The config override and prefix flags pin the output against the caller's git
+        // config, which is what lets `new_side_path` strip a fixed `b/`.
+        assert!(argv.starts_with(&["-c", "core.quotepath=off", "diff"]));
+        assert!(argv.contains(&"--src-prefix=a/"));
+        assert!(argv.contains(&"--dst-prefix=b/"));
+        assert!(argv.contains(&"--no-ext-diff"));
+        assert!(argv.contains(&"--no-color"));
+        assert!(argv.contains(&"--no-renames"));
+        // Context lines are not changed lines.
+        assert!(argv.contains(&"--unified=0"));
+        assert_eq!(argv.last(), Some(&"main...HEAD"));
+    }
+
+    #[test]
+    fn a_failed_diff_names_the_range_and_the_stderr() {
+        let output = std::process::Output {
+            status: failed_status(),
+            stdout: Vec::new(),
+            stderr: b"fatal: bad revision".to_vec(),
+        };
+        let err = diff_exit(&output, Path::new("/repo"), "nope...HEAD").unwrap_err();
+        let text = err.to_string();
+        assert!(text.contains("nope...HEAD"), "got: {text}");
+        assert!(text.contains("fatal: bad revision"), "got: {text}");
+    }
+
+    #[test]
+    fn a_successful_diff_is_not_an_error() {
+        let output = std::process::Output {
+            status: ok_status(),
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        };
+        assert!(diff_exit(&output, Path::new("/repo"), "main...HEAD").is_ok());
+    }
+
+    #[test]
+    fn measured_lines_spans_every_region_inclusive_of_both_ends() {
+        let cov = coverage::RustPatchCoverage {
+            regions: vec![(3, 5, true), (9, 9, false)],
+        };
+        assert_eq!(
+            measured_lines(&cov),
+            [3, 4, 5, 9].into_iter().collect::<BTreeSet<u64>>()
+        );
+    }
+
+    #[test]
+    fn with_a_region_floor_any_uncovered_region_misses_the_line() {
+        // Line 4 is spanned by one covered and one uncovered region.
+        let cov = coverage::RustPatchCoverage {
+            regions: vec![(4, 4, true), (4, 4, false)],
+        };
+        assert!(is_missed(&cov, 4, region_thresholds()));
+    }
+
+    #[test]
+    fn with_lines_only_one_covered_region_redeems_the_line() {
+        let cov = coverage::RustPatchCoverage {
+            regions: vec![(4, 4, true), (4, 4, false)],
+        };
+        assert!(!is_missed(&cov, 4, lines_only_thresholds()));
+    }
+
+    #[test]
+    fn a_line_no_region_covers_is_missed_under_either_reading() {
+        let cov = coverage::RustPatchCoverage {
+            regions: vec![(4, 4, false)],
+        };
+        assert!(is_missed(&cov, 4, region_thresholds()));
+        assert!(is_missed(&cov, 4, lines_only_thresholds()));
+    }
+
+    fn region_thresholds() -> RustThresholds {
+        RustThresholds {
+            regions: Some(100),
+            lines: 100,
+            functions: None,
+            branch: None,
+        }
+    }
+
+    fn lines_only_thresholds() -> RustThresholds {
+        RustThresholds {
+            regions: None,
+            lines: 100,
+            functions: None,
+            branch: None,
+        }
+    }
+
+    fn ok_status() -> std::process::ExitStatus {
+        std::process::Command::new("true").status().unwrap()
+    }
+
+    fn failed_status() -> std::process::ExitStatus {
+        std::process::Command::new("false").status().unwrap()
+    }
+
     fn changed(entries: &[(&str, &[u64])]) -> BTreeMap<String, BTreeSet<u64>> {
         entries
             .iter()

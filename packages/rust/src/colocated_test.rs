@@ -478,6 +478,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_exempt_key_is_root_relative_with_forward_slashes() {
+        assert_eq!(
+            exempt_key(Path::new("/repo"), Path::new("/repo/src/lib.rs")),
+            "src/lib.rs"
+        );
+    }
+
+    #[test]
+    fn a_file_outside_the_root_keys_on_its_own_path() {
+        assert_eq!(
+            exempt_key(Path::new("/repo"), Path::new("/elsewhere/lib.rs")),
+            "/elsewhere/lib.rs"
+        );
+    }
+
+    #[test]
     fn python_tracks_py_files() {
         assert!(Language::Python.tracks(Path::new("a.py")));
         assert!(Language::Python.tracks(Path::new("pkg/widget.py")));

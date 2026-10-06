@@ -612,9 +612,17 @@ pub fn measure_typescript(
         mutate.as_deref(),
         test_files.as_deref(),
     )?;
-    let mut mutants = to_scan_relative(parse_normalized_results(&json)?, prefix.as_deref());
+    let mutants = to_scan_relative(parse_normalized_results(&json)?, prefix.as_deref());
+    normalized_measurement(&judged_ts_mutants(mutants, root), exempt, exempt_lines)
+}
+
+/// The mutants the TypeScript arm judges: every one outside a declaration-only module, which
+/// has no behaviour for a mutant to change. An unreadable file is judged rather than dropped
+/// silently, which is what `is_declaration_only` already guarantees.
+fn judged_ts_mutants(mutants: Vec<NormalizedMutant>, root: &Path) -> Vec<NormalizedMutant> {
+    let mut mutants = mutants;
     mutants.retain(|mutant| !is_declaration_only(root, &mutant.file, Language::TypeScript));
-    normalized_measurement(&mutants, exempt, exempt_lines)
+    mutants
 }
 
 /// The measurement a judged, normalized mutant set reports: the conclusive count, and the
@@ -2238,6 +2246,24 @@ diff --git a/src/lib.rs b/src/lib.rs
             [3],
             "a mutant off the diff is not this run's to judge"
         );
+    }
+
+    #[test]
+    fn a_typescript_run_drops_the_mutants_in_a_declaration_only_module() {
+        let dir = unique_tmp();
+        std::fs::write(dir.join("types.ts"), "export type Id = string;\n").unwrap();
+        std::fs::write(dir.join("calc.ts"), "export const add = (a, b) => a + b;\n").unwrap();
+        let mutants = vec![py_mutant("types.ts", 1), py_mutant("calc.ts", 1)];
+
+        let judged = judged_ts_mutants(mutants, &dir);
+
+        // `types.ts` declares and branches on nothing, so it has no behaviour to mutate;
+        // `calc.ts` does, so its mutant is this run's to judge.
+        assert_eq!(
+            judged.iter().map(|m| m.file.as_str()).collect::<Vec<_>>(),
+            ["calc.ts"]
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

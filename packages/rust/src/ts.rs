@@ -662,6 +662,32 @@ mod tests {
     }
 
     #[test]
+    fn a_named_import_of_a_pure_function_needs_no_mock() {
+        // A pure export computes a value from its arguments and reaches nothing, so importing
+        // it unmocked isolates nothing away. The list is per-export, not per-module.
+        assert!(unit_violations(
+            "widget.test.ts",
+            "import { join } from 'node:path';\n\
+             import { parse } from 'yaml';\n",
+        )
+        .is_empty());
+
+        let found = unit_violations("widget.test.ts", "import { stringify } from 'yaml';\n");
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(found[0].message.contains("yaml"));
+    }
+
+    #[test]
+    fn a_diagnostic_alone_fails_the_parse_even_though_oxc_did_not_panic() {
+        // A top-level `return` is a diagnostic oxc recovers from: it reports the error and
+        // leaves `panicked` clear. So the diagnostic on its own has to fail the parse, or a
+        // malformed test file reads as "no violations".
+        let err = unit_violations_in(Path::new("widget.test.ts"), "return 1;\n")
+            .expect_err("a diagnostic should fail the parse");
+        assert!(err.to_string().contains("parsing"), "got: {err}");
+    }
+
+    #[test]
     fn unit_mocked_collaborator_is_clean() {
         let found = unit_violations(
             "widget.test.ts",

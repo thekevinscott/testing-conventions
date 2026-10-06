@@ -48,6 +48,17 @@ def test_verify_suites_creates_the_ref_dispatches_all_and_returns_conclusions():
     assert ["git", "push", "origin", ":refs/tags/verify-release-sha"] in run.calls
 
 
+def test_verify_suites_waits_for_npm_to_serve_the_version_before_dispatching():
+    run = _suite_run(dispatched={"a.yml": 1}, conclusions={1: "success"})
+    verify_suites("sha", "0.0.67", ["a.yml"], run=run, sleep=lambda _s: None,
+                  now=lambda: "2026-07-08T10:00:00Z")
+    probes = [i for i, argv in enumerate(run.calls) if argv[0] == "npm"]
+    dispatches = [i for i, argv in enumerate(run.calls) if argv[:3] == ["gh", "workflow", "run"]]
+    assert probes, "no npm probe ran, so the suites dispatch before the registry serves the version"
+    assert max(probes) < min(dispatches)
+    assert run.calls[probes[0]][-2:] == ["testing-conventions@0.0.67", "--help"]
+
+
 def test_verify_suites_deletes_the_ref_even_when_a_dispatch_raises():
     deleted = []
 

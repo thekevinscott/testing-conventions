@@ -40,7 +40,6 @@ struct Facts {
     bodies: String,
     changed: Vec<String>,
     added: Vec<String>,
-    migrations: bool,
 }
 
 /// Read the repository facts the verdict decides on.
@@ -50,7 +49,6 @@ fn facts(root: &Path, base: &str) -> Result<Facts> {
         bodies: commit_bodies(root, base)?,
         changed: changed_files(root, base)?,
         added: added_files(root, base)?,
-        migrations: migrations_enforced(root),
     })
 }
 
@@ -73,7 +71,8 @@ fn verdict(root: &Path, facts: &Facts) -> (i32, Vec<String>) {
             vec!["A `skip-changelog:` line is present; changelog check bypassed.".to_string()],
         );
     }
-    let found = findings(layout, facts.migrations, &facts.changed, &facts.added);
+    let breaking = has_breaking_line(&facts.bodies);
+    let found = findings(layout, breaking, &facts.changed, &facts.added);
     if found.is_empty() {
         return (
             0,
@@ -125,13 +124,6 @@ pub fn discover_layout(root: &Path) -> Option<Layout> {
     Some(Layout::PerPackage(containers))
 }
 
-/// `true` when `root` keeps migration fragments alongside its changelog fragments.
-pub fn migrations_enforced(root: &Path) -> bool {
-    fragment_dirs(root)
-        .iter()
-        .any(|segs| segs.last().is_some_and(|last| last == "migrations.d"))
-}
-
 /// `true` when `name` is `YYYY-MM-DD-<slug>.md` — the UTC merge date, then lowercase letters,
 /// digits and hyphens.
 pub fn fragment_name_ok(name: &str) -> bool {
@@ -155,13 +147,24 @@ pub fn fragment_name_ok(name: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || *b == b'-')
 }
 
-/// `true` when any line of `bodies` opens with `skip-changelog:`.
-pub fn has_skip_line(bodies: &str) -> bool {
-    const SKIP: &[u8] = b"skip-changelog:";
+/// `true` when any line of `bodies` opens with `marker`, whatever its case.
+fn has_line_opening(bodies: &str, marker: &[u8]) -> bool {
     bodies.lines().any(|line| {
         let bytes = line.as_bytes();
-        bytes.len() >= SKIP.len() && bytes[..SKIP.len()].eq_ignore_ascii_case(SKIP)
+        bytes.len() >= marker.len() && bytes[..marker.len()].eq_ignore_ascii_case(marker)
     })
+}
+
+/// `true` when any line of `bodies` opens with `skip-changelog:` — the bypass.
+pub fn has_skip_line(bodies: &str) -> bool {
+    has_line_opening(bodies, b"skip-changelog:")
+}
+
+/// `true` when any line of `bodies` opens with `breaking:` — the signal that the pull request
+/// owes a migration fragment. Opt in: a breaking change whose commits carry no such line gets
+/// no migrations enforcement, which is the trade for the check needing no configuration.
+pub fn has_breaking_line(bodies: &str) -> bool {
+    has_line_opening(bodies, b"breaking:")
 }
 
 /// `true` when `path` sits under `pkg` and is not public surface.
@@ -187,6 +190,10 @@ pub fn changed_packages(changed: &[String]) -> Vec<String> {
 
 /// Everything the pull request owes: fragments whose names break the convention, then the
 /// fragments each changed scope is still missing.
+///
+/// `migrations` is whether the pull request marked a breaking change — see
+/// [`has_breaking_line`]. A migration fragment is required when it did, and allowed, never
+/// forbidden, when it did not.
 pub fn findings(
     layout: &Layout,
     migrations: bool,
@@ -267,13 +274,29 @@ pub fn added_files(repo: &Path, base: &str) -> Result<Vec<String>> {
     Ok(lines(&out))
 }
 
+/// What a pull request missing a fragment of `kind` did, and the way out of owing it. A lookup
+/// with a default rather than a comparison, so the two kinds read side by side.
+fn phrasing(kind: &str) -> (&'static str, &'static str) {
+    match kind {
+        "migrations" => (
+            "marked a breaking change",
+            "drop the `breaking:` line if the change is not breaking",
+        ),
+        _ => (
+            "changed public surface",
+            "put a `skip-changelog: <reason>` line on any commit for a genuinely internal \
+             refactor",
+        ),
+    }
+}
+
 fn owed(scope: &str, dir: &str, kind: &str) -> Finding {
+    let (did, way_out) = phrasing(kind);
     Finding {
         file: None,
         message: format!(
-            "{scope}changed public surface without adding a {kind} fragment. Add \
-             {dir}/YYYY-MM-DD-<slug>.md, or put a `skip-changelog: <reason>` line on any commit \
-             for a genuinely internal refactor. See docs/reference/checks/changelog."
+            "{scope}{did} without adding a {kind} fragment. Add {dir}/YYYY-MM-DD-<slug>.md, or \
+             {way_out}. See docs/reference/checks/changelog."
         ),
     }
 }
@@ -448,7 +471,6 @@ mod tests {
             bodies: bodies.to_string(),
             changed: changed.iter().map(|s| s.to_string()).collect(),
             added: added.iter().map(|s| s.to_string()).collect(),
-            migrations: false,
         }
     }
 
@@ -493,6 +515,78 @@ mod tests {
     }
 
     #[test]
+    fn a_breaking_line_makes_a_migrations_fragment_required() {
+        let layout = Some(Layout::PerPackage(vec!["packages".to_string()]));
+        let changed = &["packages/parser/src/a.ts"];
+        let paid = &["packages/parser/changelog.d/2026-10-06-change-a.md"];
+        // Same facts, with and without the line: the line is the only difference.
+        assert_eq!(
+            verdict(
+                Path::new("/repo"),
+                &facts_with(layout.clone(), "", changed, paid)
+            )
+            .0,
+            0
+        );
+        let (code, lines) = verdict(
+            Path::new("/repo"),
+            &facts_with(
+                layout,
+                "feat!: drop the flag\n\nbreaking: the flag is gone",
+                changed,
+                paid,
+            ),
+        );
+        assert_eq!(code, 1);
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("migrations fragment"));
+        assert!(lines[0].contains("breaking change"));
+    }
+
+    #[test]
+    fn a_migrations_fragment_no_breaking_line_asked_for_is_allowed() {
+        // The requirement is an implication, not an equality: an unsolicited migration
+        // fragment is allowed.
+        let facts = facts_with(
+            Some(Layout::PerPackage(vec!["packages".to_string()])),
+            "",
+            &["packages/parser/src/a.ts"],
+            &[
+                "packages/parser/changelog.d/2026-10-06-change-a.md",
+                "packages/parser/migrations.d/2026-10-06-change-a.md",
+            ],
+        );
+        assert_eq!(verdict(Path::new("/repo"), &facts).0, 0);
+    }
+
+    #[test]
+    fn a_breaking_line_is_read_only_at_the_opening_of_a_line() {
+        assert!(has_breaking_line("breaking: the flag is gone"));
+        assert!(has_breaking_line(
+            "feat!: drop it\n\nBREAKING: the flag is gone"
+        ));
+        assert!(!has_breaking_line(
+            "fix: a comment saying this is not breaking: really"
+        ));
+        assert!(!has_breaking_line("breaking the flag"));
+        assert!(!has_breaking_line(""));
+    }
+
+    #[test]
+    fn phrasing_tells_a_breaking_change_apart_from_a_surface_change() {
+        assert_eq!(
+            phrasing("migrations"),
+            (
+                "marked a breaking change",
+                "drop the `breaking:` line if the change is not breaking"
+            )
+        );
+        let (did, way_out) = phrasing("changelog");
+        assert_eq!(did, "changed public surface");
+        assert!(way_out.contains("skip-changelog: <reason>"));
+    }
+
+    #[test]
     fn a_scope_that_added_its_fragment_passes() {
         let facts = facts_with(
             Some(Layout::PerPackage(vec!["packages".to_string()])),
@@ -521,7 +615,7 @@ mod tests {
         // One line per finding, each already rendered as an annotation.
         let found = findings(
             facts.layout.as_ref().unwrap(),
-            facts.migrations,
+            has_breaking_line(&facts.bodies),
             &facts.changed,
             &facts.added,
         );

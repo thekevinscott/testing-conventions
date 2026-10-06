@@ -199,7 +199,7 @@ The doc generator reads this. Single source of truth (the package's own `package
 | `typecheck.yml` | `tsc --noEmit` | every push/PR |
 | `docs.yml` | Build + deploy docs | push to main, `docs/**` |
 | `release.yml` | `uses: thekevinscott/putitoutthere/.github/workflows/release.yml@v0` | push to main |
-| `changelog-check.yml` | a `changelog.d/` + `migrations.d/` fragment per changed package (or a `skip-changelog:` line) | every PR |
+| `changelog-check.yml` | a `changelog.d/` fragment per changed package, plus a `migrations.d/` one behind a `breaking:` line (or a `skip-changelog:` line) | every PR |
 
 Composite action for repeated setup (`.github/actions/setup-pnpm/action.yml`):
 

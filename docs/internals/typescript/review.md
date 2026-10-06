@@ -25,7 +25,7 @@ If the agent didn't run these, ask. If they fail, the agent should fix before yo
 6. **`package.json` changes** — new deps match the ecosystem table in [setup.md](setup.md); `"files"` allowlist scoped to `dist`, `CHANGELOG.md`, `MIGRATIONS.md`.
 7. **Reuse over reinvention** — date math, deep clone, schema validation, retry-with-backoff all come from the ecosystem table.
 8. **Public API surface** — `default` vs named consistent; `@hidden` / `@internal` on the rest.
-9. **CHANGELOG.md + MIGRATIONS.md** — both touched for any consumer-observable change, or a `skip-changelog:` trailer present. See [../repo.md](../repo.md).
+9. **changelog + migration fragments** — a changelog fragment for any consumer-observable change, a migration fragment where a `breaking:` line marks the change breaking, or a `skip-changelog:` trailer present. See [../repo.md](../repo.md).
 10. **`putitoutthere.toml`** — `globs` cover every source path that should cascade; polyglot CLIs declare `depends_on` on the Rust crate.
 
 ---

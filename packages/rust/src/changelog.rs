@@ -530,6 +530,49 @@ mod tests {
     }
 
     #[test]
+    fn a_malformed_fragment_name_is_a_finding_even_where_nothing_is_owed() {
+        // `changelog.d/` is exempt from `code_touched`, so the only finding can be the name.
+        let facts = facts_with(
+            Some(Layout::PerPackage(vec!["packages".to_string()])),
+            "",
+            &["packages/parser/changelog.d/Nope.md"],
+            &[],
+        );
+        let found = findings(
+            facts.layout.as_ref().unwrap(),
+            facts.migrations,
+            &facts.changed,
+            &facts.added,
+        );
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].file.as_deref(),
+            Some("packages/parser/changelog.d/Nope.md")
+        );
+        assert!(found[0].message.starts_with("fragment filenames are"));
+    }
+
+    #[test]
+    fn a_scope_owes_only_where_it_is_in_a_container_and_its_code_changed() {
+        let containers = Some(Layout::PerPackage(vec!["packages".to_string()]));
+        let owed_for = |changed: &[&str]| {
+            let facts = facts_with(containers.clone(), "", changed, &[]);
+            findings(
+                facts.layout.as_ref().unwrap(),
+                facts.migrations,
+                &facts.changed,
+                &facts.added,
+            )
+        };
+        // In a container, but only its own fragment directory moved: nothing owed.
+        assert!(owed_for(&["packages/parser/changelog.d/2026-10-05-ok.md"]).is_empty());
+        // Code changed, but outside every declared container: nothing owed.
+        assert!(owed_for(&["internals/checks/src/a.py"]).is_empty());
+        // Both together is the only case that owes.
+        assert_eq!(owed_for(&["packages/parser/src/a.ts"]).len(), 1);
+    }
+
+    #[test]
     fn a_finding_with_a_file_annotates_that_file() {
         let finding = Finding {
             file: Some("packages/rust/src/lib.rs".into()),

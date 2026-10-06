@@ -2410,6 +2410,53 @@ mod tests {
     }
 
     #[test]
+    fn aiming_llvm_cov_points_cargo_at_the_crate_and_strips_the_outer_run() {
+        let mut command = Command::new("cargo");
+        command.env("RUSTC_WRAPPER", "outer");
+        aim_llvm_cov(
+            &mut command,
+            &TargetDir(PathBuf::from("/tmp/tc-aim")),
+            Path::new("/repo/crate"),
+            vec!["llvm-cov".to_string(), "--json".to_string()],
+        );
+        assert_eq!(command.get_current_dir(), Some(Path::new("/repo/crate")));
+        assert_eq!(
+            command
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect::<Vec<_>>(),
+            vec!["llvm-cov", "--json"]
+        );
+        let env = |name: &str| {
+            command
+                .get_envs()
+                .find(|(key, _)| key.to_str() == Some(name))
+                .map(|(_, value)| value.map(|v| v.to_string_lossy().into_owned()))
+        };
+        assert_eq!(
+            env("CARGO_TARGET_DIR"),
+            Some(Some("/tmp/tc-aim".to_string()))
+        );
+        // Set-and-cleared rather than simply absent: the child must not inherit ours either.
+        assert_eq!(env("RUSTC_WRAPPER"), Some(None));
+    }
+
+    #[test]
+    fn a_failed_llvm_cov_run_names_the_crate_and_only_branch_runs_name_nightly() {
+        let plain = llvm_cov_failure(Path::new("/repo/crate"), false);
+        assert_eq!(
+            plain,
+            "the unit suite did not run cleanly under cargo llvm-cov in `/repo/crate`:"
+        );
+        let branched = llvm_cov_failure(Path::new("/repo/crate"), true);
+        assert!(branched.starts_with(&plain), "got: {branched}");
+        assert!(
+            branched.contains("requires a nightly toolchain"),
+            "got: {branched}"
+        );
+    }
+
+    #[test]
     fn scrub_removes_outer_llvm_cov_state_from_a_command() {
         let mut command = Command::new("cargo");
         for name in [

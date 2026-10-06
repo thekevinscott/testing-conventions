@@ -739,6 +739,42 @@ mod tests {
     }
 
     #[test]
+    fn a_workflow_encoding_logic_fails_the_lint_and_a_wiring_one_passes() {
+        let workflow =
+            |body: &str| format!("on: push\njobs:\n  j:\n    steps:\n      - run: |\n{body}");
+        let logic = scratch(
+            "workflow-lint-logic",
+            &[(
+                "ci.yml",
+                &workflow("          for f in *.txt; do\n            echo $f\n          done\n"),
+            )],
+        );
+        assert_eq!(run_workflow_lint(&logic.join("ci.yml")).unwrap(), 1);
+
+        let wiring = scratch(
+            "workflow-lint-wiring",
+            &[("ci.yml", &workflow("          echo hello\n"))],
+        );
+        assert_eq!(run_workflow_lint(&wiring.join("ci.yml")).unwrap(), 0);
+    }
+
+    #[test]
+    fn an_inline_logic_finding_names_the_step_its_location_and_every_reason() {
+        let rendered = inline_logic_finding(&workflow_lint::Finding {
+            file: PathBuf::from(".github/workflows/ci.yml"),
+            line: 42,
+            step: "Publish".to_string(),
+            kind: "run",
+            reasons: vec!["for loop".to_string(), "sed".to_string()],
+        });
+        assert!(
+            rendered.starts_with(".github/workflows/ci.yml:42: run step `Publish` encodes logic inline (for loop; sed)"),
+            "got: {rendered}"
+        );
+        assert!(rendered.contains("one-line `run:`"), "got: {rendered}");
+    }
+
+    #[test]
     fn a_directory_holding_no_distribution_is_an_error_rather_than_a_clean_run() {
         // `Ok(0)` here would read as "checked nothing, nothing shipped" — a pass by vacancy.
         let root = scratch("packaging-empty", &[("README.md", "hi\n")]);

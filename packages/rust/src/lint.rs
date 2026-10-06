@@ -2379,6 +2379,30 @@ mod tests {
     }
 
     #[test]
+    fn a_test_file_under_tests_outside_the_two_tiers_is_unknown_tier() {
+        let tree = TempDir::new();
+        tree.write("pyproject.toml", "[project]\nname = \"myproject\"\n");
+        tree.write(
+            "tests/integration/ledger_test.py",
+            "def ledger_test():\n    pass\n",
+        );
+        tree.write("tests/e2e/ledger_test.py", "def ledger_test():\n    pass\n");
+        tree.write(
+            "tests/smoke/ledger_test.py",
+            "def ledger_test():\n    pass\n",
+        );
+        let found = find_suite_violations(&tree.0).expect("a readable tree should succeed");
+        let strays: Vec<_> = found
+            .iter()
+            .filter(|v| v.rule == "unknown-tier")
+            .map(|v| v.file.strip_prefix(&tree.0).unwrap().to_owned())
+            .collect();
+        // Only the file outside `integration/` and `e2e/` is flagged.
+        assert_eq!(strays, vec![PathBuf::from("tests/smoke/ledger_test.py")]);
+        assert_eq!(found.len(), strays.len());
+    }
+
+    #[test]
     fn find_suite_without_a_tests_directory_reports_nothing() {
         let tree = TempDir::new();
         tree.write("pyproject.toml", "[project]\nname = \"myproject\"\n");

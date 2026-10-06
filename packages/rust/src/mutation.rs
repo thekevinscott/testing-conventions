@@ -612,12 +612,29 @@ pub fn measure_typescript(
         mutate.as_deref(),
         test_files.as_deref(),
     )?;
-    let mut mutants = to_scan_relative(parse_normalized_results(&json)?, prefix.as_deref());
+    let mutants = to_scan_relative(parse_normalized_results(&json)?, prefix.as_deref());
+    normalized_measurement(&judged_ts_mutants(mutants, root), exempt, exempt_lines)
+}
+
+/// The mutants the TypeScript arm judges: every one outside a declaration-only module, which
+/// has no behaviour for a mutant to change. An unreadable file is judged rather than dropped
+/// silently, which is what `is_declaration_only` already guarantees.
+fn judged_ts_mutants(mutants: Vec<NormalizedMutant>, root: &Path) -> Vec<NormalizedMutant> {
+    let mut mutants = mutants;
     mutants.retain(|mutant| !is_declaration_only(root, &mutant.file, Language::TypeScript));
-    let survivors = evaluate_normalized(&mutants, exempt, exempt_lines)?;
+    mutants
+}
+
+/// The measurement a judged, normalized mutant set reports: the conclusive count, and the
+/// survivors left once the `mutation` exemptions have been applied.
+fn normalized_measurement(
+    mutants: &[NormalizedMutant],
+    exempt: &[String],
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
+) -> Result<Measurement> {
     Ok(Measurement::Tested {
-        count: normalized_conclusive_count(&mutants),
-        survivors,
+        count: normalized_conclusive_count(mutants),
+        survivors: evaluate_normalized(mutants, exempt, exempt_lines)?,
     })
 }
 
@@ -900,11 +917,7 @@ pub fn measure_python(
     };
     let json = run_py_adapter(root, &modules)?;
     let mutants = judged_py_mutants(parse_normalized_results(&json)?, root, changed.as_ref());
-    let survivors = evaluate_normalized(&mutants, exempt, exempt_lines)?;
-    Ok(Measurement::Tested {
-        count: normalized_conclusive_count(&mutants),
-        survivors,
-    })
+    normalized_measurement(&mutants, exempt, exempt_lines)
 }
 
 /// The modules among `changed` the adapter can mutate. Empty when the diff touches no such
@@ -1660,6 +1673,29 @@ mod tests {
     }
 
     #[test]
+    fn a_normalized_measurement_reports_the_conclusive_count_and_the_kept_survivors() {
+        let mutants = parse_normalized_results(NORMALIZED).unwrap();
+        assert_eq!(
+            normalized_measurement(&mutants, &[], &BTreeMap::new()).unwrap(),
+            Measurement::Tested {
+                // Survived, no-coverage and killed are conclusive; timeout, compile error
+                // and runtime error are not.
+                count: 3,
+                survivors: normalized_survivors(&mutants),
+            }
+        );
+
+        // A whole-file exemption drops the survivors without changing what was tested.
+        assert_eq!(
+            normalized_measurement(&mutants, &["src/a.ts".to_string()], &BTreeMap::new()).unwrap(),
+            Measurement::Tested {
+                count: 3,
+                survivors: vec![],
+            }
+        );
+    }
+
+    #[test]
     fn evaluate_normalized_reports_unexempted_survivors() {
         let mutants = parse_normalized_results(NORMALIZED).unwrap();
         let kept = evaluate_normalized(&mutants, &[], &BTreeMap::new()).unwrap();
@@ -2210,6 +2246,24 @@ diff --git a/src/lib.rs b/src/lib.rs
             [3],
             "a mutant off the diff is not this run's to judge"
         );
+    }
+
+    #[test]
+    fn a_typescript_run_drops_the_mutants_in_a_declaration_only_module() {
+        let dir = unique_tmp();
+        std::fs::write(dir.join("types.ts"), "export type Id = string;\n").unwrap();
+        std::fs::write(dir.join("calc.ts"), "export const add = (a, b) => a + b;\n").unwrap();
+        let mutants = vec![py_mutant("types.ts", 1), py_mutant("calc.ts", 1)];
+
+        let judged = judged_ts_mutants(mutants, &dir);
+
+        // `types.ts` declares and branches on nothing, so it has no behaviour to mutate;
+        // `calc.ts` does, so its mutant is this run's to judge.
+        assert_eq!(
+            judged.iter().map(|m| m.file.as_str()).collect::<Vec<_>>(),
+            ["calc.ts"]
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

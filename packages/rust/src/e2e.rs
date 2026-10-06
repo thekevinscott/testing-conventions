@@ -273,25 +273,36 @@ fn relative_pathspec(repo: &Path, scope: &Path) -> String {
 fn validate_scopes(repo: &Path, scope: &Path, extra_scopes: &[PathBuf]) -> Result<()> {
     let scope_spec = relative_pathspec(repo, scope);
     if !pathspec_matches_tracked(repo, &scope_spec)? {
-        bail!(
-            "e2e verify: --scope `{}` matches no tracked path under `{}` — \
-             --scope must name `{}` or a directory beneath it that git tracks",
-            scope.display(),
-            repo.display(),
-            repo.display(),
-        );
+        bail!("{}", untracked_scope(repo, scope));
     }
     for extra in extra_scopes {
         let extra_spec = format!(":(top){}", extra.display());
         if !pathspec_matches_tracked(repo, &extra_spec)? {
-            bail!(
-                "e2e verify: --extra-scope `{}` matches no tracked path — \
-                 --extra-scope must name a repo-root-relative directory that git tracks",
-                extra.display(),
-            );
+            bail!("{}", untracked_extra_scope(extra));
         }
     }
     Ok(())
+}
+
+/// What a `--scope` matching no tracked path reports, naming the scope git found nothing for.
+fn untracked_scope(repo: &Path, scope: &Path) -> String {
+    format!(
+        "e2e verify: --scope `{}` matches no tracked path under `{}` — \
+         --scope must name `{}` or a directory beneath it that git tracks",
+        scope.display(),
+        repo.display(),
+        repo.display(),
+    )
+}
+
+/// What an `--extra-scope` matching no tracked path reports, naming the scope git found nothing
+/// for.
+fn untracked_extra_scope(extra: &Path) -> String {
+    format!(
+        "e2e verify: --extra-scope `{}` matches no tracked path — \
+         --extra-scope must name a repo-root-relative directory that git tracks",
+        extra.display(),
+    )
 }
 
 /// `true` when git tracks at least one path matching `pathspec` (run with cwd `repo`). A
@@ -358,9 +369,68 @@ fn git_run(repo: &Path, args: &[&str]) -> Result<()> {
 mod tests {
     use super::{
         branch_slug, git_capture, git_diff_changed, git_run, pathspec_matches_tracked,
-        receipt_pathspec, run_shell, scoped_source_args, LEGACY_ATTESTATION, RECEIPTS_DIR,
+        receipt_pathspec, run_shell, scoped_source_args, untracked_extra_scope, untracked_scope,
+        validate_scopes, LEGACY_ATTESTATION, RECEIPTS_DIR,
     };
     use std::path::{Path, PathBuf};
+
+    /// A scratch repository with one file staged under `src/`. `ls-files` reads the index, so
+    /// nothing needs committing — and no identity needs configuring.
+    fn repo_tracking_src(slug: &str) -> PathBuf {
+        let repo = std::env::temp_dir().join(format!("tc-e2e-{slug}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&repo);
+        std::fs::create_dir_all(repo.join("src")).unwrap();
+        std::fs::write(repo.join("src").join("a.rs"), "pub fn f() {}\n").unwrap();
+        git_run(&repo, &["init", "-q"]).unwrap();
+        git_run(&repo, &["add", "-A", "--", "src"]).unwrap();
+        repo
+    }
+
+    #[test]
+    fn scope_validation_passes_a_tracked_scope_and_rejects_either_untracked_one() {
+        let repo = repo_tracking_src("validate-scopes");
+        let tracked = repo.join("src");
+
+        validate_scopes(&repo, &tracked, &[PathBuf::from("src")])
+            .expect("a tracked scope and a tracked extra scope both pass");
+
+        // A typo'd `--scope` must error rather than diff to empty and wave the branch through.
+        let err = format!(
+            "{:#}",
+            validate_scopes(&repo, &repo.join("nope"), &[]).unwrap_err()
+        );
+        assert!(err.contains("--scope `"), "got: {err}");
+        assert!(err.contains("matches no tracked path under"), "got: {err}");
+
+        // So must a typo'd `--extra-scope`, even behind a good `--scope`.
+        let err = format!(
+            "{:#}",
+            validate_scopes(&repo, &tracked, &[PathBuf::from("nope")]).unwrap_err()
+        );
+        assert!(err.contains("--extra-scope `nope`"), "got: {err}");
+
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn an_untracked_scope_names_the_scope_the_repository_and_what_scope_must_be() {
+        let message = untracked_scope(Path::new("/repo"), Path::new("/repo/packages/typo"));
+        assert_eq!(
+            message,
+            "e2e verify: --scope `/repo/packages/typo` matches no tracked path under `/repo` — \
+             --scope must name `/repo` or a directory beneath it that git tracks"
+        );
+    }
+
+    #[test]
+    fn an_untracked_extra_scope_names_the_scope_and_that_it_is_repo_root_relative() {
+        let message = untracked_extra_scope(Path::new("internals/typo"));
+        assert_eq!(
+            message,
+            "e2e verify: --extra-scope `internals/typo` matches no tracked path — \
+             --extra-scope must name a repo-root-relative directory that git tracks"
+        );
+    }
 
     #[test]
     fn a_named_branch_scopes_question_two_to_its_own_receipt() {

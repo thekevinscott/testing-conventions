@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use oxc::allocator::Allocator;
-use oxc::ast::ast::{Declaration, Expression, Statement, VariableDeclaration};
+use oxc::ast::ast::{
+    Declaration, ExportDefaultDeclarationKind, Expression, Statement, VariableDeclaration,
+};
 use oxc::parser::Parser;
 use oxc::span::{GetSpan, SourceType};
 use rustpython_ast::Ranged;
@@ -160,30 +162,50 @@ fn typescript_functions(source: &str, path: &Path) -> Result<Vec<Function>> {
 }
 
 /// Record whatever module-scope functions `statement` declares. Only the four statement
-/// kinds that can carry one at module scope contribute; everything else is skipped, and an
-/// `export default` carries a function only when it is a declaration rather than an
-/// expression.
+/// kinds that can carry one at module scope contribute; everything else is skipped.
 fn push_ts_statement(source: &str, lines: &[&str], statement: &Statement, out: &mut Vec<Function>) {
     match statement {
         Statement::FunctionDeclaration(node) => push_ts_function(source, lines, node, out),
         Statement::VariableDeclaration(node) => push_ts_bindings(source, lines, node, out),
-        Statement::ExportNamedDeclaration(node) => match &node.declaration {
-            Some(Declaration::FunctionDeclaration(inner)) => {
-                push_ts_function(source, lines, inner, out)
-            }
-            Some(Declaration::VariableDeclaration(inner)) => {
-                push_ts_bindings(source, lines, inner, out)
-            }
-            _ => {}
-        },
+        Statement::ExportNamedDeclaration(node) => {
+            push_ts_declaration(source, lines, node.declaration.as_ref(), out);
+        }
         Statement::ExportDefaultDeclaration(node) => {
-            if let oxc::ast::ast::ExportDefaultDeclarationKind::FunctionDeclaration(inner) =
-                &node.declaration
-            {
-                push_ts_function(source, lines, inner, out)
-            }
+            push_ts_default(source, lines, &node.declaration, out);
         }
         _ => {}
+    }
+}
+
+/// Record whatever module-scope functions an `export` clause's declaration carries. An
+/// `export { … }` re-export declares nothing of its own.
+fn push_ts_declaration(
+    source: &str,
+    lines: &[&str],
+    declaration: Option<&Declaration>,
+    out: &mut Vec<Function>,
+) {
+    match declaration {
+        Some(Declaration::FunctionDeclaration(inner)) => {
+            push_ts_function(source, lines, inner, out);
+        }
+        Some(Declaration::VariableDeclaration(inner)) => {
+            push_ts_bindings(source, lines, inner, out);
+        }
+        _ => {}
+    }
+}
+
+/// Record the function an `export default` carries. It carries one only when the default is a
+/// declaration rather than an expression.
+fn push_ts_default(
+    source: &str,
+    lines: &[&str],
+    declaration: &ExportDefaultDeclarationKind,
+    out: &mut Vec<Function>,
+) {
+    if let ExportDefaultDeclarationKind::FunctionDeclaration(inner) = declaration {
+        push_ts_function(source, lines, inner, out);
     }
 }
 

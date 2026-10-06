@@ -1,7 +1,7 @@
 {
   "command": "PATH=\"$PWD/internals/checks/.venv/bin:$HOME/.cache/testing-conventions/cargo-mutants-27.1.0/bin:$PATH\" PYTHONPATH=\"$PWD/packages/python/python\" cargo nextest run --manifest-path packages/rust/Cargo.toml -E \"binary(~_e2e) and not (test(=typescript_exempting_both_survivor_lines_passes) + test(=typescript_over_exempting_a_caught_line_is_a_hard_error) + test(=typescript_under_listing_still_fails) + test(=the_branch_floor_gates_the_measured_branches))\"",
-  "ran_at": 1791310431,
+  "ran_at": 1791310614,
   "exit_code": 0,
-  "commit": "e3a9a432662fe96803044f53757df87ae2b769b7",
+  "commit": "c79c3c3e1a3515d004ed699ba5299ad6bae7c38d",
   "branch": "fix/766-breaking-signal"
 }

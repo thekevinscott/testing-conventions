@@ -757,12 +757,105 @@ properties hold the ratchet:
 `packages/python`, `internals/move-major-tag`, `internals/detect`, and `internals/checks` all sit
 at the default and carry no config for it — the ratchet's end state.
 
-`packages/rust` entered the ratchet at `max_lines = 76` (#735) and sits at `24`. Each value is the
+`packages/rust` entered the ratchet at `max_lines = 76` (#735) and sits at `19`. Each value is the
 tightest threshold the crate passes at that point rather than a judgement about Rust, so the
 package always carries zero headroom: at `76` it was `run` in `lib.rs`, at exactly 76 lines; at
 `64` it was `run_unit_mutation`, sharing `lib.rs` with `run` at exactly 64; at `46`, the next
 line down flagged `run_unit_one_function` in `lib.rs`; at `29`, `28` flagged four more; at `24`,
-`23` flags four more again. #750 holds the remaining step sequence.
+`23` flagged four more again; at `19`, `18` flags eight. `19` is where the walk stops: #750
+records the argument, measured below.
+
+The fifth step lowers the threshold to `19`, two rungs past the `≤ 20` ceiling #772 named rather
+than one. The ceiling's own measurement is the reason. At `20` the gate flagged 21 functions
+across 10 files; clearing those left the crate passing at `20` with **six functions at exactly 20
+lines**, so shipping `20` would have banked the splitting work and still handed the next step six
+pre-identified violations. The six were six more decisions to name, not six moves, so the step
+named them and shipped `19`. "The tightest value the crate passes" means measure again *after*
+the splits, not before.
+
+What `20` pointed at confirms #764's finding and sharpens it: **not one of the 21 wanted a new
+module, and at this rung the gate no longer points at code that does.** Through `29` a violation
+was usually a long function sharing a file with another long one, and the fix was a move. From
+`24` down, the flagged function is one doing two things, and the whole of this step is naming the
+second thing in place. `changelog.rs`'s `findings` separated the malformed-name scan from the
+owed-fragment scan (`malformed_findings`, `owed_findings`, `package_owed`), and `fragment` grew
+`fragment_scope`, which makes "this layout files no fragment here" a `None` rather than a
+fallthrough. `isolation.rs`'s `cfg_requires_test` split along the one thing its body branched on,
+`not` versus a bare ident (`cfg_not_requires_test`, `cfg_ident_requires_test`). `ts.rs`'s 63-line
+`unit_violations_in` became nine lines over `parse_program`, `unmocked_violations` and
+`is_isolated_import`, and `integration_violations_in` fell from 24 lines to 9 by reusing the same
+parse. `mutation.rs`'s two adapter measurements shared their whole tail, now
+`normalized_measurement`.
+
+One clearing was a const rather than a function, by the same test #764 applied to
+`VITEST_BASE_ARGV`: is the thing really one value? `scrub_outer_llvm_cov` was 21 lines of which
+17 were an environment-variable list, and that list is one thing — the outer `cargo llvm-cov`
+run's instrumentation state — so it became `OUTER_LLVM_COV_VARS` and took the doc comment
+naming the two entries that matter with it (`RUSTC_WRAPPER` re-enters cargo-llvm-cov on every
+rustc call until the runner is OOM-killed; `RUSTUP_TOOLCHAIN` overrides the scanned crate's own
+nightly pin).
+
+The step's durable finding is about *which* decision you are allowed to name. At this rung the
+choice is forced by the mutation gate and the #758 seam rule rather than by taste, and the
+constraint is sharp: **the extraction has to return a value.** The gate is diff-scoped, so a new
+function's signature line is always in scope and its whole-body (`FnValue`) mutant has to be
+killable by a `--lib` test; the seam rule drops that mutant only for a **branch-free** function
+that reaches a `Command` a file-local hop away. A unit-returning printer is neither of those, and
+nor is a loop wrapper around something that spawns a subprocess. Three natural extractions were
+redesigned up front for that reason rather than fixed after the gate complained:
+
+- `unit_mutation.rs`'s `exit_code` wanted a `report_survivors` that printed. A printer's body
+  mutant is unkillable, so it became `survivor_report`, returning the whole report as one
+  `String` that a single `eprintln!` prints — byte-identical output, now asserted.
+- `e2e.rs`'s `validate_scopes` wanted its two loops lifted out, but `pathspec_matches_tracked`
+  shells out, so a loop wrapper returning `Ok(())` could never be judged. The messages came out
+  instead (`untracked_scope`, `untracked_extra_scope`), which is where the decision actually sat.
+- `coverage.rs`'s `run_in` wanted a `llvm_cov_command() -> Command` factory — which would have
+  moved `Command::new` and `.output()` out of `run_in` and **destroyed `run_in`'s own seam
+  status**, trading one judgeable function for one that is not. `aim_llvm_cov(&mut Command, …)`
+  leaves the spawn where it was and is asserted through `Command`'s `get_args`, `get_envs` and
+  `get_current_dir` getters — the shape `scrub_outer_llvm_cov`'s own test already used.
+
+So the rule of thumb for the remaining steps: before extracting, ask what kills the new
+function's body mutant. If the answer is "nothing a `--lib` test can reach", the extraction is in
+the wrong place — pull out the value or the message, not the effect.
+
+Counting discipline is worth recording too, because this step's first tally was wrong. Count
+flagged functions and files from the gate's own output, never from a grep over the diff: a
+`src/[a-z_/]+\.rs` pattern silently drops `e2e.rs`, whose name has a digit in it.
+
+This is also the step where the walk's own return stops being worth taking, and the measurement
+says so rather than taste. Running the gate over the step's *before* and *after* trees at the
+same thresholds prices the step's 27 extractions directly:
+
+| `max_lines` | before (`9a50eee`) | after | the step bought |
+| --- | --- | --- | --- |
+| 24 | 0 | 0 | — |
+| 20 | 21 | 0 | 21 |
+| 19 | 26 | 0 | 26 |
+| 18 | 32 | 8 | 24 |
+| 17 | 45 | 22 | 23 |
+| 16 | 61 | 43 | 18 |
+| 14 | 83 | 70 | 13 |
+| 12 | 116 | 106 | 10 |
+| 10 | 150 | 150 | **0** |
+| 1 (the shipped default) | 359 | 396 | **−37** |
+
+The last two rows are the finding. **Below about `10` the splitting buys nothing, and at the
+default it costs.** The reason is structural, not incidental: at this rung the fix is naming a
+decision, and a named decision *is* a new module-scope function, which the rule counts. Lowering
+the threshold five points added 37 definitions, so the distance to the default grew while the
+number fell. No amount of splitting walks `packages/rust` to `max_lines = 1`; only the literal
+one-function-per-file layout Python and TypeScript have does, which for this crate means roughly
+400 files. That is a redesign, and this epic is not the place to argue for it.
+
+So #750 should stop at `19` and record that argument. What `18` flags supports stopping rather
+than one more rung: eight functions, six of them at exactly 19 lines, and only two —
+`e2e.rs`'s `attest` at 29 and `workflow.rs`'s `tokenize` at 36 — long enough to want their own
+module on their own merits. Those two are worth moving as a design change whenever someone is in
+those files; they are not worth a ratchet step, because the step that moved them would still have
+to name six more decisions to shift the number, and would buy 24 violations at `18` on the way to
+buying zero at `10`.
 
 The fourth step is the first where the threshold's *ceiling* was argued down before any code was
 written. #764 asked for `≤ 10`, and #750 had already flagged it as the step to reconsider at

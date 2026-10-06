@@ -43,7 +43,8 @@ free text.
 Under the pooled layout one directory holds every package's fragments, so the slug opens with the
 package: `YYYY-MM-DD-<pkg>-<slug>.md`, where `<pkg>` is the directory name of the package whose
 surface changed — `2026-09-21-parser-drop-legacy-flag.md` pays for `packages/parser`. Both kinds
-follow it, and a fragment naming another package leaves this one unpaid.
+follow it, and a fragment naming another package leaves this one unpaid. A pooled repository with
+no discoverable package root has no package name to carry, so there any well-formed name pays.
 
 ### What a package may change without owing a fragment
 

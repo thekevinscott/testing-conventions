@@ -2,6 +2,18 @@
 
 use std::path::{Path, PathBuf};
 
+/// The manifests that mark a directory as a package root, one per language the checks support.
+/// Every check that asks "where is the package?" asks about one of these files.
+pub const MANIFESTS: [&str; 3] = ["package.json", "pyproject.toml", "Cargo.toml"];
+
+/// `true` when `dir` is a package root — it holds one of [`MANIFESTS`]. The language-agnostic
+/// form of [`package_root`], for a caller that has a candidate directory rather than a file.
+pub fn is_package_root(dir: &Path) -> bool {
+    MANIFESTS
+        .iter()
+        .any(|manifest| dir.join(manifest).is_file())
+}
+
 /// The nearest directory at or above `scan_root` holding `manifest`, or `None`.
 /// The walk stops at a `.git` boundary so it cannot escape the repository.
 pub fn package_root(scan_root: &Path, manifest: &str) -> Option<PathBuf> {
@@ -26,7 +38,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use super::{package_root, suite_tests_dir};
+    use super::{is_package_root, package_root, suite_tests_dir, MANIFESTS};
 
     struct TempTree(PathBuf);
 
@@ -106,5 +118,23 @@ mod tests {
             Some(tree.0.join("pkg/tests")),
         );
         assert_eq!(suite_tests_dir(&tree.0, "pyproject.toml"), None);
+    }
+
+    #[test]
+    fn a_directory_holding_any_manifest_is_a_package_root() {
+        let tree = TempTree::new();
+        for (i, manifest) in MANIFESTS.iter().enumerate() {
+            let dir = format!("pkg{i}");
+            assert!(!is_package_root(&tree.0.join(&dir)));
+            tree.touch(&format!("{dir}/{manifest}"));
+            assert!(is_package_root(&tree.0.join(&dir)));
+        }
+    }
+
+    #[test]
+    fn a_directory_holding_no_manifest_is_not_a_package_root() {
+        let tree = TempTree::new();
+        tree.touch("docs/guide.md");
+        assert!(!is_package_root(&tree.0.join("docs")));
     }
 }

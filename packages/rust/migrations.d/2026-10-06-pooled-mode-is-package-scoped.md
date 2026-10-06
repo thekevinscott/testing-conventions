@@ -25,8 +25,8 @@ changelog.d/YYYY-MM-DD-parser-<slug>.md, …
 Library consumers of the Rust crate: `changelog::Layout::Pooled` carries the repository's package
 roots, as `Layout::PerPackage` carries its container directories —
 `Layout::Pooled(vec!["packages/parser".to_string()])`, and `Layout::Pooled(Vec::new())` for a
-repository with no discoverable package root. `changelog::discover_layout` fills it in.
-`changelog::names_package` is the new name test.
+repository with no discoverable package root. `changelog::discover_layout` fills it in, and
+`changelog::verdict` reads the name against it.
 
 **Deprecations removed**
 

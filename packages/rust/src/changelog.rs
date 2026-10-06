@@ -12,8 +12,9 @@ use anyhow::{bail, Context, Result};
 pub enum Layout {
     /// One fragment directory per package; the payload is the directories holding the packages.
     PerPackage(Vec<String>),
-    /// One fragment directory for the whole repository.
-    Pooled,
+    /// One fragment directory for the whole repository; the payload is the package roots whose
+    /// surface those fragments pay for, empty when the tree has no discoverable package root.
+    Pooled(Vec<String>),
 }
 
 /// The two fragment kinds, in the order the check reports them missing.
@@ -119,7 +120,7 @@ pub fn discover_layout(root: &Path) -> Option<Layout> {
     containers.sort();
     containers.dedup();
     if containers.is_empty() {
-        return Some(Layout::Pooled);
+        return Some(Layout::Pooled(package_roots(root)));
     }
     Some(Layout::PerPackage(containers))
 }
@@ -218,8 +219,8 @@ fn malformed_findings(layout: &Layout, changed: &[String]) -> Vec<Finding> {
         .collect()
 }
 
-/// A finding per fragment a changed scope still owes. Under the per-package layout a scope owes
-/// only where it sits in a declared container and the change touched its code.
+/// A finding per fragment a changed scope still owes. The per-package layout asks only a package
+/// sitting in a declared container; the pooled layout scopes public surface to its discovered roots.
 fn owed_findings(
     layout: &Layout,
     migrations: bool,
@@ -227,32 +228,78 @@ fn owed_findings(
     added: &[String],
 ) -> Vec<Finding> {
     let mut out = Vec::new();
-    match layout {
+    out.extend(match layout {
         Layout::PerPackage(containers) => {
-            for pkg in changed_packages(changed) {
-                let in_a_container = containers.iter().any(|c| pkg.split('/').next() == Some(c));
-                if in_a_container && code_touched(changed, &pkg) {
-                    out.extend(package_owed(layout, migrations, added, &pkg));
-                }
-            }
+            per_package_findings(layout, containers, migrations, changed, added)
         }
-        Layout::Pooled => {
-            if changed.iter().any(|path| !exempt_at_any_boundary(path)) {
-                for kind in missing_kinds(layout, added, None, migrations) {
-                    out.push(owed("", &format!("{kind}.d"), kind));
-                }
+        Layout::Pooled(roots) => pooled_findings(layout, roots, migrations, changed, added),
+    });
+    out
+}
+
+/// What each changed package under one of `containers` still owes. The fragment directory sits
+/// inside the package, so the directory names the package and the filename need not.
+fn per_package_findings(
+    layout: &Layout,
+    containers: &[String],
+    migrations: bool,
+    changed: &[String],
+    added: &[String],
+) -> Vec<Finding> {
+    let mut out = Vec::new();
+    for pkg in changed_packages(changed) {
+        let in_a_container = containers.iter().any(|c| pkg.split('/').next() == Some(c));
+        if in_a_container && code_touched(changed, &pkg) {
+            for kind in missing_kinds(layout, added, Some(&pkg), migrations) {
+                out.push(owed(&format!("{pkg} "), &format!("{pkg}/{kind}.d"), kind));
             }
         }
     }
     out
 }
 
-/// A finding per fragment the package `pkg` still owes, each naming the directory it belongs in.
-fn package_owed(layout: &Layout, migrations: bool, added: &[String], pkg: &str) -> Vec<Finding> {
-    missing_kinds(layout, added, Some(pkg), migrations)
-        .into_iter()
-        .map(|kind| owed(&format!("{pkg} "), &format!("{pkg}/{kind}.d"), kind))
-        .collect()
+/// What each changed package root still owes, when one pooled directory holds every package's
+/// fragments. Public surface is scoped to `roots`, so a path under none of them owes nothing; a
+/// tree with no discoverable root is one package at its own root, whose whole surface counts.
+fn pooled_findings(
+    layout: &Layout,
+    roots: &[String],
+    migrations: bool,
+    changed: &[String],
+    added: &[String],
+) -> Vec<Finding> {
+    let mut out = Vec::new();
+    for root in pooled_scopes(roots) {
+        if !pooled_surface_touched(changed, root) {
+            continue;
+        }
+        let pkg = root.map(package_name);
+        for kind in missing_kinds(layout, added, pkg, migrations) {
+            out.push(owed_pooled(root, pkg, kind));
+        }
+    }
+    out
+}
+
+/// The scopes a pooled tree answers for: each package root, or the tree itself when it has none.
+fn pooled_scopes(roots: &[String]) -> Vec<Option<&str>> {
+    if roots.is_empty() {
+        return vec![None];
+    }
+    roots.iter().map(|root| Some(root.as_str())).collect()
+}
+
+/// `true` when `changed` touches the public surface of pooled scope `root`.
+fn pooled_surface_touched(changed: &[String], root: Option<&str>) -> bool {
+    match root {
+        Some(root) => code_touched(changed, root),
+        None => changed.iter().any(|path| !exempt_at_any_boundary(path)),
+    }
+}
+
+/// The name a fragment calls package `root` by: its own directory name.
+fn package_name(root: &str) -> &str {
+    root.rsplit('/').next().unwrap_or(root)
 }
 
 /// The bodies of every commit in `<base>..HEAD`, concatenated.
@@ -291,12 +338,25 @@ fn phrasing(kind: &str) -> (&'static str, &'static str) {
 }
 
 fn owed(scope: &str, dir: &str, kind: &str) -> Finding {
+    named(scope, &format!("{dir}/YYYY-MM-DD-<slug>.md"), kind)
+}
+
+/// What pooled scope `root` owes. One directory holds every package's fragments, so the fragment
+/// that pays names the package in its filename rather than by sitting inside it.
+fn owed_pooled(root: Option<&str>, pkg: Option<&str>, kind: &str) -> Finding {
+    let scope = root.map_or_else(String::new, |root| format!("{root} "));
+    let slug = pkg.map_or_else(|| "<slug>".to_string(), |pkg| format!("{pkg}-<slug>"));
+    named(&scope, &format!("{kind}.d/YYYY-MM-DD-{slug}.md"), kind)
+}
+
+/// The finding for a scope that owes a `kind` fragment, naming `fragment` as the file that pays.
+fn named(scope: &str, fragment: &str, kind: &str) -> Finding {
     let (did, way_out) = phrasing(kind);
     Finding {
         file: None,
         message: format!(
-            "{scope}{did} without adding a {kind} fragment. Add {dir}/YYYY-MM-DD-<slug>.md, or \
-             {way_out}. See docs/reference/checks/changelog."
+            "{scope}{did} without adding a {kind} fragment. Add {fragment}, or {way_out}. See \
+             docs/reference/checks/changelog."
         ),
     }
 }
@@ -333,8 +393,34 @@ fn fragment_scope(segs: &[&str], i: usize, layout: &Layout) -> Option<Option<Str
             Some(Some(format!("{}/{}", segs[0], segs[1])))
         }
         Layout::PerPackage(_) => None,
-        Layout::Pooled => Some(None),
+        Layout::Pooled(_) => Some(None),
     }
+}
+
+/// `true` when `frag` pays for `scope`. The per-package layout reads the directory the fragment
+/// sits in, and `scope` is the package's path; the pooled layout reads the filename, and `scope`
+/// is the package's name. The filename rule cannot fire under the per-package layout, because
+/// that arm never consults the name.
+fn records(layout: &Layout, frag: &Fragment, scope: Option<&str>) -> bool {
+    match layout {
+        Layout::PerPackage(_) => frag.pkg.as_deref() == scope,
+        Layout::Pooled(_) => names_package(&frag.name, scope),
+    }
+}
+
+/// `true` when fragment `name` names package `pkg`: the slug after the date opens with `<pkg>-`.
+/// A pooled tree with no package root has no name to carry, so any well-formed name records it.
+///
+/// `name` has passed [`fragment_name_ok`], so the date prefix is the first 11 bytes and the rest
+/// is the slug.
+fn names_package(name: &str, pkg: Option<&str>) -> bool {
+    let Some(pkg) = pkg else {
+        return true;
+    };
+    name.strip_suffix(".md")
+        .and_then(|stem| stem.get(11..))
+        .and_then(|slug| slug.strip_prefix(pkg))
+        .is_some_and(|rest| rest.starts_with('-'))
 }
 
 fn kind_of(segment: &str) -> Option<&'static str> {
@@ -358,13 +444,13 @@ fn malformed(layout: &Layout, changed: &[String]) -> Vec<String> {
 fn missing_kinds(
     layout: &Layout,
     added: &[String],
-    pkg: Option<&str>,
+    scope: Option<&str>,
     migrations: bool,
 ) -> Vec<&'static str> {
     let present: Vec<&'static str> = added
         .iter()
         .filter_map(|path| fragment(path, layout))
-        .filter(|frag| fragment_name_ok(&frag.name) && frag.pkg.as_deref() == pkg)
+        .filter(|frag| fragment_name_ok(&frag.name) && records(layout, frag, scope))
         .map(|frag| frag.kind)
         .collect();
     KINDS
@@ -406,6 +492,42 @@ fn is_test_or_spec(rel: &str) -> bool {
         .any(|ext| {
             name.ends_with(&format!(".test.{ext}")) || name.ends_with(&format!(".spec.{ext}"))
         })
+}
+
+/// Every package root under `root`, as a root-relative path, sorted. A package is a directory
+/// inside a container directory — `packages/parser`, `crates/lexer` — holding one of the
+/// manifests [`crate::tiers::is_package_root`] reads, which is the same question every other
+/// check asks when it resolves a package root.
+fn package_roots(root: &Path) -> Vec<String> {
+    let mut out: Vec<String> = child_dirs(root)
+        .iter()
+        .flat_map(|container| packages_in(root, container))
+        .collect();
+    out.sort();
+    out
+}
+
+/// The package roots directly under `root/container`, as root-relative paths.
+fn packages_in(root: &Path, container: &str) -> Vec<String> {
+    let dir = root.join(container);
+    child_dirs(&dir)
+        .into_iter()
+        .filter(|name| crate::tiers::is_package_root(&dir.join(name)))
+        .map(|name| format!("{container}/{name}"))
+        .collect()
+}
+
+/// The names of `dir`'s visible subdirectories, skipping the build trees the walk never enters.
+fn child_dirs(dir: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| !name.starts_with('.') && !SKIPPED_DIRS.contains(&name.as_str()))
+        .collect()
 }
 
 /// Every fragment directory under `root`, as its root-relative segments. The convention puts a
@@ -725,7 +847,7 @@ mod tests {
 
     #[test]
     fn malformed_reports_entries_but_not_fragment_readmes() {
-        let layout = Layout::Pooled;
+        let layout = Layout::Pooled(Vec::new());
         let changed = vec![
             "changelog.d/README.md".to_string(),
             "changelog.d/2026-09-26-valid.md".to_string(),
@@ -811,5 +933,201 @@ mod tests {
             ]]
         );
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// A tree under a directory unique to `slug` and this process, for a test that reads the
+    /// filesystem.
+    fn tree(slug: &str) -> std::path::PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("tc-changelog-inline-{slug}-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn touch(root: &std::path::Path, rel: &str) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "").unwrap();
+    }
+
+    #[test]
+    fn package_roots_are_the_manifest_holding_directories_inside_a_container() {
+        let root = tree("roots");
+        touch(&root, "packages/parser/package.json");
+        touch(&root, "crates/lexer/Cargo.toml");
+        touch(&root, "services/engine/pyproject.toml");
+        touch(&root, "docs/guide.md");
+        // A manifest at the root is not a package sitting inside a container directory.
+        touch(&root, "package.json");
+        assert_eq!(
+            package_roots(&root),
+            vec![
+                "crates/lexer".to_string(),
+                "packages/parser".to_string(),
+                "services/engine".to_string(),
+            ]
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn the_package_walk_skips_dependency_and_build_directories() {
+        let root = tree("skips");
+        touch(&root, "node_modules/left-pad/package.json");
+        touch(&root, "target/debug/Cargo.toml");
+        touch(&root, ".git/modules/x/package.json");
+        touch(&root, "packages/node_modules/package.json");
+        assert_eq!(package_roots(&root), Vec::<String>::new());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_directory_the_walk_cannot_read_holds_no_packages() {
+        // An unreadable or absent container is not a container of packages.
+        let root = tree("unreadable");
+        let missing = root.join("absent");
+        assert_eq!(child_dirs(&missing), Vec::<String>::new());
+        assert_eq!(packages_in(&missing, "packages"), Vec::<String>::new());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_pooled_layout_carries_the_package_roots_it_discovered() {
+        let root = tree("discover");
+        std::fs::create_dir_all(root.join("docs/changelog.d")).unwrap();
+        touch(&root, "packages/parser/package.json");
+        assert_eq!(
+            discover_layout(&root),
+            Some(Layout::Pooled(vec!["packages/parser".to_string()]))
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn names_package_reads_the_slug_after_the_date() {
+        assert!(names_package(
+            "2026-09-21-parser-drop-the-flag.md",
+            Some("parser")
+        ));
+        assert!(!names_package(
+            "2026-09-21-emitter-drop-the-flag.md",
+            Some("parser")
+        ));
+        // The package name is a whole segment, so a hyphen has to follow it, and the name
+        // carries a slug of its own as well as the package.
+        assert!(!names_package("2026-09-21-parserdrop.md", Some("parser")));
+        assert!(!names_package("2026-09-21-parser.md", Some("parser")));
+        // A fragment is a markdown file.
+        assert!(!names_package("2026-09-21-parser-x", Some("parser")));
+        // No package root means no name for the fragment to carry.
+        assert!(names_package("2026-09-21-anything.md", None));
+    }
+
+    #[test]
+    fn records_reads_the_directory_per_package_and_the_name_when_pooled() {
+        let frag = Fragment {
+            pkg: Some("packages/parser".to_string()),
+            kind: "changelog",
+            name: "2026-09-21-emitter-drop-the-flag.md".to_string(),
+        };
+        // Under the per-package layout the directory names the package, so a filename naming
+        // another package cannot leave this one unpaid.
+        let per_package = Layout::PerPackage(vec!["packages".to_string()]);
+        assert!(records(&per_package, &frag, Some("packages/parser")));
+        assert!(!records(&per_package, &frag, Some("packages/emitter")));
+        let pooled = Layout::Pooled(vec!["packages/parser".to_string()]);
+        assert!(!records(&pooled, &frag, Some("parser")));
+        assert!(records(&pooled, &frag, Some("emitter")));
+    }
+
+    #[test]
+    fn pooled_scopes_fall_back_to_the_whole_tree() {
+        let roots = vec!["packages/parser".to_string(), "crates/lexer".to_string()];
+        assert_eq!(
+            pooled_scopes(&roots),
+            vec![Some("packages/parser"), Some("crates/lexer")]
+        );
+        assert_eq!(pooled_scopes(&[]), vec![None]);
+    }
+
+    #[test]
+    fn pooled_surface_is_the_package_root_or_every_non_exempt_path() {
+        let changed = vec!["packages/parser/src/lex.py".to_string()];
+        assert!(pooled_surface_touched(&changed, Some("packages/parser")));
+        assert!(!pooled_surface_touched(&changed, Some("packages/emitter")));
+        assert!(pooled_surface_touched(&changed, None));
+        let exempt = vec!["packages/parser/src/lex_test.py".to_string()];
+        assert!(!pooled_surface_touched(&exempt, None));
+    }
+
+    #[test]
+    fn package_name_is_the_last_segment_of_the_root() {
+        assert_eq!(package_name("packages/parser"), "parser");
+        assert_eq!(package_name("parser"), "parser");
+    }
+
+    #[test]
+    fn owed_pooled_names_the_package_in_the_fragment_it_asks_for() {
+        let with_root = owed_pooled(Some("packages/parser"), Some("parser"), "migrations");
+        assert_eq!(with_root.file, None);
+        assert!(with_root.message.starts_with("packages/parser marked"));
+        assert!(with_root
+            .message
+            .contains("migrations.d/YYYY-MM-DD-parser-<slug>.md"));
+        let whole_tree = owed_pooled(None, None, "changelog");
+        assert!(whole_tree.message.starts_with("changed public surface"));
+        assert!(whole_tree
+            .message
+            .contains("changelog.d/YYYY-MM-DD-<slug>.md"));
+    }
+
+    #[test]
+    fn per_package_findings_asks_a_package_in_a_container_that_changed_code() {
+        let layout = Layout::PerPackage(vec!["packages".to_string()]);
+        let containers = vec!["packages".to_string()];
+        let changed = vec!["packages/parser/src/lex.py".to_string()];
+        assert_eq!(
+            per_package_findings(&layout, &containers, false, &changed, &[]).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn per_package_findings_skips_a_package_outside_every_container() {
+        let layout = Layout::PerPackage(vec!["packages".to_string()]);
+        let containers = vec!["packages".to_string()];
+        let changed = vec!["vendor/parser/src/lex.py".to_string()];
+        assert_eq!(
+            per_package_findings(&layout, &containers, false, &changed, &[]),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn per_package_findings_skips_a_package_whose_changed_paths_are_all_exempt() {
+        let layout = Layout::PerPackage(vec!["packages".to_string()]);
+        let containers = vec!["packages".to_string()];
+        let changed = vec!["packages/parser/src/lex_test.py".to_string()];
+        assert_eq!(
+            per_package_findings(&layout, &containers, false, &changed, &[]),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn pooled_findings_scope_each_package_root_separately() {
+        let layout = Layout::Pooled(vec![
+            "packages/emitter".to_string(),
+            "packages/parser".to_string(),
+        ]);
+        let changed = vec![
+            "packages/parser/src/lex.py".to_string(),
+            "packages/emitter/src/emit.py".to_string(),
+            "README.md".to_string(),
+        ];
+        let added = vec!["docs/changelog.d/2026-09-21-parser-drop-the-flag.md".to_string()];
+        let found = findings(&layout, false, &changed, &added);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].message.starts_with("packages/emitter changed"));
     }
 }

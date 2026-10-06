@@ -625,21 +625,26 @@ fn run_workflow_lint(path: &Path) -> anyhow::Result<i32> {
         return Ok(0);
     }
     for f in &findings {
-        eprintln!(
-            "{}:{}: {} step `{}` encodes logic inline ({}) — move it into a tested package in \
-             this repository's own language, invoked as a one-line `run:`",
-            f.file.display(),
-            f.line,
-            f.kind,
-            f.step,
-            f.reasons.join("; ")
-        );
+        eprintln!("{}", inline_logic_finding(f));
     }
     eprintln!(
         "error: {} step(s) encode logic in CI YAML, where nothing tests it",
         findings.len()
     );
     Ok(1)
+}
+
+/// What one inline-logic finding reports: where the step sits, and why its body reads as logic.
+fn inline_logic_finding(finding: &workflow_lint::Finding) -> String {
+    format!(
+        "{}:{}: {} step `{}` encodes logic inline ({}) — move it into a tested package in \
+         this repository's own language, invoked as a one-line `run:`",
+        finding.file.display(),
+        finding.line,
+        finding.kind,
+        finding.step,
+        finding.reasons.join("; ")
+    )
 }
 
 /// Run `command` as the branch's e2e decision and, when it passes, commit the receipt.

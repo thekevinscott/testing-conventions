@@ -183,7 +183,13 @@ fn evaluate_patch_typescript(
     thresholds: TypeScriptThresholds,
 ) -> Outcome {
     let tallies = typescript_tallies(changed, detail);
-    let checks = [
+    coverage::verdict(typescript_shortfalls(&tallies, thresholds))
+}
+
+/// Each vitest floor `tallies` falls short of, named. The four metrics are judged together, so
+/// a run reports every shortfall rather than the first.
+fn typescript_shortfalls(tallies: &TsTallies, thresholds: TypeScriptThresholds) -> Vec<String> {
+    [
         ("lines", tallies.lines.percent(), thresholds.lines),
         ("branches", tallies.branches.percent(), thresholds.branches),
         (
@@ -196,13 +202,10 @@ fn evaluate_patch_typescript(
             tallies.statements.percent(),
             thresholds.statements,
         ),
-    ];
-    coverage::verdict(
-        checks
-            .into_iter()
-            .filter_map(|(name, actual, required)| coverage::shortfall(name, actual, required))
-            .collect(),
-    )
+    ]
+    .into_iter()
+    .filter_map(|(name, actual, required)| coverage::shortfall(name, actual, required))
+    .collect()
 }
 
 /// The four vitest tallies the diff-scoped floor enforces, accumulated together.

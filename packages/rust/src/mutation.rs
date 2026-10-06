@@ -614,10 +614,19 @@ pub fn measure_typescript(
     )?;
     let mut mutants = to_scan_relative(parse_normalized_results(&json)?, prefix.as_deref());
     mutants.retain(|mutant| !is_declaration_only(root, &mutant.file, Language::TypeScript));
-    let survivors = evaluate_normalized(&mutants, exempt, exempt_lines)?;
+    normalized_measurement(&mutants, exempt, exempt_lines)
+}
+
+/// The measurement a judged, normalized mutant set reports: the conclusive count, and the
+/// survivors left once the `mutation` exemptions have been applied.
+fn normalized_measurement(
+    mutants: &[NormalizedMutant],
+    exempt: &[String],
+    exempt_lines: &BTreeMap<String, BTreeSet<u32>>,
+) -> Result<Measurement> {
     Ok(Measurement::Tested {
-        count: normalized_conclusive_count(&mutants),
-        survivors,
+        count: normalized_conclusive_count(mutants),
+        survivors: evaluate_normalized(mutants, exempt, exempt_lines)?,
     })
 }
 
@@ -900,11 +909,7 @@ pub fn measure_python(
     };
     let json = run_py_adapter(root, &modules)?;
     let mutants = judged_py_mutants(parse_normalized_results(&json)?, root, changed.as_ref());
-    let survivors = evaluate_normalized(&mutants, exempt, exempt_lines)?;
-    Ok(Measurement::Tested {
-        count: normalized_conclusive_count(&mutants),
-        survivors,
-    })
+    normalized_measurement(&mutants, exempt, exempt_lines)
 }
 
 /// The modules among `changed` the adapter can mutate. Empty when the diff touches no such

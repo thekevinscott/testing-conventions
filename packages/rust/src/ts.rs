@@ -10,7 +10,7 @@ use oxc::allocator::Allocator;
 use oxc::ast::ast::{
     Argument, ArrowFunctionExpression, CallExpression, ConditionalExpression, DoWhileStatement,
     Expression, ForInStatement, ForOfStatement, ForStatement, Function, IfStatement,
-    ImportDeclaration, ImportDeclarationSpecifier, ImportOrExportKind, SwitchStatement,
+    ImportDeclaration, ImportDeclarationSpecifier, ImportOrExportKind, Program, SwitchStatement,
     TryStatement, WhileStatement,
 };
 use oxc::ast_visit::{walk, Visit};
@@ -176,72 +176,114 @@ pub fn find_unit_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
 /// the unit under test, the test runner, or `vi.mock()`-ed.
 fn unit_violations_in(file: &Path, source: &str) -> Result<Vec<Violation>> {
     let allocator = Allocator::default();
-    let source_type = SourceType::from_path(file).map_err(|err| {
-        anyhow!(
-            "unsupported TypeScript extension `{}`: {err}",
-            file.display()
-        )
-    })?;
-    let ret = Parser::new(&allocator, source, source_type).parse();
-    if ret.panicked || !ret.diagnostics.is_empty() {
-        let detail = ret
-            .diagnostics
-            .iter()
-            .map(|d| d.to_string())
-            .collect::<Vec<_>>()
-            .join("; ");
-        bail!("parsing `{}` failed: {detail}", file.display());
-    }
-
+    let program = parse_program(&allocator, file, source)?;
     let mut collector = UnitCollector {
         source,
         imports: Vec::new(),
         mocked: BTreeSet::new(),
         untyped: Vec::new(),
     };
-    collector.visit_program(&ret.program);
+    collector.visit_program(&program);
+    let mut violations = unmocked_violations(file, &collector);
+    violations.extend(
+        collector
+            .untyped
+            .iter()
+            .map(|(spec, line)| untyped_mock_violation(file, *line, spec)),
+    );
+    violations.sort_by_key(|v| v.line);
+    Ok(violations)
+}
 
+/// An `unmocked-collaborator` violation per runtime import the walk recorded that nothing
+/// isolates away.
+fn unmocked_violations(file: &Path, collector: &UnitCollector<'_>) -> Vec<Violation> {
     let unit = unit_under_test_specifier(file);
-    // Vitest resolves `./formatter` and `./formatter.js` to one module, so an extension
-    // mismatch between a mock and its import must not read as an unmocked collaborator.
-    let mocked_modules: BTreeSet<&str> = collector
+    let mocked: BTreeSet<&str> = collector
         .mocked
         .iter()
         .map(|m| strip_module_ext(m))
         .collect();
-    let mut violations = Vec::new();
-    for (spec, line, pure) in &collector.imports {
-        if is_unit_under_test(spec, &unit)
-            || is_test_runner(spec)
-            || *pure
-            || mocked_modules.contains(strip_module_ext(spec))
-        {
-            continue;
-        }
-        violations.push(Violation {
-            file: file.to_path_buf(),
-            line: *line,
-            rule: "unmocked-collaborator",
-            message: format!(
-                "unit test imports `{spec}` without mocking it — a unit test isolates the \
-                 unit under test, so every collaborator must be `vi.mock()`-ed"
-            ),
-        });
+    collector
+        .imports
+        .iter()
+        .filter(|(spec, _, pure)| !is_isolated_import(spec, *pure, &unit, &mocked))
+        .map(|(spec, line, _)| unmocked_violation(file, *line, spec))
+        .collect()
+}
+
+/// `true` when a unit test's import needs no mock: the unit under test, the test runner, a pure
+/// named import, or a module `vi.mock()` already doubles. Vitest resolves `./formatter` and
+/// `./formatter.js` to one module, so `mocked` is matched with the extension stripped.
+fn is_isolated_import(spec: &str, pure: bool, unit: &str, mocked: &BTreeSet<&str>) -> bool {
+    is_unit_under_test(spec, unit)
+        || is_test_runner(spec)
+        || pure
+        || mocked.contains(strip_module_ext(spec))
+}
+
+/// The `unmocked-collaborator` violation naming `spec` at `line` of `file`.
+fn unmocked_violation(file: &Path, line: usize, spec: &str) -> Violation {
+    Violation {
+        file: file.to_path_buf(),
+        line,
+        rule: "unmocked-collaborator",
+        message: format!(
+            "unit test imports `{spec}` without mocking it — a unit test isolates the \
+             unit under test, so every collaborator must be `vi.mock()`-ed"
+        ),
     }
-    for (spec, line) in &collector.untyped {
-        violations.push(Violation {
-            file: file.to_path_buf(),
-            line: *line,
-            rule: "untyped-mock",
-            message: format!(
-                "`vi.mock('{spec}', …)` has an untyped factory — anchor it to the real module \
-                 with `vi.importActual<typeof import('{spec}')>()` so the double can't drift \
-                 from the source"
-            ),
-        });
+}
+
+/// The `untyped-mock` violation naming `spec` at `line` of `file`.
+fn untyped_mock_violation(file: &Path, line: usize, spec: &str) -> Violation {
+    Violation {
+        file: file.to_path_buf(),
+        line,
+        rule: "untyped-mock",
+        message: format!(
+            "`vi.mock('{spec}', …)` has an untyped factory — anchor it to the real module \
+             with `vi.importActual<typeof import('{spec}')>()` so the double can't drift \
+             from the source"
+        ),
     }
-    violations.sort_by_key(|v| v.line);
-    Ok(violations)
+}
+
+/// The parsed program for the TypeScript file at `file`. A parse failure is an error naming
+/// every diagnostic — a malformed test file is never a silent pass.
+fn parse_program<'a>(
+    allocator: &'a Allocator,
+    file: &Path,
+    source: &'a str,
+) -> Result<Program<'a>> {
+    let ret = Parser::new(allocator, source, source_type_of(file)?).parse();
+    if ret.panicked || !ret.diagnostics.is_empty() {
+        bail!(
+            "parsing `{}` failed: {}",
+            file.display(),
+            diagnostic_detail(&ret.diagnostics)
+        );
+    }
+    Ok(ret.program)
+}
+
+/// The oxc source type for `file`, or an error naming the extension oxc rejected.
+fn source_type_of(file: &Path) -> Result<SourceType> {
+    SourceType::from_path(file).map_err(|err| {
+        anyhow!(
+            "unsupported TypeScript extension `{}`: {err}",
+            file.display()
+        )
+    })
+}
+
+/// Every parse diagnostic, joined — the detail a parse failure reports.
+fn diagnostic_detail(diagnostics: &[impl std::fmt::Display]) -> String {
+    diagnostics
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 /// Collects a unit test's imports, `vi.mock()` targets, and untyped factories in one pass.
@@ -283,26 +325,34 @@ fn is_pure_named_import(decl: &ImportDeclaration<'_>) -> bool {
     let Some(specifiers) = decl.specifiers.as_ref() else {
         return false;
     };
+    let module = decl.source.value.as_str();
     !specifiers.is_empty()
-        && specifiers.iter().all(|specifier| match specifier {
-            ImportDeclarationSpecifier::ImportSpecifier(named) => {
-                if matches!(named.import_kind, ImportOrExportKind::Type) {
-                    return true;
-                }
-                let name = named.imported.name();
-                match decl.source.value.as_str() {
-                    "json5" | "yaml" => name == "parse",
-                    "node:path" | "path" => {
-                        matches!(
-                            name.as_str(),
-                            "basename" | "dirname" | "extname" | "join" | "normalize"
-                        )
-                    }
-                    _ => false,
-                }
-            }
-            _ => false,
-        })
+        && specifiers
+            .iter()
+            .all(|specifier| is_pure_specifier(specifier, module))
+}
+
+/// `true` when one import specifier is pure: a type-only name, or a named import of a pure
+/// function of `module`. A default or namespace import binds the whole module, so it is not.
+fn is_pure_specifier(specifier: &ImportDeclarationSpecifier<'_>, module: &str) -> bool {
+    let ImportDeclarationSpecifier::ImportSpecifier(named) = specifier else {
+        return false;
+    };
+    matches!(named.import_kind, ImportOrExportKind::Type)
+        || is_pure_function(module, named.imported.name().as_str())
+}
+
+/// `true` when `module`'s export `name` is pure — it computes a value from its arguments and
+/// reaches nothing, so importing it unmocked isolates nothing away.
+fn is_pure_function(module: &str, name: &str) -> bool {
+    match module {
+        "json5" | "yaml" => name == "parse",
+        "node:path" | "path" => matches!(
+            name,
+            "basename" | "dirname" | "extname" | "join" | "normalize"
+        ),
+        _ => false,
+    }
 }
 
 /// The unit-under-test specifier for a test file: `pkg/widget.test.ts` → `./widget`.
@@ -381,29 +431,13 @@ fn is_typed_import_actual(call: &CallExpression) -> bool {
 /// malformed test file is never a silent pass.
 fn integration_violations_in(file: &Path, source: &str) -> Result<Vec<Violation>> {
     let allocator = Allocator::default();
-    let source_type = SourceType::from_path(file).map_err(|err| {
-        anyhow!(
-            "unsupported TypeScript extension `{}`: {err}",
-            file.display()
-        )
-    })?;
-    let ret = Parser::new(&allocator, source, source_type).parse();
-    if ret.panicked || !ret.diagnostics.is_empty() {
-        let detail = ret
-            .diagnostics
-            .iter()
-            .map(|d| d.to_string())
-            .collect::<Vec<_>>()
-            .join("; ");
-        bail!("parsing `{}` failed: {detail}", file.display());
-    }
-
+    let program = parse_program(&allocator, file, source)?;
     let mut visitor = MockVisitor {
         file,
         source,
         violations: Vec::new(),
     };
-    visitor.visit_program(&ret.program);
+    visitor.visit_program(&program);
     Ok(visitor.violations)
 }
 

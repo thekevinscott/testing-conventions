@@ -193,7 +193,14 @@ pub fn findings(
     changed: &[String],
     added: &[String],
 ) -> Vec<Finding> {
-    let mut out: Vec<Finding> = malformed(layout, changed)
+    let mut out = malformed_findings(layout, changed);
+    out.extend(owed_findings(layout, migrations, changed, added));
+    out
+}
+
+/// A finding per touched fragment whose filename breaks the convention.
+fn malformed_findings(layout: &Layout, changed: &[String]) -> Vec<Finding> {
+    malformed(layout, changed)
         .into_iter()
         .map(|path| Finding {
             file: Some(path),
@@ -201,16 +208,24 @@ pub fn findings(
                       lowercase letters, digits and hyphens. See docs/reference/checks/changelog."
                 .to_string(),
         })
-        .collect();
+        .collect()
+}
 
+/// A finding per fragment a changed scope still owes. Under the per-package layout a scope owes
+/// only where it sits in a declared container and the change touched its code.
+fn owed_findings(
+    layout: &Layout,
+    migrations: bool,
+    changed: &[String],
+    added: &[String],
+) -> Vec<Finding> {
+    let mut out = Vec::new();
     match layout {
         Layout::PerPackage(containers) => {
             for pkg in changed_packages(changed) {
                 let in_a_container = containers.iter().any(|c| pkg.split('/').next() == Some(c));
                 if in_a_container && code_touched(changed, &pkg) {
-                    for kind in missing_kinds(layout, added, Some(&pkg), migrations) {
-                        out.push(owed(&format!("{pkg} "), &format!("{pkg}/{kind}.d"), kind));
-                    }
+                    out.extend(package_owed(layout, migrations, added, &pkg));
                 }
             }
         }
@@ -223,6 +238,14 @@ pub fn findings(
         }
     }
     out
+}
+
+/// A finding per fragment the package `pkg` still owes, each naming the directory it belongs in.
+fn package_owed(layout: &Layout, migrations: bool, added: &[String], pkg: &str) -> Vec<Finding> {
+    missing_kinds(layout, added, Some(pkg), migrations)
+        .into_iter()
+        .map(|kind| owed(&format!("{pkg} "), &format!("{pkg}/{kind}.d"), kind))
+        .collect()
 }
 
 /// The bodies of every commit in `<base>..HEAD`, concatenated.
@@ -270,21 +293,24 @@ fn fragment(path: &str, layout: &Layout) -> Option<Fragment> {
     if i + 2 != segs.len() {
         return None;
     }
-    let name = segs[i + 1].to_string();
+    let pkg = fragment_scope(&segs, i, layout)?;
+    Some(Fragment {
+        pkg,
+        kind,
+        name: segs[i + 1].to_string(),
+    })
+}
+
+/// The scope owning a fragment whose kind directory sits at `segs[i]`: the package under the
+/// per-package layout, `Some(None)` under the pooled one. `None` where the layout places no
+/// fragment there at all, so a stray path is not read as an entry.
+fn fragment_scope(segs: &[&str], i: usize, layout: &Layout) -> Option<Option<String>> {
     match layout {
         Layout::PerPackage(containers) if i == 2 && containers.iter().any(|c| c == segs[0]) => {
-            Some(Fragment {
-                pkg: Some(format!("{}/{}", segs[0], segs[1])),
-                kind,
-                name,
-            })
+            Some(Some(format!("{}/{}", segs[0], segs[1])))
         }
         Layout::PerPackage(_) => None,
-        Layout::Pooled => Some(Fragment {
-            pkg: None,
-            kind,
-            name,
-        }),
+        Layout::Pooled => Some(None),
     }
 }
 

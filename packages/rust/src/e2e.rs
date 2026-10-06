@@ -273,25 +273,36 @@ fn relative_pathspec(repo: &Path, scope: &Path) -> String {
 fn validate_scopes(repo: &Path, scope: &Path, extra_scopes: &[PathBuf]) -> Result<()> {
     let scope_spec = relative_pathspec(repo, scope);
     if !pathspec_matches_tracked(repo, &scope_spec)? {
-        bail!(
-            "e2e verify: --scope `{}` matches no tracked path under `{}` — \
-             --scope must name `{}` or a directory beneath it that git tracks",
-            scope.display(),
-            repo.display(),
-            repo.display(),
-        );
+        bail!("{}", untracked_scope(repo, scope));
     }
     for extra in extra_scopes {
         let extra_spec = format!(":(top){}", extra.display());
         if !pathspec_matches_tracked(repo, &extra_spec)? {
-            bail!(
-                "e2e verify: --extra-scope `{}` matches no tracked path — \
-                 --extra-scope must name a repo-root-relative directory that git tracks",
-                extra.display(),
-            );
+            bail!("{}", untracked_extra_scope(extra));
         }
     }
     Ok(())
+}
+
+/// What a `--scope` matching no tracked path reports, naming the scope git found nothing for.
+fn untracked_scope(repo: &Path, scope: &Path) -> String {
+    format!(
+        "e2e verify: --scope `{}` matches no tracked path under `{}` — \
+         --scope must name `{}` or a directory beneath it that git tracks",
+        scope.display(),
+        repo.display(),
+        repo.display(),
+    )
+}
+
+/// What an `--extra-scope` matching no tracked path reports, naming the scope git found nothing
+/// for.
+fn untracked_extra_scope(extra: &Path) -> String {
+    format!(
+        "e2e verify: --extra-scope `{}` matches no tracked path — \
+         --extra-scope must name a repo-root-relative directory that git tracks",
+        extra.display(),
+    )
 }
 
 /// `true` when git tracks at least one path matching `pathspec` (run with cwd `repo`). A

@@ -588,10 +588,21 @@ fn istanbul_patch_detail(json: &str) -> Result<BTreeMap<String, TsPatchCoverage>
         .collect())
 }
 
+/// Every branch arm `file` records, as `(line, covered)` on its branch's start line. v8 models
+/// a branch as one arm (a `[count]` array) or several, and either way each arm counts.
+fn istanbul_branch_arms(file: &IstanbulFile) -> Vec<(u64, bool)> {
+    let mut out = Vec::new();
+    for (id, branch) in &file.branch_map {
+        let line = branch.loc.start.line;
+        for &count in file.b.get(id).into_iter().flatten() {
+            out.push((line, count > 0));
+        }
+    }
+    out
+}
+
 /// One Istanbul file entry as a [`TsPatchCoverage`]. A statement spans its start and end
-/// line and is covered on a non-zero hit count; a function is pinned to its declaration
-/// line. v8 models a branch as one arm (a `[count]` array) or several, and either way this
-/// records one tuple per arm, all on the branch's start line.
+/// line and is covered on a non-zero hit count; a function is pinned to its declaration line.
 fn istanbul_file_detail(file: &IstanbulFile) -> TsPatchCoverage {
     let mut detail = TsPatchCoverage::default();
     for (id, span) in &file.statement_map {
@@ -600,14 +611,7 @@ fn istanbul_file_detail(file: &IstanbulFile) -> TsPatchCoverage {
             .statements
             .push((span.start.line, span.end.line, covered));
     }
-    for (id, branch) in &file.branch_map {
-        let line = branch.loc.start.line;
-        if let Some(counts) = file.b.get(id) {
-            for &count in counts {
-                detail.branch_arms.push((line, count > 0));
-            }
-        }
-    }
+    detail.branch_arms = istanbul_branch_arms(file);
     for (id, function) in &file.fn_map {
         let covered = file.f.get(id).is_some_and(|&count| count > 0);
         detail.functions.push((function.decl.start.line, covered));
@@ -765,21 +769,24 @@ fn lcov_lines(lcov: &str) -> BTreeMap<String, BTreeMap<u32, bool>> {
     for record in lcov.lines() {
         if let Some(name) = record.strip_prefix("SF:") {
             file = Some(name);
-        } else if let Some((number, count)) =
-            record.strip_prefix("DA:").and_then(|da| da.split_once(','))
-        {
-            let (Some(file), Ok(number), Ok(count)) =
-                (file, number.parse::<u32>(), count.trim().parse::<u64>())
-            else {
-                continue;
-            };
-            *out.entry(file.to_string())
-                .or_default()
-                .entry(number)
-                .or_default() |= count > 0;
+            continue;
         }
+        let (Some(file), Some((number, covered))) = (file, lcov_da(record)) else {
+            continue;
+        };
+        *out.entry(file.to_string())
+            .or_default()
+            .entry(number)
+            .or_default() |= covered;
     }
     out
+}
+
+/// The `(line, covered)` a `DA:` record names, or `None` where the record is some other kind or
+/// carries numbers lcov's grammar does not allow.
+fn lcov_da(record: &str) -> Option<(u32, bool)> {
+    let (number, count) = record.strip_prefix("DA:")?.split_once(',')?;
+    Some((number.parse().ok()?, count.trim().parse::<u64>().ok()? > 0))
 }
 
 /// The line metric an lcov export reports, less the lines a `#[cfg(not(test))]` gate hides.
@@ -940,22 +947,13 @@ fn hidden_totals(
     hidden: &BTreeMap<String, BTreeSet<u32>>,
 ) -> HiddenTotals {
     let measured: BTreeSet<&str> = data.files.iter().map(|f| f.filename.as_str()).collect();
-    let mut groups: BTreeMap<(String, i64, i64), HiddenTotals> = BTreeMap::new();
+    let mut groups: BTreeMap<FunctionGroup, HiddenTotals> = BTreeMap::new();
     for function in &data.functions {
-        let Some((file, line, column)) = function_start(function) else {
+        let Some((group, lines)) = hidden_group(function, &measured, hidden) else {
             continue;
         };
-        if !measured.contains(file.as_str()) {
-            continue;
-        }
-        let Some(lines) = hidden.get(&file) else {
-            continue;
-        };
-        if !lines.contains(&(line.max(0) as u32)) {
-            continue;
-        }
         groups
-            .entry((file, line, column))
+            .entry(group)
             .or_default()
             .merge(function_totals(function, lines));
     }
@@ -965,9 +963,30 @@ fn hidden_totals(
     })
 }
 
-/// The `(file, line, column)` llvm-cov groups a function record under — its first region's
-/// start. A record with no region, or one naming a file outside its own list, has no group.
-fn function_start(function: &LlvmCovFunction) -> Option<(String, i64, i64)> {
+/// The group a gated function record contributes to, with its file's gated lines. A record
+/// outside the measured files, or starting on a line no gate hides, contributes nothing.
+fn hidden_group<'h>(
+    function: &LlvmCovFunction,
+    measured: &BTreeSet<&str>,
+    hidden: &'h BTreeMap<String, BTreeSet<u32>>,
+) -> Option<(FunctionGroup, &'h BTreeSet<u32>)> {
+    let (file, line, column) = function_start(function)?;
+    if !measured.contains(file.as_str()) {
+        return None;
+    }
+    let lines = hidden.get(&file)?;
+    if !lines.contains(&(line.max(0) as u32)) {
+        return None;
+    }
+    Some(((file, line, column), lines))
+}
+
+/// The `(file, line, column)` llvm-cov groups a function record under.
+type FunctionGroup = (String, i64, i64);
+
+/// The group llvm-cov files a function record under — its first region's start. A record with no
+/// region, or one naming a file outside its own list, has no group.
+fn function_start(function: &LlvmCovFunction) -> Option<FunctionGroup> {
     let region = function.regions.first()?;
     if region.len() < 8 {
         return None;
@@ -1118,16 +1137,13 @@ fn run_in(
     branch: bool,
 ) -> Result<String> {
     let mut command = Command::new("cargo");
-    command
-        .current_dir(root)
-        .args(run_argv(
-            format,
-            features,
-            branch,
-            ignore_filename_regex(root, ignore),
-        ))
-        .env("CARGO_TARGET_DIR", &target.0);
-    scrub_outer_llvm_cov(&mut command);
+    let argv = run_argv(
+        format,
+        features,
+        branch,
+        ignore_filename_regex(root, ignore),
+    );
+    aim_llvm_cov(&mut command, target, root, argv);
     let output = command
         .output()
         .context("running `cargo llvm-cov` (is cargo-llvm-cov installed?)")?;
@@ -1135,11 +1151,27 @@ fn run_in(
         output.status.success(),
         &output.stdout,
         &output.stderr,
-        &format!(
-            "the unit suite did not run cleanly under cargo llvm-cov in `{}`:{}",
-            root.display(),
-            branch_hint(branch)
-        ),
+        &llvm_cov_failure(root, branch),
+    )
+}
+
+/// Point `command` at `root` with `argv`, write its build into `target`, and strip an outer
+/// `cargo llvm-cov` run's instrumentation state.
+fn aim_llvm_cov(command: &mut Command, target: &TargetDir, root: &Path, argv: Vec<String>) {
+    command
+        .current_dir(root)
+        .args(argv)
+        .env("CARGO_TARGET_DIR", &target.0);
+    scrub_outer_llvm_cov(command);
+}
+
+/// What a `cargo llvm-cov` run that exited non-zero in `root` reports, the branch floor's
+/// nightly requirement included where it ran with `--branch`.
+fn llvm_cov_failure(root: &Path, branch: bool) -> String {
+    format!(
+        "the unit suite did not run cleanly under cargo llvm-cov in `{}`:{}",
+        root.display(),
+        branch_hint(branch)
     )
 }
 
@@ -1177,34 +1209,32 @@ fn branch_hint(branch: bool) -> &'static str {
     }
 }
 
+/// Every variable a spawning cargo must not inherit from an outer `cargo llvm-cov` run. An
+/// inherited `RUSTC_WRAPPER` re-enters cargo-llvm-cov on every rustc call until the runner is
+/// OOM-killed, and an inherited `RUSTUP_TOOLCHAIN` overrides the scanned crate's own nightly pin.
+const OUTER_LLVM_COV_VARS: &[&str] = &[
+    "RUSTFLAGS",
+    "CARGO_ENCODED_RUSTFLAGS",
+    "RUSTDOCFLAGS",
+    "CARGO_ENCODED_RUSTDOCFLAGS",
+    "LLVM_PROFILE_FILE",
+    "CARGO_LLVM_COV",
+    "CARGO_LLVM_COV_SHOW_ENV",
+    "CARGO_LLVM_COV_TARGET_DIR",
+    "CARGO_LLVM_COV_BUILD_DIR",
+    "RUSTC_WRAPPER",
+    "RUSTC_WORKSPACE_WRAPPER",
+    "__CARGO_LLVM_COV_RUSTC_WRAPPER",
+    "__CARGO_LLVM_COV_RUSTC_WRAPPER_RUSTFLAGS",
+    "__CARGO_LLVM_COV_RUSTC_WRAPPER_CRATE_NAMES",
+    "RUSTUP_TOOLCHAIN",
+    "CARGO",
+    "RUSTC",
+];
+
 /// Strip the outer run's instrumentation state from `command`.
-///
-/// When this check runs under an outer `cargo llvm-cov`, an inherited `RUSTC_WRAPPER` makes the
-/// inner run re-enter cargo-llvm-cov on every rustc invocation and hang until the runner is
-/// OOM-killed.
 fn scrub_outer_llvm_cov(command: &mut Command) {
-    for var in [
-        "RUSTFLAGS",
-        "CARGO_ENCODED_RUSTFLAGS",
-        "RUSTDOCFLAGS",
-        "CARGO_ENCODED_RUSTDOCFLAGS",
-        "LLVM_PROFILE_FILE",
-        "CARGO_LLVM_COV",
-        "CARGO_LLVM_COV_SHOW_ENV",
-        "CARGO_LLVM_COV_TARGET_DIR",
-        "CARGO_LLVM_COV_BUILD_DIR",
-        "RUSTC_WRAPPER",
-        "RUSTC_WORKSPACE_WRAPPER",
-        "__CARGO_LLVM_COV_RUSTC_WRAPPER",
-        "__CARGO_LLVM_COV_RUSTC_WRAPPER_RUSTFLAGS",
-        "__CARGO_LLVM_COV_RUSTC_WRAPPER_CRATE_NAMES",
-        // rustup gives an inherited toolchain selection precedence over the scanned
-        // crate's own `rust-toolchain.toml`, so a spawning cargo would override the
-        // nightly a branch-floor crate pins there.
-        "RUSTUP_TOOLCHAIN",
-        "CARGO",
-        "RUSTC",
-    ] {
+    for var in OUTER_LLVM_COV_VARS {
         command.env_remove(var);
     }
 }

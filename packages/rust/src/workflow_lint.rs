@@ -168,22 +168,25 @@ fn bodies(step: &marked_yaml::types::MarkedMappingNode) -> Vec<(&'static str, St
     if let Some(run) = step.get_scalar("run") {
         out.push(("run", run.as_str().to_string(), line_of(run.span())));
     }
-    let uses = step
-        .get_scalar("uses")
-        .map(|node| node.as_str().to_string());
-    if uses.is_some_and(|uses| uses.starts_with("actions/github-script")) {
-        if let Some(script) = step
-            .get_mapping("with")
-            .and_then(|w| w.get_scalar("script"))
-        {
-            out.push((
-                "github-script",
-                script.as_str().to_string(),
-                line_of(script.span()),
-            ));
-        }
-    }
+    out.extend(github_script_body(step));
     out
+}
+
+/// The `script` body a `github-script` step carries. A step using any other action, or one
+/// passing no `script`, carries none.
+fn github_script_body(
+    step: &marked_yaml::types::MarkedMappingNode,
+) -> Option<(&'static str, String, usize)> {
+    let uses = step.get_scalar("uses")?;
+    if !uses.as_str().starts_with("actions/github-script") {
+        return None;
+    }
+    let script = step.get_mapping("with")?.get_scalar("script")?;
+    Some((
+        "github-script",
+        script.as_str().to_string(),
+        line_of(script.span()),
+    ))
 }
 
 /// The 1-based line a node starts on, or 0 when the parser recorded no position.

@@ -71,20 +71,26 @@ pub fn find_suite_violations(package_root: &Path) -> Result<Vec<Violation>> {
         }
     }
     if tests.is_dir() {
-        let mut strays = Vec::new();
-        collect_python_files(&tests, &mut strays, is_python_unit_test_file)?;
-        strays.retain(|file| !tiers.iter().any(|tier| file.starts_with(tier)));
-        for file in strays {
-            violations.push(Violation {
-                file,
-                line: 1,
-                rule: "unknown-tier",
-                message: UNKNOWN_TIER_MSG.to_string(),
-            });
-        }
+        violations.extend(stray_tier_violations(&tests, &tiers)?);
     }
     violations.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
     Ok(violations)
+}
+
+/// An `unknown-tier` violation per test file under `tests` that no entry of `tiers` contains.
+fn stray_tier_violations(tests: &Path, tiers: &[PathBuf]) -> Result<Vec<Violation>> {
+    let mut strays = Vec::new();
+    collect_python_files(tests, &mut strays, is_python_unit_test_file)?;
+    strays.retain(|file| !tiers.iter().any(|tier| file.starts_with(tier)));
+    Ok(strays
+        .into_iter()
+        .map(|file| Violation {
+            file,
+            line: 1,
+            rule: "unknown-tier",
+            message: UNKNOWN_TIER_MSG.to_string(),
+        })
+        .collect())
 }
 
 /// Every `unmocked-collaborator` violation in the single test file `file`, in source order.
@@ -106,12 +112,18 @@ fn unmocked_collaborators(file: &Path, first_party: &str) -> Result<Vec<Violatio
     for stmt in suite {
         visitor.visit_stmt(stmt);
     }
-    Ok(visitor
+    Ok(unmocked_imports(file, &visitor))
+}
+
+/// A violation per import the walk recorded that is neither the unit under test nor named by a
+/// `patch` target.
+fn unmocked_imports(file: &Path, visitor: &UnitIsolationVisitor<'_>) -> Vec<Violation> {
+    visitor
         .imports
         .iter()
         .filter(|import| !import.is_uut && !import.is_mocked(&visitor.patch_targets))
         .map(|import| unmocked_violation(file, import))
-        .collect())
+        .collect()
 }
 
 /// The `unmocked-collaborator` violation naming `import` in `file`.
@@ -1011,11 +1023,7 @@ fn resolve_object_target(expr: &Expr, ctx: &ResolveCtx) -> Option<String> {
             target = candidate;
             continue;
         }
-        let first_party_root = ctx
-            .first_party
-            .zip(ctx.source_root)
-            .filter(|(pkg, _)| target.split('.').next() == Some(*pkg));
-        let Some((_, root)) = first_party_root else {
+        let Some(root) = first_party_root(&target, ctx) else {
             return Some(append_segments(target, &rest[index..]));
         };
         target = match module_attribute(root, &target, segment)? {
@@ -1025,6 +1033,13 @@ fn resolve_object_target(expr: &Expr, ctx: &ResolveCtx) -> Option<String> {
         };
     }
     Some(target)
+}
+
+/// The source root `target` can be read from: the first-party root, where `target`'s head names
+/// the first-party package. A chain outside it resolves no further from source.
+fn first_party_root<'a>(target: &str, ctx: &ResolveCtx<'a>) -> Option<&'a Path> {
+    let (pkg, root) = ctx.first_party.zip(ctx.source_root)?;
+    (target.split('.').next() == Some(pkg)).then_some(root)
 }
 
 fn append_segments(mut target: String, segments: &[&str]) -> String {
@@ -1071,24 +1086,26 @@ struct ModuleFile {
 fn locate_module(root: &Path, module: &str) -> Option<ModuleFile> {
     let segments: Vec<String> = module.split('.').map(str::to_owned).collect();
     let rel: PathBuf = segments.iter().collect();
-    for base in [root.to_path_buf(), root.join("src")] {
-        let file = base.join(&rel).with_extension("py");
-        if file.is_file() {
-            let package = segments[..segments.len() - 1].to_vec();
-            return Some(ModuleFile {
-                path: file,
-                package,
-            });
-        }
-        let init = base.join(&rel).join("__init__.py");
-        if init.is_file() {
-            return Some(ModuleFile {
-                path: init,
-                package: segments,
-            });
-        }
+    [root.to_path_buf(), root.join("src")]
+        .iter()
+        .find_map(|base| module_file_under(base, &rel, &segments))
+}
+
+/// The file for `rel` under `base`: the flat `<rel>.py`, else the package's
+/// `<rel>/__init__.py`, whose own name is part of the package it lives in.
+fn module_file_under(base: &Path, rel: &Path, segments: &[String]) -> Option<ModuleFile> {
+    let file = base.join(rel).with_extension("py");
+    if file.is_file() {
+        return Some(ModuleFile {
+            path: file,
+            package: segments[..segments.len() - 1].to_vec(),
+        });
     }
-    None
+    let init = base.join(rel).join("__init__.py");
+    init.is_file().then(|| ModuleFile {
+        path: init,
+        package: segments.to_vec(),
+    })
 }
 
 /// What a module's own top-level source binds a name to.

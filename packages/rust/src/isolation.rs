@@ -2,6 +2,7 @@
 //! deterministic `syn` heuristic; its precision limits live in `internals/rust/isolation.md`.
 
 use std::collections::BTreeSet;
+use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
@@ -83,17 +84,27 @@ pub fn find_integration_violations(root: impl AsRef<Path>) -> Result<Vec<Violati
             .with_context(|| format!("reading source file `{}`", file.display()))?;
         let ast = syn::parse_file(&source)
             .map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
-        let mut visitor = DoubleVisitor {
-            file,
-            first_party: &first_party,
-            violations: Vec::new(),
-        };
-        visitor.visit_file(&ast);
-        violations.append(&mut visitor.violations);
+        violations.extend(double_violations(file, &ast, &first_party));
     }
 
     violations.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
     Ok(violations)
+}
+
+/// Every `no-first-party-double` violation the parsed integration test `ast` carries, in source
+/// order.
+fn double_violations(
+    file: &Path,
+    ast: &syn::File,
+    first_party: &BTreeSet<String>,
+) -> Vec<Violation> {
+    let mut visitor = DoubleVisitor {
+        file,
+        first_party,
+        violations: Vec::new(),
+    };
+    visitor.visit_file(ast);
+    visitor.violations
 }
 
 /// Walks one integration-test file, flagging a `#[double]` of a first-party crate.
@@ -158,32 +169,44 @@ fn has_double_attr(attrs: &[syn::Attribute]) -> bool {
 /// `crate::`, so the name is what a `#[double]` import is matched against.
 fn first_party_crates(root: &Path) -> Result<BTreeSet<String>> {
     let manifest = root.join("Cargo.toml");
-    let mut set = BTreeSet::new();
     if !manifest.is_file() {
-        return Ok(set);
+        return Ok(BTreeSet::new());
     }
     let text = std::fs::read_to_string(&manifest)
         .with_context(|| format!("reading `{}`", manifest.display()))?;
     let value: toml::Value =
         toml::from_str(&text).with_context(|| format!("parsing `{}`", manifest.display()))?;
+    let mut set = path_dependency_names(&value);
+    set.extend(package_crate_name(&value));
+    Ok(set)
+}
 
-    if let Some(name) = value
-        .get("package")
-        .and_then(|package| package.get("name"))
-        .and_then(toml::Value::as_str)
-    {
-        set.insert(name.replace('-', "_"));
-    }
+/// The manifest's own `[package].name`, hyphens normalized to underscores.
+fn package_crate_name(value: &toml::Value) -> Option<String> {
+    Some(
+        value
+            .get("package")?
+            .get("name")?
+            .as_str()?
+            .replace('-', "_"),
+    )
+}
+
+/// Every `path` dependency the manifest declares, hyphens normalized to underscores. A registry
+/// dependency is external code, so only a `path` entry is first-party.
+fn path_dependency_names(value: &toml::Value) -> BTreeSet<String> {
+    let mut set = BTreeSet::new();
     for table_name in ["dependencies", "dev-dependencies"] {
-        if let Some(table) = value.get(table_name).and_then(toml::Value::as_table) {
-            for (name, spec) in table {
-                if spec.as_table().is_some_and(|t| t.contains_key("path")) {
-                    set.insert(name.replace('-', "_"));
-                }
+        let Some(table) = value.get(table_name).and_then(toml::Value::as_table) else {
+            continue;
+        };
+        for (name, spec) in table {
+            if spec.as_table().is_some_and(|t| t.contains_key("path")) {
+                set.insert(name.replace('-', "_"));
             }
         }
     }
-    Ok(set)
+    set
 }
 
 /// `true` when `file` (under `root`) is a Rust integration test — a `*.rs` file with a
@@ -408,16 +431,8 @@ fn flatten_use(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<(Vec
             flatten_use(&path.tree, prefix, out);
             prefix.pop();
         }
-        syn::UseTree::Name(name) => {
-            let mut full = prefix.clone();
-            full.push(name.ident.to_string());
-            out.push((full, false));
-        }
-        syn::UseTree::Rename(rename) => {
-            let mut full = prefix.clone();
-            full.push(rename.ident.to_string());
-            out.push((full, false));
-        }
+        syn::UseTree::Name(name) => out.push(use_leaf(prefix, &name.ident)),
+        syn::UseTree::Rename(rename) => out.push(use_leaf(prefix, &rename.ident)),
         syn::UseTree::Glob(_) => out.push((prefix.clone(), true)),
         syn::UseTree::Group(group) => {
             for item in &group.items {
@@ -425,6 +440,13 @@ fn flatten_use(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<(Vec
             }
         }
     }
+}
+
+/// The non-glob leaf a named or renamed import contributes: `prefix` extended by `ident`.
+fn use_leaf(prefix: &[String], ident: &syn::Ident) -> (Vec<String>, bool) {
+    let mut full = prefix.to_vec();
+    full.push(ident.to_string());
+    (full, false)
 }
 
 /// Why a `use` reaches out of the test's own module, or `None` when it stays in-module.
@@ -502,18 +524,8 @@ fn cfg_requires_test(tokens: proc_macro2::TokenStream, negated: bool) -> bool {
     let mut iter = tokens.into_iter().peekable();
     while let Some(tt) = iter.next() {
         match tt {
-            proc_macro2::TokenTree::Ident(id) if id == "not" => {
-                // `not` applies to the group immediately following it.
-                if let Some(proc_macro2::TokenTree::Group(group)) = iter.peek() {
-                    let stream = group.stream();
-                    iter.next();
-                    if cfg_requires_test(stream, !negated) {
-                        return true;
-                    }
-                }
-            }
             proc_macro2::TokenTree::Ident(id) => {
-                if !negated && id == "test" {
+                if cfg_ident_requires_test(&id, &mut iter, negated) {
                     return true;
                 }
             }
@@ -524,6 +536,33 @@ fn cfg_requires_test(tokens: proc_macro2::TokenStream, negated: bool) -> bool {
         }
     }
     false
+}
+
+/// `true` when an ident in a `cfg(...)` predicate requires `test`: a bare `test` outside any
+/// `not(...)`, or a `not(...)` whose group requires it under the flipped negation.
+fn cfg_ident_requires_test(
+    id: &proc_macro2::Ident,
+    iter: &mut Peekable<proc_macro2::token_stream::IntoIter>,
+    negated: bool,
+) -> bool {
+    if id == "not" {
+        return cfg_not_requires_test(iter, negated);
+    }
+    !negated && id == "test"
+}
+
+/// `true` when the group a `not` applies to — the token tree immediately following it, which
+/// this consumes — requires `test` under the flipped negation.
+fn cfg_not_requires_test(
+    iter: &mut Peekable<proc_macro2::token_stream::IntoIter>,
+    negated: bool,
+) -> bool {
+    let Some(proc_macro2::TokenTree::Group(group)) = iter.peek() else {
+        return false;
+    };
+    let stream = group.stream();
+    iter.next();
+    cfg_requires_test(stream, !negated)
 }
 
 /// The 1-based lines of the Rust items a `#[cfg(not(test))]` gate keeps out of a test build.

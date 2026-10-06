@@ -61,18 +61,24 @@ fn exit_code(measurement: mutation::Measurement) -> i32 {
         return 0;
     }
 
-    eprintln!(
-        "error: {} unexplained surviving mutant(s) — kill each with an assertion, or lift an \
-         equivalent/defensive one with a reason-required `[[<language>.exempt]] rules = [\"mutation\"]`:",
-        survivors.len()
-    );
-    for survivor in &survivors {
-        eprintln!(
-            "  {}:{}: {}",
-            survivor.file, survivor.line, survivor.description
-        );
-    }
+    eprintln!("{}", survivor_report(&survivors));
     1
+}
+
+/// The report a surviving mutant set prints: the headline naming how to clear them, then one
+/// `file:line: description` line per survivor.
+fn survivor_report(survivors: &[mutation::Survivor]) -> String {
+    let detail: Vec<String> = survivors
+        .iter()
+        .map(|s| format!("  {}:{}: {}", s.file, s.line, s.description))
+        .collect();
+    format!(
+        "error: {} unexplained surviving mutant(s) — kill each with an assertion, or lift an \
+         equivalent/defensive one with a reason-required \
+         `[[<language>.exempt]] rules = [\"mutation\"]`:\n{}",
+        survivors.len(),
+        detail.join("\n")
+    )
 }
 
 fn clean_message(count: usize) -> String {
@@ -126,6 +132,31 @@ mod tests {
             }),
             1
         );
+    }
+
+    #[test]
+    fn the_survivor_report_names_every_survivor_under_one_headline() {
+        let survivor = |line, description: &str| mutation::Survivor {
+            file: "src/lib.rs".to_string(),
+            line,
+            description: description.to_string(),
+        };
+        let report = survivor_report(&[survivor(3, "replace true with false"), survivor(9, "x")]);
+        let mut lines = report.lines();
+        assert_eq!(
+            lines.next(),
+            Some(
+                "error: 2 unexplained surviving mutant(s) — kill each with an assertion, or lift \
+                 an equivalent/defensive one with a reason-required `[[<language>.exempt]] \
+                 rules = [\"mutation\"]`:"
+            )
+        );
+        assert_eq!(
+            lines.next(),
+            Some("  src/lib.rs:3: replace true with false")
+        );
+        assert_eq!(lines.next(), Some("  src/lib.rs:9: x"));
+        assert_eq!(lines.next(), None);
     }
 
     #[test]

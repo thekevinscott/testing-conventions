@@ -820,6 +820,44 @@ So the rule of thumb for the remaining steps: before extracting, ask what kills 
 function's body mutant. If the answer is "nothing a `--lib` test can reach", the extraction is in
 the wrong place — pull out the value or the message, not the effect.
 
+Budgeting that work up front did not make it cheap. **Thirty-one mutants survived across two
+runs, and sixteen new colocated tests killed every one of them — no exemption was added.** The
+first run, over the tree with the splits but no new tests, reported 21: whole-body replacements
+of `run_workflow_lint`, `inline_logic_finding`, `malformed_findings`, `llvm_cov_failure`,
+`untracked_scope`, `untracked_extra_scope`, `validate_scopes`, `find_suite_violations` and
+`aim_llvm_cov`, an `&&`→`||` in `owed_findings`, and two negation deletions in `validate_scopes`.
+Those are the ones the model above predicts: a new definition, a new body mutant.
+
+The second run found ten more, and **they are the step's real surprise: none of them was on a
+line the step wrote.** They were `ts.rs`'s purity chain (`is_pure_function`'s two module arms and
+its `name == "parse"`, `is_pure_specifier`'s type-or-pure choice, `is_pure_named_import`'s
+non-empty guard), `parse_program`'s `panicked || !diagnostics.is_empty()`, and
+`measure_typescript`'s declaration-only `retain`. **A diff-scoped mutation gate prices the whole
+function you touched, not your edit** — so splitting a 20-line function puts *both* resulting
+spans in scope, including the lines that merely moved. Budget for the function, not the diff.
+
+Killing those ten says two more things worth keeping:
+
+- **Drive a predicate through its caller, and assert it per-case.** The purity chain is reached
+  only from `unit_violations_in`, so one test over `import { join } from 'node:path'` and
+  `import { parse } from 'yaml'` kills eight mutants at once — but only because it also asserts
+  that `yaml`'s `stringify` *is* flagged. The list is per-export, not per-module, and the
+  `==`→`!=` mutant is exactly the one that an "is it pure?" assertion alone would miss.
+- **Pick the input that separates the operands.** `parse_program` bails on
+  `panicked || !diagnostics.is_empty()`, and the obvious malformed source (`import { from 'x';`)
+  sets *both*, so it leaves the `||`→`&&` mutant standing. A top-level `return` is a diagnostic
+  oxc recovers from without panicking, which is the only input that proves the diagnostic alone
+  fails the parse. Prove the kill against the mutant before writing the test, not after.
+
+The tenth was the seam rule again, one layer deeper. `measure_typescript`'s `retain` dropped the
+mutants in declaration-only modules, and no `--lib` test could ever reach it, because the
+function runs the TypeScript adapter. It moved into `judged_ts_mutants` — mirroring the
+`judged_py_mutants` the Python arm already had — and a test drives it over a real scratch tree.
+Two mutants do still survive cargo-mutants and are supposed to: both whole-body replacements of
+`coverage.rs`'s `run_in`, which the #758 seam rule drops because `run_in` stayed branch-free and
+kept its `Command` a file-local hop away. That is the `aim_llvm_cov` design paying off, and the
+reminder that **`missed.txt` is not the verdict** — the gate's own exit code is.
+
 Counting discipline is worth recording too, because this step's first tally was wrong. Count
 flagged functions and files from the gate's own output, never from a grep over the diff: a
 `src/[a-z_/]+\.rs` pattern silently drops `e2e.rs`, whose name has a digit in it.
@@ -835,16 +873,16 @@ same thresholds prices the step's 27 extractions directly:
 | 19 | 26 | 0 | 26 |
 | 18 | 32 | 8 | 24 |
 | 17 | 45 | 22 | 23 |
-| 16 | 61 | 43 | 18 |
+| 16 | 61 | 42 | 19 |
 | 14 | 83 | 70 | 13 |
 | 12 | 116 | 106 | 10 |
 | 10 | 150 | 150 | **0** |
-| 1 (the shipped default) | 359 | 396 | **−37** |
+| 1 (the shipped default) | 359 | 397 | **−38** |
 
 The last two rows are the finding. **Below about `10` the splitting buys nothing, and at the
 default it costs.** The reason is structural, not incidental: at this rung the fix is naming a
 decision, and a named decision *is* a new module-scope function, which the rule counts. Lowering
-the threshold five points added 37 definitions, so the distance to the default grew while the
+the threshold five points added 38 definitions, so the distance to the default grew while the
 number fell. No amount of splitting walks `packages/rust` to `max_lines = 1`; only the literal
 one-function-per-file layout Python and TypeScript have does, which for this crate means roughly
 400 files. That is a redesign, and this epic is not the place to argue for it.

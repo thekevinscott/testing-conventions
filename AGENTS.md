@@ -319,6 +319,13 @@ hygiene on internal tooling, not shipped product behavior, so it does not earn a
 wiring gate (see **Wiring gates are earned**) — just copy the block into any new
 `pull_request` workflow.
 
+Scope the `types:` alongside it. `[opened, synchronize, reopened]` is the default set, because
+`cancel-in-progress` means "a newer **code** change supersedes this run". `edited` fires on a title
+or body change, so pairing it with `cancel-in-progress` makes a workflow cancel its own passing run
+every time someone records gate verdicts in the PR body — and a cancelled run reaches `CI Gate` as a
+failure (#779). Earn `edited` only when the check's verdict genuinely depends on the title or body,
+and then leave `cancel-in-progress` off it: a body edit supersedes nothing about the tree.
+
 ## Affirmative voice
 
 Write docs and user-facing text by stating what the tool **does** and what the user **provides** —

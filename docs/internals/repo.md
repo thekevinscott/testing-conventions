@@ -1153,3 +1153,33 @@ deploys — a job-level `pages` group would re-couple nothing new and is omitted
 one workflow-level `group: pages` shared by every PR and main, put all pending runs in a single
 queue where a newer pending run cancels the older one; a cancelled PR build then reads as a
 non-passing run to pr-monitor's CI Gate, failing PRs on repo-wide docs traffic they never touched.
+
+## Path length: an `edited` trigger cancelling its own runs
+
+`path-length.yml` shipped in #675 triggering on `pull_request: types: [opened, synchronize,
+reopened, edited]`, alongside the standard `cancel-in-progress: true` block. `edited` fires on a
+**title or body** change, not only a push, so every PR-body write cancelled the in-flight `Path
+length` run and queued a replacement at the same sha. pr-monitor reads a `cancelled` run as
+non-passing, so `CI Gate` failed.
+
+This repo's own conventions drove it: gate verdicts belong in the PR body, and because `gh pr edit`
+fails silently here the recorded method is `gh api -X PATCH .../pulls/<n>` — an `edited` event every
+time. Following the documented process is what reddened `CI Gate`. On 2026-10-06, with five PRs in
+flight, four branches showed a cancelled/successful pair at one sha and one (`ad0f76b`) had two
+edits land close enough together that **both** runs cancelled, leaving no successful run at all.
+
+The fix drops `edited`. #675's follow-up `b3c80c0` had already scoped the gate to the whole tracked
+tree rather than the diff, which makes the verdict a pure function of the tree — a title or body
+cannot change it, so the trigger bought nothing. It arrived undocumented in the workflow's initial
+commit with no stated rationale.
+
+**This is the second instance of one pattern**, the first being the Pages-queue case in *Docs CI:
+ref-scoped concurrency* above: a run cancelled for a reason unrelated to the PR's code still reaches
+`CI Gate` as a failure. The generalizable rule is in AGENTS.md under *PR workflow concurrency* —
+scope both the concurrency group and the trigger types so that only a superseding **code** change
+cancels a run.
+
+`edited` is not wrong in itself; pairing it with `cancel-in-progress` is. A check whose verdict
+really does depend on the title or body has earned the trigger — it just must not also claim that a
+body edit supersedes a run, because a body edit changes nothing about the tree. Re-running the gate treats the symptom; `pr-monitor` is reporting the cancellation
+accurately and a bypass is never the remedy.

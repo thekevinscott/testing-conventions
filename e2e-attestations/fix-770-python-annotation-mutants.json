@@ -1,0 +1,7 @@
+{
+  "command": "PATH=\"$PWD/internals/checks/.venv/bin:$PATH\" PYTHONPATH=\"$PWD/packages/python/python\" cargo test --manifest-path packages/rust/Cargo.toml --test mutation_python --test mutation_python_e2e",
+  "ran_at": 1791308273,
+  "exit_code": 0,
+  "commit": "6cb1e144ccb3455eac4abd6104fd50fd29d76a3e",
+  "branch": "fix/770-python-annotation-mutants"
+}

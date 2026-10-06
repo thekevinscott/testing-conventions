@@ -71,6 +71,11 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
       - uses: astral-sh/setup-uv@v7
+      # The dispatch waits for npm to serve the pinned version by installing it, so this job needs
+      # the same Node the check jobs resolve the package with.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
       - name: Verify the version-pinned self-test + dogfood suites at the release commit
         env:
           GH_TOKEN: ${{ github.token }}

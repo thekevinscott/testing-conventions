@@ -319,6 +319,11 @@ hygiene on internal tooling, not shipped product behavior, so it does not earn a
 wiring gate (see **Wiring gates are earned**) — just copy the block into any new
 `pull_request` workflow.
 
+Pair that flag with `types:` that fire only on code changes — `[opened, synchronize, reopened]`.
+`edited` fires on a title or body change, so a workflow carrying both `edited` and
+`cancel-in-progress` cancels its own passing run every time someone records gate verdicts in the PR
+body, and `CI Gate` reads the cancellation as a failure (#779).
+
 ## Affirmative voice
 
 Write docs and user-facing text by stating what the tool **does** and what the user **provides** —

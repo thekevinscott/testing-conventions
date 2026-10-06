@@ -81,8 +81,8 @@ npx testing-conventions changelog --base "$BASE"
 
 A `breaking: <summary>` line on any commit in the pull request requires a **migrations** fragment
 beside the changelog fragment, for every package the pull request owes fragments for. The line is
-matched anywhere in any commit body, case-insensitively, the same way the bypass line below is, so
-it works from a commit whose body already carries other text.
+read at the start of a line, in any commit body, whatever its case — the same way the bypass line
+below is — so it works from a commit whose body already carries other text.
 
 The signal is **opt-in by design**: the author of the change marks the breakage, and a pull request
 whose commits carry no `breaking:` line owes a changelog fragment alone. That is the trade for a

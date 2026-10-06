@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use testing_conventions::changelog::{
-    self, changed_packages, discover_layout, findings, fragment_name_ok, has_skip_line, is_exempt,
-    migrations_enforced, Layout,
+    self, changed_packages, discover_layout, findings, fragment_name_ok, has_breaking_line,
+    has_skip_line, is_exempt, Layout,
 };
 
 struct TempTree(PathBuf);
@@ -101,15 +101,25 @@ fn the_walk_skips_dependency_and_build_directories() {
 }
 
 #[test]
-fn migrations_are_enforced_only_where_the_repository_keeps_that_directory() {
-    let with = TempTree::new("with-migrations");
-    with.dir("packages/parser/changelog.d");
-    with.dir("packages/parser/migrations.d");
-    assert!(migrations_enforced(with.path()));
+fn migrations_are_enforced_by_a_breaking_line_not_by_the_directory() {
+    // The directory is a fact about the repository; the line is a fact about the pull
+    // request, and the line is what decides.
+    let tree = TempTree::new("with-migrations");
+    tree.dir("packages/parser/changelog.d");
+    tree.dir("packages/parser/migrations.d");
+    let layout = discover_layout(tree.path()).unwrap();
+    let changed = vec!["packages/parser/src/a.ts".to_string()];
+    let added = vec!["packages/parser/changelog.d/2026-10-06-change-a.md".to_string()];
 
-    let without = TempTree::new("without-migrations");
-    without.dir("packages/parser/changelog.d");
-    assert!(!migrations_enforced(without.path()));
+    assert!(findings(&layout, has_breaking_line(""), &changed, &added).is_empty());
+    let owed = findings(
+        &layout,
+        has_breaking_line("feat!: drop it\n\nbreaking: the flag is gone"),
+        &changed,
+        &added,
+    );
+    assert_eq!(owed.len(), 1);
+    assert!(owed[0].message.contains("migrations fragment"));
 }
 
 #[test]

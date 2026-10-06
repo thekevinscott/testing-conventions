@@ -135,18 +135,35 @@ pub fn missing_unit_tests(
         if !language.is_subject(&contents, source) {
             continue;
         }
-        let relative = source
-            .strip_prefix(root)
-            .unwrap_or(source)
-            .to_string_lossy()
-            .replace('\\', "/");
-        if exempt.contains(&relative) {
+        if exempt.contains(&exempt_key(root, source)) {
             continue;
         }
         orphans.push(source.clone());
     }
     orphans.sort();
     Ok(orphans)
+}
+
+/// The key `exempt` sets are indexed by: `file` relative to `root`, with Windows separators
+/// normalized to `/` so a config written on either platform matches. The path itself when it
+/// does not sit under `root`.
+fn exempt_key(root: &Path, file: &Path) -> String {
+    file.strip_prefix(root)
+        .unwrap_or(file)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+/// `true` when `file` defines testable behavior — a function with a body outside any
+/// `#[cfg(test)]` module — but carries no inline `#[cfg(test)]` module of its own.
+fn lacks_inline_tests(file: &Path) -> Result<bool> {
+    let source = std::fs::read_to_string(file)
+        .with_context(|| format!("reading source file `{}`", file.display()))?;
+    let ast =
+        syn::parse_file(&source).map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
+    let mut visitor = PresenceVisitor::default();
+    visitor.visit_file(&ast);
+    Ok(visitor.has_testable_fn && !visitor.has_test_module)
 }
 
 /// Recursively collect every file `language` tracks under `dir` into `out`.
@@ -178,24 +195,12 @@ pub fn missing_inline_tests(
 
     let mut orphans = Vec::new();
     for file in &files {
-        let source = std::fs::read_to_string(file)
-            .with_context(|| format!("reading source file `{}`", file.display()))?;
-        let ast = syn::parse_file(&source)
-            .map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
-        let mut visitor = PresenceVisitor::default();
-        visitor.visit_file(&ast);
-        if !visitor.has_testable_fn || visitor.has_test_module {
+        if exempt.contains(&exempt_key(root, file)) {
             continue;
         }
-        let relative = file
-            .strip_prefix(root)
-            .unwrap_or(file)
-            .to_string_lossy()
-            .replace('\\', "/");
-        if exempt.contains(&relative) {
-            continue;
+        if lacks_inline_tests(file)? {
+            orphans.push(file.clone());
         }
-        orphans.push(file.clone());
     }
     // `files` is already sorted, so `orphans` is in order.
     Ok(orphans)
@@ -471,6 +476,116 @@ fn stem_of(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A process-unique scratch tree, rebuilt from scratch on every call.
+    fn scratch(name: &str, files: &[(&str, &str)]) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "testing-conventions-colocated-{name}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        for (path, contents) in files {
+            let full = root.join(path);
+            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+            std::fs::write(&full, contents).unwrap();
+        }
+        root
+    }
+
+    #[test]
+    fn a_rust_file_with_a_body_and_no_test_module_lacks_inline_tests() {
+        let root = scratch(
+            "lacks-yes",
+            &[("src/widget.rs", "pub fn f() -> u8 { 1 }\n")],
+        );
+        assert!(lacks_inline_tests(&root.join("src/widget.rs")).unwrap());
+    }
+
+    #[test]
+    fn a_rust_file_carrying_its_own_test_module_does_not() {
+        let root = scratch(
+            "lacks-no",
+            &[(
+                "src/widget.rs",
+                "pub fn f() -> u8 { 1 }\n#[cfg(test)]\nmod tests { #[test] fn t() {} }\n",
+            )],
+        );
+        assert!(!lacks_inline_tests(&root.join("src/widget.rs")).unwrap());
+    }
+
+    #[test]
+    fn a_rust_file_with_no_testable_body_does_not_want_inline_tests() {
+        let root = scratch("lacks-decl", &[("src/types.rs", "pub struct Widget;\n")]);
+        assert!(!lacks_inline_tests(&root.join("src/types.rs")).unwrap());
+    }
+
+    #[test]
+    fn missing_inline_tests_names_the_orphan_and_only_the_orphan() {
+        let root = scratch(
+            "inline-orphans",
+            &[
+                ("src/orphan.rs", "pub fn f() -> u8 { 1 }\n"),
+                (
+                    "src/tested.rs",
+                    "pub fn g() -> u8 { 2 }\n#[cfg(test)]\nmod tests { #[test] fn t() {} }\n",
+                ),
+            ],
+        );
+        let orphans = missing_inline_tests(&root, &BTreeSet::new()).unwrap();
+        assert_eq!(orphans, vec![root.join("src/orphan.rs")]);
+    }
+
+    #[test]
+    fn an_exempt_rust_file_is_never_an_orphan() {
+        let root = scratch(
+            "inline-exempt",
+            &[("src/orphan.rs", "pub fn f() -> u8 { 1 }\n")],
+        );
+        let exempt: BTreeSet<String> = ["src/orphan.rs".to_string()].into_iter().collect();
+        assert!(missing_inline_tests(&root, &exempt).unwrap().is_empty());
+    }
+
+    #[test]
+    fn missing_unit_tests_names_the_source_with_no_colocated_twin() {
+        let root = scratch(
+            "unit-orphans",
+            &[
+                ("pkg/orphan.py", "def f():\n    return 1\n"),
+                ("pkg/tested.py", "def g():\n    return 2\n"),
+                ("pkg/tested_test.py", "def test_g():\n    assert True\n"),
+            ],
+        );
+        let orphans = missing_unit_tests(&root, Language::Python, &BTreeSet::new()).unwrap();
+        assert_eq!(orphans, vec![root.join("pkg/orphan.py")]);
+    }
+
+    #[test]
+    fn an_exempt_source_has_no_missing_unit_test() {
+        let root = scratch(
+            "unit-exempt",
+            &[("pkg/orphan.py", "def f():\n    return 1\n")],
+        );
+        let exempt: BTreeSet<String> = ["pkg/orphan.py".to_string()].into_iter().collect();
+        assert!(missing_unit_tests(&root, Language::Python, &exempt)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn the_exempt_key_is_root_relative_with_forward_slashes() {
+        assert_eq!(
+            exempt_key(Path::new("/repo"), Path::new("/repo/src/lib.rs")),
+            "src/lib.rs"
+        );
+    }
+
+    #[test]
+    fn a_file_outside_the_root_keys_on_its_own_path() {
+        assert_eq!(
+            exempt_key(Path::new("/repo"), Path::new("/elsewhere/lib.rs")),
+            "/elsewhere/lib.rs"
+        );
+    }
 
     #[test]
     fn python_tracks_py_files() {

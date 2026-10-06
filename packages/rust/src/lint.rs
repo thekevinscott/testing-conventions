@@ -87,6 +87,48 @@ pub fn find_suite_violations(package_root: &Path) -> Result<Vec<Violation>> {
     Ok(violations)
 }
 
+/// Every `unmocked-collaborator` violation in the single test file `file`, in source order.
+/// An import is clean when it is the unit under test or some `patch` target names it.
+fn unmocked_collaborators(file: &Path, first_party: &str) -> Result<Vec<Violation>> {
+    let source = std::fs::read_to_string(file)
+        .with_context(|| format!("reading test file `{}`", file.display()))?;
+    let suite = ast::Suite::parse(&source, &file.to_string_lossy())
+        .map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
+    let base = unit_under_test_base(file);
+    let mut visitor = UnitIsolationVisitor {
+        source: &source,
+        first_party,
+        base: &base,
+        type_checking_depth: 0,
+        imports: Vec::new(),
+        patch_targets: Vec::new(),
+    };
+    for stmt in suite {
+        visitor.visit_stmt(stmt);
+    }
+    Ok(visitor
+        .imports
+        .iter()
+        .filter(|import| !import.is_uut && !import.is_mocked(&visitor.patch_targets))
+        .map(|import| unmocked_violation(file, import))
+        .collect())
+}
+
+/// The `unmocked-collaborator` violation naming `import` in `file`.
+fn unmocked_violation(file: &Path, import: &ImportRecord) -> Violation {
+    Violation {
+        file: file.to_path_buf(),
+        line: import.line,
+        rule: "unmocked-collaborator",
+        message: format!(
+            "unit test imports `{}` without mocking it — a unit test isolates the \
+             unit under test, so mock every collaborator (patch it by string in a \
+             fixture)",
+            import.display
+        ),
+    }
+}
+
 /// Every `unmocked-collaborator` violation under `root` — a collaborator a `*_test.py`
 /// imports without mocking it — sorted by `(file, line)`. First-party is the dist's own
 /// package ([`first_party_package`]); a tree that declares none reports nothing.
@@ -108,38 +150,7 @@ pub fn find_unit_isolation_violations(root: impl AsRef<Path>) -> Result<Vec<Viol
 
     let mut violations = Vec::new();
     for file in &files {
-        let source = std::fs::read_to_string(file)
-            .with_context(|| format!("reading test file `{}`", file.display()))?;
-        let suite = ast::Suite::parse(&source, &file.to_string_lossy())
-            .map_err(|err| anyhow!("parsing `{}`: {err}", file.display()))?;
-        let base = unit_under_test_base(file);
-        let mut visitor = UnitIsolationVisitor {
-            source: &source,
-            first_party: &first_party,
-            base: &base,
-            type_checking_depth: 0,
-            imports: Vec::new(),
-            patch_targets: Vec::new(),
-        };
-        for stmt in suite {
-            visitor.visit_stmt(stmt);
-        }
-        for import in &visitor.imports {
-            if import.is_uut || import.is_mocked(&visitor.patch_targets) {
-                continue;
-            }
-            violations.push(Violation {
-                file: file.to_path_buf(),
-                line: import.line,
-                rule: "unmocked-collaborator",
-                message: format!(
-                    "unit test imports `{}` without mocking it — a unit test isolates the \
-                     unit under test, so mock every collaborator (patch it by string in a \
-                     fixture)",
-                    import.display
-                ),
-            });
-        }
+        violations.extend(unmocked_collaborators(file, &first_party)?);
     }
 
     violations.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
@@ -1396,6 +1407,32 @@ fn is_python_unit_test_file(path: &Path) -> bool {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[test]
+    fn the_unmocked_violation_names_the_import_and_says_to_patch_by_string() {
+        let import = ImportRecord {
+            display: "myproject.ledger".into(),
+            line: 7,
+            is_uut: false,
+            symbols: Vec::new(),
+            source: None,
+            module: None,
+        };
+        let violation = unmocked_violation(Path::new("tests/widget_test.py"), &import);
+        assert_eq!(violation.line, 7);
+        assert_eq!(violation.rule, "unmocked-collaborator");
+        assert_eq!(violation.file, Path::new("tests/widget_test.py"));
+        assert!(
+            violation.message.contains("myproject.ledger"),
+            "got: {}",
+            violation.message
+        );
+        assert!(
+            violation.message.contains("patch it by string"),
+            "got: {}",
+            violation.message
+        );
+    }
 
     /// A throwaway directory, removed on drop — for the `pyproject.toml` discovery.
     struct TempDir(PathBuf);

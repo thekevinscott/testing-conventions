@@ -353,7 +353,7 @@ where
             } => integration_lint::run(&path, language, &config),
         },
         Some(Command::Packaging { path, language }) => run_packaging(&path, language),
-        Some(Command::Changelog { base, path }) => run_changelog(&base, &path),
+        Some(Command::Changelog { base, path }) => changelog::run(&path, &base),
         Some(Command::Workflow { path }) => run_workflow(&path),
         Some(Command::WorkflowLint { path }) => run_workflow_lint(&path),
         Some(Command::E2e { command }) => match command {
@@ -428,7 +428,19 @@ fn report_colocated_presence(
     if orphans.is_empty() {
         return Ok(true);
     }
-    let (label, summary) = match language {
+    let (label, summary) = orphan_wording(language);
+    for orphan in &orphans {
+        eprintln!("{label}: {}", orphan.display());
+    }
+    eprintln!("error: {} {summary}", orphans.len());
+    Ok(false)
+}
+
+/// How the `colocated-test` rule names what is missing for `language`: the per-file label and
+/// the summary line. Rust wants an inline `#[cfg(test)]` module; the others want a sibling
+/// test file.
+fn orphan_wording(language: colocated_test::Language) -> (&'static str, &'static str) {
+    match language {
         colocated_test::Language::Rust => (
             "missing inline `#[cfg(test)]` tests",
             "source file(s) with testable code but no inline `#[cfg(test)]` module \
@@ -439,12 +451,7 @@ fn report_colocated_presence(
             "source file(s) missing a colocated unit test \
              (add a colocated test, or an `exempt` entry with a reason)",
         ),
-    };
-    for orphan in &orphans {
-        eprintln!("{label}: {}", orphan.display());
     }
-    eprintln!("error: {} {summary}", orphans.len());
-    Ok(false)
 }
 
 /// The `colocated-test`-rule exempt paths for `language`; empty when the config is absent.
@@ -524,54 +531,11 @@ fn split_scopes(
     (whole_file, line_scoped)
 }
 
-/// Report every scope in `<base>...HEAD` that changed public surface without adding the
-/// fragments recording it. `0` when `root` keeps no fragment directories.
-fn run_changelog(base: &str, root: &Path) -> anyhow::Result<i32> {
-    let Some(layout) = changelog::discover_layout(root) else {
-        println!(
-            "No fragment directories under `{}`; changelog check skipped.",
-            root.display()
-        );
-        return Ok(0);
-    };
-    if changelog::has_skip_line(&changelog::commit_bodies(root, base)?) {
-        println!("A `skip-changelog:` line is present; changelog check bypassed.");
-        return Ok(0);
-    }
-    let changed = changelog::changed_files(root, base)?;
-    let added = changelog::added_files(root, base)?;
-    let migrations = changelog::migrations_enforced(root);
-    let found = changelog::findings(&layout, migrations, &changed, &added);
-    if found.is_empty() {
-        println!("Every scope that changed public surface added its fragments.");
-        return Ok(0);
-    }
-    for finding in &found {
-        match &finding.file {
-            Some(file) => println!("::error file={file}::{}", finding.message),
-            None => println!("::error::{}", finding.message),
-        }
-    }
-    Ok(1)
-}
-
 /// Inspect the built distributions at `path` for test files. With `language`, `path` is that
 /// language's distribution or unpacked artifact root; without it, `path` is searched and every
 /// distribution found takes the language its file name names. `1` when any test file ships.
 fn run_packaging(path: &Path, language: Option<colocated_test::Language>) -> anyhow::Result<i32> {
-    let distributions = match language {
-        Some(language) => vec![packaging::Distribution {
-            path: path.to_path_buf(),
-            language,
-        }],
-        None => packaging::discover(path)?,
-    };
-    if distributions.is_empty() {
-        anyhow::bail!(
-            "no recognized built distribution (`.whl`, `.tar.gz`, `.tgz`, `.crate`) at `{}`",
-            path.display()
-        );
-    }
+    let distributions = distributions_at(path, language)?;
     let mut shipped = 0;
     for distribution in &distributions {
         shipped += report_shipped_test_files(distribution)?;
@@ -588,6 +552,29 @@ fn run_packaging(path: &Path, language: Option<colocated_test::Language>) -> any
         distributions.len()
     );
     Ok(0)
+}
+
+/// The distributions `run_packaging` inspects. With `language`, `path` is itself that
+/// language's distribution; without it, `path` is searched. An error when neither yields one,
+/// because an empty run would otherwise pass as a clean one.
+fn distributions_at(
+    path: &Path,
+    language: Option<colocated_test::Language>,
+) -> anyhow::Result<Vec<packaging::Distribution>> {
+    let distributions = match language {
+        Some(language) => vec![packaging::Distribution {
+            path: path.to_path_buf(),
+            language,
+        }],
+        None => packaging::discover(path)?,
+    };
+    if distributions.is_empty() {
+        anyhow::bail!(
+            "no recognized built distribution (`.whl`, `.tar.gz`, `.tgz`, `.crate`) at `{}`",
+            path.display()
+        );
+    }
+    Ok(distributions)
 }
 
 /// Name every test file `distribution` ships, and how many there were.
@@ -723,7 +710,96 @@ fn run_e2e_slug(branch: Option<&str>) -> anyhow::Result<i32> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
     use super::*;
+
+    /// A process-unique scratch tree holding `files`, rebuilt from scratch on every call.
+    fn scratch(slug: &str, files: &[(&str, &str)]) -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "tc-lib-{}-{}-{}",
+            slug,
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed),
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        for (rel, contents) in files {
+            let full = root.join(rel);
+            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+            std::fs::write(full, contents).unwrap();
+        }
+        root
+    }
+
+    #[test]
+    fn a_directory_holding_no_distribution_is_an_error_rather_than_a_clean_run() {
+        // `Ok(0)` here would read as "checked nothing, nothing shipped" — a pass by vacancy.
+        let root = scratch("packaging-empty", &[("README.md", "hi\n")]);
+        assert!(run_packaging(&root, None).is_err());
+    }
+
+    #[test]
+    fn a_rust_file_with_no_inline_tests_makes_the_presence_report_unclean() {
+        let root = scratch(
+            "presence-orphan",
+            &[("src/widget.rs", "pub fn f() -> u8 { 1 }\n")],
+        );
+        let config = root.join("testing-conventions.toml");
+        assert!(
+            !report_colocated_presence(&root, colocated_test::Language::Rust, &config).unwrap()
+        );
+    }
+
+    #[test]
+    fn a_rust_file_carrying_inline_tests_makes_the_presence_report_clean() {
+        let root = scratch(
+            "presence-clean",
+            &[(
+                "src/widget.rs",
+                "pub fn f() -> u8 { 1 }\n#[cfg(test)]\nmod tests { #[test] fn t() {} }\n",
+            )],
+        );
+        let config = root.join("testing-conventions.toml");
+        assert!(report_colocated_presence(&root, colocated_test::Language::Rust, &config).unwrap());
+    }
+
+    #[test]
+    fn rust_is_told_about_inline_test_modules_and_the_others_about_sibling_files() {
+        let (label, summary) = orphan_wording(colocated_test::Language::Rust);
+        assert!(label.contains("inline"), "got: {label}");
+        assert!(summary.contains("inline test module"), "got: {summary}");
+
+        let (label, summary) = orphan_wording(colocated_test::Language::Python);
+        assert!(label.contains("colocated unit test"), "got: {label}");
+        assert!(summary.contains("add a colocated test"), "got: {summary}");
+    }
+
+    #[test]
+    fn a_named_language_makes_the_path_itself_the_distribution() {
+        let found = distributions_at(
+            Path::new("/tmp/pkg.whl"),
+            Some(colocated_test::Language::Python),
+        )
+        .unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].path, Path::new("/tmp/pkg.whl"));
+    }
+
+    #[test]
+    fn a_search_that_finds_nothing_is_an_error_not_a_clean_run() {
+        let dir = std::env::temp_dir().join(format!(
+            "testing-conventions-no-distributions-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let err = distributions_at(&dir, None).unwrap_err();
+        assert!(
+            err.to_string().contains("no recognized built distribution"),
+            "got: {err}"
+        );
+    }
 
     #[test]
     fn no_args_returns_ok_zero() {

@@ -154,33 +154,37 @@ fn typescript_functions(source: &str, path: &Path) -> Result<Vec<Function>> {
     let lines: Vec<&str> = source.lines().collect();
     let mut found = Vec::new();
     for statement in &parsed.program.body {
-        match statement {
-            Statement::FunctionDeclaration(node) => {
-                push_ts_function(source, &lines, node, &mut found)
-            }
-            Statement::VariableDeclaration(node) => {
-                push_ts_bindings(source, &lines, node, &mut found)
-            }
-            Statement::ExportNamedDeclaration(node) => match &node.declaration {
-                Some(Declaration::FunctionDeclaration(inner)) => {
-                    push_ts_function(source, &lines, inner, &mut found)
-                }
-                Some(Declaration::VariableDeclaration(inner)) => {
-                    push_ts_bindings(source, &lines, inner, &mut found)
-                }
-                _ => {}
-            },
-            Statement::ExportDefaultDeclaration(node) => {
-                if let oxc::ast::ast::ExportDefaultDeclarationKind::FunctionDeclaration(inner) =
-                    &node.declaration
-                {
-                    push_ts_function(source, &lines, inner, &mut found)
-                }
-            }
-            _ => {}
-        }
+        push_ts_statement(source, &lines, statement, &mut found);
     }
     Ok(found)
+}
+
+/// Record whatever module-scope functions `statement` declares. Only the four statement
+/// kinds that can carry one at module scope contribute; everything else is skipped, and an
+/// `export default` carries a function only when it is a declaration rather than an
+/// expression.
+fn push_ts_statement(source: &str, lines: &[&str], statement: &Statement, out: &mut Vec<Function>) {
+    match statement {
+        Statement::FunctionDeclaration(node) => push_ts_function(source, lines, node, out),
+        Statement::VariableDeclaration(node) => push_ts_bindings(source, lines, node, out),
+        Statement::ExportNamedDeclaration(node) => match &node.declaration {
+            Some(Declaration::FunctionDeclaration(inner)) => {
+                push_ts_function(source, lines, inner, out)
+            }
+            Some(Declaration::VariableDeclaration(inner)) => {
+                push_ts_bindings(source, lines, inner, out)
+            }
+            _ => {}
+        },
+        Statement::ExportDefaultDeclaration(node) => {
+            if let oxc::ast::ast::ExportDefaultDeclarationKind::FunctionDeclaration(inner) =
+                &node.declaration
+            {
+                push_ts_function(source, lines, inner, out)
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Record a TypeScript `function` declaration; a bodyless overload signature is skipped.

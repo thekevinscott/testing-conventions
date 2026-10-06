@@ -448,6 +448,28 @@ fn vitest_exit(success: bool, root: &Path, stdout: &[u8], stderr: &[u8]) -> Resu
     Ok(())
 }
 
+/// The part of the `npx vitest run` argv that never varies between passes. Two entries are
+/// load-bearing against footguns rather than merely configuring the run:
+///
+/// - `--no-install`, never `--yes`: with `--yes` a missing vitest is silently downloaded,
+///   where every other arm fails clean on a missing binary.
+/// - the zeroed `coverage.thresholds` with `autoUpdate=false`: a consumer config's own
+///   thresholds neither decide the gate's exit nor rewrite the config file during a run.
+const VITEST_BASE_ARGV: [&str; 12] = [
+    "--no-install",
+    "vitest",
+    "run",
+    "--no-cache",
+    "--coverage.enabled",
+    "--coverage.provider=v8",
+    "--coverage.all=true",
+    "--coverage.thresholds.lines=0",
+    "--coverage.thresholds.branches=0",
+    "--coverage.thresholds.functions=0",
+    "--coverage.thresholds.statements=0",
+    "--coverage.thresholds.autoUpdate=false",
+];
+
 /// The `npx vitest run` argv for one coverage pass. `--coverage.all=true` counts source files
 /// the suite never imported, so an untested file is measured rather than vanishing.
 fn vitest_coverage_argv<'a>(
@@ -455,27 +477,10 @@ fn vitest_coverage_argv<'a>(
     reports_dir: &Path,
     exclude: impl Iterator<Item = &'a String>,
 ) -> Vec<String> {
-    let mut argv: Vec<String> = [
-        // `--no-install`, never `--yes`: with `--yes` a missing vitest is silently
-        // downloaded, where the other arms fail clean on a missing binary.
-        "--no-install",
-        "vitest",
-        "run",
-        "--no-cache",
-        "--coverage.enabled",
-        "--coverage.provider=v8",
-        "--coverage.all=true",
-        // A consumer config's own `coverage.thresholds` neither decide the gate's exit
-        // nor rewrite the config file — `autoUpdate` never writes during a gate run.
-        "--coverage.thresholds.lines=0",
-        "--coverage.thresholds.branches=0",
-        "--coverage.thresholds.functions=0",
-        "--coverage.thresholds.statements=0",
-        "--coverage.thresholds.autoUpdate=false",
-    ]
-    .iter()
-    .map(|arg| (*arg).to_string())
-    .collect();
+    let mut argv: Vec<String> = VITEST_BASE_ARGV
+        .iter()
+        .map(|arg| (*arg).to_string())
+        .collect();
     argv.push(format!("--coverage.reporter={reporter}"));
     argv.push(format!(
         "--coverage.reportsDirectory={}",
@@ -577,32 +582,37 @@ pub fn measure_patch_typescript_detail(
 fn istanbul_patch_detail(json: &str) -> Result<BTreeMap<String, TsPatchCoverage>> {
     let files: BTreeMap<String, IstanbulFile> = serde_json::from_str(json)
         .context("parsing vitest coverage-final (Istanbul) JSON report")?;
-    let mut out = BTreeMap::new();
-    for (path, file) in files {
-        let mut detail = TsPatchCoverage::default();
-        for (id, span) in &file.statement_map {
-            let covered = file.s.get(id).is_some_and(|&count| count > 0);
-            detail
-                .statements
-                .push((span.start.line, span.end.line, covered));
-        }
-        // v8 models a branch as one arm (a `[count]` array) or several; one tuple per
-        // arm either way.
-        for (id, branch) in &file.branch_map {
-            let line = branch.loc.start.line;
-            if let Some(counts) = file.b.get(id) {
-                for &count in counts {
-                    detail.branch_arms.push((line, count > 0));
-                }
+    Ok(files
+        .into_iter()
+        .map(|(path, file)| (path, istanbul_file_detail(&file)))
+        .collect())
+}
+
+/// One Istanbul file entry as a [`TsPatchCoverage`]. A statement spans its start and end
+/// line and is covered on a non-zero hit count; a function is pinned to its declaration
+/// line. v8 models a branch as one arm (a `[count]` array) or several, and either way this
+/// records one tuple per arm, all on the branch's start line.
+fn istanbul_file_detail(file: &IstanbulFile) -> TsPatchCoverage {
+    let mut detail = TsPatchCoverage::default();
+    for (id, span) in &file.statement_map {
+        let covered = file.s.get(id).is_some_and(|&count| count > 0);
+        detail
+            .statements
+            .push((span.start.line, span.end.line, covered));
+    }
+    for (id, branch) in &file.branch_map {
+        let line = branch.loc.start.line;
+        if let Some(counts) = file.b.get(id) {
+            for &count in counts {
+                detail.branch_arms.push((line, count > 0));
             }
         }
-        for (id, function) in &file.fn_map {
-            let covered = file.f.get(id).is_some_and(|&count| count > 0);
-            detail.functions.push((function.decl.start.line, covered));
-        }
-        out.insert(path, detail);
     }
-    Ok(out)
+    for (id, function) in &file.fn_map {
+        let covered = file.f.get(id).is_some_and(|&count| count > 0);
+        detail.functions.push((function.decl.start.line, covered));
+    }
+    detail
 }
 
 /// The `cargo llvm-cov` coverage floors, from a `[rust].coverage` table. `lines` is
@@ -969,19 +979,8 @@ fn function_start(function: &LlvmCovFunction) -> Option<(String, i64, i64)> {
 /// One record's share: its code regions, the gated source lines they map, its own execution,
 /// and the two outcomes llvm-cov counts per branch region.
 fn function_totals(function: &LlvmCovFunction, hidden: &BTreeSet<u32>) -> HiddenTotals {
-    let code: Vec<&Vec<i64>> = function
-        .regions
-        .iter()
-        .filter(|region| region.len() >= 8 && region[7] == 0)
-        .collect();
-    let mut lines: BTreeMap<u32, bool> = BTreeMap::new();
-    for region in &code {
-        for line in region[0].max(0) as u32..=region[2].max(0) as u32 {
-            if hidden.contains(&line) {
-                *lines.entry(line).or_default() |= region[4] > 0;
-            }
-        }
-    }
+    let code = code_regions(function);
+    let lines = hidden_line_coverage(&code, hidden);
     HiddenTotals {
         regions: Tally {
             count: code.len() as u64,
@@ -997,6 +996,30 @@ fn function_totals(function: &LlvmCovFunction, hidden: &BTreeSet<u32>) -> Hidden
         },
         branches: branch_tally(&function.branches),
     }
+}
+
+/// The record's *code* regions — llvm-cov tags a region's kind in slot 7, and only kind 0
+/// is code. Anything shorter than eight slots is not a region this reading understands.
+fn code_regions(function: &LlvmCovFunction) -> Vec<&Vec<i64>> {
+    function
+        .regions
+        .iter()
+        .filter(|region| region.len() >= 8 && region[7] == 0)
+        .collect()
+}
+
+/// Which of the gated `hidden` lines `code` covers. A line spanned by several regions is
+/// covered when *any* of them executed, so the entries OR together.
+fn hidden_line_coverage(code: &[&Vec<i64>], hidden: &BTreeSet<u32>) -> BTreeMap<u32, bool> {
+    let mut lines: BTreeMap<u32, bool> = BTreeMap::new();
+    for region in code {
+        for line in region[0].max(0) as u32..=region[2].max(0) as u32 {
+            if hidden.contains(&line) {
+                *lines.entry(line).or_default() |= region[4] > 0;
+            }
+        }
+    }
+    lines
 }
 
 /// Two outcomes per branch region: llvm-cov counts the true and false arms separately.
@@ -1354,6 +1377,103 @@ fn regex_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn istanbul_detail_reads_statements_branches_and_functions() {
+        let json = r#"{
+            "/pkg/src/widget.ts": {
+                "path": "/pkg/src/widget.ts",
+                "statementMap": {
+                    "0": {"start": {"line": 3}, "end": {"line": 5}},
+                    "1": {"start": {"line": 9}, "end": {"line": 9}}
+                },
+                "s": {"0": 2, "1": 0},
+                "branchMap": {"0": {"loc": {"start": {"line": 4}, "end": {"line": 7}}}},
+                "b": {"0": [1, 0]},
+                "fnMap": {
+                    "0": {"decl": {"start": {"line": 2}, "end": {"line": 2}}},
+                    "1": {"decl": {"start": {"line": 8}, "end": {"line": 8}}}
+                },
+                "f": {"0": 0, "1": 3}
+            }
+        }"#;
+        let detail = istanbul_patch_detail(json).unwrap();
+        let file = &detail["/pkg/src/widget.ts"];
+        // A statement spans start..end, and is covered only on a *positive* hit count.
+        assert!(file.statements.contains(&(3, 5, true)));
+        assert!(file.statements.contains(&(9, 9, false)));
+        // One tuple per arm, every arm on the branch's start line.
+        assert_eq!(file.branch_arms, vec![(4, true), (4, false)]);
+        // A function is pinned to its declaration line, not its body, and a positive call
+        // count is the only thing that makes it covered.
+        assert_eq!(file.functions, vec![(2, false), (8, true)]);
+    }
+
+    #[test]
+    fn a_zero_hit_count_is_uncovered_rather_than_covered() {
+        let json = r#"{
+            "/pkg/src/widget.ts": {
+                "path": "/pkg/src/widget.ts",
+                "statementMap": {"0": {"start": {"line": 1}, "end": {"line": 1}}},
+                "s": {"0": 0},
+                "branchMap": {},
+                "b": {},
+                "fnMap": {},
+                "f": {}
+            }
+        }"#;
+        let detail = istanbul_patch_detail(json).unwrap();
+        assert_eq!(detail["/pkg/src/widget.ts"].statements, vec![(1, 1, false)]);
+    }
+
+    #[test]
+    fn only_kind_zero_regions_count_as_code() {
+        let function = LlvmCovFunction {
+            filenames: vec!["a.rs".into()],
+            // slot 7 is the region kind: 0 is code, anything else is not.
+            regions: vec![vec![1, 0, 3, 0, 1, 0, 0, 0], vec![4, 0, 6, 0, 1, 0, 0, 2]],
+            count: 1,
+            branches: Vec::new(),
+        };
+        let code = code_regions(&function);
+        assert_eq!(code.len(), 1);
+        assert_eq!(code[0][0], 1);
+    }
+
+    #[test]
+    fn a_region_too_short_to_carry_a_kind_is_not_code() {
+        let function = LlvmCovFunction {
+            filenames: vec!["a.rs".into()],
+            regions: vec![vec![1, 0, 3, 0, 1]],
+            count: 1,
+            branches: Vec::new(),
+        };
+        assert!(code_regions(&function).is_empty());
+    }
+
+    #[test]
+    fn several_regions_over_one_hidden_line_or_together() {
+        let uncovered = vec![1i64, 0, 1, 0, 0, 0, 0, 0];
+        let covered = vec![1i64, 0, 1, 0, 4, 0, 0, 0];
+        let hidden: BTreeSet<u32> = [1].into_iter().collect();
+        let code: Vec<&Vec<i64>> = vec![&uncovered, &covered];
+        assert_eq!(hidden_line_coverage(&code, &hidden).get(&1), Some(&true));
+
+        let only_uncovered: Vec<&Vec<i64>> = vec![&uncovered];
+        assert_eq!(
+            hidden_line_coverage(&only_uncovered, &hidden).get(&1),
+            Some(&false)
+        );
+    }
+
+    #[test]
+    fn a_line_outside_the_gated_set_is_not_tallied() {
+        let region = vec![1i64, 0, 9, 0, 1, 0, 0, 0];
+        let code: Vec<&Vec<i64>> = vec![&region];
+        let hidden: BTreeSet<u32> = [4].into_iter().collect();
+        let lines = hidden_line_coverage(&code, &hidden);
+        assert_eq!(lines.keys().copied().collect::<Vec<u32>>(), vec![4]);
+    }
 
     fn report(percent_covered: f64, num_branches: u64) -> CoverageReport {
         CoverageReport {

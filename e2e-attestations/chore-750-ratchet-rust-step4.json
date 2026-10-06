@@ -1,0 +1,7 @@
+{
+  "command": "PATH=\"$PWD/internals/checks/.venv/bin:$HOME/.cache/testing-conventions/cargo-mutants-27.1.0/bin:$PATH\" PYTHONPATH=\"$PWD/packages/python/python\" cargo nextest run --manifest-path packages/rust/Cargo.toml -E \"binary(~_e2e) and not (test(=typescript_exempting_both_survivor_lines_passes) + test(=typescript_over_exempting_a_caught_line_is_a_hard_error) + test(=typescript_under_listing_still_fails))\"",
+  "ran_at": 1791163639,
+  "exit_code": 0,
+  "commit": "34cc388bcd0639b819bb2bb305b301bb24ab43b4",
+  "branch": "chore/750-ratchet-rust-step4"
+}

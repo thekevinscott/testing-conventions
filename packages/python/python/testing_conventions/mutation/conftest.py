@@ -19,8 +19,9 @@ import pytest
 @pytest.fixture
 def cosmic_ray():
     """Yield the adapter's cosmic-ray seams as configurable mocks. ``db`` is the fake
-    ``WorkDB`` a test configures (``db.results`` for the baseline, ``db.completed_work_items``
-    for the session); the rest are the ``find_modules`` / ``init`` / ``execute`` / ... calls."""
+    ``WorkDB`` a test configures (``db.results`` for the baseline, ``db.work_items`` and
+    ``db.completed_work_items`` for the session); the rest are the ``find_modules`` /
+    ``init`` / ``execute`` / ... calls."""
     saved = {
         name: mod
         for name, mod in sys.modules.items()
@@ -30,13 +31,15 @@ def cosmic_ray():
         del sys.modules[name]
 
     seams = SimpleNamespace(
-        db=MagicMock(name="WorkDB"),
+        db=MagicMock(name="WorkDB", work_items=[]),
         deserialize_config=MagicMock(name="deserialize_config"),
         find_modules=MagicMock(name="find_modules", return_value=[]),
         filter_paths=MagicMock(name="filter_paths", side_effect=lambda mods, excl: list(mods)),
         init=MagicMock(name="init"),
         execute=MagicMock(name="execute"),
         WorkItem=MagicMock(name="WorkItem"),
+        WorkResult=MagicMock(name="WorkResult"),
+        WorkerOutcome=SimpleNamespace(SKIPPED="skipped"),
     )
 
     @contextlib.contextmanager
@@ -59,7 +62,12 @@ def cosmic_ray():
     root.work_db = module(
         "cosmic_ray.work_db", use_db=use_db, WorkDB=SimpleNamespace(Mode=SimpleNamespace(create=1))
     )
-    root.work_item = module("cosmic_ray.work_item", WorkItem=seams.WorkItem)
+    root.work_item = module(
+        "cosmic_ray.work_item",
+        WorkItem=seams.WorkItem,
+        WorkResult=seams.WorkResult,
+        WorkerOutcome=seams.WorkerOutcome,
+    )
 
     yield seams
 

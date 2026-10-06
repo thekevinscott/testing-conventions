@@ -40,3 +40,22 @@ def test_a_string_module_path_is_wrapped_in_a_list(cosmic_ray):
     cosmic_ray.db.completed_work_items = []
     run_session(_config("calc.py"))
     cosmic_ray.find_modules.assert_called_once_with([Path("calc.py")])
+
+
+def test_a_mutation_inside_an_annotation_is_skipped_before_execute(cosmic_ray, tmp_path):
+    from testing_conventions.mutation.session import run_session
+
+    module = tmp_path / "calc.py"
+    module.write_text("def add(a: int | None, b: int) -> int:\n    return a or b\n")
+    # Line 1 column 15 is the `|` of `int | None`, so the engine never judges this work item:
+    # the skip records its result, and `execute` schedules only the items carrying none.
+    mutation = SimpleNamespace(module_path=str(module), start_pos=(1, 15), end_pos=(1, 16))
+    cosmic_ray.db.work_items = [SimpleNamespace(job_id="annotation", mutations=[mutation])]
+    cosmic_ray.db.completed_work_items = []
+
+    assert run_session(_config([str(tmp_path)])) == []
+
+    cosmic_ray.db.set_result.assert_called_once_with(
+        "annotation", cosmic_ray.WorkResult.return_value
+    )
+    cosmic_ray.execute.assert_called_once()

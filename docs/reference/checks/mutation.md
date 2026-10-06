@@ -58,6 +58,20 @@ decision is assertable once it moves out: a pure function that returns the argv,
 runs it. That is the shape the mutation adapter's own `install_argv` + `execute` pair already
 takes. The drop is for the irreducible last mile, not for everything that spawns.
 
+In Python, a mutant inside a **type annotation** is dropped: a parameter annotation, a return
+annotation, an annotated assignment's type, and a `type` alias's value. An annotation holds type
+metadata, and the interpreter need never evaluate it — `from __future__ import annotations`
+(PEP 563) keeps it a string, and from Python 3.14 on every annotation is lazy (PEP 649) — so the
+rewritten operator in `def f(x: dict | None) -> int | None` executes no code, at import or at call,
+and the suite has nothing to fail on. Stryker and cargo-mutants read a type as a type and offer no
+mutant there; cosmic-ray matches operators over the token tree, so the adapter scopes the drop to
+the annotation's own span and skips those mutants before the suite runs.
+
+The drop is scoped to the annotation's span, not to its line. A default value beside an annotation —
+`def f(x: int | None, n: int = 10 - 4)` — is live code evaluated when the `def` runs, sits outside
+the annotation's span, and keeps every mutant it has. So does a `cast(int | None, x)` call, whose
+arguments the interpreter does evaluate.
+
 <!--@include: ../../explanation/mutation.md#engines-->
 
 ### Timeouts
@@ -89,8 +103,8 @@ A passing run states which fact made it green:
   engine ran, judged that many mutants conclusively (always at least one), and the suite (or a
   reasoned exemption) accounted for every one.
 - `unit mutation: the engine found no mutants to test` — the changed lines hold source, but no
-  mutant sites (a signature move, a `const` value, a tests-only edit, every mutant a
-  declaration-only module produced): the engine ran and had nothing to judge.
+  mutant sites (a signature move, a `const` value, a tests-only edit, a Python annotation-only
+  edit, every mutant a declaration-only module produced): the engine ran and had nothing to judge.
 - `unit mutation: no mutatable changed lines — engine not run` — the diff's changed lines hold
   no source files for the language (a docs-only or workflow-only pull request), or for
   TypeScript, only declaration-only modules — filtered out before Stryker ever runs — so the

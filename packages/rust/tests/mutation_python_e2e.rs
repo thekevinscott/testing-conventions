@@ -147,6 +147,44 @@ fn a_declaration_only_change_reports_nothing_tested() {
 }
 
 #[test]
+fn an_annotation_only_change_reports_nothing_tested() {
+    let repo = GitRepo::new("py-annotation-only");
+    repo.write(
+        "calc.py",
+        "from __future__ import annotations\n\n\ndef add(a: int, b: int) -> int:\n    return a + b\n",
+    );
+    repo.write(
+        "calc_test.py",
+        "from calc import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n    assert add(-1, 1) == 0\n",
+    );
+    repo.commit("baseline: a fully-tested add");
+    let base = repo.head();
+    repo.write(
+        "calc.py",
+        "from __future__ import annotations\n\n\ndef add(a: int | None, b: int) -> int | None:\n    return a + b\n",
+    );
+    repo.commit("widen the annotations");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "python"])
+        .args(["--base", &base])
+        .arg(repo.path())
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "an annotation-only change passes; stdout: {stdout}; stderr: {stderr}"
+    );
+    assert!(
+        stdout.contains(NOTHING_TESTED),
+        "the changed line's only mutants sit inside annotations, leaving nothing tested; got: {stdout}"
+    );
+}
+
+#[test]
 fn a_scan_path_that_is_not_there_names_the_directory_not_the_interpreter() {
     let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
         .args(["unit", "mutation", "--language", "python", "no/such/dir"])

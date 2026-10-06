@@ -131,6 +131,28 @@ fn a_declaration_only_module_leaves_no_survivors() {
 }
 
 #[test]
+fn a_mutant_inside_an_annotation_leaves_no_survivors() {
+    let package = Staged::python("annotations");
+    let (count, survivors) = expect_tested(
+        measure_python(
+            &package.path().join("src"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+        )
+        .expect("cosmic-ray runs"),
+    );
+    assert!(
+        survivors.is_empty(),
+        "an annotation is never evaluated, so its mutants are not judged; got {survivors:?}"
+    );
+    assert!(
+        count > 0,
+        "the body and the parameter default are still judged, so the count is non-zero"
+    );
+}
+
+#[test]
 fn a_mutation_exemption_drops_the_survivors() {
     let package = Staged::python("survivors");
     let exempt = vec!["calc.py".to_string()];

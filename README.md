@@ -286,6 +286,12 @@ Rust mutation runs the library unit target with `--lib`. A survivor means that t
 assert the line; an integration or e2e test may cover it. A line-scoped exemption with a reason
 naming that test records the tier boundary.
 
+Python mutation drops a mutant inside a type annotation — a parameter or return annotation, an
+annotated assignment's type, a `type` alias's value. An annotation holds type metadata the
+interpreter need never evaluate (`from __future__ import annotations`, and every annotation from
+3.14 on), so the rewrite executes no code and no test can fail on it. Live code beside an
+annotation, a parameter default among them, keeps every mutant it has.
+
 Mutation is a binary gate, not a score — equivalent mutants (mutations no test can
 ever kill) make 100% unreachable, and a score isn't comparable across engines.
 Instead the check is diff-scoped: **no unexplained surviving mutant on changed

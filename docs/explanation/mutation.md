@@ -109,6 +109,32 @@ produce their own mutators over these wrappers, and whether the same argument ho
 question about that engine's operator set, not about the language. A TypeScript or Python wrapper
 that hits the equivalent still takes a line-scoped exemption.
 
+## A Python annotation is metadata, not behavior
+
+The second survivor class the tool recognizes is an annotation. `def f(x: dict | None) -> int |
+None` carries two `|` operators, and cosmic-ray rewrites each of them the way it rewrites any
+other: `dict + None`, `dict & None`, eleven variants per site. None of them runs. An annotation is
+type metadata, and the interpreter is free never to evaluate it — `from __future__ import
+annotations` (PEP 563) keeps the whole annotation a string, and from Python 3.14 on laziness is
+the default (PEP 649), where an annotation is evaluated only if something asks for it. A mutation
+of code that never executes cannot fail a test, so every one of those mutants survives a suite
+that pins the function's behavior completely.
+
+That is the textbook equivalent mutant, and the conclusion the gate draws from it is the whole
+reason the gate is binary: a survivor no test can kill is not a measurement. So the tool does not
+hand this one to the consumer as an exemption to write. An exemption records a judgment the author
+made, and a hundred copies of "this is an annotation" records a missing rule — the same argument
+the subprocess seam settles above. The adapter skips the mutants inside each annotation's span
+before the suite runs, so they are never judged and never cost a suite run.
+
+Scoping to the span rather than the line is what keeps the rule from swallowing real gaps. A
+default value shares the `def` line with its annotation and *is* evaluated when the `def` runs, so
+`n: int = 10 - 4` keeps every mutant it has; so does a `cast(int | None, x)` whose arguments the
+interpreter really does evaluate. Python is also the only arm that needs this: Stryker and
+cargo-mutants read a type as a type and never offer a mutant inside one, while cosmic-ray matches
+operators over the token tree, where a type and an expression look alike. The drop brings the
+Python arm to the behavior the other two engines already have.
+
 ## A pass names its evidence
 
 The check has three green outcomes, and they are different facts — so the run reports which one
@@ -118,8 +144,8 @@ it earned. A run that tested mutants states the count:
 
 so the pass carries its own evidence, and the count is always at least one. A diff-scoped run
 whose changed source lines hold no mutant site — a signature move, a `const` value, a tests-only
-edit, a declaration-only module's mutants dropped before judging — runs the engine, finds nothing
-to judge, and says so:
+edit, a Python annotation-only edit, a declaration-only module's mutants dropped before judging —
+runs the engine, finds nothing to judge, and says so:
 
 > `unit mutation: the engine found no mutants to test`
 

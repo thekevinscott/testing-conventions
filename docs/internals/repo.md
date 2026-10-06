@@ -1177,5 +1177,9 @@ commit with no stated rationale.
 ref-scoped concurrency* above: a run cancelled for a reason unrelated to the PR's code still reaches
 `CI Gate` as a failure. The generalizable rule is in AGENTS.md under *PR workflow concurrency* —
 scope both the concurrency group and the trigger types so that only a superseding **code** change
-cancels a run. Re-running the gate treats the symptom; `pr-monitor` is reporting the cancellation
+cancels a run.
+
+`edited` is not wrong in itself; pairing it with `cancel-in-progress` is. A check whose verdict
+really does depend on the title or body has earned the trigger — it just must not also claim that a
+body edit supersedes a run, because a body edit changes nothing about the tree. Re-running the gate treats the symptom; `pr-monitor` is reporting the cancellation
 accurately and a bypass is never the remedy.

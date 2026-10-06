@@ -1033,6 +1033,15 @@ mod tests {
     }
 
     #[test]
+    fn diagnostic_detail_joins_every_diagnostic_a_parse_reported() {
+        let none: &[&str] = &[];
+        assert_eq!(diagnostic_detail(none), "");
+        assert_eq!(diagnostic_detail(&["first"]), "first");
+        // Every diagnostic, not just the first: a second error is as much of the reason.
+        assert_eq!(diagnostic_detail(&["first", "second"]), "first; second");
+    }
+
+    #[test]
     fn unsupported_extension_is_reported() {
         let err = integration_violations_in(Path::new("weird.test.bogus"), "vi.mock('./x');\n")
             .unwrap_err();

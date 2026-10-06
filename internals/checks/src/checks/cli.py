@@ -34,6 +34,7 @@ from checks.packaging_package_root_wired.cli import cli as packaging_package_roo
 from checks.packaging_red.cli import cli as packaging_red
 from checks.path_length_gate.cli import cli as path_length_gate
 from checks.pnpm_version_wired.cli import cli as pnpm_version_wired
+from checks.published_detect_contract.cli import cli as published_detect_contract
 from checks.python_mutation_clean.cli import cli as python_mutation_clean
 from checks.red_path_hermetic_wired.cli import cli as red_path_hermetic_wired
 from checks.release_lockstep_wired.cli import cli as release_lockstep_wired
@@ -84,6 +85,7 @@ main.add_command(packaging_package_root_wired, name="packaging-package-root-wire
 main.add_command(packaging_red, name="packaging-red")
 main.add_command(path_length_gate, name="path-length-gate")
 main.add_command(pnpm_version_wired, name="pnpm-version-wired")
+main.add_command(published_detect_contract, name="published-detect-contract")
 main.add_command(python_mutation_clean, name="python-mutation-clean")
 main.add_command(red_path_hermetic_wired, name="red-path-hermetic-wired")
 main.add_command(release_lockstep_wired, name="release-lockstep-wired")

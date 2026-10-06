@@ -46,8 +46,10 @@ def run_in(repo, *arguments):
 
 def without_output(manifest, name):
     """`manifest` with the `name:` output and its body dropped, as the tag carried it before."""
+    # Bounded to the `outputs:` mapping: `config` names both an input and an output, and dropping
+    # the input leaves the output in place, so the check passes and the case proves nothing.
     lines = manifest.split("\n")
-    start = lines.index(f"  {name}:")
+    start = lines.index(f"  {name}:", lines.index("outputs:"))
     end = next(i for i in range(start + 1, len(lines)) if not lines[i].startswith("    "))
     return "\n".join(lines[:start] + lines[end:])
 

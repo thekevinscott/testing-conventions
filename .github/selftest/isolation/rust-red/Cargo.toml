@@ -1,5 +1,5 @@
-# Violating fixture crate for the `unit lint` job: its inline unit test performs real
-# filesystem I/O, so `no-out-of-module-call` fires and the binary exits non-zero.
+# Violating fixture crate for the `unit lint` job: its inline unit test opens a real
+# socket, so `no-out-of-module-call` fires and the binary exits non-zero.
 # `[workspace]` isolates it from cargo (the rule parses it, never compiles it).
 [package]
 name = "iso_selftest_red"

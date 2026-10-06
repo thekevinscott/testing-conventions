@@ -37,9 +37,11 @@ end to end.
     `super::`. Driven through the reusable workflow under `["rust"]`, it proves
     `detect` recognizes a crate (a `Cargo.toml` / `*.rs`) and fans the isolation job
     over `rust`, then passes the well-isolated unit.
-  - `rust-red/` — the same shape but its unit test performs real filesystem I/O
-    (`std::fs`), an out-of-module effectful-`std` call, so `unit lint` exits
-    non-zero. (The fail path drives the published command directly, since a failing
+  - `rust-red/` — the same shape but its unit test opens a real socket
+    (`std::net`), an out-of-module effectful-`std` call, so `unit lint` exits
+    non-zero. `std::fs` is deliberately legal for a Rust unit test, so the
+    violation this fixture states has to be one of the reaches the rule still
+    catches. (The fail path drives the published command directly, since a failing
     `uses:` call would fail the whole run.) The workflow's isolation job covers
     Python, TypeScript, and Rust; the Python arm rides the
     `clean` / `absent-language-skipped` jobs.

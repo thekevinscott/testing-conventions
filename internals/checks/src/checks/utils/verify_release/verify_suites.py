@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timezone
 
 from checks.utils.verify_release.await_run import await_run
+from checks.utils.verify_release.await_version import await_version
 from checks.utils.verify_release.run_bytes import run_bytes
 from checks.utils.verify_release.watch_conclusion import watch_conclusion
 
@@ -30,8 +31,11 @@ def verify_suites(
 ) -> dict:
     """Dispatch every workflow in `workflows` at `sha` with `version`; return `{workflow: conclusion}`.
 
-    One throwaway tag at `sha` is the dispatch ref (`workflow_dispatch` takes a branch/tag, never a
-    bare SHA); all workflows dispatch before any await, and a `finally` deletes the tag either way."""
+    Every dispatched job installs `version` from npm, so the wait for the registry to serve it comes
+    first. One throwaway tag at `sha` is the dispatch ref (`workflow_dispatch` takes a branch/tag,
+    never a bare SHA); all workflows dispatch before any await, and a `finally` deletes the tag
+    either way."""
+    await_version(version, run, sleep, clock)
     tag = f"{TEMP_TAG_PREFIX}{sha}"
     run_bytes(run, ["git", "push", "origin", f"{sha}:refs/tags/{tag}"])
     try:

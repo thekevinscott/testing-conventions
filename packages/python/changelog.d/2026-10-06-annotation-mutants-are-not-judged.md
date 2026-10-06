@@ -4,4 +4,4 @@ runs. An annotation holds type metadata the interpreter need never evaluate (`fr
 import annotations`, and every annotation from Python 3.14 on, per PEP 649), so cosmic-ray's
 rewrite of an operator there executes no code and no test can fail on it. Such a mutant survived
 a suite that pinned the function's behavior completely, failing the check on fully-tested code.
-Live code beside an annotation, a parameter default among it, keeps every mutant it has.
+Live code beside an annotation keeps every mutant it has, a parameter default included.

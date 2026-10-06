@@ -290,7 +290,7 @@ Python mutation drops a mutant inside a type annotation — a parameter or retur
 annotated assignment's type, a `type` alias's value. An annotation holds type metadata the
 interpreter need never evaluate (`from __future__ import annotations`, and every annotation from
 3.14 on), so the rewrite executes no code and no test can fail on it. Live code beside an
-annotation, a parameter default among them, keeps every mutant it has.
+annotation keeps every mutant it has, a parameter default included.
 
 Mutation is a binary gate, not a score — equivalent mutants (mutations no test can
 ever kill) make 100% unreachable, and a score isn't comparable across engines.

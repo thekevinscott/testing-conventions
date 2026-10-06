@@ -9,8 +9,8 @@ SIGNATURE = "def add(a: int | None, b: int = 10 - 4) -> int | None:\n    return 
 
 
 def test_a_signatures_parameter_and_return_annotations_each_get_a_span():
-    # `int | None` at columns 11 and 43, `int` at 26 — and `10 - 4`, the default, is live code
-    # with no span of its own.
+    # The `10 - 4` default sits between the two annotations and gets no span: a span that ran
+    # to the end of the line would unjudge a mutant the suite does kill.
     assert sorted(annotation_spans(SIGNATURE)) == [
         ((1, 11), (1, 21)),
         ((1, 26), (1, 29)),

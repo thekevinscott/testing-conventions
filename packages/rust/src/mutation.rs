@@ -1667,21 +1667,24 @@ mod tests {
     #[test]
     fn a_normalized_measurement_reports_the_conclusive_count_and_the_kept_survivors() {
         let mutants = parse_normalized_results(NORMALIZED).unwrap();
-        let measurement = normalized_measurement(&mutants, &[], &BTreeMap::new()).unwrap();
-        let Measurement::Tested { count, survivors } = measurement else {
-            panic!("a judged mutant set is always `Tested`");
-        };
-        assert_eq!(count, 3);
-        assert_eq!(survivors.len(), 2);
+        assert_eq!(
+            normalized_measurement(&mutants, &[], &BTreeMap::new()).unwrap(),
+            Measurement::Tested {
+                // Survived, no-coverage and killed are conclusive; timeout, compile error
+                // and runtime error are not.
+                count: 3,
+                survivors: normalized_survivors(&mutants),
+            }
+        );
 
         // A whole-file exemption drops the survivors without changing what was tested.
-        let lifted =
-            normalized_measurement(&mutants, &["src/a.ts".to_string()], &BTreeMap::new()).unwrap();
-        let Measurement::Tested { count, survivors } = lifted else {
-            panic!("a judged mutant set is always `Tested`");
-        };
-        assert_eq!(count, 3);
-        assert!(survivors.is_empty());
+        assert_eq!(
+            normalized_measurement(&mutants, &["src/a.ts".to_string()], &BTreeMap::new()).unwrap(),
+            Measurement::Tested {
+                count: 3,
+                survivors: vec![],
+            }
+        );
     }
 
     #[test]

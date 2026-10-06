@@ -203,3 +203,64 @@ fn a_malformed_fragment_name_exits_nonzero_and_annotates_the_file() {
         "annotates the offending file: {stdout}"
     );
 }
+
+#[test]
+fn changing_package_source_with_a_changelog_fragment_alone_exits_zero() {
+    let (repo, base) = seeded("not-breaking");
+    repo.write("packages/parser/src/lex.py", "def lex():\n    return 1\n");
+    repo.write(
+        "packages/parser/changelog.d/2026-10-06-lex-returns.md",
+        "x\n",
+    );
+    repo.commit("feat: lex returns");
+
+    let out = repo.changelog(&base);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
+
+#[test]
+fn a_breaking_line_without_a_migrations_fragment_exits_nonzero() {
+    let (repo, base) = seeded("breaking");
+    repo.write("packages/parser/src/lex.py", "def lex():\n    return 1\n");
+    repo.write(
+        "packages/parser/changelog.d/2026-10-06-lex-returns.md",
+        "x\n",
+    );
+    repo.commit("feat!: lex returns\n\nbreaking: lex returns a value now");
+
+    let out = repo.changelog(&base);
+    assert_eq!(out.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("migrations fragment"),
+        "names the fragment the breaking change owes: {stdout}"
+    );
+}
+
+#[test]
+fn a_breaking_line_with_both_fragments_exits_zero() {
+    let (repo, base) = seeded("breaking-paid");
+    repo.write("packages/parser/src/lex.py", "def lex():\n    return 1\n");
+    repo.write(
+        "packages/parser/changelog.d/2026-10-06-lex-returns.md",
+        "x\n",
+    );
+    repo.write(
+        "packages/parser/migrations.d/2026-10-06-lex-returns.md",
+        "x\n",
+    );
+    repo.commit("feat!: lex returns\n\nbreaking: lex returns a value now");
+
+    let out = repo.changelog(&base);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}

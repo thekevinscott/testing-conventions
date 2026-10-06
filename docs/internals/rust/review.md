@@ -26,7 +26,7 @@ If the agent didn't run these, ask it to. If they fail, the agent should fix bef
 7. **Reinvention** — did the agent rebuild something a standard crate provides?
 8. **Naming** — `new`/`with_*`/`from`/`try_*` for constructors?
 9. **Public API** — `pub` surface intentional (not over-exposed); typed `thiserror` errors in libraries; `#[non_exhaustive]` where the type will grow.
-10. **CHANGELOG.md + MIGRATIONS.md** — both touched for any consumer-observable change, or a `skip-changelog:` trailer present (philosophy in [../repo.md](../repo.md)).
+10. **changelog + migration fragments** — a changelog fragment for any consumer-observable change, a migration fragment where a `breaking:` line marks the change breaking, or a `skip-changelog:` trailer present (philosophy in [../repo.md](../repo.md)).
 11. **`putitoutthere.toml`** — `globs` cover every source path that should cascade a release; polyglot CLIs declare `depends_on` correctly.
 
 ---

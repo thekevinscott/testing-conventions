@@ -45,12 +45,14 @@ Every PR starts with **documentation, written alongside the red tests** — both
 
 ## Changelog and migrations are fragments
 
-A PR that changes public API under `packages/<pkg>/` adds **one new file** to each of that
-package's fragment directories: `packages/<pkg>/changelog.d/YYYY-MM-DD-<slug>.md` and
-`packages/<pkg>/migrations.d/YYYY-MM-DD-<slug>.md`. The `changelog` check — the reusable
-workflow's `CHANGELOG + MIGRATIONS touched` job, run over this repo by `dogfood.yml` — requires
+A PR that changes public API under `packages/<pkg>/` adds **one new file** to that package's
+`packages/<pkg>/changelog.d/YYYY-MM-DD-<slug>.md`. A PR that **breaks** a consumer says so with a
+`breaking: <summary>` line on any commit, and that line requires one new file in
+`packages/<pkg>/migrations.d/YYYY-MM-DD-<slug>.md` too. The `changelog` check — the reusable
+workflow's `CHANGELOG + MIGRATIONS touched` job, run over this repo by `dogfood.yml` — enforces
 both per changed package; a `skip-changelog: <reason>` line on any commit bypasses it for a
-genuinely internal refactor.
+genuinely internal refactor. A migration fragment written without the `breaking:` line is allowed:
+the line makes one required, never forbidden.
 
 The package-root `CHANGELOG.md` and `MIGRATIONS.md` are a **frozen archive** of the entries
 written before this convention. Never append to them — a shared file every PR edits at the same

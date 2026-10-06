@@ -8,12 +8,19 @@ Each package records its changes as **fragments** — one file per change, added
 `packages/<pkg>/changelog.d/` and `packages/<pkg>/migrations.d/`. The convention below is global;
 every language package follows it.
 
-A PR that changes public API under `packages/<pkg>/` adds one fragment to each of that package's
-two fragment directories. Enforced in CI by the reusable workflow's `changelog` check, which
+A PR that changes public API under `packages/<pkg>/` adds one fragment to that package's
+`changelog.d/`, and — when it carries a `breaking: <summary>` line on any commit — one to its
+`migrations.d/` as well. Enforced in CI by the reusable workflow's `changelog` check, which
 `dogfood.yml` runs over this repo; a `skip-changelog: <reason>` line on any commit bypasses it for
-genuinely internal refactors, and the reason stays in git history. The rule itself lives in the
+genuinely internal refactors, and both reasons stay in git history. The rule itself lives in the
 shipped CLI (`packages/rust/src/changelog.rs`), which is the one implementation this repo and every
 consumer run.
+
+**Marking a breaking change.** The `breaking:` line is what makes the migration fragment required:
+the author of the change states the breakage, and the check reads it from the PR's commits. Write
+one whenever a consumer must change something to upgrade — a renamed or removed export, a changed
+CLI flag or config key, a different default. A migration fragment added without the line is
+allowed; the line makes one required, never forbidden.
 
 **Why fragments.** A shared file that every PR appends to at the same anchor makes concurrent PRs
 conflict by construction: the gate requires each PR to edit it, and the convention puts each new

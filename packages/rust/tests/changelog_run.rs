@@ -113,3 +113,75 @@ fn a_scope_that_added_its_fragment_passes() {
     repo.commit("feat(parser): change public surface, with its fragment");
     assert_eq!(changelog(&base, repo.path()), 0);
 }
+
+/// A per-package tree keeping both fragment directories, whose `parser` scope has uncommitted
+/// code changes since the returned base.
+fn owing_with_migrations(slug: &str) -> (TempRepo, String) {
+    let repo = TempRepo::new(slug);
+    repo.write("packages/parser/changelog.d/.gitkeep", "")
+        .write("packages/parser/migrations.d/.gitkeep", "")
+        .write("packages/parser/src/parse.ts", "export const a = 1;\n");
+    let base = repo.commit("baseline");
+    repo.write("packages/parser/src/parse.ts", "export const a = 2;\n");
+    (repo, base)
+}
+
+#[test]
+fn a_changelog_fragment_alone_pays_when_no_commit_calls_the_change_breaking() {
+    let (repo, base) = owing_with_migrations("not-breaking");
+    repo.write(
+        "packages/parser/changelog.d/2026-10-06-change-a.md",
+        "changed a\n",
+    );
+    repo.commit("feat(parser): change public surface");
+    assert_eq!(
+        changelog(&base, repo.path()),
+        0,
+        "a repository keeping migrations.d owes a migration for a breaking change alone"
+    );
+}
+
+#[test]
+fn a_breaking_line_requires_a_migrations_fragment() {
+    let (repo, base) = owing_with_migrations("breaking");
+    repo.write(
+        "packages/parser/changelog.d/2026-10-06-change-a.md",
+        "changed a\n",
+    );
+    repo.commit("feat(parser)!: drop the legacy flag\n\nbreaking: the --legacy flag is gone");
+    assert_eq!(changelog(&base, repo.path()), 1);
+}
+
+#[test]
+fn a_breaking_line_is_paid_by_both_fragments() {
+    let (repo, base) = owing_with_migrations("breaking-paid");
+    repo.write(
+        "packages/parser/changelog.d/2026-10-06-change-a.md",
+        "changed a\n",
+    );
+    repo.write(
+        "packages/parser/migrations.d/2026-10-06-change-a.md",
+        "migrate a\n",
+    );
+    repo.commit("feat(parser)!: drop the legacy flag\n\nbreaking: the --legacy flag is gone");
+    assert_eq!(changelog(&base, repo.path()), 0);
+}
+
+#[test]
+fn a_migrations_fragment_no_commit_asked_for_is_allowed() {
+    let (repo, base) = owing_with_migrations("unsolicited");
+    repo.write(
+        "packages/parser/changelog.d/2026-10-06-change-a.md",
+        "changed a\n",
+    );
+    repo.write(
+        "packages/parser/migrations.d/2026-10-06-change-a.md",
+        "migrate a\n",
+    );
+    repo.commit("feat(parser): change public surface");
+    assert_eq!(
+        changelog(&base, repo.path()),
+        0,
+        "the `breaking:` line makes a migrations fragment required, never forbidden"
+    );
+}

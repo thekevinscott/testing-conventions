@@ -24,8 +24,8 @@ tree holds the record in between.
 For every package whose public surface the pull request changed:
 
 - One **added** file under that package's `changelog.d/`.
-- One **added** file under that package's `migrations.d/`, where the repository keeps migration
-  fragments.
+- One **added** file under that package's `migrations.d/`, when a commit in the pull request
+  carries a [`breaking:` line](#breaking).
 
 A file that was modified doesn't satisfy the check — the gate reads the diff filtered to
 additions, because a fragment satisfies it only when the pull request writes a new one.
@@ -66,8 +66,8 @@ about the repository rather than something you declare.
 When the repository holds at least one fragment directory; **skipped, never failed** otherwise, so
 the drop-in is safe on a repository that doesn't keep a changelog this way.
 
-Migration fragments are enforced when the repository keeps a `migrations.d/`. A repository that
-wants changelog entries alone keeps `changelog.d/` and the migrations arm stays quiet.
+Migration fragments are enforced for the pull requests that mark themselves breaking — see
+[Marking a breaking change](#breaking).
 
 The reusable workflow runs it on pull requests as the `CHANGELOG + MIGRATIONS touched` job, which
 the [`gates` input](/reference/workflow#inputs) names `changelog`. Run it from the CLI, naming the
@@ -76,6 +76,22 @@ pull request's base:
 ```sh
 npx testing-conventions changelog --base "$BASE"
 ```
+
+## Marking a breaking change {#breaking}
+
+A `breaking: <summary>` line on any commit in the pull request requires a **migrations** fragment
+beside the changelog fragment, for every package the pull request owes fragments for. The line is
+matched anywhere in any commit body, case-insensitively, the same way the bypass line below is, so
+it works from a commit whose body already carries other text.
+
+The signal is **opt-in by design**: the author of the change marks the breakage, and a pull request
+whose commits carry no `breaking:` line owes a changelog fragment alone. That is the trade for a
+check that reads no configuration — a repository keeping a `migrations.d/` records the breaking
+subset of its history, which says nothing about the pull request in front of the check, so the pull
+request states the fact itself.
+
+A migrations fragment the pull request adds **without** the line is allowed: the line makes a
+migrations fragment required, never forbidden.
 
 ## The bypass
 
@@ -90,8 +106,8 @@ that a human made the call, it doesn't judge the reason.
 ## Configuration
 
 The check reads no configuration. The fragment directories are discovered, the filename
-convention is fixed, and whether migrations are enforced follows from whether the repository
-keeps that directory.
+convention is fixed, and whether migrations are enforced follows from the pull request's own
+commits.
 
 The check honors no exemption rules — a package's public surface either got a fragment or it
 didn't.

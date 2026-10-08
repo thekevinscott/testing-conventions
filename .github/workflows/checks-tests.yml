@@ -5,6 +5,12 @@ name: Checks package (tests)
 
 on:
   pull_request:
+  # A merge can break `main` even when both parents passed: two PRs that touch different lines
+  # of one file merge without conflict, and each lane only ever tested its own stale base. No
+  # paths filter here on purpose — main's health should be a known fact after every merge, not a
+  # guess conditioned on what the last merge happened to touch.
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -12,7 +18,10 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Scope cancellation to PR pushes so the `push: [main]` run is never cancelled out from under
+  # itself. A cancellation is a permanent fact of a sha's run history, so a cancelled main build
+  # leaves that commit's verdict unknowable without a new sha.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:

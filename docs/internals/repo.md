@@ -1314,6 +1314,31 @@ one workflow-level `group: pages` shared by every PR and main, put all pending r
 queue where a newer pending run cancels the older one; a cancelled PR build then reads as a
 non-passing run to pr-monitor's CI Gate, failing PRs on repo-wide docs traffic they never touched.
 
+## Building `main`: two green PRs that broke it
+
+`rust.yml`, `node.yml`, `python.yml` and `checks-tests.yml` each trigger on `push: [main]` as well
+as `pull_request`, with no `paths:` filter on the push.
+
+The reason is a failure CI cannot see from a pull request. Every PR's lane runs against that PR's
+**base**, which is whatever `main` was when the branch last moved. Two PRs that touch different
+lines of one file merge without a conflict and without either lane ever evaluating the combination.
+On 2026-10-06 #778 landed tests reading `Facts.migrations` and #776 then removed that field: both
+were green, the merge was clean, and `main` stopped compiling. Nothing on push to `main` built the
+crate, so `main` read green for two days and the breakage surfaced as unrelated failures on #774
+and #781 — PRs whose own diffs were fine. The cost was paid in debugging those.
+
+The push trigger carries no `paths:` filter deliberately. A filter would make `main`'s health
+conditional on what the last merge happened to touch, so a docs-only merge landing on an already
+broken `main` would report nothing. The property worth having is that `main`'s state is a known
+fact after every merge, which also makes a scheduled job unnecessary: merges are the only thing
+that change `main`.
+
+Detection is not prevention. These lanes tell you `main` broke, shortly after it broke, and name
+the merge commit; they do not stop the merge. The preventive setting is branch protection's
+*Require branches to be up to date before merging*, which forces each PR to re-run against the real
+base — at the cost of serializing merges behind a full CI run each. That is a repository-settings
+decision, not a workflow one, and is deliberately left open.
+
 ## Path length: an `edited` trigger cancelling its own runs
 
 `path-length.yml` shipped in #675 triggering on `pull_request: types: [opened, synchronize,

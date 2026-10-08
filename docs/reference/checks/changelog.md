@@ -37,9 +37,14 @@ and hyphens. A fragment whose name doesn't match is reported against its own pat
 annotation lands on the offending file.
 
 The date prefix sorts the directory chronologically, which is what lets the release step read the
-fragments in order. The slug is free text: a repository pooling fragments from several packages in
-one directory writes the package into the slug (`2026-09-21-parser-drop-legacy-flag.md`) and the
-name parses unchanged.
+fragments in order. Under the per-package layout the directory names the package, so the slug is
+free text.
+
+Under the pooled layout one directory holds every package's fragments, so the slug opens with the
+package: `YYYY-MM-DD-<pkg>-<slug>.md`, where `<pkg>` is the directory name of the package whose
+surface changed — `2026-09-21-parser-drop-legacy-flag.md` pays for `packages/parser`. Both kinds
+follow it, and a fragment naming another package leaves this one unpaid. A pooled repository with
+no discoverable package root has no package name to carry, so there any well-formed name pays.
 
 ### What a package may change without owing a fragment
 
@@ -50,6 +55,22 @@ A path is exempt when it isn't public surface:
 - `e2e-attestations/` — CI freshness receipts, written by automation.
 - Test files, in the shapes
   [`colocated-test`](./colocated-test) already derives for the package's language.
+- Anything outside every package — see **What counts as a package** below.
+
+### What counts as a package {#packages}
+
+Under the per-package layout the fragment directory answers it: a package is the directory holding
+`changelog.d/`.
+
+Under the pooled layout the fragment directories sit outside every package and say nothing about
+where the packages are, so the check discovers them. A **package root** is a directory inside a
+container directory holding a manifest — `packages/parser/package.json`,
+`crates/lexer/Cargo.toml`, `packages/engine/pyproject.toml` — the same manifests the other checks
+walk to when they resolve a package root. Public surface is what sits under one, so a root
+`README.md`, a `docs/` page, or repository tooling outside every package owes no fragment.
+
+A repository where no package root is discoverable is treated as one package at its root: every
+non-exempt path is public surface.
 
 ## The two layouts
 
@@ -58,8 +79,10 @@ about the repository rather than something you declare.
 
 - **Per package.** `packages/<pkg>/changelog.d/` — the fragment's owning package is its parent
   directory, and the check reports one finding per package that owes one.
-- **Pooled at the repository root.** A single `changelog.d/` outside any package — the check runs
-  repository-scoped: a pull request that changed public surface anywhere adds one fragment.
+- **Pooled.** A single `changelog.d/` outside any package — every package's fragments share one
+  directory. The check reports one finding per package that owes one, as the per-package layout
+  does; the fragment's **name** says which package it pays for, where the per-package layout's
+  directory does.
 
 ## When it runs
 

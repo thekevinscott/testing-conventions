@@ -75,7 +75,10 @@ fn the_container_directories_are_discovered_not_assumed() {
 fn a_fragment_dir_outside_any_package_is_the_pooled_layout() {
     let tree = TempTree::new("pooled");
     tree.dir("docs/changelog.d");
-    assert_eq!(discover_layout(tree.path()), Some(Layout::Pooled));
+    assert_eq!(
+        discover_layout(tree.path()),
+        Some(Layout::Pooled(Vec::new()))
+    );
 }
 
 #[test]
@@ -287,28 +290,90 @@ fn a_package_that_changed_only_exempt_paths_owes_nothing() {
     assert_eq!(findings(&per_package(), true, &changed, &[]), vec![]);
 }
 
+/// The pooled layout over a tree whose packages the check found.
+fn pooled() -> Layout {
+    Layout::Pooled(vec![
+        "packages/emitter".to_string(),
+        "packages/parser".to_string(),
+    ])
+}
+
 #[test]
-fn the_pooled_layout_asks_for_one_fragment_however_many_packages_changed() {
+fn a_pooled_tree_with_no_package_roots_asks_once_for_the_whole_tree() {
     let changed = owned(&["packages/parser/src/lex.py", "packages/emitter/src/emit.py"]);
-    let found = findings(&Layout::Pooled, false, &changed, &[]);
+    let found = findings(&Layout::Pooled(Vec::new()), false, &changed, &[]);
     assert_eq!(
         found.len(),
         1,
-        "repository-scoped: one fragment, not one per package"
+        "with no package root to scope to, the tree is one package"
     );
 }
 
 #[test]
-fn the_pooled_layout_is_satisfied_by_a_single_root_fragment() {
+fn a_pooled_tree_with_no_package_roots_takes_any_well_formed_fragment() {
     let changed = owned(&["packages/parser/src/lex.py"]);
-    let added = owned(&["docs/changelog.d/2026-09-21-parser-drop-the-flag.md"]);
-    assert_eq!(findings(&Layout::Pooled, false, &changed, &added), vec![]);
+    let added = owned(&["docs/changelog.d/2026-09-21-drop-the-flag.md"]);
+    assert_eq!(
+        findings(&Layout::Pooled(Vec::new()), false, &changed, &added),
+        vec![],
+        "no package root means no package name for the fragment to carry"
+    );
 }
 
 #[test]
 fn the_pooled_layout_owes_nothing_when_only_exempt_paths_changed() {
     let changed = owned(&["packages/parser/src/lex_test.py"]);
-    assert_eq!(findings(&Layout::Pooled, false, &changed, &[]), vec![]);
+    assert_eq!(findings(&pooled(), false, &changed, &[]), vec![]);
+}
+
+#[test]
+fn a_pooled_tree_asks_each_changed_package_for_its_own_fragment() {
+    let changed = owned(&["packages/parser/src/lex.py", "packages/emitter/src/emit.py"]);
+    let found = findings(&pooled(), false, &changed, &[]);
+    assert_eq!(
+        found.len(),
+        2,
+        "one fragment names one package, so two changed packages owe two"
+    );
+}
+
+#[test]
+fn a_pooled_fragment_pays_the_package_its_name_opens_with() {
+    let changed = owned(&["packages/parser/src/lex.py"]);
+    let added = owned(&["docs/changelog.d/2026-09-21-parser-drop-the-flag.md"]);
+    assert_eq!(findings(&pooled(), false, &changed, &added), vec![]);
+}
+
+#[test]
+fn a_pooled_fragment_naming_another_package_leaves_this_one_unpaid() {
+    let changed = owned(&["packages/parser/src/lex.py"]);
+    let added = owned(&["docs/changelog.d/2026-09-21-emitter-drop-the-flag.md"]);
+    let found = findings(&pooled(), false, &changed, &added);
+    assert_eq!(found.len(), 1);
+    assert!(found[0].message.contains("packages/parser"));
+    assert!(found[0].message.contains("YYYY-MM-DD-parser-<slug>.md"));
+}
+
+#[test]
+fn a_pooled_migrations_fragment_also_names_the_package_it_pays_for() {
+    let changed = owned(&["packages/parser/src/lex.py"]);
+    let added = owned(&[
+        "docs/changelog.d/2026-09-21-parser-drop-the-flag.md",
+        "docs/migrations.d/2026-09-21-emitter-drop-the-flag.md",
+    ]);
+    let found = findings(&pooled(), true, &changed, &added);
+    assert_eq!(found.len(), 1);
+    assert!(found[0].message.contains("migrations fragment"));
+}
+
+#[test]
+fn a_pooled_path_under_no_package_root_is_not_public_surface() {
+    let changed = owned(&["README.md", "docs/guide.md", "internals/checks/run.py"]);
+    assert_eq!(
+        findings(&pooled(), true, &changed, &[]),
+        vec![],
+        "pooled surface is scoped to the discovered package roots"
+    );
 }
 
 #[test]

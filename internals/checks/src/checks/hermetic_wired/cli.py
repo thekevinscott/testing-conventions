@@ -13,7 +13,7 @@ from checks.hermetic_wired.unwired_steps import unwired_steps
 from checks.utils.check_failed import CheckFailed
 from checks.utils.job_block import iter_job_blocks
 
-GUARD = "github.repository == 'thekevinscott/testing-conventions' && inputs.version == ''"
+GUARD = "github.repository == 'thekevinscott/testing-conventions'"
 
 USES_LINE = re.compile(r"^\s*uses: \./\.github/workflows/testing-conventions\.yml$", re.M)
 NEEDS_BUILD_CLI = re.compile(r"^\s*needs: \[[^\]]*\bbuild-cli\b[^\]]*\]$", re.M)
@@ -53,6 +53,15 @@ def cli(workflow: str, callers: tuple[str, ...]) -> None:
             + ", ".join(missing)
             + " — so an in-repo caller (self-test, dogfood) can only validate the published "
             "detect/binary, not the commit under test"
+        )
+    detect = dict(iter_job_blocks(text)).get("detect", "")
+    if "inputs.version ==" in detect:
+        raise CheckFailed(
+            "the reusable workflow's `detect` job guards its action step on `inputs.version` — a "
+            "version-pinned run in this repo then resolves `detect` at the published major tag, "
+            "which declares no output added since the tag last moved, so the promotion that would "
+            "move the tag fails on the empty value and the tag never advances past the output; "
+            "scope the guard to the repository"
         )
     unwired_fallback = unwired_steps(text)
     if unwired_fallback:

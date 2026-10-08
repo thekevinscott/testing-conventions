@@ -8,7 +8,8 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from checks.hermetic_wired.cli import cli
+from checks.hermetic_wired.cli import GUARD, cli
+from checks.utils.extract_job_block import extract_job_block
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "testing-conventions.yml"
@@ -65,3 +66,18 @@ def test_dropping_any_single_real_step_env_line_fails_the_check(tmp_path):
 
 def test_the_unmutated_copy_passes_so_the_mutation_is_what_reds_it(tmp_path):
     assert run_against(tmp_path, WORKFLOW.read_text()).exit_code == 0
+
+
+def test_the_real_workflow_selects_the_detect_action_on_the_repository_alone():
+    detect_job = extract_job_block(WORKFLOW.read_text(), "detect", "changelog")
+    assert GUARD in detect_job
+    assert "inputs.version ==" not in detect_job
+
+
+def test_re_adding_the_version_conjunct_to_the_real_guard_fails_the_check(tmp_path):
+    text = WORKFLOW.read_text()
+    mutated = text.replace(GUARD, GUARD + " && inputs.version == ''")
+    assert mutated != text
+    result = run_against(tmp_path, mutated)
+    assert result.exit_code == 1
+    assert "inputs.version" in result.output

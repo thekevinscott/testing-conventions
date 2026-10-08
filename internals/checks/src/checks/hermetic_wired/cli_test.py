@@ -235,3 +235,29 @@ def test_a_neighbouring_steps_env_does_not_satisfy_an_unwired_step(tmp_path):
         assert "Check colocated-test" in error.message
     else:
         raise AssertionError("a neighbour's env line must not satisfy an unwired step")
+
+
+def test_the_action_selection_guard_is_scoped_to_the_repository():
+    # A conjunct on `inputs.version` sends the version-pinned promotion verification to
+    # `detect@v0`, which emits no output added after the tag last moved.
+    assert GUARD == "github.repository == 'thekevinscott/testing-conventions'"
+
+
+def test_raises_when_the_detect_job_guards_its_action_on_the_version_input(tmp_path):
+    workflow = _write(tmp_path, "wf.yml", WIRED.replace(GUARD, GUARD + " && inputs.version == ''"))
+    caller = _write(tmp_path, "caller.yml", CALLER_WIRED)
+    try:
+        cli.callback(workflow=workflow, callers=(caller,))
+    except Exception as error:  # noqa: BLE001
+        assert "inputs.version" in error.message
+        assert error.message.endswith("scope the guard to the repository")
+    else:
+        raise AssertionError("a detect guard constraining inputs.version must raise")
+
+
+def test_an_unrelated_jobs_version_comparison_leaves_the_detect_guard_alone(tmp_path):
+    # The guard assertion is bounded to the `detect` job: a sibling job comparing `inputs.version`
+    # is not the deadlock, and a file-wide needle would red on it.
+    workflow = _write(tmp_path, "wf.yml", WIRED + "  later:\n    if: ${{ inputs.version == '' }}\n")
+    caller = _write(tmp_path, "caller.yml", CALLER_WIRED)
+    cli.callback(workflow=workflow, callers=(caller,))

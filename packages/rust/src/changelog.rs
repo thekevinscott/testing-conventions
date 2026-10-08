@@ -634,7 +634,7 @@ mod tests {
         );
         let found = findings(
             facts.layout.as_ref().unwrap(),
-            facts.migrations,
+            has_breaking_line(&facts.bodies),
             &facts.changed,
             &facts.added,
         );
@@ -653,7 +653,7 @@ mod tests {
             let facts = facts_with(containers.clone(), "", changed, &[]);
             findings(
                 facts.layout.as_ref().unwrap(),
-                facts.migrations,
+                has_breaking_line(&facts.bodies),
                 &facts.changed,
                 &facts.added,
             )

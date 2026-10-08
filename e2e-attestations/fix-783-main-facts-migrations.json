@@ -1,0 +1,7 @@
+{
+  "command": "PATH=\"$PWD/internals/checks/.venv/bin:$PATH\" cargo nextest run --manifest-path packages/rust/Cargo.toml -E \"binary(~changelog)\"",
+  "ran_at": 1791462570,
+  "exit_code": 0,
+  "commit": "2334d73cbeb80dc1aecc582efb5b8309926c29df",
+  "branch": "fix/783-main-facts-migrations"
+}

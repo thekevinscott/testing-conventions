@@ -40,6 +40,7 @@ export default defineConfig({
       { text: 'Reference', link: '/reference/workflow' },
       { text: 'Explanation', link: '/explanation/' },
     ],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/thekevinscott/testing-conventions' }],
     sidebar: {
       '/': [
         {

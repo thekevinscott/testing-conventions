@@ -87,9 +87,37 @@ one, so until a page's step lands:
 - A **new** page goes in the tree above rather than into a retiring directory.
 - The check inventory is still enumerated by hand in four places — the sidebar,
   `reference/checks/index.md`, `reference/workflow.md` and `explanation/index.md` — so a new check
-  is added to all four. Single-sourcing that inventory is its own step, and **the source's form is
-  still open**: a manifest file both the docs and a check read, or a `tc-checks` subcommand that
-  emits it.
+  is added to all four until the pages consuming `docs/checks.json` land. The source's form is
+  settled; see **The inventory has one authored source** below.
+
+### The inventory has one authored source
+
+`docs/checks.json` is the inventory: every check's name, category, sub-category, the job(s) that run
+it, its run conditions, its languages, and its CLI invocation. **A page or a sidebar that lists
+checks reads it rather than restating it.**
+
+**A file, not a `tc-checks` subcommand, because the docs build stays hermetic.**
+`docs/.vitepress/config.ts` is evaluated at build time, so generating the sidebar from the CLI would
+make `pnpm run build` depend on a built Rust binary and hand a docs-only pull request the Rust
+toolchain. Today that build imports nothing external. Shelling out from a config file to populate a
+config file also puts a program where nothing tests it.
+
+**An authored file is a fifth hand-maintained list unless something holds it to the truth**, so a
+check does. Three of the surfaces it names are facts rather than opinions — the `gates` input's
+accepted values, the job names in `.github/workflows/testing-conventions.yml`, and the CLI's leaf
+commands — and `checks.inventory.inventory_drift` reports any name present on one side and missing
+from the other, in both directions. A check deleted from the tool cannot keep its page, and a check
+added to the tool cannot stay undocumented.
+
+The pages and the sidebar are *generated from* the manifest, so they are not surfaces to reconcile;
+that is what makes one authored file safe. **Job names are stored exactly as the workflow writes
+them**, matrix template and all, so the comparison is string equality with no normalization step to
+get wrong.
+
+Two groups exist because the reconciliation has to be total, and both earn a documented home:
+`jobs_without_a_check` (today, `detect`, which computes the language matrix) and
+`commands_without_a_job` (`install`, `e2e attest`, `e2e slug` — the author-side commands **The CLI
+is documented where it runs** sends to `/integrate#cli`).
 
 ## Diátaxis (retiring): four modes, one job per page
 

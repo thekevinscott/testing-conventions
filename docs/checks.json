@@ -1,0 +1,186 @@
+{
+  "comment": [
+    "The one authored source for the check inventory (#791, part of epic #697).",
+    "Held to the shipped workflow and CLI by checks.inventory.inventory_drift: every",
+    "`gate`, `jobs` and `command` value here is compared against the gates input's",
+    "accepted values, the workflow's job names, and the CLI's leaf commands. Job names",
+    "are stored exactly as the workflow writes them, matrix template included, so the",
+    "comparison is a string equality with no normalization step to get wrong."
+  ],
+  "checks": [
+    {
+      "name": "colocated-test",
+      "gate": "colocated-test",
+      "category": "testing",
+      "subcategory": "unit",
+      "command": "unit colocated-test",
+      "jobs": [
+        "Static checks (${{ matrix.language }})"
+      ],
+      "languages": [
+        "python",
+        "typescript",
+        "rust"
+      ],
+      "runs": "every event, when the repository has sources for a static language"
+    },
+    {
+      "name": "one-function-per-file",
+      "gate": "one-function-per-file",
+      "category": "testing",
+      "subcategory": "unit",
+      "command": "unit one-function-per-file",
+      "jobs": [
+        "Static checks (${{ matrix.language }})"
+      ],
+      "languages": [
+        "python",
+        "typescript",
+        "rust"
+      ],
+      "runs": "every event, when the repository has sources for a static language"
+    },
+    {
+      "name": "unit-lint",
+      "gate": "unit-lint",
+      "category": "testing",
+      "subcategory": "unit",
+      "command": "unit lint",
+      "jobs": [
+        "Static checks (${{ matrix.language }})"
+      ],
+      "languages": [
+        "python",
+        "typescript",
+        "rust"
+      ],
+      "runs": "every event, when the repository has sources for a static language"
+    },
+    {
+      "name": "unit-coverage",
+      "gate": "unit-coverage",
+      "category": "testing",
+      "subcategory": "unit",
+      "command": "unit coverage",
+      "jobs": [
+        "Unit-test coverage (${{ matrix.language }})",
+        "Unit-test coverage — changed lines (${{ matrix.language }})"
+      ],
+      "languages": [
+        "python",
+        "typescript",
+        "rust"
+      ],
+      "runs": "whole tree on every event; the same floor over the diff on pull requests only"
+    },
+    {
+      "name": "mutation",
+      "gate": "mutation",
+      "category": "testing",
+      "subcategory": "unit",
+      "command": "unit mutation",
+      "jobs": [
+        "Unit mutation — changed lines (${{ matrix.language }})"
+      ],
+      "languages": [
+        "python",
+        "typescript",
+        "rust"
+      ],
+      "runs": "pull requests only, over the diff"
+    },
+    {
+      "name": "integration-lint",
+      "gate": "integration-lint",
+      "category": "testing",
+      "subcategory": "integration",
+      "command": "integration lint",
+      "jobs": [
+        "Static checks (${{ matrix.language }})"
+      ],
+      "languages": [
+        "python",
+        "typescript",
+        "rust"
+      ],
+      "runs": "every event, when the repository has integration sources"
+    },
+    {
+      "name": "e2e-verify",
+      "gate": "e2e-verify",
+      "category": "testing",
+      "subcategory": "e2e",
+      "command": "e2e verify",
+      "jobs": [
+        "E2E attestation freshness (e2e verify)"
+      ],
+      "languages": null,
+      "runs": "pull requests only, when the repository keeps attestations"
+    },
+    {
+      "name": "packaging",
+      "gate": "packaging",
+      "category": "packaging",
+      "subcategory": null,
+      "command": "packaging",
+      "jobs": [
+        "Packaging (no test files in the built artifact)"
+      ],
+      "languages": [
+        "python",
+        "typescript",
+        "rust"
+      ],
+      "runs": "every event, when a built artifact is configured or detected"
+    },
+    {
+      "name": "changelog",
+      "gate": "changelog",
+      "category": "repo",
+      "subcategory": null,
+      "command": "changelog",
+      "jobs": [
+        "CHANGELOG + MIGRATIONS touched"
+      ],
+      "languages": null,
+      "runs": "pull requests only, when the repository keeps fragment directories"
+    },
+    {
+      "name": "workflow-lint",
+      "gate": "workflow-lint",
+      "category": "repo",
+      "subcategory": null,
+      "command": "workflow-lint",
+      "jobs": [
+        "Workflow lint (no logic in CI YAML)"
+      ],
+      "languages": null,
+      "runs": "every event"
+    }
+  ],
+  "jobs_without_a_check": [
+    {
+      "jobs": [
+        "Detect requested languages with sources"
+      ],
+      "why": "computes the language matrix every other job fans out over; runs no check"
+    }
+  ],
+  "commands_without_a_job": [
+    {
+      "name": "install",
+      "command": "install",
+      "why": "writes the testing contract into the repository's agent context file"
+    },
+    {
+      "name": "e2e attest",
+      "command": "e2e attest",
+      "why": "author-side: runs the e2e command and commits the branch's receipt"
+    },
+    {
+      "name": "e2e slug",
+      "command": "e2e slug",
+      "why": "author-side: prints the receipt slug for a branch name"
+    }
+  ]
+}

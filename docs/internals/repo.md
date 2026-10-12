@@ -1102,6 +1102,35 @@ Diff-scoped mutation has one consequence for the inventory: an entry whose `line
 sits inert rather than erroring, because the determinism guard only judges lines inside the diff. So
 re-read a line-scoped mutation entry against its source whenever the file around it moves.
 
+### Scope: the machinery every `scope` subcommand shares
+
+A static `paths:` filter decides which gates run today, and a glob cannot express scope that
+depends on a file's *contents* — "run when `AGENTS.md` or anything it `@`-references changed" is a
+statement about what each document imports, at any level of cleverness. `checks/utils/scope/`
+holds the half of that answer every such check shares (#696):
+
+- `closure.py` — `closure(seed, extract_refs)` is the seed and everything it reaches,
+  breadth-first, each path once. A cycle terminates on the repeat and the depth is unbounded, so a
+  reference chain is walked to its end. `extract_refs` is the one piece that differs per check, so
+  it is the parameter; it owns the file reads, which keeps the walk itself pure.
+- `seeds_in_scope.py` — `seeds_in_scope(seeds, extract_refs, changed)` is each seed whose closure
+  holds a changed path, in the order `seeds` gave them. That is the whole scoping decision, and it
+  answers in *seeds*: the work-unit shape a job fans out on (`{"file": "AGENTS.md"}`) belongs to
+  the check that emits it, not to shared machinery.
+- `one_frame.py` — the guard both sides pass through, below.
+
+**The diff is a parameter, not a read.** `changed` arrives as an argument, so this package shells
+out to no `git diff` of its own and `packages/rust/src/changelog.rs`'s `changed_files` stays the
+only reader of that range in the repo. A caller hands over the diff it already has, and which
+process produced it is the calling check's decision, one layer up.
+
+**Mixing an absolute path with a repo-relative one raises.** The two sides of the intersection
+arrive from different places — seeds from a tree walk, `changed` from a diff — so they are easy to
+anchor differently, and an intersection taken across two frames is empty. An empty scope spawns
+zero jobs and a check that spawns zero jobs passes, so a frame mismatch reads exactly like
+"nothing to do" and the gate silently never runs. `one_frame` turns that into a `ValueError`
+naming the remedy instead. Either frame is allowed on its own; holding both at once is the error.
+
 ## The detect action's package (`internals/detect`)
 
 `detect.py` (the `detect` composite action's implementation) lives in its own uv package, `internals/detect/`, mirroring `internals/checks`: custom logic earns a real package with real test tiers, not a loose script under `.github/`. `src/` holds flat sibling modules, one derivation per file, each with its colocated `_test.py`; `detect.py` is the entry point, reading its command line, calling `compute_outputs` (the orchestrator that imports every derivation), and rendering `GITHUB_OUTPUT`. Sibling imports resolve because the script's own directory leads `sys.path`, so the plain-script invocation works from any working directory. The integration/e2e suites sit at `internals/detect/tests/`, a sibling outside `src/`, exactly like `internals/checks`.

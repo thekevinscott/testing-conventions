@@ -1368,3 +1368,41 @@ cancels a run.
 really does depend on the title or body has earned the trigger — it just must not also claim that a
 body edit supersedes a run, because a body edit changes nothing about the tree. Re-running the gate treats the symptom; `pr-monitor` is reporting the cancellation
 accurately and a bypass is never the remedy.
+
+## A release can publish without its tag (#788)
+
+A `Release` run can write to the registry and then fail to push the matching tag, leaving the
+registry ahead of the tags. **The remedy is `putitoutthere reconcile`, which backfills the tag.
+Re-running publish is wrong** — the registry write already succeeded, so a re-run either fails on
+an existing version or publishes a second one.
+
+The worked case is the run on `dd64392`, which published `testing-conventions-rust@0.0.141` to
+crates.io at 16:11:50 and then failed with `PIOT_TAG_PUSH_FAILED`:
+
+```
+! [remote rejected] testing-conventions-rust-v0.0.141 (refusing to allow a GitHub App to
+  create or update workflow `.github/workflows/testing-conventions.yml` without `workflows` permission)
+```
+
+**The mechanism is a race with a later merge, and it names the recurrence condition.** Release runs
+serialize (*Release concurrency: serializing the whole run* above), so that run was created at 15:53
+and its publish step did not start until 16:10. `0a93d77` merged at ~16:10 and changed
+`.github/workflows/testing-conventions.yml`. Pushing a tag at the *older* commit therefore reads to
+GitHub as **updating** that workflow file, which the `GITHUB_TOKEN` may not do. So the condition is:
+**a release's tag push landing after a later merge that edits a file under `.github/workflows/`.**
+That is also why the throwaway `verify-release-<sha>` tags push without trouble — they are created
+before any such merge can land.
+
+**No `permissions:` line closes this.** The push uses `GITHUB_TOKEN`, which has no `workflows`
+scope to grant. Closing the gap needs a PAT or a separate App, and `release.yml` forwards no
+`secrets:` by design, because forwarding one selects the classic long-lived-token path that
+*Release credentials: the publish path is OIDC-only* above rules out. The gap is therefore a
+repo-settings decision rather than a workflow change, and it stays open: a recurrence is handled by
+the runbook above.
+
+**A reconcile attributes the tag to the wrong commit, and that is usually harmless.** The
+recovering run created `testing-conventions-rust-v0.0.141` at `0a93d77`, not at `dd64392` where the
+publish happened. It was harmless there only because that diff touches no `packages/rust/**` file,
+so the tag's tree matches what was published. Read a reconciled tag as "the version exists", not as
+"this is the tree that built it", and confirm against the publishing run when the difference
+matters.

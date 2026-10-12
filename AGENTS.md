@@ -286,6 +286,56 @@ The exception is a variable some *other* tool reads from the environment as its 
 interface: `NODE_AUTH_TOKEN` for `npm publish`, `CI`, `PATH`. Those are that tool's contract, not our
 step-to-script wiring, and they stay in `env:`.
 
+## A job-spawning check exposes a `scope` subcommand
+
+**A check that can spawn jobs also answers what is in scope**, as its own subcommand returning one
+JSON object per job — the arguments that job passes back to the check:
+
+```
+$ tc-checks agents-md-size scope --base origin/main
+[{"file": "AGENTS.md"}, {"file": "packages/node/AGENTS.md"}]
+```
+
+This replaces a static `paths:` filter, which cannot express scope that depends on a file's
+**contents**: "run when `AGENTS.md` or anything it `@`-references changed" is a statement about what
+each document imports, which no glob says at any level of cleverness.
+
+The workflow spends the array as a matrix, in two jobs:
+
+```yaml
+  scope:
+    outputs: { units: "${{ steps.s.outputs.units }}" }
+    steps:
+      - id: s
+        env: { BASE: "${{ github.event.pull_request.base.sha }}" }
+        run: uv run --project internals/checks tc-checks agents-md-size scope --base "$BASE"
+  gate:
+    needs: scope
+    if: fromJSON(needs.scope.outputs.units)[0] != null
+    strategy:
+      matrix: { include: "${{ fromJSON(needs.scope.outputs.units) }}" }
+    steps:
+      - run: uv run ... tc-checks agents-md-size --file "${{ matrix.file }}"
+```
+
+`scope`, not `resolve` — it answers "what is in scope", where `resolve` reads as resolving the
+command itself. The `env:` name is bash-local transport across the templating layer and the
+subcommand still reads `sys.argv`, per **Never pass data through the environment**.
+
+**The `scope` job is the branch-protection surface, and it passes on `[]`.** An empty matrix
+*skips* a job, and a skipped required check blocks a pull request forever — so the required check is
+the job computing the array, which succeeds whether the array is empty or not. The `gate` job is
+never required directly.
+
+**Each check owns its own `scope`.** A central `tc-checks scope <cmd>` holding a table of every
+command's seeds becomes a registry each new gate must be added to, and puts the scoping away from
+the check it belongs to. What stays generic is `closure(seeds, extract_refs) ∩ changed(base)`, in
+`internals/checks/src/checks/utils/scope/` — pure, with the file reads and the diff injected. A
+check supplies its seeds and its extractor.
+
+A `scope` subcommand earns no wiring gate: it is the check's own behavior, tested directly like any
+other.
+
 ## Wiring gates are earned
 
 A `*_wired` assertion — a `tc-checks` subcommand plus its own selftest job — guards wiring

@@ -12,13 +12,88 @@ whole, or record a reasoned exemption — and stop there: escape hatches (the `g
 driving the CLI in another CI system) are documented as facts in Reference, and no tutorial or
 guide promotes them as destinations.
 
-The CLI's own surface has exactly one home: **Running a check directly** on the Reference checks
-index, which carries the subcommand form and the flags every check shares (`--language`,
-`--config`, `--base`). A check's own page names only the flags unique to it, tutorials and
-how-tos stay on the workflow, and a new flag lands in that one section rather than growing a
-page of its own.
+The CLI's own surface is documented where it runs — a check's invocation on that check's page, and
+the shared flags (`--language`, `--config`, `--base`) in one place, per **The CLI is documented
+where it runs** below. A check's page names the flags unique to it, tutorials and how-tos stay on
+the workflow, and a new shared flag lands in that one section rather than growing a page of its
+own.
 
-## Diátaxis: four modes, one job per page
+## The structure: CI-shaped, with the check as the leaf
+
+The docs are organized around how a consumer meets this tool — as named jobs in a pull request's
+check list. Three top-level pages carry everything:
+
+| Page | Job |
+| --- | --- |
+| `/` | What this does, in one screen: what goes red, and why you want that. |
+| `/integrate` | Adopting it — the drop-in, one call per package, every input, the config file, the CLI's shared flags, and the author-side commands. |
+| `/checks/` | Every check, grouped by category, with an index page at each level. |
+
+### The check tree
+
+Category → sub-category → check, each level carrying its own index page:
+
+```
+/checks/                          every check, one table, grouped by category
+  /checks/testing/
+    /checks/testing/unit/         colocated-test, one-function-per-file, unit-lint,
+                                  unit-coverage, mutation
+    /checks/testing/integration/  integration-lint
+    /checks/testing/e2e/          e2e-verify
+  /checks/packaging/              packaging
+  /checks/repo/                   changelog
+```
+
+Each check page is the complete record for that check and **opens with why it exists** — the
+lint-rule-page genre of ESLint, Ruff and Clippy. That opening was Diátaxis's one sanctioned hybrid
+here; it is now the rule. The page then names the job or jobs that run the check, its run
+conditions, its per-language behavior, every config key and exemption rule name that touches it,
+and its CLI invocation.
+
+### The job shape is a lookup, so it is a table
+
+**The check is the leaf, and the jobs are one flat table on `/checks/`.** Two job boundaries do
+not survive the nesting: `Static checks` runs four unit checks *plus* `integration-lint`, so it
+spans two sub-categories, and `unit-coverage` is a single check behind a single flag that produces
+two jobs. Making the job the leaf costs the `unit/` and `integration/` levels outright. Reshaping
+CI to match the tree splits a job whose whole purpose is sharing one checkout across five
+sub-second scans, and renames branch-protection surface, to settle a docs question.
+
+So `/checks/` carries one table mapping every job name a consumer can see in a pull request to its
+category and the checks it runs. A reader arriving with a red job name gets one lookup, and a
+reader browsing gets a hierarchy that nests cleanly. **A new job name joins that table in the same
+PR that adds the job** — the table is where the job surface is written down.
+
+### The CLI is documented where it runs
+
+A check's invocation lives on that check's own page, because the CLI is how the check runs. One
+`/integrate#cli` section carries the flags every check shares (`--language`, `--config`,
+`--base`) and the author-side commands that have no job at all (`install`, `e2e attest`,
+`e2e slug`).
+
+### `agents` is not a category yet
+
+`install` writes the testing contract into a repository's agent context file: a command, not a
+check, and no job runs it. It lives on `/integrate` under "Teach your agent". `/checks/agents/`
+opens when the first check belongs in it.
+
+### Until the pages move
+
+This section is the decision. The pages migrate in later steps, and the site builds green at every
+one, so until a page's step lands:
+
+- `reference/`, `explanation/` and `guide/` still exist, and **Diátaxis (retiring)** below governs
+  edits to the pages still in them.
+- A **new** page goes in the tree above rather than into a retiring directory.
+- The check inventory is still enumerated by hand in four places — the sidebar,
+  `reference/checks/index.md`, `reference/workflow.md` and `explanation/index.md` — so a new check
+  is added to all four. Single-sourcing that inventory is its own step, and **the source's form is
+  still open**: a manifest file both the docs and a check read, or a `tc-checks` subcommand that
+  emits it.
+
+## Diátaxis (retiring): four modes, one job per page
+
+This section governs the pages still under `reference/`, `explanation/` and `guide/`, and retires with the last of them.
 
 The docs follow [Diátaxis](https://diataxis.fr/). Every page belongs to **exactly one** of four
 modes, decided by what the reader needs *right now*. Mixing modes on a page is the failure this
@@ -84,7 +159,9 @@ Every page — in any mode — opens with one or two sentences answering *why am
 page is for, and why the reader should care or read on. No page starts cold with mechanics. This is
 the single most important habit for keeping the docs scannable.
 
-## Information architecture
+## Information architecture (retiring)
+
+This describes the four-mode layout being replaced; **The structure** above is the target a new page is written into.
 
 The **homepage (`index.md`) is the hub** — a jumping-off point that routes to the sections, and the
 only page whose job is navigation. The nav and sidebar mirror the four modes, in this order; keep

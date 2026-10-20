@@ -229,38 +229,42 @@ pub fn in_scope(repo: &Path, path: &Path, base: Option<&str>) -> Result<bool> {
         .any(|file| named_file || is_ci_file(Path::new(file))))
 }
 
-/// Every path under `path` that `<base>...HEAD` touched, relative to `repo`. `--no-renames` lists
-/// a moved workflow at both ends, so a move out of `workflows/` still counts.
+/// `--no-renames` lists a moved workflow at both ends, so a move out of `workflows/` still counts.
+const DIFF_ARGS: [&str; 8] = [
+    "-c",
+    "core.quotepath=off",
+    "--literal-pathspecs",
+    "diff",
+    "--name-only",
+    "--no-ext-diff",
+    "--no-renames",
+    "--relative",
+];
+
+/// Every path under `path` that `<base>...HEAD` touched, relative to `repo`.
 fn changed_under(repo: &Path, path: &Path, base: &str) -> Result<Vec<String>> {
     let range = format!("{base}...HEAD");
     let output = std::process::Command::new("git")
         .current_dir(repo)
-        .args([
-            "-c",
-            "core.quotepath=off",
-            "--literal-pathspecs",
-            "diff",
-            "--name-only",
-            "--no-ext-diff",
-            "--no-renames",
-            "--relative",
-            &range,
-            "--",
-        ])
+        .args(DIFF_ARGS)
+        .args([range.as_str(), "--"])
         .arg(path)
         .output()
         .with_context(|| format!("running `git diff` in `{}`", repo.display()))?;
     if !output.status.success() {
-        anyhow::bail!(
-            "`git diff {range}` failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("`git diff {range}` failed: {}", stderr.trim());
     }
-    Ok(String::from_utf8_lossy(&output.stdout)
+    Ok(diff_paths(&String::from_utf8_lossy(&output.stdout)))
+}
+
+/// The paths a `git diff --name-only` printed, C-quoting undone.
+fn diff_paths(stdout: &str) -> Vec<String> {
+    stdout
         .lines()
         .filter(|line| !line.is_empty())
         .map(|line| crate::git_path::unquote_c_path(line).replace('\\', "/"))
-        .collect())
+        .collect()
 }
 
 /// Collect the YAML GitHub actually executes under `path` into `out`: `path` itself when it is a
@@ -309,6 +313,21 @@ fn is_ci_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn changed_under_reports_a_spawn_failure() {
+        let nowhere = Path::new("/nonexistent-tc-workflow-lint");
+        let err = changed_under(nowhere, Path::new(".github"), "main").unwrap_err();
+        assert!(format!("{err:#}").contains("running `git diff`"), "{err:#}");
+    }
+
+    #[test]
+    fn diff_paths_undoes_c_quoting_and_drops_blank_lines() {
+        assert_eq!(
+            diff_paths("\".github/workflows/a\\\"b.yml\"\n\n.github/action.yml\n"),
+            vec![".github/workflows/a\"b.yml", ".github/action.yml"]
+        );
+    }
 
     #[test]
     fn straight_line_glue_is_not_logic() {

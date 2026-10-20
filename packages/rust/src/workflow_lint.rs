@@ -216,6 +216,13 @@ pub fn scan(path: impl AsRef<Path>) -> Result<Vec<Finding>> {
     Ok(findings)
 }
 
+/// `true` when `<base>...HEAD` in `repo` changes a file [`scan`] reads under `path`, which is
+/// relative to `repo`. Without a base the whole tree is in scope.
+pub fn in_scope(repo: &Path, path: &Path, base: Option<&str>) -> Result<bool> {
+    let _ = (repo, path, base);
+    todo!()
+}
+
 /// Collect the YAML GitHub actually executes under `path` into `out`: `path` itself when it is a
 /// file, else every qualifying file beneath it, recursively. A named file is always scanned, so a
 /// caller can point the check anywhere.

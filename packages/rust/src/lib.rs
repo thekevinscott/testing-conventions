@@ -642,8 +642,12 @@ fn run_workflow(path: &Path) -> anyhow::Result<i32> {
 }
 
 fn run_workflow_lint_scope(path: &Path, base: Option<&str>) -> anyhow::Result<i32> {
-    let _ = (path, base);
-    todo!()
+    let in_scope = workflow_lint::in_scope(Path::new("."), path, base).unwrap_or_else(|err| {
+        eprintln!("workflow-lint scope: {err:#}; scoping the whole tree in");
+        true
+    });
+    println!("{in_scope}");
+    Ok(0)
 }
 
 fn run_workflow_lint(path: &Path) -> anyhow::Result<i32> {

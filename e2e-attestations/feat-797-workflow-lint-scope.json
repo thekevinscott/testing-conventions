@@ -1,0 +1,7 @@
+{
+  "command": "cargo nextest run --manifest-path packages/rust/Cargo.toml -E \"binary(~workflow_lint)\"",
+  "ran_at": 1792498215,
+  "exit_code": 0,
+  "commit": "cb3fa95fa457af0dd550a8cda00ac23b8cf3ff92",
+  "branch": "feat/797-workflow-lint-scope"
+}

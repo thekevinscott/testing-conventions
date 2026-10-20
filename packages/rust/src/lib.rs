@@ -94,7 +94,10 @@ enum Command {
     /// Workflow conventions: a GitHub Actions `run:` or `github-script` body must be wiring, not a
     /// program. Iteration, multi-branch dispatch, text-munging, and a body past a dozen commands
     /// belong in a tested package in the repository's own language, invoked as a one-line `run:`.
+    #[command(args_conflicts_with_subcommands = true)]
     WorkflowLint {
+        #[command(subcommand)]
+        command: Option<WorkflowLintCommand>,
         /// Workflow or action file, or a directory of them (defaults to `.github`).
         #[arg(default_value = ".github")]
         path: PathBuf,
@@ -247,6 +250,20 @@ enum IntegrationRule {
 }
 
 #[derive(Subcommand, Debug)]
+enum WorkflowLintCommand {
+    /// Print `true` when `<base>...HEAD` changes a file the check reads, else `false`. Exits 0;
+    /// a missing base or an unreadable diff prints `true`.
+    Scope {
+        /// Base commit of the pull request; the range read is `<base>...HEAD`.
+        #[arg(long)]
+        base: Option<String>,
+        /// Workflow or action file, or a directory of them (defaults to `.github`).
+        #[arg(default_value = ".github")]
+        path: PathBuf,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 enum E2eCommand {
     /// Run the e2e command of your choosing and, when it passes, commit the
     /// branch's receipt — the command (full suite, targeted subset, or a no-op)
@@ -355,7 +372,12 @@ where
         Some(Command::Packaging { path, language }) => run_packaging(&path, language),
         Some(Command::Changelog { base, path }) => changelog::run(&path, &base),
         Some(Command::Workflow { path }) => run_workflow(&path),
-        Some(Command::WorkflowLint { path }) => run_workflow_lint(&path),
+        Some(Command::WorkflowLint { command, path }) => match command {
+            None => run_workflow_lint(&path),
+            Some(WorkflowLintCommand::Scope { base, path }) => {
+                run_workflow_lint_scope(&path, base.as_deref())
+            }
+        },
         Some(Command::E2e { command }) => match command {
             E2eCommand::Attest { command } => run_e2e_attest(&command),
             E2eCommand::Verify {
@@ -617,6 +639,15 @@ fn run_workflow(path: &Path) -> anyhow::Result<i32> {
         violations.len()
     );
     Ok(1)
+}
+
+fn run_workflow_lint_scope(path: &Path, base: Option<&str>) -> anyhow::Result<i32> {
+    let in_scope = workflow_lint::in_scope(Path::new("."), path, base).unwrap_or_else(|err| {
+        eprintln!("workflow-lint scope: {err:#}; scoping the whole tree in");
+        true
+    });
+    println!("{in_scope}");
+    Ok(0)
 }
 
 fn run_workflow_lint(path: &Path) -> anyhow::Result<i32> {

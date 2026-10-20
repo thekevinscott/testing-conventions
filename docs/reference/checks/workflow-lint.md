@@ -101,6 +101,21 @@ npx testing-conventions workflow-lint          # defaults to .github
 npx testing-conventions workflow-lint path/to/workflow.yml
 ```
 
+### Scope {#scope}
+
+`workflow-lint scope` reports whether a pull request touched anything this check reads. It prints
+`true` when `<base>...HEAD` adds, changes, or deletes a file the check scans under the path, and
+`false` otherwise. It decides with the same file test the check uses, so a `dependabot.yml` or a
+fixture under `.github` stays out of scope.
+
+```sh
+npx testing-conventions workflow-lint scope --base origin/main          # .github
+npx testing-conventions workflow-lint scope --base origin/main action.yml
+```
+
+It exits 0 on every verdict. Every doubt resolves to `true`: with no `--base` the whole tree is in
+scope, and a diff that cannot be read prints `true` with the reason on stderr.
+
 ## Configuration
 
 The check reads no configuration and honors no exemption rules.

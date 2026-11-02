@@ -9,12 +9,12 @@ name = "testing-conventions"
 dynamic = ["version"]
 description = "Enforce testing conventions in libraries (Python, TypeScript, and Rust)."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Kevin Scott", email = "me@thekevinscott.com" }]
 # The mutation/coverage engines ship with the package so the rule resolves them from the same
 # environment; pytest stays the consumer's, since it runs their suite. Unpinned so pip
-# backtracks to an interpreter-compatible release across the supported 3.9+ range.
+# backtracks to an interpreter-compatible release across the supported 3.10+ range.
 dependencies = ["cosmic-ray", "coverage"]
 
 [project.urls]

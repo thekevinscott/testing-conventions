@@ -1248,6 +1248,10 @@ toolchain, `rust-cache`, or `maturin` installed anymore; they only need Python a
 already-built wheel. `plugin` still checks out the repo (unlike `build`) because it runs
 `pytest tests/` against the checked-out integration-test files, which aren't part of the wheel.
 
+The matrix floor is 3.10, matching `requires-python`. 3.9 was dropped when `ubuntu-latest` moved
+to Ubuntu 26.04, which `actions/setup-python` ships no 3.9 build for. `plugin` runs 3.10 for the
+`tomli` fallback (`tomllib` is 3.11+) and 3.13 for the stdlib path.
+
 ## Node CI: cache the pnpm store
 
 `node.yml`'s four jobs (`lint`, `typecheck`, `test`, `build`) each ran `pnpm install

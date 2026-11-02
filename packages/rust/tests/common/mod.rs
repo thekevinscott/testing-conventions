@@ -155,6 +155,17 @@ impl Staged {
         Self::stage("python", project, &["calc.py", "calc_test.py"], false)
     }
 
+    /// Stage a loose Python fixture whose `tests/` tree holds a helper module with no
+    /// test-shaped name (`loose_test_helpers`).
+    pub fn python_loose_test_helpers(project: &str) -> Self {
+        Self::stage(
+            "python",
+            project,
+            &["calc.py", "calc_test.py", "tests/integration/served.py"],
+            false,
+        )
+    }
+
     /// Stage the Python fixture whose scan path also carries a declaration-only module
     /// (`declaration_only`), a constants file beside the tested `calc.py`.
     pub fn python_declaration_only(project: &str) -> Self {

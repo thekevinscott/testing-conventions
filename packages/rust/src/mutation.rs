@@ -974,13 +974,16 @@ fn run_py_adapter(root: &Path, modules: &[String]) -> Result<String> {
 }
 
 /// Whether a changed file is a mutatable Python *source* — a `.py` that is not a test
-/// (`*_test.py` / `test_*.py`) or `conftest.py`.
+/// (`*_test.py` / `test_*.py`), a `conftest.py`, or under the root `tests/` pytest ignores.
 fn is_mutatable_py(file: &str) -> bool {
     if !file.ends_with(".py") {
         return false;
     }
     let base = file.rsplit('/').next().unwrap_or(file);
-    !(base.ends_with("_test.py") || base.starts_with("test_") || base == "conftest.py")
+    !(file.starts_with("tests/")
+        || base.ends_with("_test.py")
+        || base.starts_with("test_")
+        || base == "conftest.py")
 }
 
 /// A unique temp dir for one cargo-mutants run's `--output`, removed on drop so the
@@ -2293,6 +2296,9 @@ diff --git a/src/lib.rs b/src/lib.rs
         assert!(!is_mutatable_py("test_calc.py"));
         assert!(!is_mutatable_py("pkg/conftest.py"));
         assert!(!is_mutatable_py("README.md"));
+        assert!(!is_mutatable_py("tests/served.py"));
+        assert!(!is_mutatable_py("tests/integration/served.py"));
+        assert!(is_mutatable_py("pkg/tests/helper.py"));
     }
 
     #[test]

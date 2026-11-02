@@ -215,3 +215,30 @@ fn base_with_no_mutatable_changed_files_reports_the_engine_not_run() {
         "a test-file-only diff has nothing mutatable, so the engine never ran"
     );
 }
+
+#[test]
+fn base_with_only_a_tests_tree_helper_changed_reports_the_engine_not_run() {
+    let repo = TempRepo::loose("tests-helper");
+    repo.write("calc.py", BASELINE);
+    repo.write("calc_test.py", BASELINE_TEST);
+    repo.commit("baseline");
+    let base = repo.head();
+    repo.write(
+        "tests/integration/served.py",
+        "def page_url(port, path):\n    return f\"http://localhost:{port}/{path}\"\n",
+    );
+    repo.commit("add a shared integration helper");
+
+    let measurement = measure_python(
+        &repo.0,
+        &[],
+        &std::collections::BTreeMap::new(),
+        Some(&base),
+    )
+    .expect("no run needed");
+    assert_eq!(
+        measurement,
+        Measurement::EngineNotRun,
+        "a helper under tests/ is test code, so the engine never ran"
+    );
+}

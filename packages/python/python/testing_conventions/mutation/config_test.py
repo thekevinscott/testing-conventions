@@ -15,6 +15,9 @@ def test_the_excludes_match_test_files_at_every_depth(tmp_path, monkeypatch):
         "pkg/test_deep.py",
         "pkg/conftest.py",
         "pkg/sub/deeper_test.py",
+        "pkg/tests/helper.py",
+        "tests/served.py",
+        "tests/integration/served.py",
     ):
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -33,6 +36,8 @@ def test_the_excludes_match_test_files_at_every_depth(tmp_path, monkeypatch):
         "pkg/test_deep.py",
         "pkg/conftest.py",
         "pkg/sub/deeper_test.py",
+        "tests/served.py",
+        "tests/integration/served.py",
     }
 
 

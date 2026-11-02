@@ -1,0 +1,7 @@
+{
+  "command": "cargo nextest run --manifest-path packages/rust/Cargo.toml -E \"binary(~mutation_python) | binary(mutation_base_py)\"",
+  "ran_at": 1793629347,
+  "exit_code": 0,
+  "commit": "ed86ecf061c77e9ff503da718de58de212958ea5",
+  "branch": "fix/796-mutation-excludes-tests-tree"
+}

@@ -1,4 +1,4 @@
-"""Unit tests for the TOML-source read: presence, absence, and malformed TOML."""
+"""Unit tests for the TOML-source read: presence, absence, a missing file, and malformed TOML."""
 from testing_conventions.config.pyproject_has import pyproject_has
 
 
@@ -18,3 +18,7 @@ def test_pyproject_has_on_malformed_toml_is_false(tmp_path):
     path = tmp_path / "pyproject.toml"
     path.write_text("= broken =\n")
     assert pyproject_has(str(path), "report", "fail_under") is False
+
+
+def test_pyproject_has_on_a_missing_file_is_false(tmp_path):
+    assert pyproject_has(str(tmp_path / "pyproject.toml"), "report", "fail_under") is False

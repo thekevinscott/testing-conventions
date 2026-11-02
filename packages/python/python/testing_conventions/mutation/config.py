@@ -1,10 +1,9 @@
 """Render the cosmic-ray configuration the adapter drives, and derive the timing it carries."""
 from __future__ import annotations
 
-# Test files cosmic-ray must never mutate, which would mutate the suite itself. cosmic-ray
-# expands each with `glob.glob(pattern, recursive=True)`, so dropping the `**/` matches the
-# scanned path's top level alone and every nested suite is mutated as production source.
-EXCLUDES = ["**/*_test.py", "**/test_*.py", "**/conftest.py"]
+# cosmic-ray globs each relative to the run root: dropping `**/` leaves nested suites mutated, and
+# `tests/**/*.py` must track the test command's `--ignore=tests`, or its mutants all survive.
+EXCLUDES = ["**/*_test.py", "**/test_*.py", "**/conftest.py", "tests/**/*.py"]
 
 # A mutant outlasting the clean suite by more than this is judged hung. Scoping to the observed
 # runtime rather than a fixed ceiling keeps a merely-slow suite from timing out wholesale.

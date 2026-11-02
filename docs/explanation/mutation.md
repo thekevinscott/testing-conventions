@@ -205,6 +205,8 @@ resolves that pattern against the package root, exactly as it does when you run 
 The run mutates production source alone and leaves your test files intact: a `*_test.py`,
 `test_*.py`, or `conftest.py`; a `*.test.*` or `*.spec.*`, and anything under `__tests__/`; a
 Rust `#[cfg(test)]` module — at any depth beneath the scanned path, not just its top level.
+Every Python file under a `tests/` directly beneath the scanned path is test code by location,
+whatever its name, so a shared helper such as `tests/integration/served.py` yields no mutants.
 In-place mutation is built for the ephemeral CI
 checkout the workflow runs in; run it locally on a clean working tree, since the sources hold
 mutants while the run is live.

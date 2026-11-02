@@ -249,3 +249,19 @@ fn an_exempted_survivor_passes_the_gate() {
         0
     );
 }
+
+#[test]
+fn a_helper_module_under_tests_passes_the_gate() {
+    let project = Staged::python_loose_test_helpers("loose_test_helpers");
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "python"])
+        .arg(project.path())
+        .output()
+        .expect("the built binary should run");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("served.py"),
+        "no survivor is reported against a helper under tests/; got: {stderr}"
+    );
+    assert_eq!(out.status.code(), Some(0), "stderr: {stderr}");
+}

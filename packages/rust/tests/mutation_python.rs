@@ -95,6 +95,25 @@ fn a_loose_tree_with_no_manifest_reports_root_relative_survivors() {
 }
 
 #[test]
+fn a_helper_module_under_tests_is_never_mutated() {
+    let project = Staged::python_loose_test_helpers("loose_test_helpers");
+    let (count, survivors) = expect_tested(
+        measure_python(
+            project.path(),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+        )
+        .expect("cosmic-ray runs"),
+    );
+    assert!(count > 0, "calc.py is mutated, so the count is non-zero");
+    assert!(
+        survivors.is_empty(),
+        "tests/integration/served.py is test code and yields no mutants; got {survivors:?}"
+    );
+}
+
+#[test]
 fn a_loose_tree_with_no_manifest_passes_when_all_mutants_are_killed() {
     let project = Staged::python_loose("loose_killed");
     let (_, survivors) = expect_tested(

@@ -2293,6 +2293,9 @@ diff --git a/src/lib.rs b/src/lib.rs
         assert!(!is_mutatable_py("test_calc.py"));
         assert!(!is_mutatable_py("pkg/conftest.py"));
         assert!(!is_mutatable_py("README.md"));
+        assert!(!is_mutatable_py("tests/served.py"));
+        assert!(!is_mutatable_py("tests/integration/served.py"));
+        assert!(is_mutatable_py("pkg/tests/helper.py"));
     }
 
     #[test]

@@ -4,7 +4,7 @@ The adapter imports ``cosmic_ray`` lazily (inside the functions), so the engine 
 installed to unit-test it. This fixture installs a fake ``cosmic_ray`` package tree in
 ``sys.modules`` for the duration of a test, and the lazy imports resolve to it — injecting the
 dependency via ``sys.modules`` (never ``monkeypatch`` or an inline ``patch``, which the
-isolation lint forbids), the same technique the version-conditional ``tomlcompat`` test uses.
+isolation lint forbids).
 """
 from __future__ import annotations
 

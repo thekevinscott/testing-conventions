@@ -37,3 +37,13 @@ fn tier_layout_integration_suite_is_linted_from_a_src_scan() {
 fn tier_layout_test_outside_a_standard_tier_is_flagged() {
     assert_eq!(lint_exit("tier_layout/unknown_tier/src"), 1);
 }
+
+#[test]
+fn declared_suite_clean_exits_zero() {
+    let output = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["integration", "lint", "--language", "typescript", "--config"])
+        .arg(fixture("declared_suite/clean/testing-conventions.toml"))
+        .arg(fixture("declared_suite/clean/src"))
+        .output().expect("the built binary should run");
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+}

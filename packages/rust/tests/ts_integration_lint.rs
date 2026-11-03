@@ -104,3 +104,14 @@ fn tier_layout_integration_suite_is_linted_from_a_src_scan() {
 fn tier_layout_test_outside_a_standard_tier_is_flagged() {
     assert_eq!(lint_exit("tier_layout/unknown_tier/src"), 1);
 }
+
+#[test]
+fn declared_suite_clean_is_scanned_and_accepted() {
+    let argv: Vec<OsString> = vec![
+        "testing-conventions".into(), "integration".into(), "lint".into(),
+        "--language".into(), "typescript".into(), "--config".into(),
+        fixture("declared_suite/clean/testing-conventions.toml").into_os_string(),
+        fixture("declared_suite/clean/src").into_os_string(),
+    ];
+    assert_eq!(run(argv).unwrap(), 0);
+}

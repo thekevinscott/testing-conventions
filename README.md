@@ -21,7 +21,7 @@ one page per check, with its per-language behavior, run conditions, and configur
 
 **Integration**
 
-- [`integration lint`](https://thekevinscott.github.io/testing-conventions/explanation/isolation) — integration tests run first-party code for real: no first-party mock, double, or patch (Python, TypeScript, Rust); plus Python mock-mechanism hygiene (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`) and the suite layout itself, where a test file under `tests/` outside a standard tier is flagged (`unknown-tier`; Python, TypeScript).
+- [`integration lint`](https://thekevinscott.github.io/testing-conventions/explanation/isolation) — integration tests run first-party code for real: no first-party mock, double, or patch (Python, TypeScript, Rust); plus Python mock-mechanism hygiene (`no-monkeypatch`, `no-inline-patch`, `no-environ-mutation`, `no-constant-patch`) and the suite layout itself, where a test file under `tests/` outside a standard or declared tier is flagged (`unknown-tier`; Python, TypeScript).
 
 **Packaging**
 
@@ -149,7 +149,7 @@ first-party code for real, and `unit coverage` measures only the colocated unit
 suite. Location is checked negatively: `integration lint` scans
 `<package root>/tests/integration/` and `<package root>/tests/e2e/` when present
 (Rust: the crate root's `tests/`), and flags a test file that lands under `tests/`
-outside those tiers (`unknown-tier`). Misplacement fails; a package with no
+outside those tiers and any suite declared in `[integration-lint].suites` (`unknown-tier`). Misplacement fails; a package with no
 integration or e2e suite passes.
 
 #### External Dependencies

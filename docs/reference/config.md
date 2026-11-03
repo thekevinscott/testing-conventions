@@ -62,7 +62,21 @@ has its own section below.
 | `reason` | A free-form note on the table's `build_command`, kept as written. An exemption entry's required `reason` is a separate field. |
 | `features` | `[rust]` only: the cargo features the suite-running Rust checks enable. |
 
-`[e2e]` is the fourth root table, language-agnostic, carrying `extra_scope` and `exclude`.
+`[e2e]` is a root table carrying `extra_scope` and `exclude`. `[integration-lint]` is a
+root table carrying `suites`, the additional Python and TypeScript directories under
+`<package root>/tests/` scanned by the check. See [integration-lint](./checks/integration-lint#configuration).
+
+## Additional test suites
+
+```toml
+[integration-lint]
+suites = ["perf", "smoke"]
+```
+
+Each entry is a plain directory name directly under `<package root>/tests/`. The check scans
+existing declared suites with the integration rule set. An absent directory is a no-op. Empty
+names, `..`, and names containing path separators are config errors. Rust scans its entire
+crate-root `tests/` tree under Cargo's layout.
 
 ## Coverage
 

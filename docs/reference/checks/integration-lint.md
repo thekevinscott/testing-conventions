@@ -13,8 +13,8 @@ opposite side.
 
 An integration test that mocks first-party code is testing a fiction: the assembled system it
 claims to exercise never actually runs. The check keeps the integration tier honest — and it
-guards the suite layout itself: a test file outside a standard tier is a suite the scan would
-silently miss, so it is named as an error (`unknown-tier`) instead.
+guards the suite layout itself: a test file outside a standard or declared tier is named as
+`unknown-tier` so every suite receives the integration rules.
 
 ## The first-party/external line
 
@@ -24,10 +24,11 @@ silently miss, so it is named as an error (`unknown-tier`) instead.
 
 Subjects derive from the [package root](/monorepo#source-vs-the-package-root) — the
 nearest directory at or above `source` holding the language's manifest: the integration suite in
-`tests/integration/` and the e2e suite in `tests/e2e/` (Rust: the crate root's `tests/`, cargo's
-own layout, holding both out-of-crate suites). Both suites run first-party code for real, so both
-are held to the integration rules. A test file under `<package root>/tests/` outside a standard
-tier is flagged as `unknown-tier`; a tree with no manifest — loose scripts — is scanned at
+`tests/integration/` and the e2e suite in `tests/e2e/`, plus each suite declared by
+`[integration-lint].suites` in the package config. Every suite receives the same integration
+rules. A test file under `<package root>/tests/` outside these suites is flagged as
+`unknown-tier`. Rust uses Cargo's crate-root `tests/` layout, so the check scans that whole
+directory; a tree with no manifest — loose scripts — is scanned at
 `source` directly.
 
 ## What it flags
@@ -49,7 +50,21 @@ alike. The [`gates` input](/reference/workflow#inputs) names it `integration-lin
 
 ## Configuration
 
-The check takes no keys of its own. Each rule is lifted per file by a
+The package-root `testing-conventions.toml` declares additional suite directories for Python
+and TypeScript. Each name is one directory directly under `tests/`:
+
+```toml
+[integration-lint]
+suites = ["perf", "smoke"]
+```
+
+A declared suite receives every integration rule. An absent suite directory is a no-op. Names
+must be plain, single path segments; empty names, `..`, and path separators are errors. Rust
+already scans every test in the crate-root `tests/`, including subdirectories. Its suite layout
+uses Cargo's convention and does not require declarations. This check scans declared suites;
+execution of their tests is configured by the consuming package.
+
+Each rule is lifted per file by a
 [`[[<language>.exempt]]` entry](/reference/config#exemptions) with a required `reason` — and for
 this check's suite subjects, the entry's `path` resolves **relative to the package root** the
 tiers derive from (e.g. `tests/integration/billing_test.py`), not the scanned `source`:
@@ -63,7 +78,7 @@ tiers derive from (e.g. `tests/integration/billing_test.py`), not the scanned `s
 | `no-environ-mutation` | Python | env mutated outside `patch.dict(os.environ, ...)` |
 | `no-constant-patch` | Python | patching a module-global constant (either patch form) instead of injecting config |
 | `no-first-party-double` | Rust | a `#[double]` of the crate under test or a `path` dependency |
-| `unknown-tier` | Python, TypeScript | a test file under `<package root>/tests/` outside a standard tier |
+| `unknown-tier` | Python, TypeScript | a test file under `<package root>/tests/` outside a standard or declared tier |
 
 ## Learn more
 

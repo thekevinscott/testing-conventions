@@ -445,3 +445,14 @@ fn tier_layout_clean_suites_exit_zero() {
 fn tier_layout_package_without_a_tests_dir_exits_zero() {
     assert_eq!(lint_exit("tier_layout/no_tests/src"), 0);
 }
+
+#[test]
+fn declared_suite_clean_is_scanned_and_accepted() {
+    let argv: Vec<OsString> = vec![
+        "testing-conventions".into(), "integration".into(), "lint".into(),
+        "--language".into(), "python".into(), "--config".into(),
+        fixture("declared_suite/clean/testing-conventions.toml").into_os_string(),
+        fixture("declared_suite/clean/src").into_os_string(),
+    ];
+    assert_eq!(run(argv).unwrap(), 0);
+}

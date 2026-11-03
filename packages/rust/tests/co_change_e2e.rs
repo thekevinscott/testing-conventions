@@ -417,3 +417,91 @@ fn base_still_enforces_tree_wide_presence() {
         "stderr should name the orphan; got: {stderr}"
     );
 }
+
+const ENDED_PY: &str = "def ended():\n    return True\n";
+const REAPER_PY_TEST: &str =
+    "from pkg.reaper import reap\n\n\ndef test_reap():\n    assert reap()\n";
+
+/// A base where `pkg/reaper.py` imports `ended` from `pkg/old/ended.py`.
+fn python_relocation_base(slug: &str) -> (TempRepo, String) {
+    let repo = TempRepo::new(slug);
+    repo.write("pkg/__init__.py", "");
+    repo.write("pkg/old/__init__.py", "");
+    repo.write("pkg/old/ended.py", ENDED_PY);
+    repo.write(
+        "pkg/reaper.py",
+        "from pkg.old.ended import ended\n\n\ndef reap():\n    return ended()\n",
+    );
+    repo.write("pkg/reaper_test.py", REAPER_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+    (repo, base)
+}
+
+#[test]
+fn python_import_relocation_exits_zero() {
+    let (repo, base) = python_relocation_base("py-reloc");
+    repo.remove("pkg/old/ended.py");
+    repo.write("pkg/tools.py", ENDED_PY);
+    repo.write(
+        "pkg/reaper.py",
+        "from pkg.tools import ended\n\n\ndef reap():\n    return ended()\n",
+    );
+    repo.commit("move ended");
+
+    let (code, stderr) = co_change(&repo, "python", &base, None);
+    assert_eq!(
+        code, 0,
+        "an import relocation is not a co-change subject; stderr: {stderr}"
+    );
+}
+
+#[test]
+fn the_relocation_skip_does_not_silence_a_second_implementation() {
+    let (repo, base) = python_relocation_base("py-reloc-kept");
+    repo.write("pkg/tools.py", ENDED_PY);
+    repo.write(
+        "pkg/reaper.py",
+        "from pkg.tools import ended\n\n\ndef reap():\n    return ended()\n",
+    );
+    repo.commit("point at a second implementation");
+
+    let (code, stderr) = co_change(&repo, "python", &base, None);
+    assert_eq!(
+        code, 1,
+        "an import of a module still in the tree is a change; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("reaper.py"),
+        "stderr should name the importer; got: {stderr}"
+    );
+}
+
+#[test]
+fn typescript_import_relocation_exits_zero() {
+    let repo = TempRepo::new("ts-reloc");
+    repo.write("src/old/ended.ts", "export const ended = () => true;\n");
+    repo.write(
+        "src/reaper.ts",
+        "import { ended } from './old/ended.js';\nexport const reap = () => ended();\n",
+    );
+    repo.write(
+        "src/reaper.test.ts",
+        "import { reap } from './reaper.js';\nit('reaps', () => expect(reap()).toBe(true));\n",
+    );
+    repo.commit("base");
+    let base = repo.head();
+    repo.remove("src/old/ended.ts");
+    repo.write("src/tools.ts", "export const ended = () => true;\n");
+    repo.write(
+        "src/reaper.ts",
+        "import { ended } from './tools.js';\nexport const reap = () => ended();\n",
+    );
+    repo.commit("move ended");
+
+    let (code, stderr) = co_change(&repo, "typescript", &base, None);
+    assert_eq!(
+        code, 0,
+        "an import relocation is not a co-change subject; stderr: {stderr}"
+    );
+}

@@ -106,5 +106,21 @@ The normalization is deliberately narrow, and everything outside it stays a subj
 - Content that fails to parse on either side counts as changed, so an unparseable file is held to
   its colocated test.
 
+### A relocated import is not a change
+
+Moving a helper to a new module rewrites the import lines of every file that uses it, and nothing
+else. The names those files bind are the same, so their colocated tests pin the same behavior, and
+the edit passes on its own when it is a **pure relocation**:
+
+- everything outside the import statements compares equal under the rule above;
+- the file binds the same set of names before and after;
+- every name whose source module changed came from a module the same diff deletes.
+
+The last condition is what makes the move safe. A changed import that still points at a module
+living in the tree can bind a different implementation under the same name, so the file stays a
+subject. A source the check can't map to a file in the diff counts the same way: a TypeScript
+package specifier (`'lodash'`) and a Python `import *` both keep the file a subject. Python reads
+absolute and relative imports; TypeScript reads relative specifiers, with or without an extension.
+
 Both languages reach the same determination through their own parser, so the two arms agree on what
 an edit means — the parity the standard holds every check to.

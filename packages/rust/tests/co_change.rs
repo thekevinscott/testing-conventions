@@ -954,3 +954,275 @@ fn base_still_enforces_tree_wide_presence() {
 
     assert_eq!(run_co_change(&repo, "python", &base, None).unwrap(), 1);
 }
+
+const ENDED_PY: &str = "def ended():\n    return True\n";
+const ENDED_PY_TEST: &str =
+    "from pkg.old.ended import ended\n\n\ndef test_ended():\n    assert ended()\n";
+const REAPER_PY_TEST: &str =
+    "from pkg.reaper import reap\n\n\ndef test_reap():\n    assert reap()\n";
+
+const PY_OLD_IMPORT: &str = "from pkg.old.ended import ended";
+
+fn reaper_py(import: &str) -> String {
+    format!("{import}\n\n\ndef reap():\n    return ended()\n")
+}
+
+/// A base where `pkg/reaper.py` imports `ended` from `pkg/old/ended.py` with `import`, both
+/// tested.
+fn python_relocation_base(slug: &str, import: &str) -> (TempRepo, String) {
+    let repo = TempRepo::new(slug);
+    repo.write("pkg/__init__.py", "");
+    repo.write("pkg/old/__init__.py", "");
+    repo.write("pkg/old/ended.py", ENDED_PY);
+    repo.write("pkg/old/ended_test.py", ENDED_PY_TEST);
+    repo.write("pkg/reaper.py", &reaper_py(import));
+    repo.write("pkg/reaper_test.py", REAPER_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+    (repo, base)
+}
+
+/// Moves `ended` from `pkg/old/ended.py` to `pkg/tools/process.py`, tests and all.
+fn python_move_ended(repo: &TempRepo) {
+    repo.remove("pkg/old/ended.py");
+    repo.remove("pkg/old/ended_test.py");
+    repo.write("pkg/tools/__init__.py", "");
+    repo.write("pkg/tools/process.py", ENDED_PY);
+    repo.write(
+        "pkg/tools/process_test.py",
+        "from pkg.tools.process import ended\n\n\ndef test_ended():\n    assert ended()\n",
+    );
+}
+
+#[test]
+fn python_import_relocation_away_from_a_deleted_module_is_not_a_subject() {
+    let (repo, base) = python_relocation_base("py-reloc", PY_OLD_IMPORT);
+    python_move_ended(&repo);
+    repo.write(
+        "pkg/reaper.py",
+        &reaper_py("from pkg.tools.process import ended"),
+    );
+    repo.commit("move ended");
+
+    assert!(stale(&repo, &base, Language::Python).is_empty());
+}
+
+#[test]
+fn python_relative_import_relocation_is_not_a_subject() {
+    let (repo, base) = python_relocation_base("py-reloc-rel", "from .old.ended import ended");
+    python_move_ended(&repo);
+    repo.write(
+        "pkg/reaper.py",
+        &reaper_py("from .tools.process import ended"),
+    );
+    repo.commit("move ended");
+
+    assert!(stale(&repo, &base, Language::Python).is_empty());
+}
+
+#[test]
+fn python_merging_several_relocated_imports_into_one_is_not_a_subject() {
+    let repo = TempRepo::new("py-reloc-merge");
+    repo.write("pkg/__init__.py", "");
+    repo.write("pkg/old/__init__.py", "");
+    repo.write("pkg/old/ended.py", ENDED_PY);
+    repo.write("pkg/old/settle.py", "def settle():\n    return True\n");
+    repo.write(
+        "pkg/reaper.py",
+        "from pkg.old.ended import ended\nfrom pkg.old.settle import settle\n\n\n\
+         def reap():\n    return ended() and settle()\n",
+    );
+    repo.write("pkg/reaper_test.py", REAPER_PY_TEST);
+    repo.commit("base");
+    let base = repo.head();
+
+    repo.remove("pkg/old/ended.py");
+    repo.remove("pkg/old/settle.py");
+    repo.write(
+        "pkg/tools.py",
+        "def ended():\n    return True\n\n\ndef settle():\n    return True\n",
+    );
+    repo.write(
+        "pkg/reaper.py",
+        "from pkg.tools import ended, settle\n\n\n\
+         def reap():\n    return ended() and settle()\n",
+    );
+    repo.commit("move both helpers");
+
+    let stale = stale(&repo, &base, Language::Python);
+    assert!(
+        !stale.contains(&"pkg/reaper.py".to_string()),
+        "got: {stale:?}"
+    );
+}
+
+#[test]
+fn python_import_change_to_a_module_still_in_the_tree_is_stale() {
+    let (repo, base) = python_relocation_base("py-reloc-kept", PY_OLD_IMPORT);
+    repo.write("pkg/tools/__init__.py", "");
+    repo.write("pkg/tools/process.py", ENDED_PY);
+    repo.write(
+        "pkg/reaper.py",
+        &reaper_py("from pkg.tools.process import ended"),
+    );
+    repo.commit("point at a second implementation");
+
+    assert_eq!(stale(&repo, &base, Language::Python), vec!["pkg/reaper.py"]);
+}
+
+#[test]
+fn python_import_relocation_that_binds_a_new_name_is_stale() {
+    let (repo, base) = python_relocation_base("py-reloc-newname", PY_OLD_IMPORT);
+    python_move_ended(&repo);
+    repo.write(
+        "pkg/reaper.py",
+        &reaper_py("from pkg.tools.process import ended, settle"),
+    );
+    repo.commit("move ended and bind settle");
+
+    assert_eq!(stale(&repo, &base, Language::Python), vec!["pkg/reaper.py"]);
+}
+
+#[test]
+fn python_import_relocation_carrying_a_code_change_is_stale() {
+    let (repo, base) = python_relocation_base("py-reloc-code", PY_OLD_IMPORT);
+    python_move_ended(&repo);
+    repo.write(
+        "pkg/reaper.py",
+        "from pkg.tools.process import ended\n\n\ndef reap():\n    return not ended()\n",
+    );
+    repo.commit("move ended and change reap");
+
+    assert_eq!(stale(&repo, &base, Language::Python), vec!["pkg/reaper.py"]);
+}
+
+#[test]
+fn python_star_import_relocation_is_stale() {
+    let (repo, base) = python_relocation_base("py-reloc-star", "from pkg.old.ended import *");
+    python_move_ended(&repo);
+    repo.write(
+        "pkg/reaper.py",
+        &reaper_py("from pkg.tools.process import *"),
+    );
+    repo.commit("move ended");
+
+    assert_eq!(stale(&repo, &base, Language::Python), vec!["pkg/reaper.py"]);
+}
+
+const ENDED_TS: &str = "export const ended = () => true;\n";
+const REAPER_TS_TEST: &str =
+    "import { reap } from './reaper.js';\nit('reaps', () => expect(reap()).toBe(true));\n";
+
+const TS_OLD_IMPORT: &str = "import { ended } from './old/ended.js';";
+
+fn reaper_ts(import: &str) -> String {
+    format!("{import}\nexport const reap = () => ended();\n")
+}
+
+/// A base where `src/reaper.ts` imports `ended` from `src/old/ended.ts` with `import`, both
+/// tested.
+fn typescript_relocation_base(slug: &str, import: &str) -> (TempRepo, String) {
+    let repo = TempRepo::new(slug);
+    repo.write("src/old/ended.ts", ENDED_TS);
+    repo.write(
+        "src/old/ended.test.ts",
+        "import { ended } from './ended.js';\nit('ends', () => expect(ended()).toBe(true));\n",
+    );
+    repo.write("src/reaper.ts", &reaper_ts(import));
+    repo.write("src/reaper.test.ts", REAPER_TS_TEST);
+    repo.commit("base");
+    let base = repo.head();
+    (repo, base)
+}
+
+/// Moves `ended` from `src/old/ended.ts` to `src/tools/process.ts`, tests and all.
+fn typescript_move_ended(repo: &TempRepo) {
+    repo.remove("src/old/ended.ts");
+    repo.remove("src/old/ended.test.ts");
+    repo.write("src/tools/process.ts", ENDED_TS);
+    repo.write(
+        "src/tools/process.test.ts",
+        "import { ended } from './process.js';\nit('ends', () => expect(ended()).toBe(true));\n",
+    );
+}
+
+#[test]
+fn typescript_import_relocation_away_from_a_deleted_module_is_not_a_subject() {
+    let (repo, base) = typescript_relocation_base("ts-reloc", TS_OLD_IMPORT);
+    typescript_move_ended(&repo);
+    repo.write(
+        "src/reaper.ts",
+        &reaper_ts("import { ended } from './tools/process.js';"),
+    );
+    repo.commit("move ended");
+
+    assert!(stale(&repo, &base, Language::TypeScript).is_empty());
+}
+
+#[test]
+fn typescript_extensionless_import_relocation_is_not_a_subject() {
+    let (repo, base) =
+        typescript_relocation_base("ts-reloc-bare-ext", "import { ended } from './old/ended';");
+    typescript_move_ended(&repo);
+    repo.write(
+        "src/reaper.ts",
+        &reaper_ts("import { ended } from './tools/process';"),
+    );
+    repo.commit("move ended");
+
+    assert!(stale(&repo, &base, Language::TypeScript).is_empty());
+}
+
+#[test]
+fn typescript_import_change_to_a_module_still_in_the_tree_is_stale() {
+    let (repo, base) = typescript_relocation_base("ts-reloc-kept", TS_OLD_IMPORT);
+    repo.write("src/tools/process.ts", ENDED_TS);
+    repo.write(
+        "src/reaper.ts",
+        &reaper_ts("import { ended } from './tools/process.js';"),
+    );
+    repo.commit("point at a second implementation");
+
+    assert_eq!(
+        stale(&repo, &base, Language::TypeScript),
+        vec!["src/reaper.ts"]
+    );
+}
+
+#[test]
+fn typescript_package_specifier_change_is_stale() {
+    let repo = TempRepo::new("ts-reloc-pkg");
+    repo.write(
+        "src/reaper.ts",
+        &reaper_ts("import { ended } from 'old-tools';"),
+    );
+    repo.write("src/reaper.test.ts", REAPER_TS_TEST);
+    repo.commit("base");
+    let base = repo.head();
+    repo.write(
+        "src/reaper.ts",
+        &reaper_ts("import { ended } from 'new-tools';"),
+    );
+    repo.commit("swap the package");
+
+    assert_eq!(
+        stale(&repo, &base, Language::TypeScript),
+        vec!["src/reaper.ts"]
+    );
+}
+
+#[test]
+fn typescript_import_relocation_carrying_a_code_change_is_stale() {
+    let (repo, base) = typescript_relocation_base("ts-reloc-code", TS_OLD_IMPORT);
+    typescript_move_ended(&repo);
+    repo.write(
+        "src/reaper.ts",
+        "import { ended } from './tools/process.js';\nexport const reap = () => !ended();\n",
+    );
+    repo.commit("move ended and change reap");
+
+    assert_eq!(
+        stale(&repo, &base, Language::TypeScript),
+        vec!["src/reaper.ts"]
+    );
+}

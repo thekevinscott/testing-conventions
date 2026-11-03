@@ -1,5 +1,5 @@
 ---
-description: The integration-lint check — integration and e2e tests run first-party code for real; the suite tiers it scans, the per-language rules, the hygiene lints, and unknown-tier.
+description: The integration-lint check — integration and e2e tests run first-party code for real; the standard and declared suites it scans, the per-language rules, and unknown-tier.
 ---
 
 # `integration-lint`

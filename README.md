@@ -147,10 +147,10 @@ coverage is measured on.
 to mock every collaborator, `integration lint` requires integration tests to run
 first-party code for real, and `unit coverage` measures only the colocated unit
 suite. Location is checked negatively: `integration lint` scans
-`<package root>/tests/integration/` and `<package root>/tests/e2e/` when present
-(Rust: the crate root's `tests/`), and flags a test file that lands under `tests/`
-outside those tiers and any suite declared in `[integration-lint].suites` (`unknown-tier`). Misplacement fails; a package with no
-integration or e2e suite passes.
+`<package root>/tests/integration/`, `<package root>/tests/e2e/`, and suites
+declared in `[integration-lint].suites` when present (Rust: the crate root's
+`tests/`). A test file outside these suites is flagged as `unknown-tier`. A
+package with no suites passes.
 
 #### External Dependencies
 

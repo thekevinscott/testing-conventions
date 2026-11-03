@@ -55,16 +55,23 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     Ok(violations)
 }
 
-const UNKNOWN_TIER_MSG: &str = "test file sits under `tests/` outside the standard suite tiers; \
-     a suite lives in `tests/integration/` or `tests/e2e/`";
+const UNKNOWN_TIER_MSG: &str =
+    "test file sits under `tests/` outside the standard or declared suites; \
+     declare its directory in `[integration-lint].suites` in `testing-conventions.toml`";
 
 /// Every lint violation in `package_root`'s suite tiers, sorted by `(file, line)`.
-/// `tests/integration/` and `tests/e2e/` both run first-party code for real; a `*_test.py`
-/// under `tests/` outside them is `unknown-tier` rather than silently unscanned.
-pub fn find_suite_violations(package_root: &Path) -> Result<Vec<Violation>> {
+/// Standard and declared suites receive the integration rules; test files outside them
+/// are `unknown-tier`.
+pub fn find_suite_violations(package_root: &Path, suites: &[String]) -> Result<Vec<Violation>> {
     let tests = package_root.join("tests");
     let mut violations = Vec::new();
-    let tiers = ["integration", "e2e"].map(|tier| tests.join(tier));
+    let mut tiers = vec![tests.join("integration"), tests.join("e2e")];
+    for suite in suites {
+        let path = tests.join(suite);
+        if !tiers.contains(&path) {
+            tiers.push(path);
+        }
+    }
     for tier in &tiers {
         if tier.is_dir() {
             violations.extend(find_violations(tier)?);
@@ -2391,7 +2398,7 @@ mod tests {
             "tests/smoke/ledger_test.py",
             "def ledger_test():\n    pass\n",
         );
-        let found = find_suite_violations(&tree.0).expect("a readable tree should succeed");
+        let found = find_suite_violations(&tree.0, &[]).expect("a readable tree should succeed");
         let strays: Vec<_> = found
             .iter()
             .filter(|v| v.rule == "unknown-tier")
@@ -2400,13 +2407,14 @@ mod tests {
         // Only the file outside `integration/` and `e2e/` is flagged.
         assert_eq!(strays, vec![PathBuf::from("tests/smoke/ledger_test.py")]);
         assert_eq!(found.len(), strays.len());
+        assert!(found[0].message.contains("[integration-lint].suites"));
     }
 
     #[test]
     fn find_suite_without_a_tests_directory_reports_nothing() {
         let tree = TempDir::new();
         tree.write("pyproject.toml", "[project]\nname = \"myproject\"\n");
-        assert!(find_suite_violations(&tree.0)
+        assert!(find_suite_violations(&tree.0, &[])
             .expect("a readable tree should succeed")
             .is_empty());
     }

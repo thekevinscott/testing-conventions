@@ -2,7 +2,6 @@
 
 use std::path::Path;
 
-#[cfg(test)]
 use crate::config;
 use crate::waivers::{apply_waivers, ExemptSelect};
 use crate::{colocated_test, isolation, lint, tiers, ts, violation, IntegrationLintLanguage};
@@ -16,7 +15,16 @@ pub fn run(
 ) -> anyhow::Result<i32> {
     let package_root = tiers::package_root(root, manifest_name(language));
     let scan_root = package_root.as_deref().unwrap_or(root);
-    let raw = find(root, package_root.as_deref(), scan_root, language)?;
+    let config = if config_path.exists() {
+        Some(config::load_config(config_path)?)
+    } else {
+        None
+    };
+    let suites = config
+        .as_ref()
+        .and_then(|config| config.integration_lint.as_ref())
+        .map_or(&[][..], |table| table.suites.as_slice());
+    let raw = find(root, package_root.as_deref(), scan_root, language, suites)?;
     let violations = apply_waivers(raw, scan_root, config_path, select(language))?;
     if violations.is_empty() {
         return Ok(0);
@@ -55,14 +63,15 @@ fn find(
     package_root: Option<&Path>,
     scan_root: &Path,
     language: IntegrationLintLanguage,
+    suites: &[String],
 ) -> anyhow::Result<Vec<lint::Violation>> {
     match (language, package_root) {
         (IntegrationLintLanguage::Python, Some(package_root)) => {
-            lint::find_suite_violations(package_root)
+            lint::find_suite_violations(package_root, suites)
         }
         (IntegrationLintLanguage::Python, None) => lint::find_violations(root),
         (IntegrationLintLanguage::TypeScript, Some(package_root)) => {
-            ts::find_suite_violations(package_root)
+            ts::find_suite_violations(package_root, suites)
         }
         (IntegrationLintLanguage::TypeScript, None) => ts::find_integration_violations(root),
         (IntegrationLintLanguage::Rust, _) => isolation::find_integration_violations(scan_root),
@@ -114,7 +123,7 @@ mod tests {
             IntegrationLintLanguage::Python,
             IntegrationLintLanguage::TypeScript,
         ] {
-            assert!(find(&dir, None, &dir, language).unwrap().is_empty());
+            assert!(find(&dir, None, &dir, language, &[]).unwrap().is_empty());
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -127,7 +136,9 @@ mod tests {
             IntegrationLintLanguage::Python,
             IntegrationLintLanguage::TypeScript,
         ] {
-            assert!(find(&dir, Some(&dir), &dir, language).unwrap().is_empty());
+            assert!(find(&dir, Some(&dir), &dir, language, &[])
+                .unwrap()
+                .is_empty());
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

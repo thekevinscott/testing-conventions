@@ -15,6 +15,8 @@ pub struct Config {
     pub typescript: Option<TypeScriptConfig>,
     pub rust: Option<RustConfig>,
     pub e2e: Option<E2eConfig>,
+    #[serde(rename = "integration-lint")]
+    pub integration_lint: Option<IntegrationLintConfig>,
 }
 
 /// The `[python]` table.
@@ -43,6 +45,14 @@ pub struct E2eConfig {
     pub extra_scope: Vec<String>,
     #[serde(default)]
     pub exclude: Vec<String>,
+}
+
+/// Additional suite directories scanned by `integration-lint`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct IntegrationLintConfig {
+    #[serde(default)]
+    pub suites: Vec<String>,
 }
 
 /// The `[typescript]` table.
@@ -454,8 +464,19 @@ impl Config {
         self.rust.as_ref().map_or(&[], |c| &c.exempt)
     }
 
-    /// Reject any `exempt` entry that names no rule or carries an empty reason.
+    /// Reject invalid suite names and malformed exemptions.
     fn validate(&self) -> Result<()> {
+        if let Some(table) = &self.integration_lint {
+            for name in &table.suites {
+                let mut components = Path::new(name).components();
+                let plain = matches!(components.next(), Some(std::path::Component::Normal(_)))
+                    && components.next().is_none()
+                    && !name.contains(['/', '\\']);
+                if !plain {
+                    bail!("[integration-lint].suites entry `{name}` must be a plain single directory name");
+                }
+            }
+        }
         let tables = [
             ("python", self.python.as_ref().map(|c| &c.exempt)),
             ("typescript", self.typescript.as_ref().map(|c| &c.exempt)),
@@ -586,6 +607,27 @@ mod tests {
     /// [`annotate_toml_error`] receives from `load_config`.
     fn toml_error(toml_src: &str) -> toml::de::Error {
         toml::from_str::<Config>(toml_src).expect_err("the source should fail to parse")
+    }
+
+    #[test]
+    fn declared_suites_accept_plain_directory_names() {
+        let config = parse("[integration-lint]\nsuites = [\"perf\", \"smoke\"]\n").unwrap();
+        assert_eq!(
+            config.integration_lint.unwrap().suites,
+            vec!["perf", "smoke"]
+        );
+    }
+
+    #[test]
+    fn declared_suites_reject_non_segments() {
+        for name in ["", ".", "..", "a/b", "a\\b"] {
+            let source = format!("[integration-lint]\nsuites = [{name:?}]\n");
+            let err = parse(&source).unwrap_err();
+            assert!(
+                err.to_string().contains("plain single directory name"),
+                "{name:?}: {err}"
+            );
+        }
     }
 
     #[test]

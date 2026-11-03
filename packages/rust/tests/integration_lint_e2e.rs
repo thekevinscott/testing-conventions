@@ -181,3 +181,17 @@ fn declared_suite_clean_exits_zero() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+#[test]
+fn declared_suite_red_receives_integration_rules() {
+    let output = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["integration", "lint", "--language", "python", "--config"])
+        .arg(fixture("declared_suite/red/testing-conventions.toml"))
+        .arg(fixture("declared_suite/red/src"))
+        .output()
+        .expect("the built binary should run");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(stderr.contains("no-monkeypatch"), "{stderr}");
+    assert!(!stderr.contains("unknown-tier"), "{stderr}");
+}

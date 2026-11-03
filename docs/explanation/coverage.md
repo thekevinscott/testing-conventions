@@ -31,7 +31,7 @@ exempted files/lines are lifted from it. The exact keys and defaults are in the
 - **Python** — the suite runs under `coverage.py` with branch coverage on; the combined line +
   branch total meets `fail_under`. A source with no branching constructs measures zero branches,
   which is vacuously full branch coverage — the total reduces to the line percent. `pytest`
-  collects only the scanned path, with the standard suite tiers under `tests/` ignored, so the
+  collects only the scanned path, with the package-root suites under `tests/` ignored, so the
   integration tier stays out of the unit lane the same way it stays out for TypeScript and Rust.
 - **TypeScript** — the suite runs under `vitest` v8 coverage; **four independent metrics** (lines,
   branches, functions, statements) each meet their floor, because line coverage can read 100% while

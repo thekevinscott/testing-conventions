@@ -117,16 +117,22 @@ pub fn find_integration_violations(root: impl AsRef<Path>) -> Result<Vec<Violati
     Ok(violations)
 }
 
-const UNKNOWN_TIER_MSG: &str = "test file sits under `tests/` outside the standard suite tiers; \
-     a suite lives in `tests/integration/` or `tests/e2e/`";
+const UNKNOWN_TIER_MSG: &str =
+    "test file sits under `tests/` outside the standard or declared suites; \
+     declare its directory in `[integration-lint].suites` in `testing-conventions.toml`";
 
 /// Every integration-isolation violation in `package_root`'s suite tiers, sorted by
-/// `(file, line)`. `tests/integration/` and `tests/e2e/` both run first-party code for real;
-/// a test file under `tests/` outside them is `unknown-tier` rather than silently unscanned.
-pub fn find_suite_violations(package_root: &Path) -> Result<Vec<Violation>> {
+/// `(file, line)`. Standard and declared suites receive the integration rules.
+pub fn find_suite_violations(package_root: &Path, suites: &[String]) -> Result<Vec<Violation>> {
     let tests = package_root.join("tests");
     let mut violations = Vec::new();
-    let tiers = ["integration", "e2e"].map(|tier| tests.join(tier));
+    let mut tiers = vec![tests.join("integration"), tests.join("e2e")];
+    for suite in suites {
+        let path = tests.join(suite);
+        if !tiers.contains(&path) {
+            tiers.push(path);
+        }
+    }
     for tier in &tiers {
         if tier.is_dir() {
             violations.extend(find_integration_violations(tier)?);
@@ -1108,7 +1114,7 @@ mod tests {
     #[test]
     fn a_package_without_a_tests_dir_has_no_suite_violations() {
         let dir = unique_tmp("suite-test");
-        let found = find_suite_violations(&dir).expect("an empty package scans clean");
+        let found = find_suite_violations(&dir, &[]).expect("an empty package scans clean");
         assert!(found.is_empty(), "got: {found:?}");
     }
 
@@ -1135,10 +1141,13 @@ mod tests {
         .unwrap();
         std::fs::write(dir.join("tests/stray_b.test.ts"), "").unwrap();
         std::fs::write(dir.join("tests/stray_a.test.ts"), "").unwrap();
-        let found = find_suite_violations(&dir).unwrap();
+        let found = find_suite_violations(&dir, &[]).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(found.len(), 2, "got: {found:?}");
         assert!(found.iter().all(|v| v.rule == "unknown-tier"));
+        assert!(found
+            .iter()
+            .all(|v| v.message.contains("[integration-lint].suites")));
         assert!(found[0].file < found[1].file);
     }
 

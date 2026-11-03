@@ -50,6 +50,7 @@ fn expected_valid() -> Config {
             reason: String::new(),
         }),
         e2e: None,
+        integration_lint: None,
     }
 }
 

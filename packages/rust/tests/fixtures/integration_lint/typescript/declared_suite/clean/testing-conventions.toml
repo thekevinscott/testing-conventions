@@ -1,2 +1,2 @@
 [integration-lint]
-suites = ["perf", "absent"]
+suites = ["perf", "absent", "integration"]

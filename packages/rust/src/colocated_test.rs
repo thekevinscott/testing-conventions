@@ -85,6 +85,26 @@ impl Language {
         }
     }
 
+    /// `true` when `head` differs from `base` only by imports that moved off a module in
+    /// `deleted` — the same code and bound names otherwise.
+    pub(crate) fn relocates_imports(
+        self,
+        base: &str,
+        head: &str,
+        path: &Path,
+        deleted: &BTreeSet<String>,
+    ) -> bool {
+        match self {
+            Language::Python => crate::python_imports::split(base, path)
+                .zip(crate::python_imports::split(head, path))
+                .is_some_and(|(b, h)| crate::relocation::is_relocation(&b, &h, deleted)),
+            Language::TypeScript => crate::ts_imports::split(base, path)
+                .zip(crate::ts_imports::split(head, path))
+                .is_some_and(|(b, h)| crate::relocation::is_relocation(&b, &h, deleted)),
+            Language::Rust => false,
+        }
+    }
+
     /// The colocated test `source` is expected to have.
     pub(crate) fn expected_test_path(self, source: &Path) -> PathBuf {
         match self {
@@ -806,6 +826,33 @@ mod tests {
             "def widget(flag):\n    if flag:\n        count = 1\n        return count\n",
             py
         ));
+    }
+
+    #[test]
+    fn relocates_imports_reads_each_language_and_never_rust() {
+        let gone: BTreeSet<String> = ["pkg/old.py", "src/old.ts"]
+            .iter()
+            .map(|p| p.to_string())
+            .collect();
+        assert!(Language::Python.relocates_imports(
+            "from pkg.old import f\nx = f()\n",
+            "from pkg.new import f\nx = f()\n",
+            Path::new("pkg/user.py"),
+            &gone,
+        ));
+        assert!(!Language::Python.relocates_imports(
+            "from pkg.old import f\nx = f()\n",
+            "def f() return 1\n",
+            Path::new("pkg/user.py"),
+            &gone,
+        ));
+        assert!(Language::TypeScript.relocates_imports(
+            "import { f } from './old.js';\nexport const x = f();\n",
+            "import { f } from './new.js';\nexport const x = f();\n",
+            Path::new("src/user.ts"),
+            &gone,
+        ));
+        assert!(!Language::Rust.relocates_imports("", "", Path::new("src/lib.rs"), &gone));
     }
 
     #[test]

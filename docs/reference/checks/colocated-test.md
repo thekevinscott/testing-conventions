@@ -45,6 +45,11 @@ block structure Python indentation carries, so an edit there is a subject; so is
 that travels with a code change. Content that fails to parse on either side counts as changed and
 is held to its test.
 
+A modification that only relocates imports is not a subject either. When every name the file binds
+is unchanged and each rewritten import points away from a module the same diff deletes, the file's
+test still pins its behavior. Python reads absolute and relative imports; TypeScript reads relative
+specifiers. A package specifier or an `import *` keeps the file a subject.
+
 Changing a test on its own always passes. Rust units are inline in the same file, so a sibling
 test can't go stale and co-change doesn't apply to Rust — a deliberate asymmetry.
 
@@ -113,8 +118,8 @@ The check takes no keys of its own. Its exemption names, each a
 | `colocated-test` | the presence requirement for one file (a launcher shim, a process entry point) |
 | `co-change` | the co-change requirement for one file, independently of presence |
 
-Both exemptions apply to whole files. A declaration-only module is never a subject, and a comment-only or
-whitespace-only edit is never a co-change subject — the files themselves decide both, with no
+Both exemptions apply to whole files. A declaration-only module is never a subject, and a comment-only,
+whitespace-only, or import-relocation edit is never a co-change subject — the files themselves decide both, with no
 configuration.
 
 ## Learn more

@@ -117,12 +117,13 @@ pub fn find_integration_violations(root: impl AsRef<Path>) -> Result<Vec<Violati
     Ok(violations)
 }
 
-const UNKNOWN_TIER_MSG: &str = "test file sits under `tests/` outside the standard suite tiers; \
-     a suite lives in `tests/integration/` or `tests/e2e/`";
+const UNKNOWN_TIER_MSG: &str = "test file sits directly in `tests/`; \
+     a suite lives in a directory under `tests/`, such as `tests/integration/`";
 
 /// Every integration-isolation violation in `package_root`'s suite tiers, sorted by
 /// `(file, line)`. `tests/integration/` and `tests/e2e/` both run first-party code for real;
-/// a test file under `tests/` outside them is `unknown-tier` rather than silently unscanned.
+/// any other `tests/<name>/` is the package's own suite, and a test file directly in `tests/` is
+/// `unknown-tier`.
 pub fn find_suite_violations(package_root: &Path) -> Result<Vec<Violation>> {
     let tests = package_root.join("tests");
     let mut violations = Vec::new();
@@ -135,7 +136,7 @@ pub fn find_suite_violations(package_root: &Path) -> Result<Vec<Violation>> {
     if tests.is_dir() {
         let mut strays = Vec::new();
         collect_ts_test_files(&tests, &mut strays)?;
-        strays.retain(|file| !tiers.iter().any(|tier| file.starts_with(tier)));
+        strays.retain(|file| file.parent() == Some(tests.as_path()));
         for file in strays {
             violations.push(Violation {
                 file,
@@ -1135,6 +1136,8 @@ mod tests {
         .unwrap();
         std::fs::write(dir.join("tests/stray_b.test.ts"), "").unwrap();
         std::fs::write(dir.join("tests/stray_a.test.ts"), "").unwrap();
+        std::fs::create_dir_all(dir.join("tests/perf")).unwrap();
+        std::fs::write(dir.join("tests/perf/load.test.ts"), "").unwrap();
         let found = find_suite_violations(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(found.len(), 2, "got: {found:?}");

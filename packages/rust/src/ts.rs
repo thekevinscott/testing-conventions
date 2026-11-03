@@ -1131,6 +1131,16 @@ mod tests {
     }
 
     #[test]
+    fn declared_suite_reports_an_unreadable_test_file() {
+        let dir = unique_tmp("declared-unreadable");
+        std::fs::create_dir_all(dir.join("tests/perf")).unwrap();
+        std::fs::write(dir.join("tests/perf/bad.test.ts"), [0xFF, 0xFE]).unwrap();
+        let err = find_suite_violations(&dir, &["perf".to_string()]).unwrap_err();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(err.to_string().contains("reading test file"), "{err:#}");
+    }
+
+    #[test]
     fn suite_violations_cover_tiers_and_sort_stray_files() {
         let dir = unique_tmp("suite-busy");
         std::fs::create_dir_all(dir.join("tests/integration")).unwrap();

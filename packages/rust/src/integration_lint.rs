@@ -144,6 +144,31 @@ mod tests {
     }
 
     #[test]
+    fn a_declared_python_suite_uses_the_package_config() {
+        let dir = tree("declared-python-suite");
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::create_dir_all(dir.join("tests/perf")).unwrap();
+        std::fs::write(dir.join("pyproject.toml"), "[project]\nname = \"widget\"\n").unwrap();
+        std::fs::write(
+            dir.join("testing-conventions.toml"),
+            "[integration-lint]\nsuites = [\"perf\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("tests/perf/perf_test.py"),
+            "def perf_test():\n    assert True\n",
+        )
+        .unwrap();
+        let exit = run(
+            &dir.join("src"),
+            IntegrationLintLanguage::Python,
+            &dir.join("testing-conventions.toml"),
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(exit.unwrap(), 0);
+    }
+
+    #[test]
     fn a_clean_rust_suite_exits_zero() {
         let dir = tree("clean");
         std::fs::create_dir_all(dir.join("tests")).unwrap();

@@ -75,6 +75,6 @@ fn declared_suite_red_receives_integration_rules() {
         .expect("the built binary should run");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success());
-    assert!(stderr.contains("no-first-party-mock"), "{stderr}");
+    assert_eq!(stderr.matches("no-first-party-mock").count(), 2, "{stderr}");
     assert!(!stderr.contains("unknown-tier"), "{stderr}");
 }

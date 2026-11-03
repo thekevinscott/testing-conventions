@@ -163,6 +163,11 @@ fn tier_layout_test_outside_a_standard_tier_is_flagged() {
 }
 
 #[test]
+fn tier_layout_custom_suite_directory_is_left_unscanned() {
+    assert_eq!(lint_exit("tier_layout/custom_suite/src"), 0);
+}
+
+#[test]
 fn tier_layout_clean_suites_exit_zero() {
     assert_eq!(lint_exit("tier_layout/clean/src"), 0);
 }

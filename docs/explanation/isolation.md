@@ -42,9 +42,9 @@ tests under the call's `source`, leaving `<package root>/tests/` to the suite ti
 above `source` holding the language's manifest — per the standard layout: the integration suite in
 `tests/integration/`, the e2e suite in `tests/e2e/`. Both suites run first-party code for real,
 so both are held to the integration rules. (Rust's cargo layout keeps both out-of-crate suites
-in the crate root's `tests/`, so that whole directory is the subject there.) A test file under
-`<package root>/tests/` outside a standard tier is flagged as `unknown-tier`: the layout is part
-of the standard, and a suite the scan would silently miss is an error instead. A tree with no
+in the crate root's `tests/`, so that whole directory is the subject there.) Any other directory
+under `tests/` (`tests/perf/`, `tests/smoke/`) is a suite of the package's own, left unscanned. A
+test file directly in `<package root>/tests/` is flagged as `unknown-tier`. A tree with no
 manifest — loose scripts — is scanned at `source` directly.
 
 ## What `unit-lint` flags

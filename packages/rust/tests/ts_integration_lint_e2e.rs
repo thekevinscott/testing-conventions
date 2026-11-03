@@ -37,3 +37,8 @@ fn tier_layout_integration_suite_is_linted_from_a_src_scan() {
 fn tier_layout_test_outside_a_standard_tier_is_flagged() {
     assert_eq!(lint_exit("tier_layout/unknown_tier/src"), 1);
 }
+
+#[test]
+fn tier_layout_custom_suite_directory_is_left_unscanned() {
+    assert_eq!(lint_exit("tier_layout/custom_suite/src"), 0);
+}

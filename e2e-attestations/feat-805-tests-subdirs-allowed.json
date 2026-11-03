@@ -1,0 +1,7 @@
+{
+  "command": "cargo nextest run --manifest-path packages/rust/Cargo.toml -E \"binary(integration_lint) | binary(integration_lint_e2e) | binary(ts_integration_lint) | binary(ts_integration_lint_e2e)\"",
+  "ran_at": 1793722663,
+  "exit_code": 0,
+  "commit": "521297c2c65711799e021610ee5347ff18781055",
+  "branch": "feat/805-tests-subdirs-allowed"
+}

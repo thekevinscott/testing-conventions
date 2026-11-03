@@ -55,12 +55,12 @@ pub fn find_violations(root: impl AsRef<Path>) -> Result<Vec<Violation>> {
     Ok(violations)
 }
 
-const UNKNOWN_TIER_MSG: &str = "test file sits under `tests/` outside the standard suite tiers; \
-     a suite lives in `tests/integration/` or `tests/e2e/`";
+const UNKNOWN_TIER_MSG: &str = "test file sits directly in `tests/`; \
+     a suite lives in a directory under `tests/`, such as `tests/integration/`";
 
 /// Every lint violation in `package_root`'s suite tiers, sorted by `(file, line)`.
-/// `tests/integration/` and `tests/e2e/` both run first-party code for real; a `*_test.py`
-/// under `tests/` outside them is `unknown-tier` rather than silently unscanned.
+/// `tests/integration/` and `tests/e2e/` both run first-party code for real; any other
+/// `tests/<name>/` is the package's own suite, and a `*_test.py` directly in `tests/` is `unknown-tier`.
 pub fn find_suite_violations(package_root: &Path) -> Result<Vec<Violation>> {
     let tests = package_root.join("tests");
     let mut violations = Vec::new();
@@ -71,17 +71,17 @@ pub fn find_suite_violations(package_root: &Path) -> Result<Vec<Violation>> {
         }
     }
     if tests.is_dir() {
-        violations.extend(stray_tier_violations(&tests, &tiers)?);
+        violations.extend(stray_tier_violations(&tests)?);
     }
     violations.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
     Ok(violations)
 }
 
-/// An `unknown-tier` violation per test file under `tests` that no entry of `tiers` contains.
-fn stray_tier_violations(tests: &Path, tiers: &[PathBuf]) -> Result<Vec<Violation>> {
+/// An `unknown-tier` violation per test file directly in `tests`, outside any suite directory.
+fn stray_tier_violations(tests: &Path) -> Result<Vec<Violation>> {
     let mut strays = Vec::new();
     collect_python_files(tests, &mut strays, is_python_unit_test_file)?;
-    strays.retain(|file| !tiers.iter().any(|tier| file.starts_with(tier)));
+    strays.retain(|file| file.parent() == Some(tests));
     Ok(strays
         .into_iter()
         .map(|file| Violation {
@@ -2379,7 +2379,7 @@ mod tests {
     }
 
     #[test]
-    fn a_test_file_under_tests_outside_the_two_tiers_is_unknown_tier() {
+    fn only_a_test_file_directly_in_tests_is_unknown_tier() {
         let tree = TempDir::new();
         tree.write("pyproject.toml", "[project]\nname = \"myproject\"\n");
         tree.write(
@@ -2391,14 +2391,14 @@ mod tests {
             "tests/smoke/ledger_test.py",
             "def ledger_test():\n    pass\n",
         );
+        tree.write("tests/loose_test.py", "def loose_test():\n    pass\n");
         let found = find_suite_violations(&tree.0).expect("a readable tree should succeed");
         let strays: Vec<_> = found
             .iter()
             .filter(|v| v.rule == "unknown-tier")
             .map(|v| v.file.strip_prefix(&tree.0).unwrap().to_owned())
             .collect();
-        // Only the file outside `integration/` and `e2e/` is flagged.
-        assert_eq!(strays, vec![PathBuf::from("tests/smoke/ledger_test.py")]);
+        assert_eq!(strays, vec![PathBuf::from("tests/loose_test.py")]);
         assert_eq!(found.len(), strays.len());
     }
 

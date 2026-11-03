@@ -22,9 +22,9 @@ the package root — the nearest directory holding the language's manifest (`pyp
 `package.json`, `Cargo.toml`), stopping at the repository boundary — and takes its subjects from
 the standard suite directories: `tests/integration/` and `tests/e2e/` (Rust: the crate root's
 `tests/`, cargo's own layout). The unit-tier checks leave `<package root>/tests/` to the suites,
-so one `source` covers a package whose suites sit beside its sources. A test file under
-`<package root>/tests/` outside a standard tier is flagged (`unknown-tier`): the layout is part
-of the standard, so a suite the scan would otherwise miss is named as an error. A tree with no
+so one `source` covers a package whose suites sit beside its sources. Any other directory under
+`tests/` (`tests/perf/`, `tests/smoke/`) is a suite of the package's own, left unscanned. A test
+file directly in `<package root>/tests/` is flagged (`unknown-tier`). A tree with no
 manifest — loose scripts — is scanned at `source` directly, every test file a subject.
 
 That's the whole scoping model. There is no ignore file, no exclude glob, no `.gitignore`

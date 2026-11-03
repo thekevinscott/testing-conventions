@@ -1,1 +1,1 @@
-**Added** `integration-lint` scans Python and TypeScript suite directories declared in `[integration-lint].suites`, applying the same rules as the standard integration and e2e suites.
+**Added** **BREAKING** `integration-lint` scans Python and TypeScript suite directories declared in `[integration-lint].suites`, applying the same rules as the standard integration and e2e suites. Rust scanner helpers now take the suite list explicitly; see the [migration](../migrations.d/2026-11-03-declared-suites.md).

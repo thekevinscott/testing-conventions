@@ -342,7 +342,8 @@ fn cli_verify_with_path_argument_fails_when_missing() {
 fn cli_verify_with_no_argument_defaults_to_the_current_directory() {
     let argv: Vec<OsString> = vec!["testing-conventions".into(), "e2e".into(), "verify".into()];
     let code = run(argv).expect("`e2e verify` with no argument should still dispatch");
-    assert_eq!(code, 1);
+    let cwd = std::env::current_dir().unwrap();
+    assert_eq!(code, e2e_verify_cli(&cwd, &[]).unwrap());
 }
 
 #[test]

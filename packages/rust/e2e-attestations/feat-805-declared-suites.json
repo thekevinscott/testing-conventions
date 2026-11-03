@@ -1,0 +1,7 @@
+{
+  "command": "cargo test --test integration_lint_e2e --test ts_integration_lint_e2e",
+  "ran_at": 1793710250,
+  "exit_code": 0,
+  "commit": "adbff1309cd4f00f24b963cbeed03d774b4a99a7",
+  "branch": "feat/805-declared-suites"
+}

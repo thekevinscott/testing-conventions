@@ -22,6 +22,11 @@ pub fn stale_sources(
     let entries = changed_entries(repo, base)?;
     let fork_point = merge_base(repo, base)?;
     let changed: BTreeSet<&str> = entries.iter().map(|(_, path)| path.as_str()).collect();
+    let deleted: BTreeSet<String> = entries
+        .iter()
+        .filter(|(status, _)| matches!(status, Status::Deleted))
+        .map(|(_, path)| path.clone())
+        .collect();
     // `<package root>/tests/` belongs to the suite tiers, so nothing under it is a subject.
     let suite_tests = match language {
         Language::Python => crate::tiers::suite_tests_dir(repo, "pyproject.toml"),
@@ -51,8 +56,10 @@ pub fn stale_sources(
                 // having no colocated test — the fact presence uses to skip it.
                 let contents = std::fs::read_to_string(repo.join(path))
                     .with_context(|| format!("reading changed source `{rel}`"))?;
+                let before = blob_at(repo, &fork_point, rel)?;
                 language.is_subject(&contents, path)
-                    && !language.same_code(&blob_at(repo, &fork_point, rel)?, &contents, path)
+                    && !language.same_code(&before, &contents, path)
+                    && !language.relocates_imports(&before, &contents, path, &deleted)
             }
             // HEAD cannot answer this — the file is gone — so `base` is asked instead.
             Status::Deleted => test_exists_in_base(repo, base, &expected)?,

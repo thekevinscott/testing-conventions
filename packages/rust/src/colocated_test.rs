@@ -85,6 +85,26 @@ impl Language {
         }
     }
 
+    /// `true` when `head` differs from `base` only by imports that moved off a module in
+    /// `deleted` — the same code and bound names otherwise.
+    pub(crate) fn relocates_imports(
+        self,
+        base: &str,
+        head: &str,
+        path: &Path,
+        deleted: &BTreeSet<String>,
+    ) -> bool {
+        match self {
+            Language::Python => crate::python_imports::split(base, path)
+                .zip(crate::python_imports::split(head, path))
+                .is_some_and(|(b, h)| crate::relocation::is_relocation(&b, &h, deleted)),
+            Language::TypeScript => crate::ts_imports::split(base, path)
+                .zip(crate::ts_imports::split(head, path))
+                .is_some_and(|(b, h)| crate::relocation::is_relocation(&b, &h, deleted)),
+            Language::Rust => false,
+        }
+    }
+
     /// The colocated test `source` is expected to have.
     pub(crate) fn expected_test_path(self, source: &Path) -> PathBuf {
         match self {

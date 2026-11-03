@@ -371,7 +371,7 @@ fn is_unit_under_test(spec: &str, unit: &str) -> bool {
 }
 
 /// `spec` without a trailing JS/TS module extension.
-fn strip_module_ext(spec: &str) -> &str {
+pub(crate) fn strip_module_ext(spec: &str) -> &str {
     for ext in [".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"] {
         if let Some(base) = spec.strip_suffix(ext) {
             return base;
@@ -588,7 +588,7 @@ pub fn same_code(base: &str, head: &str, path: &Path) -> bool {
 }
 
 /// `source` re-emitted with every comment dropped, or `None` when it does not parse.
-fn emit_without_comments(source: &str, path: &Path) -> Option<String> {
+pub(crate) fn emit_without_comments(source: &str, path: &Path) -> Option<String> {
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(path).ok()?;
     let ret = Parser::new(&allocator, source, source_type).parse();

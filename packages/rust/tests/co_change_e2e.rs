@@ -429,6 +429,10 @@ fn python_relocation_base(slug: &str) -> (TempRepo, String) {
     repo.write("pkg/old/__init__.py", "");
     repo.write("pkg/old/ended.py", ENDED_PY);
     repo.write(
+        "pkg/old/ended_test.py",
+        "from pkg.old.ended import ended\n\n\ndef test_ended():\n    assert ended()\n",
+    );
+    repo.write(
         "pkg/reaper.py",
         "from pkg.old.ended import ended\n\n\ndef reap():\n    return ended()\n",
     );
@@ -442,7 +446,12 @@ fn python_relocation_base(slug: &str) -> (TempRepo, String) {
 fn python_import_relocation_exits_zero() {
     let (repo, base) = python_relocation_base("py-reloc");
     repo.remove("pkg/old/ended.py");
+    repo.remove("pkg/old/ended_test.py");
     repo.write("pkg/tools.py", ENDED_PY);
+    repo.write(
+        "pkg/tools_test.py",
+        "from pkg.tools import ended\n\n\ndef test_ended():\n    assert ended()\n",
+    );
     repo.write(
         "pkg/reaper.py",
         "from pkg.tools import ended\n\n\ndef reap():\n    return ended()\n",
@@ -461,6 +470,10 @@ fn the_relocation_skip_does_not_silence_a_second_implementation() {
     let (repo, base) = python_relocation_base("py-reloc-kept");
     repo.write("pkg/tools.py", ENDED_PY);
     repo.write(
+        "pkg/tools_test.py",
+        "from pkg.tools import ended\n\n\ndef test_ended():\n    assert ended()\n",
+    );
+    repo.write(
         "pkg/reaper.py",
         "from pkg.tools import ended\n\n\ndef reap():\n    return ended()\n",
     );
@@ -472,8 +485,8 @@ fn the_relocation_skip_does_not_silence_a_second_implementation() {
         "an import of a module still in the tree is a change; stderr: {stderr}"
     );
     assert!(
-        stderr.contains("reaper.py"),
-        "stderr should name the importer; got: {stderr}"
+        stderr.contains("reaper.py") && !stderr.contains("missing colocated"),
+        "stderr should name only the stale importer; got: {stderr}"
     );
 }
 
@@ -493,6 +506,10 @@ fn typescript_import_relocation_exits_zero() {
     let base = repo.head();
     repo.remove("src/old/ended.ts");
     repo.write("src/tools.ts", "export const ended = () => true;\n");
+    repo.write(
+        "src/tools.test.ts",
+        "import { ended } from './tools.js';\nit('ends', () => expect(ended()).toBe(true));\n",
+    );
     repo.write(
         "src/reaper.ts",
         "import { ended } from './tools.js';\nexport const reap = () => ended();\n",

@@ -74,11 +74,11 @@ fn bind_from(
 
 /// The `/`-joined directory path of `module`, relative imports resolved against `path`.
 fn module_dir(level: usize, module: &str, path: &Path) -> Option<String> {
-    let segments = module.split('.').filter(|s| !s.is_empty());
+    let segments: Vec<&str> = module.split('.').filter(|s| !s.is_empty()).collect();
     if level == 0 {
-        return Some(segments.collect::<Vec<_>>().join("/"));
+        return Some(segments.join("/"));
     }
-    walk_from(path, level - 1, segments)
+    walk_from(path, level - 1, &segments)
 }
 
 /// Where `from <dir> import <name>` may read from: the module itself, or a submodule `name`.

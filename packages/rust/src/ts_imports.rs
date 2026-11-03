@@ -63,7 +63,11 @@ fn module_paths(specifier: &str, path: &Path) -> Vec<String> {
     if !(specifier.starts_with("./") || specifier.starts_with("../")) {
         return Vec::new();
     }
-    let Some(stem) = walk_from(path, 0, strip_module_ext(specifier).split('/')) else {
+    let Some(stem) = walk_from(
+        path,
+        0,
+        &strip_module_ext(specifier).split('/').collect::<Vec<_>>(),
+    ) else {
         return Vec::new();
     };
     MODULE_EXTENSIONS

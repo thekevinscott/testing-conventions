@@ -829,6 +829,33 @@ mod tests {
     }
 
     #[test]
+    fn relocates_imports_reads_each_language_and_never_rust() {
+        let gone: BTreeSet<String> = ["pkg/old.py", "src/old.ts"]
+            .iter()
+            .map(|p| p.to_string())
+            .collect();
+        assert!(Language::Python.relocates_imports(
+            "from pkg.old import f\nx = f()\n",
+            "from pkg.new import f\nx = f()\n",
+            Path::new("pkg/user.py"),
+            &gone,
+        ));
+        assert!(!Language::Python.relocates_imports(
+            "from pkg.old import f\nx = f()\n",
+            "def f() return 1\n",
+            Path::new("pkg/user.py"),
+            &gone,
+        ));
+        assert!(Language::TypeScript.relocates_imports(
+            "import { f } from './old.js';\nexport const x = f();\n",
+            "import { f } from './new.js';\nexport const x = f();\n",
+            Path::new("src/user.ts"),
+            &gone,
+        ));
+        assert!(!Language::Rust.relocates_imports("", "", Path::new("src/lib.rs"), &gone));
+    }
+
+    #[test]
     fn python_same_code_holds_unparseable_content_apart() {
         let py = Path::new("widget.py");
         assert!(!Language::Python.same_code(

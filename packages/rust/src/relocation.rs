@@ -45,11 +45,7 @@ fn moved_away(old: &Binding, deleted: &BTreeSet<String>) -> bool {
 
 /// The `/`-joined path reached from `file`'s directory by climbing `ups` levels, then following
 /// `segments` (`.` stays, `..` climbs). `None` when the walk climbs above the root.
-pub(crate) fn walk_from<'a>(
-    file: &Path,
-    ups: usize,
-    segments: impl IntoIterator<Item = &'a str>,
-) -> Option<String> {
+pub(crate) fn walk_from(file: &Path, ups: usize, segments: &[&str]) -> Option<String> {
     let mut parts: Vec<String> = file
         .parent()
         .into_iter()
@@ -60,7 +56,7 @@ pub(crate) fn walk_from<'a>(
         parts.pop()?;
     }
     for segment in segments {
-        match segment {
+        match *segment {
             "." | "" => {}
             ".." => {
                 parts.pop()?;
@@ -174,19 +170,19 @@ mod tests {
     fn walk_from_climbs_and_descends_from_the_files_directory() {
         let file = Path::new("pkg/sub/reaper.py");
         assert_eq!(
-            walk_from(file, 0, ["old", "ended"]).unwrap(),
+            walk_from(file, 0, &["old", "ended"]).unwrap(),
             "pkg/sub/old/ended"
         );
-        assert_eq!(walk_from(file, 1, ["old"]).unwrap(), "pkg/old");
-        assert_eq!(walk_from(file, 0, [".", "..", "old"]).unwrap(), "pkg/old");
-        assert_eq!(walk_from(file, 0, ["", "old"]).unwrap(), "pkg/sub/old");
-        assert_eq!(walk_from(file, 2, []).unwrap(), "");
+        assert_eq!(walk_from(file, 1, &["old"]).unwrap(), "pkg/old");
+        assert_eq!(walk_from(file, 0, &[".", "..", "old"]).unwrap(), "pkg/old");
+        assert_eq!(walk_from(file, 0, &["", "old"]).unwrap(), "pkg/sub/old");
+        assert_eq!(walk_from(file, 2, &[]).unwrap(), "");
     }
 
     #[test]
     fn walk_from_refuses_to_climb_above_the_root() {
         let file = Path::new("pkg/reaper.py");
-        assert!(walk_from(file, 2, ["old"]).is_none());
-        assert!(walk_from(file, 0, ["..", "..", "old"]).is_none());
+        assert!(walk_from(file, 2, &["old"]).is_none());
+        assert!(walk_from(file, 0, &["..", "..", "old"]).is_none());
     }
 }

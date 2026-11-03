@@ -108,8 +108,12 @@ fn tier_layout_test_outside_a_standard_tier_is_flagged() {
 #[test]
 fn declared_suite_clean_is_scanned_and_accepted() {
     let argv: Vec<OsString> = vec![
-        "testing-conventions".into(), "integration".into(), "lint".into(),
-        "--language".into(), "typescript".into(), "--config".into(),
+        "testing-conventions".into(),
+        "integration".into(),
+        "lint".into(),
+        "--language".into(),
+        "typescript".into(),
+        "--config".into(),
         fixture("declared_suite/clean/testing-conventions.toml").into_os_string(),
         fixture("declared_suite/clean/src").into_os_string(),
     ];

@@ -173,6 +173,11 @@ fn declared_suite_clean_exits_zero() {
         .args(["integration", "lint", "--language", "python", "--config"])
         .arg(fixture("declared_suite/clean/testing-conventions.toml"))
         .arg(fixture("declared_suite/clean/src"))
-        .output().expect("the built binary should run");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        .output()
+        .expect("the built binary should run");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

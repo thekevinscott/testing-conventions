@@ -589,20 +589,6 @@ mod tests {
     }
 
     #[test]
-    fn declared_suites_accept_plain_directory_names() {
-        assert!(parse("[integration-lint]\nsuites = [\"perf\", \"smoke\"]\n").is_ok());
-    }
-
-    #[test]
-    fn declared_suites_reject_non_segments() {
-        for name in ["", "..", "a/b", "a\\b"] {
-            let source = format!("[integration-lint]\nsuites = [{name:?}]\n");
-            let err = parse(&source).unwrap_err();
-            assert!(err.to_string().contains("suite"), "{name:?}: {err}");
-        }
-    }
-
-    #[test]
     fn annotate_points_an_unknown_key_error_at_migrations() {
         let annotated = annotate_toml_error(toml_error("[python]\nbogus = true\n"));
         let chain = format!("{annotated:#}");

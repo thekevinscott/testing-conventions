@@ -449,8 +449,12 @@ fn tier_layout_package_without_a_tests_dir_exits_zero() {
 #[test]
 fn declared_suite_clean_is_scanned_and_accepted() {
     let argv: Vec<OsString> = vec![
-        "testing-conventions".into(), "integration".into(), "lint".into(),
-        "--language".into(), "python".into(), "--config".into(),
+        "testing-conventions".into(),
+        "integration".into(),
+        "lint".into(),
+        "--language".into(),
+        "python".into(),
+        "--config".into(),
         fixture("declared_suite/clean/testing-conventions.toml").into_os_string(),
         fixture("declared_suite/clean/src").into_os_string(),
     ];

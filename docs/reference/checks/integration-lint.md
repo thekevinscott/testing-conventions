@@ -13,8 +13,8 @@ opposite side.
 
 An integration test that mocks first-party code is testing a fiction: the assembled system it
 claims to exercise never actually runs. The check keeps the integration tier honest — and it
-guards the suite layout itself: a test file outside a standard tier is a suite the scan would
-silently miss, so it is named as an error (`unknown-tier`) instead.
+guards the suite layout itself: a test file directly in `tests/`, outside any suite directory, is
+named as an error (`unknown-tier`).
 
 ## The first-party/external line
 
@@ -26,9 +26,10 @@ Subjects derive from the [package root](/monorepo#source-vs-the-package-root) �
 nearest directory at or above `source` holding the language's manifest: the integration suite in
 `tests/integration/` and the e2e suite in `tests/e2e/` (Rust: the crate root's `tests/`, cargo's
 own layout, holding both out-of-crate suites). Both suites run first-party code for real, so both
-are held to the integration rules. A test file under `<package root>/tests/` outside a standard
-tier is flagged as `unknown-tier`; a tree with no manifest — loose scripts — is scanned at
-`source` directly.
+are held to the integration rules. Any other directory under `tests/` (`tests/perf/`,
+`tests/smoke/`) is the package's own suite: the check leaves it unscanned, and the package owns its
+rules. A test file directly in `<package root>/tests/` is flagged as `unknown-tier`; a tree with no
+manifest — loose scripts — is scanned at `source` directly.
 
 ## What it flags
 
@@ -63,7 +64,7 @@ tiers derive from (e.g. `tests/integration/billing_test.py`), not the scanned `s
 | `no-environ-mutation` | Python | env mutated outside `patch.dict(os.environ, ...)` |
 | `no-constant-patch` | Python | patching a module-global constant (either patch form) instead of injecting config |
 | `no-first-party-double` | Rust | a `#[double]` of the crate under test or a `path` dependency |
-| `unknown-tier` | Python, TypeScript | a test file under `<package root>/tests/` outside a standard tier |
+| `unknown-tier` | Python, TypeScript | a test file directly in `<package root>/tests/`, outside any suite directory |
 
 ## Learn more
 

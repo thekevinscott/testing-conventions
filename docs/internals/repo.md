@@ -1375,38 +1375,64 @@ accurately and a bypass is never the remedy.
 
 ## A release can publish without its tag (#788)
 
-A `Release` run can write to the registry and then fail to push the matching tag, leaving the
-registry ahead of the tags. **The remedy is `putitoutthere reconcile`, which backfills the tag.
-Re-running publish is wrong** — the registry write already succeeded, so a re-run either fails on
-an existing version or publishes a second one.
+A `Release` run can write to the registry and leave that version untagged. The next `Release` run
+then stops before publishing anything for that package:
 
-The worked case is the run on `dd64392`, which published `testing-conventions-rust@0.0.141` to
-crates.io at 16:11:50 and then failed with `PIOT_TAG_PUSH_FAILED`:
+```
+[PIOT_HEAL_UNRELEASED_CHANGES] testing-conventions-py@0.0.144 is live on the registry but
+untagged, and HEAD has unreleased changes
+```
+
+**The runbook:**
+
+1. **Find the commit that published the version.** It is the head sha of the `Release` run whose
+   publish job uploaded it. Check the run's log for the version, rather than assuming the latest run.
+2. **Tag that commit by hand.**
+   `git tag -a testing-conventions-<pkg>-v<version> <sha> -m "testing-conventions-<pkg> v<version>"`,
+   then `git push origin <tag>`.
+3. **Start a new `Release` run** with `gh workflow run release.yml --ref main`. Re-running the failed
+   run's jobs cannot recover: a re-run reuses the run's original plan, so it uploads the version
+   already on the registry and fails with PyPI's `File already exists`.
+4. **After it finishes, confirm every published version has its tag.** A green run can still leave
+   one untagged (the second failure mode below), and the gap only surfaces on the next release.
+
+`putitoutthere reconcile` also backfills a missing tag, but it can pick the wrong commit (the first
+failure mode below). Prefer the hand tag.
+
+### Failure mode 1: the tag lands on the wrong commit (putitoutthere#822)
+
+On 2026-11-02 the `pypi-tag` job published `testing-conventions-py@0.0.141` at `4040fb6`, then its
+`reconcile` placed the tag at `0a93d77`, the commit carrying `testing-conventions-rust-v0.0.141`. It
+matches a missing tag to a sibling package's tag of the same version number. The packages version
+independently and py trails rust by one, so the same number names different commits. The push
+failed with `PIOT_TAG_PUSH_FAILED`:
 
 ```
 ! [remote rejected] testing-conventions-rust-v0.0.141 (refusing to allow a GitHub App to
   create or update workflow `.github/workflows/testing-conventions.yml` without `workflows` permission)
 ```
 
-**The mechanism is a race with a later merge, and it names the recurrence condition.** Release runs
-serialize (*Release concurrency: serializing the whole run* above), so that run was created at 15:53
-and its publish step did not start until 16:10. `0a93d77` merged at ~16:10 and changed
-`.github/workflows/testing-conventions.yml`. Pushing a tag at the *older* commit therefore reads to
-GitHub as **updating** that workflow file, which the `GITHUB_TOKEN` may not do. So the condition is:
-**a release's tag push landing after a later merge that edits a file under `.github/workflows/`.**
-That is also why the throwaway `verify-release-<sha>` tags push without trouble — they are created
-before any such merge can land.
+In both cases observed, GitHub refused a `GITHUB_TOKEN` tag push at a commit whose
+`.github/workflows/` files differ from `main`'s. Here the wrong commit is the cause and the
+rejection is the symptom.
 
-**No `permissions:` line closes this.** The push uses `GITHUB_TOKEN`, which has no `workflows`
-scope to grant. Closing the gap needs a PAT or a separate App, and `release.yml` forwards no
-`secrets:` by design, because forwarding one selects the classic long-lived-token path that
-*Release credentials: the publish path is OIDC-only* above rules out. The gap is therefore a
-repo-settings decision rather than a workflow change, and it stays open: a recurrence is handled by
-the runbook above.
+The earlier `dd64392` run shows the same rejection from a different cause. It published
+`testing-conventions-rust@0.0.141` at 16:11:50, and `0a93d77` merged at about 16:10 and edited
+`.github/workflows/testing-conventions.yml`. Release runs serialize (*Release concurrency:
+serializing the whole run* above), so the tag push at the older commit landed after that merge.
 
-**A reconcile attributes the tag to the wrong commit, and that is usually harmless.** The
-recovering run created `testing-conventions-rust-v0.0.141` at `0a93d77`, not at `dd64392` where the
-publish happened. It was harmless there only because that diff touches no `packages/rust/**` file,
-so the tag's tree matches what was published. Read a reconciled tag as "the version exists", not as
-"this is the tree that built it", and confirm against the publishing run when the difference
-matters.
+**No `permissions:` line closes either case.** `GITHUB_TOKEN` has no `workflows` scope to grant.
+Closing the gap needs a PAT or a separate App, and `release.yml` forwards no `secrets:` by design,
+because forwarding one selects the classic long-lived-token path that *Release credentials: the
+publish path is OIDC-only* above rules out.
+
+A tag on the wrong commit that does get pushed is not harmless. It claims the wrong tree built the
+version, and the next `reconcile` matches siblings against it.
+
+### Failure mode 2: a green tag job tags nothing (putitoutthere#823)
+
+On 2026-11-03 the `Release` run at `e80a5e5` published `testing-conventions-py@0.0.144`, and its
+`pypi-tag` job passed. Its log shows no tag for py 0.0.144. The cause is not yet known; PyPI not
+yet reporting the new version when `reconcile` checked is the leading guess. The next release, at
+`31e8228`, stopped with `PIOT_HEAL_UNRELEASED_CHANGES`, and its re-run failed with `File already
+exists`. The recovery was steps 2 and 3 above.

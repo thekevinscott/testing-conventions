@@ -1399,7 +1399,7 @@ untagged, and HEAD has unreleased changes
 `putitoutthere reconcile` also backfills a missing tag, but it can pick the wrong commit (the first
 failure mode below). Prefer the hand tag.
 
-### Failure mode 1: the tag lands on the wrong commit
+### Failure mode 1: the tag lands on the wrong commit (putitoutthere#822)
 
 On 2026-11-02 the `pypi-tag` job published `testing-conventions-py@0.0.141` at `4040fb6`, then its
 `reconcile` placed the tag at `0a93d77`, the commit carrying `testing-conventions-rust-v0.0.141`. It
@@ -1429,7 +1429,7 @@ publish path is OIDC-only* above rules out.
 A tag on the wrong commit that does get pushed is not harmless. It claims the wrong tree built the
 version, and the next `reconcile` matches siblings against it.
 
-### Failure mode 2: a green tag job tags nothing
+### Failure mode 2: a green tag job tags nothing (putitoutthere#823)
 
 On 2026-11-03 the `Release` run at `e80a5e5` published `testing-conventions-py@0.0.144`, and its
 `pypi-tag` job passed. Its log shows no tag for py 0.0.144. The cause is not yet known; PyPI not

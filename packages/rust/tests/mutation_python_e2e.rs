@@ -257,10 +257,7 @@ fn a_diff_scoped_run_never_runs_a_mutant_off_the_changed_lines() {
         "the changed lines' mutants were judged; got: {stdout}"
     );
     let log = std::fs::read_to_string(repo.path().join("runs.log")).expect("the suite ran");
-    let mutated: Vec<u32> = log
-        .split_whitespace()
-        .map(|n| n.parse().unwrap())
-        .collect();
+    let mutated: Vec<u32> = log.split_whitespace().map(|n| n.parse().unwrap()).collect();
     assert!(
         mutated.iter().all(|&line| line >= 3),
         "`add` on lines 1-2 is unchanged, so none of its mutants runs the suite; got {log:?}"

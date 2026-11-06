@@ -7,13 +7,15 @@ from __future__ import annotations
 
 from testing_conventions.mutation.execute_colocated_first import execute_colocated_first
 from testing_conventions.mutation.skip_annotation_mutants import skip_annotation_mutants
+from testing_conventions.mutation.skip_off_line_mutants import skip_off_line_mutants
 
 
-def run_session(config):
+def run_session(config, ranges):
     """Init + execute cosmic-ray over ``config``'s ``module-path`` and return a list of
     ``(MutationSpec, WorkResult)`` — the first mutation of each completed work item paired
-    with its outcome. The session DB lives in an out-of-tree temp dir; cosmic-ray mutates
-    each source file in place and reverts it, so the scanned tree is left as it was."""
+    with its outcome. A mutant off ``ranges`` (file to changed line ranges) never runs. The
+    session DB lives in an out-of-tree temp dir; cosmic-ray mutates each source file in place and
+    reverts it, so the scanned tree is left as it was."""
     import tempfile
     from pathlib import Path
 
@@ -33,6 +35,7 @@ def run_session(config):
         with use_db(Path(tmp) / "session.sqlite", mode=WorkDB.Mode.create) as database:
             cosmic_ray.commands.init(modules, database, config.operators_config)
             skip_annotation_mutants(database)
+            skip_off_line_mutants(database, ranges)
             execute_colocated_first(database, config)
             return [
                 (item.mutations[0], result) for item, result in database.completed_work_items

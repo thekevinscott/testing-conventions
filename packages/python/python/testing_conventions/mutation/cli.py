@@ -13,6 +13,7 @@ from testing_conventions.mutation.build_config import build_config
 from testing_conventions.mutation.config import MEASURE_TIMEOUT, derive_timeout
 from testing_conventions.mutation.normalize import normalize
 from testing_conventions.mutation.parse_args import parse_args
+from testing_conventions.mutation.parse_line_ranges import parse_line_ranges
 from testing_conventions.mutation.session import run_session
 
 
@@ -26,7 +27,7 @@ def mutation_cli(argv):
         config = build_config(args.modules, derive_timeout(observed))
         results = [
             mutant
-            for mutation, result in run_session(config)
+            for mutation, result in run_session(config, parse_line_ranges(args.lines))
             if (mutant := normalize(mutation, result)) is not None
         ]
         with open(args.out, "w", encoding="utf-8") as handle:

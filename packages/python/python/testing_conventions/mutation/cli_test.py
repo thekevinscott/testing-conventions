@@ -87,3 +87,21 @@ def test_a_baseline_failure_exits_nonzero_and_writes_nothing(cosmic_ray, tmp_pat
     assert exc.value.code == 1
     assert "did not pass unmutated" in capsys.readouterr().err
     assert not out.exists()
+
+
+def test_lines_scope_the_session_to_the_changed_ranges(cosmic_ray, tmp_path):
+    module = tmp_path / "calc.py"
+    module.write_text("def add(a, b):\n    return a + b\n")
+    cosmic_ray.deserialize_config.return_value = _config()
+    cosmic_ray.db.results = _baseline("survived")
+    cosmic_ray.find_modules.return_value = []
+    unchanged = SimpleNamespace(module_path=str(module), start_pos=(2, 13), end_pos=(2, 14))
+    cosmic_ray.db.work_items = [SimpleNamespace(job_id="unchanged", mutations=[unchanged])]
+    cosmic_ray.db.completed_work_items = []
+    out = tmp_path / "r.json"
+
+    mutation_cli(["--out", str(out), "--module", str(module), "--lines", f"{module}:6-6"])
+
+    cosmic_ray.db.set_result.assert_called_once_with(
+        "unchanged", cosmic_ray.WorkResult.return_value
+    )

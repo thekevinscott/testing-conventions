@@ -172,8 +172,17 @@ runner that runs your own suite:
 | Language | Engine | You provide |
 | --- | --- | --- |
 | TypeScript | [Stryker](https://stryker-mutator.io/), driven via its Node API by an adapter bundled in the npm package | `vitest` |
-| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray), driven via its library API by an adapter bundled in the wheel, with a baseline run that requires the clean suite to pass; each mutant's run ends at its first failing test | `pytest` |
+| Python | [cosmic-ray](https://github.com/sixty-north/cosmic-ray), driven via its library API by an adapter bundled in the wheel, with a baseline run that requires the clean suite to pass; each mutant runs its colocated test first, then the full suite only if it survives, and each run ends at its first failing test | `pytest` |
 | Rust | [cargo-mutants](https://github.com/sourcefrog/cargo-mutants), provisioned on first use (a pinned `cargo install` into the tool's own cache) and run from there; concurrent invocations share one provisioning install rather than each racing to install their own | the cargo toolchain that builds and tests your crate |
+
+Each engine narrows the tests a mutant runs where it can do so without changing the verdict.
+Stryker runs only the tests its per-test coverage attributes to the mutant. The Python adapter runs
+a mutant in `calc.py` against `calc_test.py` alone, and a kill there is the verdict; a survivor, a
+timeout, or a module with no colocated test goes on to the full suite, so the survivor set is the
+one the full suite alone would give. A colocated test that fails on the clean tree in isolation
+never judges a mutant, since its failure would read as a kill. cargo-mutants runs the crate's whole
+`--lib` suite for every mutant: the crate compiles as one unit, and cargo-mutants takes no
+per-mutant test filter.
 
 A run lists each survivor with its file, line, and mutation — the engine's mutator and the source
 that mutator produced — and fails on any un-exempted one. Survivor paths are reported relative to

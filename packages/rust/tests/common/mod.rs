@@ -155,6 +155,17 @@ impl Staged {
         Self::stage("python", project, &["calc.py", "calc_test.py"], false)
     }
 
+    /// Stage a loose Python fixture whose suite holds a second test file beside the
+    /// colocated `calc_test.py` (`colocated_first`, `colocated_fallback`).
+    pub fn python_loose_with_neighbor(project: &str) -> Self {
+        Self::stage(
+            "python",
+            project,
+            &["calc.py", "calc_test.py", "a_test.py"],
+            false,
+        )
+    }
+
     /// Stage a loose Python fixture whose `tests/` tree holds a helper module with no
     /// test-shaped name (`loose_test_helpers`).
     pub fn python_loose_test_helpers(project: &str) -> Self {

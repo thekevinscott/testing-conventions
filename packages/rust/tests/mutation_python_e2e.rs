@@ -265,3 +265,21 @@ fn a_helper_module_under_tests_passes_the_gate() {
     );
     assert_eq!(out.status.code(), Some(0), "stderr: {stderr}");
 }
+
+#[test]
+fn a_mutant_its_colocated_test_kills_skips_the_rest_of_the_suite() {
+    let project = Staged::python_loose_with_neighbor("colocated_first");
+    assert_eq!(unit_mutation_exit(project.path(), None), 0);
+    let runs = std::fs::read_to_string(project.path().join("runs.log")).unwrap_or_default();
+    assert_eq!(
+        runs.lines().count(),
+        1,
+        "a_test.py runs only in the clean baseline, never for a mutant calc_test.py kills"
+    );
+}
+
+#[test]
+fn a_mutant_only_another_test_kills_passes_the_gate() {
+    let project = Staged::python_loose_with_neighbor("colocated_fallback");
+    assert_eq!(unit_mutation_exit(project.path(), None), 0);
+}

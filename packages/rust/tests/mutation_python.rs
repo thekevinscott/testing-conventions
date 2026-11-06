@@ -191,6 +191,50 @@ fn a_mutation_exemption_drops_the_survivors() {
 }
 
 #[test]
+fn a_mutant_its_colocated_test_kills_never_runs_the_rest_of_the_suite() {
+    let project = Staged::python_loose_with_neighbor("colocated_first");
+    let (count, survivors) = expect_tested(
+        measure_python(
+            project.path(),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+        )
+        .expect("cosmic-ray runs"),
+    );
+    assert!(count > 0, "calc.py is mutated, so the count is non-zero");
+    assert!(
+        survivors.is_empty(),
+        "calc_test.py kills every mutant; got {survivors:?}"
+    );
+    let runs = std::fs::read_to_string(project.path().join("runs.log")).unwrap_or_default();
+    assert_eq!(
+        runs.lines().count(),
+        1,
+        "a_test.py runs only in the clean baseline, never for a mutant calc_test.py kills"
+    );
+}
+
+#[test]
+fn a_mutant_only_another_test_kills_is_still_killed() {
+    let project = Staged::python_loose_with_neighbor("colocated_fallback");
+    let (count, survivors) = expect_tested(
+        measure_python(
+            project.path(),
+            &[],
+            &std::collections::BTreeMap::new(),
+            None,
+        )
+        .expect("cosmic-ray runs"),
+    );
+    assert!(count > 0, "calc.py is mutated, so the count is non-zero");
+    assert!(
+        survivors.is_empty(),
+        "a mutant the colocated test misses falls back to the full suite; got {survivors:?}"
+    );
+}
+
+#[test]
 fn an_adapter_failure_surfaces_its_output() {
     let dir = std::env::temp_dir().join(format!("tc-mut-py-fail-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

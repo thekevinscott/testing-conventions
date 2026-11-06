@@ -5,6 +5,7 @@ unit-tested with a fake ``cosmic_ray`` injected).
 """
 from __future__ import annotations
 
+from testing_conventions.mutation.execute_colocated_first import execute_colocated_first
 from testing_conventions.mutation.skip_annotation_mutants import skip_annotation_mutants
 
 
@@ -32,7 +33,7 @@ def run_session(config):
         with use_db(Path(tmp) / "session.sqlite", mode=WorkDB.Mode.create) as database:
             cosmic_ray.commands.init(modules, database, config.operators_config)
             skip_annotation_mutants(database)
-            cosmic_ray.commands.execute(database, config)
+            execute_colocated_first(database, config)
             return [
                 (item.mutations[0], result) for item, result in database.completed_work_items
             ]

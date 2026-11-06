@@ -1,0 +1,7 @@
+{
+  "command": "cargo nextest run --manifest-path packages/rust/Cargo.toml -E \"binary(mutation_python) | binary(mutation_python_e2e)\"",
+  "ran_at": 1793986903,
+  "exit_code": 0,
+  "commit": "82ad9cc705b05ebf585b11c171861589aa2a2c13",
+  "branch": "feat/810-colocated-test-first"
+}

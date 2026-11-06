@@ -242,7 +242,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
-          if compgen -G "$GITHUB_WORKSPACE/hermetic-cli/*.whl" > /dev/null; then uv pip install pytest "$GITHUB_WORKSPACE"/hermetic-cli/*.whl; else uv pip install pytest testing-conventions; fi
+          if compgen -G "$GITHUB_WORKSPACE/hermetic-cli/*.whl" > /dev/null; then uv pip install pytest "$GITHUB_WORKSPACE"/hermetic-cli/*.whl; else uv pip install pytest "testing-conventions @ git+https://github.com/thekevinscott/testing-conventions@main#subdirectory=packages/python"; fi
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
@@ -330,7 +330,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
-          if compgen -G "$GITHUB_WORKSPACE/hermetic-cli/*.whl" > /dev/null; then uv pip install pytest "$GITHUB_WORKSPACE"/hermetic-cli/*.whl; else uv pip install pytest testing-conventions; fi
+          if compgen -G "$GITHUB_WORKSPACE/hermetic-cli/*.whl" > /dev/null; then uv pip install pytest "$GITHUB_WORKSPACE"/hermetic-cli/*.whl; else uv pip install pytest "testing-conventions @ git+https://github.com/thekevinscott/testing-conventions@main#subdirectory=packages/python"; fi
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5
@@ -410,7 +410,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PYTHON_ENV" = "uv" ]; then uv sync; else uv venv; fi
-          if compgen -G "$GITHUB_WORKSPACE/hermetic-cli/*.whl" > /dev/null; then uv pip install pytest "$GITHUB_WORKSPACE"/hermetic-cli/*.whl; else uv pip install pytest testing-conventions; fi
+          if compgen -G "$GITHUB_WORKSPACE/hermetic-cli/*.whl" > /dev/null; then uv pip install pytest "$GITHUB_WORKSPACE"/hermetic-cli/*.whl; else uv pip install pytest "testing-conventions @ git+https://github.com/thekevinscott/testing-conventions@main#subdirectory=packages/python"; fi
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - if: matrix.language == 'typescript' && (needs.detect.outputs.ts_package_manager || 'pnpm') == 'pnpm'
         uses: pnpm/action-setup@v5

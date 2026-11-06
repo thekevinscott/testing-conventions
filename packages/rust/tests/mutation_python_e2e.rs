@@ -206,6 +206,67 @@ fn a_scan_path_that_is_not_there_names_the_directory_not_the_interpreter() {
     );
 }
 
+const RUN_RECORDER: &str = r#"from pathlib import Path
+
+HERE = Path(__file__).parent
+
+
+def pytest_sessionstart(session):
+    pristine = (HERE / "calc.pristine").read_text().splitlines()
+    current = (HERE / "calc.py").read_text().splitlines()
+    mutated = [str(n) for n, (a, b) in enumerate(zip(pristine, current), 1) if a != b]
+    with open(HERE / "runs.log", "a") as log:
+        log.write(" ".join(mutated) + "\n")
+"#;
+
+#[test]
+fn a_diff_scoped_run_never_runs_a_mutant_off_the_changed_lines() {
+    let added = "def add(a, b):\n    return a + b\n\n\ndef is_positive(n):\n    return n > 0\n";
+    let repo = GitRepo::new("py-off-line");
+    repo.write("calc.py", "def add(a, b):\n    return a + b\n");
+    repo.write(
+        "calc_test.py",
+        "from calc import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n    assert add(-1, 1) == 0\n",
+    );
+    repo.write("conftest.py", RUN_RECORDER);
+    repo.commit("baseline: a fully-tested add");
+    let base = repo.head();
+    repo.write("calc.py", added);
+    repo.write("calc.pristine", added);
+    repo.write(
+        "calc_test.py",
+        "from calc import add, is_positive\n\n\ndef test_add():\n    assert add(2, 3) == 5\n    assert add(-1, 1) == 0\n\n\ndef test_is_positive():\n    assert is_positive(1)\n    assert not is_positive(0)\n    assert not is_positive(-1)\n",
+    );
+    repo.commit("add a fully-tested is_positive");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_testing-conventions"))
+        .args(["unit", "mutation", "--language", "python"])
+        .args(["--base", &base])
+        .arg(repo.path())
+        .output()
+        .expect("the built binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "every changed-line mutant is caught; stdout: {stdout}; stderr: {stderr}"
+    );
+    assert!(
+        tested_count(&stdout) > 0,
+        "the changed lines' mutants were judged; got: {stdout}"
+    );
+    let log = std::fs::read_to_string(repo.path().join("runs.log")).expect("the suite ran");
+    let mutated: Vec<u32> = log
+        .split_whitespace()
+        .map(|n| n.parse().unwrap())
+        .collect();
+    assert!(
+        mutated.iter().all(|&line| line >= 3),
+        "`add` on lines 1-2 is unchanged, so none of its mutants runs the suite; got {log:?}"
+    );
+}
+
 #[test]
 fn survivors_fail_the_gate_by_default() {
     let package = Staged::python("survivors");

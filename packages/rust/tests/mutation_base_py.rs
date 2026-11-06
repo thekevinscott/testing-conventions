@@ -242,3 +242,59 @@ fn base_with_only_a_tests_tree_helper_changed_reports_the_engine_not_run() {
         "a helper under tests/ is test code, so the engine never ran"
     );
 }
+
+const RUN_RECORDER: &str = r#"from pathlib import Path
+
+HERE = Path(__file__).parent
+
+
+def pytest_sessionstart(session):
+    pristine = (HERE / "calc.pristine").read_text().splitlines()
+    current = (HERE / "calc.py").read_text().splitlines()
+    mutated = [str(n) for n, (a, b) in enumerate(zip(pristine, current), 1) if a != b]
+    with open(HERE / "runs.log", "a") as log:
+        log.write(" ".join(mutated) + "\n")
+"#;
+
+/// The source lines each suite run found mutated, one entry per run, read from the log the
+/// `RUN_RECORDER` conftest writes.
+fn mutated_lines_per_run(dir: &Path) -> Vec<Vec<u32>> {
+    std::fs::read_to_string(dir.join("runs.log"))
+        .expect("the suite ran at least once")
+        .lines()
+        .map(|run| run.split_whitespace().map(|n| n.parse().unwrap()).collect())
+        .collect()
+}
+
+#[test]
+fn base_never_runs_a_mutant_off_the_changed_lines() {
+    let repo = TempRepo::new("off-line");
+    repo.write("src/calc.py", BASELINE);
+    repo.write("src/calc_test.py", BASELINE_TEST);
+    repo.write("src/conftest.py", RUN_RECORDER);
+    repo.commit("baseline: fully-tested add");
+    let base = repo.head();
+    repo.write("src/calc.py", WITH_SURVIVOR);
+    repo.write("src/calc.pristine", WITH_SURVIVOR);
+    repo.write("src/calc_test.py", WITH_SURVIVOR_TEST);
+    repo.commit("add an assertion-light is_positive");
+
+    expect_tested(
+        measure_python(
+            &repo.0.join("src"),
+            &[],
+            &std::collections::BTreeMap::new(),
+            Some(&base),
+        )
+        .expect("cosmic-ray runs"),
+    );
+    let runs = mutated_lines_per_run(&repo.0.join("src"));
+    assert!(
+        runs.iter().any(|lines| !lines.is_empty()),
+        "the engine ran the changed lines' mutants; got {runs:?}"
+    );
+    assert!(
+        runs.iter().flatten().all(|&line| line >= 3),
+        "`add` on lines 1-2 is unchanged, so none of its mutants runs the suite; got {runs:?}"
+    );
+}

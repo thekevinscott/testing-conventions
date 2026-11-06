@@ -196,6 +196,11 @@ workflow change:
 manifest only under `source` would have made `source: packages/rust/src` detect no rust at all and
 skip every rust gate silently, which is the shape `packages/node/src` already uses.
 
+Source presence, in every language, skips a `tests/` directory directly beneath `source`. The unit
+gates already leave that directory out, so a package whose only files of a language are suite
+tiers (an e2e-only Python wrapper, a crate with only `tests/*.rs`) would otherwise enable a unit
+lane that collects nothing and fails. A `tests/` nested deeper is still source, matching the gates.
+
 It also emits two presence flags the packaging and e2e-verify jobs gate on — **`packaging_dist`**
 (a built distribution is discoverable at `package_root`) and **`e2e_attestation`** (committed
 receipts sit in `e2e-attestations/` there) — so both checks run by default and skip, never fail,

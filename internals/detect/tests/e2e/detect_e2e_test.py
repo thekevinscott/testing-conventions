@@ -249,6 +249,25 @@ def test_e2e_cargo_without_rust_source_is_not_a_crate(run_detect):
     assert out["integration_lint_languages"] == "[]"
 
 
+def test_e2e_an_e2e_only_python_package_enables_no_unit_lane(run_detect):
+    out = run_detect(sources={"tests/e2e/version_test.py": "def test_v():\n    pass\n"})
+    assert out["languages"] == "[]"
+    assert out["coverage_languages"] == "[]"
+
+
+def test_e2e_an_e2e_only_typescript_package_enables_no_unit_lane(run_detect):
+    out = run_detect(sources={"tests/e2e/cli.test.ts": "export {};\n"})
+    assert out["languages"] == "[]"
+    assert out["coverage_languages"] == "[]"
+
+
+def test_e2e_a_crate_with_only_integration_tests_enables_no_unit_lane(run_detect):
+    out = run_detect(
+        sources={"Cargo.toml": '[package]\nname = "x"\n', "tests/cli.rs": "#[test]\nfn t() {}\n"}
+    )
+    assert out["coverage_languages"] == "[]"
+
+
 def test_e2e_absent_language_is_skipped(run_detect):
     out = run_detect(languages='["python","typescript"]', sources={"widget.py": "x = 1\n"})
     assert out["languages"] == '["python"]'

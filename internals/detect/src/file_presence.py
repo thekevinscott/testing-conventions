@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from any_source_match import any_source_match
+
 _SOURCE_GLOBS: dict[str, tuple[str, ...]] = {
     "python": ("*.py",),
     "typescript": ("*.ts", "*.tsx", "*.mts", "*.cts"),
@@ -16,4 +18,4 @@ def any_match(root: Path, globs: tuple[str, ...]) -> bool:
 
 def has_source(root: Path, language: str) -> bool:
     """True if `root` holds any source file for `language` (python / typescript)."""
-    return any_match(root, _SOURCE_GLOBS[language])
+    return any_source_match(root, _SOURCE_GLOBS[language])

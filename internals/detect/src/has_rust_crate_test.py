@@ -27,3 +27,9 @@ def test_has_rust_crate_is_false_when_the_package_root_is_another_languages(tmp_
     write(tmp_path / "package.json", "{}\n")
     write(tmp_path / "src" / "build.rs", "fn main() {}\n")
     assert has_rust_crate.has_rust_crate(tmp_path / "src", tmp_path) is False
+
+
+def test_has_rust_crate_ignores_the_tests_tier_beneath_the_root(tmp_path, write):
+    write(tmp_path / "Cargo.toml", '[package]\nname = "c"\n')
+    write(tmp_path / "tests" / "cli.rs", "#[test]\nfn t() {}\n")
+    assert has_rust_crate.has_rust_crate(tmp_path, tmp_path) is False

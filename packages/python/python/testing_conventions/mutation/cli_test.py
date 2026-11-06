@@ -14,6 +14,8 @@ from testing_conventions.mutation.cli import mutation_cli
 
 class _Config(dict):
     operators_config = {}
+    test_command = "pytest"
+    timeout = 10.0
 
 
 def _config():

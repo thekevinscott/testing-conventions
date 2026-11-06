@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 class _Config(dict):
     operators_config = {}
+    test_command = "pytest"
+    timeout = 10.0
 
 
 def test_running_the_module_invokes_the_cli_over_argv(cosmic_ray, tmp_path):

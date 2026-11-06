@@ -21,7 +21,7 @@ def cosmic_ray():
     """Yield the adapter's cosmic-ray seams as configurable mocks. ``db`` is the fake
     ``WorkDB`` a test configures (``db.results`` for the baseline, ``db.work_items`` and
     ``db.completed_work_items`` for the session); the rest are the ``find_modules`` /
-    ``init`` / ``execute`` / ... calls."""
+    ``init`` / ``execute`` / ``mutate_and_test`` / ... calls."""
     saved = {
         name: mod
         for name, mod in sys.modules.items()
@@ -37,6 +37,8 @@ def cosmic_ray():
         filter_paths=MagicMock(name="filter_paths", side_effect=lambda mods, excl: list(mods)),
         init=MagicMock(name="init"),
         execute=MagicMock(name="execute"),
+        mutate_and_test=MagicMock(name="mutate_and_test"),
+        run_tests=MagicMock(name="run_tests", return_value=("survived", "")),
         WorkItem=MagicMock(name="WorkItem"),
         WorkResult=MagicMock(name="WorkResult"),
         WorkerOutcome=SimpleNamespace(SKIPPED="skipped"),
@@ -58,6 +60,8 @@ def cosmic_ray():
     root.modules = module(
         "cosmic_ray.modules", find_modules=seams.find_modules, filter_paths=seams.filter_paths
     )
+    root.mutating = module("cosmic_ray.mutating", mutate_and_test=seams.mutate_and_test)
+    root.testing = module("cosmic_ray.testing", run_tests=seams.run_tests)
     root.config = module("cosmic_ray.config", deserialize_config=seams.deserialize_config)
     root.work_db = module(
         "cosmic_ray.work_db", use_db=use_db, WorkDB=SimpleNamespace(Mode=SimpleNamespace(create=1))

@@ -40,6 +40,13 @@ def test_any_range_of_a_module_keeps_the_item(cosmic_ray):
     assert skip_off_line_mutants(cosmic_ray.db, {"calc.py": [(3, 6), (9, 9)]}) == []
 
 
+def test_the_first_mutation_decides_as_it_is_the_one_reported(cosmic_ray):
+    reported, trailing = _item("first", 3).mutations[0], _item("last", 9).mutations[0]
+    cosmic_ray.db.work_items = [SimpleNamespace(job_id="pair", mutations=[reported, trailing])]
+
+    assert skip_off_line_mutants(cosmic_ray.db, {"calc.py": [(3, 3)]}) == []
+
+
 def test_the_module_path_is_matched_with_forward_slashes(cosmic_ray):
     cosmic_ray.db.work_items = [_item("nested", 3, module_path=PureWindowsPath("pkg\\calc.py"))]
 

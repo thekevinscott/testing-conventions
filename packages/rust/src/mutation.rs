@@ -979,11 +979,9 @@ fn run_py_adapter(root: &Path, modules: &[String], lines: &[String]) -> Result<S
         .args(["-m", "testing_conventions.mutation.main", "--out"])
         .arg(&results)
         .env("PYTHONDONTWRITEBYTECODE", "1");
-    for module in modules {
-        command.arg("--module").arg(module);
-    }
-    for range in lines {
-        command.arg("--lines").arg(range);
+    let modules = modules.iter().map(|module| ("--module", module));
+    for (flag, value) in modules.chain(lines.iter().map(|range| ("--lines", range))) {
+        command.arg(flag).arg(value);
     }
     let output = command
         .output()

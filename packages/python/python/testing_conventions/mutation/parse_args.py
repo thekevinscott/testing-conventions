@@ -2,7 +2,8 @@
 
 The rust binary spawns ``python -m testing_conventions.mutation.main`` and passes these:
 ``--out <path>`` (where to write the normalized-results JSON — the rule passes a temp file)
-and ``--module <path>`` (repeatable; the source files to mutate, for a diff-scoped run).
+``--module <path>`` (repeatable; the source files to mutate, for a diff-scoped run), and
+``--lines <file>:<start>-<end>`` (repeatable; the changed ranges a diff-scoped run judges).
 Without any ``--module`` the whole project is mutated.
 """
 from __future__ import annotations
@@ -17,6 +18,7 @@ class Args:
 
     out: str
     modules: list[str] = field(default_factory=list)
+    lines: list[str] = field(default_factory=list)
 
 
 def parse_args(argv):
@@ -24,5 +26,6 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(prog="testing-conventions-mutation")
     parser.add_argument("--out", required=True)
     parser.add_argument("--module", action="append", default=[], dest="modules")
+    parser.add_argument("--lines", action="append", default=[])
     ns = parser.parse_args(argv)
-    return Args(out=ns.out, modules=ns.modules)
+    return Args(out=ns.out, modules=ns.modules, lines=ns.lines)

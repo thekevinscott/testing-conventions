@@ -905,17 +905,18 @@ pub fn measure_python(
         Some(base) => Some(crate::patch_coverage::changed_lines(root, base)?),
         None => None,
     };
-    let modules = match &changed {
-        None => Vec::new(),
+    let (modules, lines) = match &changed {
+        None => (Vec::new(), Vec::new()),
         Some(changed) => {
             let modules = mutatable_py_modules(changed);
             if modules.is_empty() {
                 return Ok(Measurement::EngineNotRun);
             }
-            modules
+            let lines = py_line_ranges(changed, &modules);
+            (modules, lines)
         }
     };
-    let json = run_py_adapter(root, &modules)?;
+    let json = run_py_adapter(root, &modules, &lines)?;
     let mutants = judged_py_mutants(parse_normalized_results(&json)?, root, changed.as_ref());
     normalized_measurement(&mutants, exempt, exempt_lines)
 }
@@ -927,6 +928,20 @@ fn mutatable_py_modules(changed: &BTreeMap<String, BTreeSet<u64>>) -> Vec<String
         .keys()
         .filter(|file| is_mutatable_py(file))
         .cloned()
+        .collect()
+}
+
+/// The adapter's `--lines` specs for `modules`: each module's `changed` lines as
+/// `<file>:<start>-<end>` ranges, the shape [`mutate_ranges`] hands Stryker.
+fn py_line_ranges(changed: &BTreeMap<String, BTreeSet<u64>>, modules: &[String]) -> Vec<String> {
+    modules
+        .iter()
+        .filter_map(|module| changed.get(module).map(|lines| (module, lines)))
+        .flat_map(|(module, lines)| {
+            contiguous_runs(lines)
+                .into_iter()
+                .map(move |(start, end)| format!("{module}:{start}-{end}"))
+        })
         .collect()
 }
 
@@ -951,8 +966,9 @@ fn judged_py_mutants(
 
 /// Run the bundled Python mutation adapter over `root` and return the normalized-results
 /// JSON it writes. `modules`, when non-empty, scopes the run to those source files; empty
-/// runs the whole project. `PYTHONDONTWRITEBYTECODE` keeps `__pycache__` out of the tree.
-fn run_py_adapter(root: &Path, modules: &[String]) -> Result<String> {
+/// runs the whole project. `lines`, when non-empty, skips every mutant off those ranges
+/// before it runs. `PYTHONDONTWRITEBYTECODE` keeps `__pycache__` out of the tree.
+fn run_py_adapter(root: &Path, modules: &[String], lines: &[String]) -> Result<String> {
     let (_out, results) = adapter_results_path()?;
     let cwd = adapter_cwd(root, "Python")?;
 
@@ -963,8 +979,9 @@ fn run_py_adapter(root: &Path, modules: &[String]) -> Result<String> {
         .args(["-m", "testing_conventions.mutation.main", "--out"])
         .arg(&results)
         .env("PYTHONDONTWRITEBYTECODE", "1");
-    for module in modules {
-        command.arg("--module").arg(module);
+    let modules = modules.iter().map(|module| ("--module", module));
+    for (flag, value) in modules.chain(lines.iter().map(|range| ("--lines", range))) {
+        command.arg(flag).arg(value);
     }
     let output = command
         .output()
@@ -1923,7 +1940,7 @@ diff --git a/src/lib.rs b/src/lib.rs
     #[test]
     fn a_python_adapter_failure_reports_the_adapter_output() {
         let dir = unique_tmp();
-        let err = run_py_adapter(&dir, &[]).unwrap_err();
+        let err = run_py_adapter(&dir, &[], &[]).unwrap_err();
         let msg = format!("{err:#}");
         assert!(msg.contains("the Python mutation adapter failed"), "{msg}");
         std::fs::remove_dir_all(&dir).ok();
@@ -2235,6 +2252,21 @@ diff --git a/src/lib.rs b/src/lib.rs
         let changed = BTreeMap::from([("docs/guide.md".to_string(), BTreeSet::from([1u64]))]);
 
         assert!(mutatable_py_modules(&changed).is_empty());
+    }
+
+    #[test]
+    fn py_line_ranges_folds_each_modules_changed_lines_into_ranges() {
+        let changed = BTreeMap::from([
+            ("pkg/calc.py".to_string(), BTreeSet::from([3u64, 4, 5, 9])),
+            ("pkg/calc_test.py".to_string(), BTreeSet::from([4u64])),
+            ("pkg/util.py".to_string(), BTreeSet::from([1u64])),
+        ]);
+        let modules = ["pkg/calc.py".to_string(), "pkg/util.py".to_string()];
+
+        assert_eq!(
+            py_line_ranges(&changed, &modules),
+            ["pkg/calc.py:3-5", "pkg/calc.py:9-9", "pkg/util.py:1-1"]
+        );
     }
 
     #[test]

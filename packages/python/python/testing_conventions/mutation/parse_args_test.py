@@ -19,3 +19,12 @@ def test_modules_default_to_empty():
 def test_out_is_required():
     with pytest.raises(SystemExit):
         parse_args(["--module", "a.py"])
+
+
+def test_parses_repeated_lines():
+    args = parse_args(["--out", "r.json", "--lines", "a.py:1-2", "--lines", "b.py:4-4"])
+    assert args.lines == ["a.py:1-2", "b.py:4-4"]
+
+
+def test_lines_default_to_empty():
+    assert parse_args(["--out", "r.json"]).lines == []

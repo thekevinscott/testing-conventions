@@ -26,7 +26,7 @@ def test_inits_executes_and_returns_first_mutation_with_result(cosmic_ray):
     # Two mutations on the item so the *first* index is asserted, not just "a" mutation.
     cosmic_ray.db.completed_work_items = [(SimpleNamespace(mutations=[mutation, other]), result)]
 
-    pairs = run_session(_config(["."]))
+    pairs = run_session(_config(["."]), {})
 
     assert pairs == [(mutation, result)]
     cosmic_ray.find_modules.assert_called_once_with([Path(".")])
@@ -39,7 +39,7 @@ def test_a_string_module_path_is_wrapped_in_a_list(cosmic_ray):
 
     cosmic_ray.find_modules.return_value = []
     cosmic_ray.db.completed_work_items = []
-    run_session(_config("calc.py"))
+    run_session(_config("calc.py"), {})
     cosmic_ray.find_modules.assert_called_once_with([Path("calc.py")])
 
 
@@ -54,7 +54,7 @@ def test_a_mutation_inside_an_annotation_is_skipped_before_execute(cosmic_ray, t
     cosmic_ray.db.work_items = [SimpleNamespace(job_id="annotation", mutations=[mutation])]
     cosmic_ray.db.completed_work_items = []
 
-    assert run_session(_config([str(tmp_path)])) == []
+    assert run_session(_config([str(tmp_path)]), {}) == []
 
     cosmic_ray.db.set_result.assert_called_once_with(
         "annotation", cosmic_ray.WorkResult.return_value
@@ -71,9 +71,25 @@ def test_each_pending_mutant_is_judged_colocated_test_first(cosmic_ray, tmp_path
     cosmic_ray.mutate_and_test.return_value = SimpleNamespace(test_outcome="killed", output="")
     cosmic_ray.db.completed_work_items = []
 
-    run_session(_config([str(tmp_path)]))
+    run_session(_config([str(tmp_path)]), {})
 
     cosmic_ray.mutate_and_test.assert_called_once_with(
         mutations, f"pytest {tmp_path / 'calc_test.py'}", 10.0
     )
     cosmic_ray.execute.assert_not_called()
+
+
+def test_a_mutation_off_the_changed_ranges_is_skipped_before_execute(cosmic_ray, tmp_path):
+    from testing_conventions.mutation.session import run_session
+
+    module = tmp_path / "calc.py"
+    module.write_text("def add(a, b):\n    return a + b\n")
+    mutation = SimpleNamespace(module_path=str(module), start_pos=(2, 13), end_pos=(2, 14))
+    cosmic_ray.db.work_items = [SimpleNamespace(job_id="unchanged", mutations=[mutation])]
+    cosmic_ray.db.completed_work_items = []
+
+    assert run_session(_config([str(module)]), {str(module): [(5, 6)]}) == []
+
+    cosmic_ray.db.set_result.assert_called_once_with(
+        "unchanged", cosmic_ray.WorkResult.return_value
+    )

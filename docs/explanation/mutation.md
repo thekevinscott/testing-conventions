@@ -188,6 +188,12 @@ A run lists each survivor with its file, line, and mutation — the engine's mut
 that mutator produced — and fails on any un-exempted one. Survivor paths are reported relative to
 the scanned path, so exemptions address the same paths every other check uses.
 
+A diff-scoped run spends the suite only on mutants that sit on a changed line. Each engine gets
+the `<base>...HEAD` changed lines before it runs: cargo-mutants reads the diff, Stryker takes
+`<file>:<start>-<end>` mutate ranges, and the Python adapter takes the same ranges and marks every
+other mutant in a touched module skipped before cosmic-ray executes anything. Run time follows the
+changed lines, not the size of the files they sit in.
+
 Each engine runs where its ecosystem expects: cargo-mutants at the crate root, cosmic-ray at the
 scanned path, and Stryker at the **package root** — the nearest directory at or above the scanned
 path holding a `package.json`. cargo-mutants addresses files relative to the crate's **cargo

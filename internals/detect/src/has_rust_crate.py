@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from file_presence import any_match, any_source_match
+from any_source_match import any_source_match
+from file_presence import any_match
 
 
 def has_rust_crate(root: Path, package_root: Path) -> bool:

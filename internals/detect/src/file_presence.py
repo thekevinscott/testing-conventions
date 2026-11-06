@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from any_source_match import any_source_match
+
 _SOURCE_GLOBS: dict[str, tuple[str, ...]] = {
     "python": ("*.py",),
     "typescript": ("*.ts", "*.tsx", "*.mts", "*.cts"),
@@ -11,16 +13,6 @@ def any_match(root: Path, globs: tuple[str, ...]) -> bool:
     for glob in globs:
         for _ in root.rglob(glob):
             return True
-    return False
-
-
-def any_source_match(root: Path, globs: tuple[str, ...]) -> bool:
-    """`any_match`, skipping the suite tiers in a `tests/` directory directly beneath `root`."""
-    tiers = root / "tests"
-    for glob in globs:
-        for path in root.rglob(glob):
-            if not path.is_relative_to(tiers):
-                return True
     return False
 
 

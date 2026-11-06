@@ -1,0 +1,7 @@
+{
+  "command": "PATH=\"$PWD/internals/checks/.venv/bin:$PATH\" PYTHONPATH=\"$PWD/packages/python/python\" cargo test --manifest-path packages/rust/Cargo.toml --test mutation_base_py --test mutation_python --test mutation_python_e2e",
+  "ran_at": 1793986788,
+  "exit_code": 0,
+  "commit": "e1b313ea0d6ae6d921f0a3a18d073670e6a8a55d",
+  "branch": "feat/809-skip-off-line-py-mutants"
+}

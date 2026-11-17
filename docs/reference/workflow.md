@@ -81,9 +81,12 @@ for a single-package repo, so an existing single-package call is unaffected. Pyt
 by **uv** in all three jobs, with identical steps: an installable package (a `pyproject.toml` with
 a `[project]` table) is synced first — `uv sync` installs the project's own dependencies and
 builds/installs the project itself — while a plain package gets a fresh `uv venv`; the suite
-toolchain (`coverage`, `pytest`, and the `testing-conventions` adapter wheel) then installs into
+toolchain (`coverage`, `pytest`, and the `testing-conventions` adapter) then installs into
 that same `.venv`, which goes on the suite's `PATH` — so cosmic-ray's spawned pytest (for
 `mutation`) and the coverage run import the project's dependencies and the adapter together.
+The adapter is built on the runner from this repository's git tag for the CLI version the job
+runs, so the two always come from the same commit; the build compiles the CLI crate with the
+runner's Rust toolchain and takes about a minute when uv's cache does not already hold it.
 uv reads its own index/network configuration (`UV_INDEX_URL`, `uv.toml`); a private index is
 declared there. TypeScript runs under `vitest`
 v8 coverage, installed with the package's own lockfile (`pnpm install --frozen-lockfile` or

@@ -393,7 +393,7 @@ Inside CI jobs the Python toolchain comes from **uv, and this repo's own mutatio
   - `internals/detect` — `pytest` (its only engine; `detect.py` is stdlib-only) is a dev-dependency pinned in its lock, and `detect-action.yml` runs the suite from the package directory.
   - `internals/checks` — `coverage`, `pytest`, and `cosmic-ray` are dev-dependencies pinned in its lock; `checks-tests.yml` runs the suite from the package directory, and the selftest jobs that shell out to them (`below-floor`, `python-mutation-clean`) already run `--project internals/checks` and pick them up from the sync. The one job with no uv project of its own (`rust.yml` integration — a Rust crate) **borrows** that environment, syncing it once and putting its `.venv/bin` on `PATH`: a deliberate coupling, accepted because `internals/checks` is the repo's test-tooling home; if a cleaner home emerges for the borrowing job, prefer it.
   - the `packages/python` wheel build (`python.yml`) — `maturin` is not a test engine but the PEP 517 build backend, so its pin lives where a build backend is declared: `[build-system].requires`, pinned exactly. The job builds through it (`uv build --wheel`), so the toolchain that builds the shipped wheel is a function of the commit.
-  - the reusable workflow's suite jobs (the consumer path) — **the consumer's own lock is the pin**. No lock of this repo's can reach that runner (the workflow executes in the consumer's checkout, and published wheels carry ranges, not locks), so the provisioning line installs only `pytest` (the runner fallback — a synced uv project's own locked pytest is already satisfied and wins) plus the `testing-conventions` wheel, whose dependencies carry the coverage/mutation engines. The float that remains — the wheel's ranges, for lock-less consumers — is the consumer-path exception below, gated at promotion (Layer 2).
+  - the reusable workflow's suite jobs (the consumer path) — **the consumer's own lock is the pin**. No lock of this repo's can reach that runner (the workflow executes in the consumer's checkout, and published wheels carry ranges, not locks), so the provisioning line installs only `pytest` (the runner fallback — a synced uv project's own locked pytest is already satisfied and wins) plus the `testing-conventions` adapter, whose dependencies carry the coverage/mutation engines. The adapter builds from this repo's git tag for the CLI version the job runs (*The consumer adapter builds from the CLI's release tag* below). The float that remains — the adapter's dependency ranges, for lock-less consumers — is the consumer-path exception below, gated at promotion (Layer 2).
 
 - **The adapter is this repo's code, so it resolves from source, not the wheel.** `unit mutation --language python` spawns `python3 -m testing_conventions.mutation.main`. Installing the published `testing-conventions` wheel to supply that module — `pip install testing-conventions`, or `uv run --with testing-conventions` — runs the *last release's* adapter over this PR's fixtures, the same `@v0`/npm version-skew class the hermetic merge gate (#356) closes for the CLI binary. The `hermetic-cli` artifact stages the Rust binary, the node `dist/`, and the Python wheel built from this commit. The hermetic Python arms install that staged wheel, so the adapter under test is the PR's. `cosmic-ray` (its engine, otherwise pulled in transitively by the wheel) then comes from `internals/checks`'s synced environment, pinned in its lock.
 
@@ -698,17 +698,16 @@ preflight-timing skew, without touching or duplicating putitoutthere's own group
 
 ## Registry skew: the version numbers differ, the rules don't
 
-npm and PyPI carry different version numbers — `0.0.122` against `0.0.116` as of 2026-09-21 — and a
-consumer job installs both halves by name, so one run picks the newest of each independently. The
-numbers drift because putitoutthere versions each package on its own globs: a `packages/node/**`
-change advances npm alone, a `packages/python/**` change advances PyPI alone. The drift is
-arithmetic, and it is permanent by design.
+npm and PyPI carry different version numbers — `0.0.122` against `0.0.116` as of 2026-09-21 — and
+anyone who installs both halves by name picks the newest of each independently. The numbers drift
+because putitoutthere versions each package on its own globs: a `packages/node/**` change advances
+npm alone, a `packages/python/**` change advances PyPI alone. The drift is arithmetic, and it is
+permanent by design.
 
-What matters is whether the two halves a job installs can disagree about the rules, and they cannot.
-Both published packages list `packages/rust/**` in their globs and `depends_on` the CLI crate, so
-**every change to the CLI republishes both halves**. The combination a consumer can reach is
-therefore the newest CLI against a plugin built from the same commit — never a new CLI against an
-old plugin.
+What matters is whether the two halves can disagree about the rules. Both published packages list
+`packages/rust/**` in their globs and `depends_on` the CLI crate, so **every change to the CLI
+republishes both halves** — while both registries accept the upload. The combination a by-name
+install reaches is then the newest CLI against a plugin built from the same commit.
 
 The reverse pairing — an old CLI against a newer plugin, from a Python-only release — is reachable,
 and both sides of the boundary between them fail loudly on any change that matters:
@@ -726,6 +725,31 @@ CLI crate's path and name from the config itself and asserts every published pac
 it. This is the kind of regression wiring gates exist for: removing the glob turns every consumer's
 next run into a mixed pair with nothing red to show for it (see AGENTS.md, "Wiring gates are
 earned").
+
+### The consumer adapter builds from the CLI's release tag
+
+The reusable workflow's suite jobs take the lockstep from git instead of from PyPI. The Python
+provisioning step asks the npm CLI the job is about to run for its version
+(`npm exec testing-conventions[@<version>] --version`, the same spec every check step runs) and
+installs the adapter from that version's tag:
+
+```
+testing-conventions @ git+https://github.com/thekevinscott/testing-conventions@testing-conventions-npm-v<version>#subdirectory=packages/python
+```
+
+putitoutthere cuts `testing-conventions-npm-v<version>` on the commit that built the npm package, so
+the adapter and the CLI come from one commit for every version, including a caller's pinned
+`version`. A PyPI outage leaves the pair intact: on 2026-11-06 PyPI stopped accepting uploads at
+`0.0.145` while npm reached `0.0.156`, and every consumer's Python mutation job failed on
+`unrecognized arguments: --lines` until the adapter stopped coming from PyPI.
+
+The install is a source build: maturin compiles the CLI crate on the runner (`bindings = "bin"`),
+using the runner image's own cargo. uv caches the built wheel by commit, so a job whose setup-uv
+cache already holds that commit's wheel skips the compile.
+
+The tag is the contract. A release that publishes npm without its tag (*A release can publish
+without its tag* below) fails the install with a git error naming the missing ref; the hand tag in
+that runbook restores it.
 
 ## Rolling release: how `@v0` advances
 
